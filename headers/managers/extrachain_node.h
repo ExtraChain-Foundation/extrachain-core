@@ -55,7 +55,7 @@ private:
     ActorIndex*         m_actorIndex         = nullptr;
     Blockchain*         m_blockchain         = nullptr;
     NetworkManager*     m_networkManager     = nullptr;
-    TransactionManager* m_txManager          = nullptr;
+    TransactionManager* m_transactionManager = nullptr;
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
@@ -88,7 +88,7 @@ public:
     AccountController*  accountController() const;
     ActorIndex*         actorIndex() const;
     DfsController*      dfs() const;
-    TransactionManager* txManager() const;
+    TransactionManager* transactionManager() const;
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
 
@@ -114,7 +114,7 @@ public:
     createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
     std::expected<Transaction, TransactionError>
-                createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx);
+                createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TransactionType& typeTx);
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();
     bool        importUser(const std::string& data, const std::string& login, const std::string& password);
@@ -129,7 +129,7 @@ private:
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */
-    void connectTxManager();
+    void connectTransactionManager();
     void connectContractManager();
     void connectBlockchain();
     //    void connectAccountController();

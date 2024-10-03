@@ -20,7 +20,7 @@
 #include "managers/account_controller.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) {
@@ -43,7 +43,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     qDebug() << "[Accounts] Created new profile" << actor.id();
 
     node.start(); // TODO: remove
-    node.txManager()->runMakeAndProveBlockTimers();
+    node.transactionManager()->runMakeAndProveBlockTimers();
 
     node.blockchain()->getBlockZero();
     node.calculateBlockCount();
@@ -85,7 +85,7 @@ bool AccountController::load(const std::string &hash) {
             m_currentProfile = profile.main()->id();
             node.start(); // TODO: remove
             if (this->empty())
-                node.txManager()->runMakeAndProveBlockTimers();
+                node.transactionManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
         }

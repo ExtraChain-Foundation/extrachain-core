@@ -66,7 +66,7 @@ std::set<Approver> BlockVariant::signatures() const {
 
 std::set<Transaction> BlockVariant::transactions() const {
     if (isGenesisBlock()) {
-        qDebug() << "[BlockVariant] Try to get transactions for GenesisBlock";
+        return {};
     }
 
     return std::visit(

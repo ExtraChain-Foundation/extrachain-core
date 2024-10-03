@@ -25,14 +25,14 @@
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
-enum class TypeTx {
+enum class TransactionType {
     Transaction = 0,
-    RewardTransaction = 1,
+    Reward = 1,
     FarmingTransaction = 2,
     FarmingLockedTransaction = 3
 };
-MSGPACK_ADD_ENUM(TypeTx)
-FORMAT_ENUM(TypeTx)
+MSGPACK_ADD_ENUM(TransactionType)
+FORMAT_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
@@ -57,7 +57,8 @@ enum class TransactionProveError {
     ZeroProducer, // producer 0
     ProducerVerify, // bad signature in fee tx
     SenderBalanceBelowZero, // sender's balance will be < 0
-    SelfPleasure
+    SelfPleasure,
+    RewardWrongToken
 };
 FORMAT_ENUM(TransactionProveError)
 
@@ -75,7 +76,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string signature;
-    TypeTx typeTx = TypeTx::Transaction;
+    TransactionType typeTx = TransactionType::Transaction;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -139,8 +140,8 @@ public:
     bool isRewardTransaction() const;
     bool isFarmingTransaction() const;
     bool isLockedFarmingTransaction() const;
-    TypeTx getTypeTx() const;
-    virtual void setTypeTx(TypeTx newTypeTx);
+    TransactionType getTypeTx() const;
+    virtual void setTypeTx(TransactionType newTypeTx);
 
     MSGPACK_DEFINE(
         sender,

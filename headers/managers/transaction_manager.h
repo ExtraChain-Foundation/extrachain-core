@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TX_MANAGER_H
-#define TX_MANAGER_H
+#ifndef TRANSACTION_MANAGER_H
+#define TRANSACTION_MANAGER_H
 
 #include <QByteArray>
 #include <QDebug>
@@ -59,6 +59,7 @@ public:
     TransactionManager(ExtraChainNode &node);
 
 private:
+    void addProvedTransaction(const Transaction &tx);
     void removeTransaction(int i);
 
 public:
@@ -87,7 +88,6 @@ public slots:
 
     void proveTransactions();
     void addTransaction(const Transaction &tx);
-    void addProvedTransaction(const Transaction &tx);
     // Unapproved tx's //
 
     /**
@@ -151,4 +151,4 @@ signals:
     void addToCache(std::string actor, Transaction tx);
 };
 
-#endif // TX_MANAGER_H
+#endif // TRANSACTION_MANAGER_H

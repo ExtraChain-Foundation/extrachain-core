@@ -58,12 +58,11 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
 private:
-    ExtraChainNode *node;
+    ExtraChainNode &node;
 
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
                            //    Actor<KeyPrivate>   approver;       // current user.
-    TransactionManager *txManager;
     // service //
     std::vector<GenesisDataRow> genBlockData; // actorid -> token
     int blocksFromLastGenesis = 0;
@@ -73,12 +72,15 @@ private:
     bool possibleMining = true;
 
 public:
-    explicit Blockchain(ExtraChainNode *node);
+    explicit Blockchain(ExtraChainNode &node);
     BlockVariant getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
     BlockVariant getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
+
+    void sync();
+    void syncResponse(const BigNumber fromBlock, const std::string &messageId);
 
 private:
     BlockVariant getBlockByData(const QByteArray &data);
@@ -125,8 +127,6 @@ public:
     void sendLastGenesisBlock() const;
 
 private:
-    void addGenesisBlockFromTempFile(const QByteArray &prevGenesisHash);
-
     // merging //
     int mergeBlockWithLocal(BlockVariant &received);
     int mergeGenesisBlockWithLocal(const GenesisBlock &received);
@@ -196,13 +196,15 @@ public:
     std::pair<Transaction, QByteArray>
     getTransaction(SearchEnum::TxParam type, const QByteArray &value, const ActorId &token = ActorId());
 
+private:
     /**
      * Add block to blockchain
      * Convert block to MemBlock or FileBlock according to a fileMode.
      * @return 0 is success, or error code
      */
-    int addBlock(BlockVariant &block);
+    int addBlock(const BlockVariant &block);
 
+public:
     /**
      * Removes block and all blocks after them
      * @return 0 is success, or error code
@@ -242,16 +244,7 @@ public:
      * @brief remove all blocks
      */
     void removeAll();
-    /**
-     * @brief getApprover
-     * @return
-     */
-    std::shared_ptr<Actor<KeyPrivate>> getApprover() const;
-    /**
-     * @brief setApprover
-     * @param value
-     */
-    void setApprover(const Actor<KeyPrivate> &value);
+
     /**
      * @brief true - file mode, false - memory mode
      * @param memory
@@ -288,7 +281,7 @@ public:
     int getCountTransactionsInBlocks() const;
 
     BigNumberFloat
-    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TypeTx typeTx = TypeTx::Transaction) const;
+    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TransactionType typeTx = TransactionType::Transaction) const;
 
     /**
      * @brief Show blockchain
@@ -329,50 +322,7 @@ public:
 
 signals:
     void newNotify(Notification ntf);
-    void addActorInActorIndex(Actor<KeyPublic> actor);
-    void updateTransactionListInModel(QByteArray, QByteArray);
-    /**
-     * @brief Sends new verified block to the network. Should be emited when
-     * merged is created
-     * @param firstBlock
-     * @param secondBlock
-     * @param resultBlock - merged block
-     */
-    //    void SendMergedBlock(Block firstBlock, Block secondBlock, Block
-    //    resultBlock);
-    /**
-     * @brief Block is corrupted (validation is not passed)
-     * @param block
-     */
-    void BlockCorrupted(Block block);
-    /**
-     * @brief New block created
-     * @param block
-     */
-    void NewBlock(Block block);
-
-    // responses
-    void responseReady(
-        const QByteArray &data,
-        const unsigned int &msgType,
-        const QByteArray &requestHash,
-        const std::string &messageId);
-
-    /**
-     * @brief There no such block in a local blockchain
-     * @param block
-     */
-    void BlockIsMissing(Block block);
-
-    /**
-     * @brief Transaction is verified by blockchain
-     * @param tx - verified transaction
-     */
-    void VerifiedTx(Transaction tx);
-
     void updateLastTransactionList();
-    void sendMessage(const QByteArray &data, const unsigned int &type);
-    void finished();
 
     /**
      * @brief possibleMiningChange
@@ -381,38 +331,9 @@ signals:
     void possibleMiningChange(const bool &possibleMinig);
 
 public:
-    void addBlockToBlockchain(BlockVariant &block);
-    void addGenBlockToBlockchain(GenesisBlock block);
-    void setTxManager(TransactionManager *value);
+    void addBlockFromNetwork(const BlockVariant &block);
+    void addGenesisBlockFromNetwork(const GenesisBlock &block);
     BigNumber getBlockCount();
-
-public slots:
-    void process();
-    void updateBlockchain();
-    /**
-     * @brief Checks if there is a such block in a local blockchain.
-     * Emits BlockExistence or SendMergedBlock signals.
-     * @param block
-     */
-    void checkBlockExistence(BlockVariant &block);
-    /**
-     * @brief blockCountResponse
-     * @param count
-     */
-    void blockCountResponse(const BigNumber &count);
-    // from node manager
-    void getTxFromBlockchain(
-        const SearchEnum::TxParam &param,
-        const QByteArray &value,
-        const std::string &messageId,
-        const QByteArray &request);
-
-    /**
-     * @brief If there no such tx in a previous block
-     * adds this tx to the list and emits VerifiedTx signal
-     * @param tx
-     */
-    void VerifyTx(Transaction &tx);
 
     /**
      * @brief finds needed transaction by sender or receiver

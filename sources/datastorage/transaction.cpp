@@ -31,7 +31,7 @@ Transaction::Transaction() {
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TypeTx::Transaction;
+    this->typeTx = TransactionType::Transaction;
     calcHash();
 }
 
@@ -49,7 +49,7 @@ Transaction::Transaction(
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TypeTx::Transaction;
+    this->typeTx = TransactionType::Transaction;
     this->token = token;
     calcHash();
 }
@@ -75,15 +75,15 @@ void Transaction::setReceiver(const ActorId &value) {
 }
 
 bool Transaction::isRewardTransaction() const {
-    return typeTx == TypeTx::RewardTransaction;
+    return typeTx == TransactionType::Reward;
 }
 
 bool Transaction::isFarmingTransaction() const {
-    return typeTx == TypeTx::FarmingTransaction;
+    return typeTx == TransactionType::FarmingTransaction;
 }
 
 bool Transaction::isLockedFarmingTransaction() const {
-    return typeTx == TypeTx::FarmingLockedTransaction;
+    return typeTx == TransactionType::FarmingLockedTransaction;
 }
 
 void Transaction::setProducer(const ActorId &value) {
@@ -141,11 +141,11 @@ void Transaction::calcHash() {
     }
 }
 
-TypeTx Transaction::getTypeTx() const {
+TransactionType Transaction::getTypeTx() const {
     return typeTx;
 }
 
-void Transaction::setTypeTx(TypeTx newTypeTx) {
+void Transaction::setTypeTx(TransactionType newTypeTx) {
     typeTx = newTypeTx;
 }
 

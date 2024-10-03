@@ -21,8 +21,7 @@
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
-#include "managers/thread_pool.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/bignumber_float.h"
@@ -134,7 +133,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
         auto        serialized = message.serialize();
         auto        sign       = mainActor->key().sign(serialized);
-        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
     });
 }
 
@@ -288,9 +287,10 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                 const std::string &receiver_identifier) {
+                                 const std::string &receiver_identifier, MessageType type_info,
+                                 MessageStatus status_info) {
     if (!isActiveConnectionExists()) {
-        qDebug() << "[NetworkManager] Save message to cache";
+        qDebug() << "[NetworkManager] Save message to cache" << type_info << status_info;
         saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
@@ -398,7 +398,7 @@ void NetworkManager::sendFromCache() {
         const std::string deserialized_message = deserializedList[0];
         const Config::Net::TypeSend typeSend = typeSendFromString(deserializedList[1]);
         const std::string receiver_identifier = deserializedList[2];
-        sendMessage(deserialized_message, typeSend, receiver_identifier);
+        sendMessage(deserialized_message, typeSend, receiver_identifier, MessageType::Unknown, MessageStatus::NoStatus);
     }
 }
 
@@ -657,7 +657,7 @@ void NetworkManager::messageReceived(
         // TODO: why temp std::string?
         GenesisBlock genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!genesisBlock.isEmpty()) {
-            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+            node.blockchain()->addGenesisBlockFromNetwork(genesisBlock);
         } else {
             qDebug() << "false genesis block";
         }
@@ -669,7 +669,7 @@ void NetworkManager::messageReceived(
         Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node.blockchain()->addBlockToBlockchain(blockVariant);
+            node.blockchain()->addBlockFromNetwork(blockVariant);
         }
         break;
     }
@@ -677,7 +677,7 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        node.txManager()->addTransaction(transaction);
+        node.transactionManager()->addTransaction(transaction);
         break;
     }
 
@@ -698,6 +698,12 @@ void NetworkManager::messageReceived(
         else if (requestData.first == BlockType::Genesis)
             node.blockchain()->sendLastGenesisBlock();
 
+        break;
+    }
+
+    case MessageType::BlockhainSync: {
+        auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
+        node.blockchain()->syncResponse(fromBlock, messageId);
         break;
     }
 
@@ -819,7 +825,7 @@ void NetworkManager::messageReceived(
         Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec), ActorId(Token::ROCC_TOKEN));
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
         tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node.txManager()->addTransaction(tx);
+        node.transactionManager()->addTransaction(tx);
         node.network()->send_message(tx, MessageType::BlockchainTransaction);
         */
         break;

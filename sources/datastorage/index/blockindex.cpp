@@ -57,7 +57,7 @@ int BlockIndex::addBlock(const BlockVariant &block) {
 
 BlockVariant BlockIndex::getLastBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         BlockVariant block = this->getBlockById(id);
 
@@ -77,7 +77,7 @@ BlockVariant BlockIndex::getLastBlock() const {
 
 BlockVariant BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] Last real block:" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last real block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         BlockVariant block = this->getBlockById(id);
         if ((!block.isEmpty()) && (block.getType() != BlockType::Dummy)) {
@@ -91,7 +91,7 @@ BlockVariant BlockIndex::getLastRealBlock() const {
 
 GenesisBlock BlockIndex::getLastGenesisBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] Last real genesis block:" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last real genesis block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         GenesisBlock block = this->getGenesisBlockById(id);
         if (!block.isEmpty()) {
@@ -114,6 +114,10 @@ GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
 }
 
 BlockVariant BlockIndex::getBlockById(const BigNumber &id) const {
+    if (id < 0) {
+        qFatal("getBlockById < 0");
+    }
+
     auto block = this->getById(id);
     if (block.has_value() && !block->isEmpty()) {
         return *block;
@@ -450,7 +454,7 @@ void BlockIndex::calculationCountBlock() {
         BlockVariant block = this->getBlockById(id);
         if (!block.isEmpty()) {
             if (block.getType() == BlockType::Data) {
-                qDebug() << "[BlockIndex] Block by index" << block.getIndex() << " is real";
+                qDebug() << "[BlockIndex] Block by index" << block.getIndex() << "is real";
                 realBlockRecords++;
                 qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
             }
@@ -552,10 +556,8 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
                 rowRow.insert({ "hash", tmp.getHash() });
                 rowRow.insert({ "approver", tmp.getApprover().toStdString() });
                 rowRow.insert({ "signature", tmp.getSignature() });
-                if (tmp.getProducer().isZero())
-                    rowRow.insert({ "producer", "0" });
-                else
-                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+                rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+
                 bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
                 if (txInserted)
                     countTransactions++;
@@ -642,14 +644,17 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
     qDebug() << "[BlockIndex] remove dummy blocks";
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
-    while (!isNotDummyBlock) {
+
+    if (lastSavedId < 0 || firstSavedId < 0)
+        return;
+
+    while (lastId != firstSavedId) {
         const auto block = getBlockById(lastId);
-        if (block.getType() != BlockType::Dummy) {
-            isNotDummyBlock = true;
-        } else {
+        if (block.getType() == BlockType::Dummy) {
             removeById(block);
-            lastId--;
         }
+
+        lastId--;
     }
 }
 

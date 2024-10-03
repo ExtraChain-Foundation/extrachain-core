@@ -20,7 +20,7 @@
 #include "managers/data_mining_manager.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
@@ -133,7 +133,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
                  << totalBytes.first << node->dfs()->totalDfsSize();
-        return 0;
+        return 1;
     }
 
     return (
@@ -146,7 +146,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const DFS::Reward::Reque
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
                  << requestReward.BytesSent << node->dfs()->totalDfsSize();
-        return 0;
+        return 1;
     }
 
     return (
@@ -162,7 +162,8 @@ void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &reques
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
-        transaction.setTypeTx(TypeTx::RewardTransaction);
+        transaction.setTypeTx(TransactionType::Reward);
+        transaction.sign(node->accountController()->mainActor());
         node->network()->send_message(transaction, MessageType::BlockchainTransaction);
     }
 }
@@ -178,9 +179,9 @@ void DataMiningManager::interestAccrual() {
         BigNumberFloat result = balanceFarming * farmingPercent;
         balanceFarming += result;
         ActorId actorId = node->accountController()->mainActor()->id();
-        auto transaction = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
+        auto transaction = node->createFarmingTransaction(actorId, result, TransactionType::FarmingTransaction);
         if (transaction.has_value())
-            node->txManager()->addTransaction(transaction.value());
+            node->transactionManager()->addTransaction(transaction.value());
         else
             qDebug() << "[DataMiningManager] Can't create tx:" << transaction.error();
     }
@@ -192,7 +193,7 @@ BigNumberFloat DataMiningManager::farmingBalance() const {
 
 void DataMiningManager::calculateFarmingBalanceMainUser() {
     auto currentActorId = node->accountController()->currentProfile().current()->id();
-    balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TypeTx::FarmingTransaction);
+    balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TransactionType::FarmingTransaction);
     isRecalculate = true;
 }
 

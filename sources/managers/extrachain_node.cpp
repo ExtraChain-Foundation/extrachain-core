@@ -27,15 +27,15 @@
 #include "datastorage/block_variant.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
-#include "datastorage/dfs/permission_manager.h"
+// #include "datastorage/dfs/permission_manager.h"
 #include "datastorage/index/actorindex.h"
 #include "datastorage/transaction.h"
 #include "enc/enc_tools.h"
 #include "managers/account_controller.h"
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
-#include "managers/thread_pool.h"
-#include "managers/tx_manager.h"
+// #include "managers/thread_pool.h"
+#include "managers/transaction_manager.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
@@ -59,11 +59,10 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     m_networkManager = new NetworkManager(*this);
     //    ThreadPool::addThread(m_networkManager);
 
-    m_blockchain = new Blockchain(this);
-    m_txManager  = new TransactionManager(*this);
+    m_blockchain = new Blockchain(*this);
+    m_transactionManager = new TransactionManager(*this);
     m_dfs        = new DfsController(*this);
 
-    m_blockchain->setTxManager(m_txManager);
 
     m_dmm = new DataMiningManager(this);
     // test port and address
@@ -92,7 +91,7 @@ ExtraChainNode::~ExtraChainNode() {
     emit m_networkManager->finished();
     delete m_dfs;
     delete m_actorIndex;
-    delete m_txManager;
+    delete m_transactionManager;
     delete m_blockchain;
     delete m_accountController;
     delete m_dmm;
@@ -124,8 +123,7 @@ bool ExtraChainNode::createNewNetwork(
         QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
         GenesisBlock tmp        = m_blockchain->createGenesisBlock(first, tm);
-        auto         tmpVariant = BlockVariant(tmp);
-        m_blockchain->addBlock(tmpVariant);
+        m_blockchain->addGenesisBlockFromNetwork(tmp);
 
         // TEST
         //        Block lastBlock = m_blockchain->getLastBlock();
@@ -180,7 +178,7 @@ void ExtraChainNode::showMessage(QString from, QString message) {
 //    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
 // }
 
-void ExtraChainNode::connectTxManager() {
+void ExtraChainNode::connectTransactionManager() {
 }
 
 Blockchain* ExtraChainNode::blockchain() {
@@ -240,10 +238,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     qDebug() << "[Transaction] Send" << tx.getAmountDec() << "to" << tx.getReceiver();
 
     if (tx.isFarmingTransaction() || tx.isLockedFarmingTransaction()) {
-        m_txManager->addTransaction(tx);
+        m_transactionManager->addTransaction(tx);
     }
     if (tx.getSender().isZero() || tx.getSender() == m_actorIndex->firstId())
-        m_txManager->addTransaction(tx);
+        m_transactionManager->addTransaction(tx);
 
     return tx;
 }
@@ -366,7 +364,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             qDebug() << "[Transaction] Send tx" << tx.getAmountDec() << "to" << tx.getReceiver();
             auto createdTx = this->createTransaction(tx);
             if (createdTx.has_value()) {
-                m_txManager->addTransaction(createdTx.value());
+                m_transactionManager->addTransaction(createdTx.value());
                 return createdTx;
             }
         }
@@ -394,7 +392,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 }
 
 std::expected<Transaction, TransactionError>
-ExtraChainNode::createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TypeTx& typeTx) {
+ExtraChainNode::createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TransactionType& typeTx) {
     qDebug() << sender;
     Transaction tx(sender, sender, 0);
     tx.setTypeTx(typeTx);
@@ -504,7 +502,7 @@ void ExtraChainNode::connectSignals() {
         []() {
             qInfo() << "Node: started";
         });
-    connectTxManager();
+    connectTransactionManager();
     connectContractManager();
     //    connectAccountController();
     connectActorIndex();
@@ -513,7 +511,7 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
-    connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
+    // connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
     connect(
         m_networkManager,
         &NetworkManager::newSocket,
@@ -570,8 +568,8 @@ DfsController* ExtraChainNode::dfs() const {
     return m_dfs;
 }
 
-TransactionManager* ExtraChainNode::txManager() const {
-    return m_txManager;
+TransactionManager* ExtraChainNode::transactionManager() const {
+    return m_transactionManager;
 }
 
 DataMiningManager* ExtraChainNode::dataMiningManager() const {

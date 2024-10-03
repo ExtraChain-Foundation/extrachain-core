@@ -17,11 +17,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 
-#include "managers/extrachain_node.h"
 #include <QFuture>
 #include <QtConcurrent>
+
+#include "managers/extrachain_node.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {
     return m_receivedTxList;
@@ -76,6 +77,12 @@ void TransactionManager::makeBlock() {
     BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
     BlockVariant lastBlock = node.blockchain()->getLastBlock();
 
+    if (lastRealBlock.getIndex() != lastBlock.getIndex()) {
+        qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex() << "| last real:" << lastRealBlock.getIndex() << "|" <<  lastRealBlock.getType();
+    } else {
+        qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
+    }
+
     if (m_pendingTxList.empty()) {
         // if (lastRealBlock.isEmpty())
             lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
@@ -84,18 +91,20 @@ void TransactionManager::makeBlock() {
             return;
         }
 
-        return; // temp disable dummy
         // creating dummy block in as ordinary block
+        if (!node.network()->isActiveConnectionExists()) {
+            qDebug() << "[TransactionManager] Dummy: no active connections";
+            return;
+        }
+
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock);
         dummyBlock.addData(lastRealBlock.getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node.blockchain()->signBlock(dummyBlockVariant);
-        const int addedBlock = node.blockchain()->addBlock(dummyBlockVariant);
-        if (addedBlock == 0)
-            lastBlock = dummyBlockVariant;
-        lastBlock = node.blockchain()->getLastBlock();
+
+        node.network()->send_message(dummyBlockVariant.getBlockConst(), MessageType::BlockchainNewBlock);
         return;
     }
 
@@ -140,7 +149,7 @@ void TransactionManager::proveTransactions() {
 
             // hack
             if (res == TransactionProveError::SelfPleasure && tx.isRewardTransaction()) {
-                node.network()->send_message(tx, MessageType::BlockchainTransaction);
+                // node.network()->send_message(tx, MessageType::BlockchainTransaction);
             }
         }
     }
