@@ -129,6 +129,7 @@ std::string DfsController::addLocalFile(const std::shared_ptr<Actor<KeyPrivate>>
     auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     auto lastFileName = DFST::ActorDirFile::getLastName(actrDirFile);
     DBRow rowData = makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
+    rowData["state"] = std::to_string(std::to_underlying(DFS::Basic::FileState::Loaded));
 
     if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
         qDebug() << "[Dfs] addFile: insert failed:" << actrDirFile.file().c_str() << " :"
@@ -493,7 +494,7 @@ DBRow DfsController::makeActrDirDBRow(std::string fileName, std::string fileName
              { "filePath", filePath },
              { "fileSize", std::to_string(fileSize) },
              { "lastModified", std::to_string(Utils::currentDateSecs()) },
-             { "state", std::to_string(int(DFS::Basic::FileState::Unloaded))
+             { "state", std::to_string(std::to_underlying(DFS::Basic::FileState::Unloaded))
              }
     };
 }
@@ -1205,7 +1206,7 @@ void DfsController::updateFileState(const ActorId &actorId, const std::string fi
 {
     auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId.toStdString());
     actrDirFile.update(fmt::format("UPDATE {} SET state = '{}' WHERE fileName = '{}'",
-                                   DFST::ActorDirFile::TableName, int(state), fileName));
+                                   DFST::ActorDirFile::TableName, std::to_underlying(state), fileName));
     actrDirFile.close();
 }
 
@@ -1304,9 +1305,8 @@ void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, con
 
     auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     auto lastFileName = DFST::ActorDirFile::getLastName(actrDirFile);
-    DBRow rowData =
+    const DBRow rowData =
         m_dfsController->makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
-    rowData["state"] = std::to_string(int(DFS::Basic::FileState::Loaded));
 
     if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
         std::string errorStr = fmt::format("[Dfs] addFile: insert failed: {}: {}", actrDirFile.file().c_str(),
