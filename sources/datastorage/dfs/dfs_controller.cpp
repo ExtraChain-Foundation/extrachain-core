@@ -155,7 +155,8 @@ bool DfsController::removeLocalFile(const std::string &actorId, const std::strin
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = fileHash };
     bool res = removeFile(msg);
-    node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    // node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    emit sendNetworkRemoveFile(msg);
     return res;
 }
 

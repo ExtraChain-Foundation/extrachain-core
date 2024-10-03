@@ -142,6 +142,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         auto        sign       = mainActor->key().sign(serialized);
         this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
     });
+    connect(node.dfs(), &DfsController::sendNetworkRemoveFile, this, [&](const DFSP::RemoveFileMessage msg) {
+        qInfo() << "send DfsRemoveFile";
+        node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
