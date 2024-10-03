@@ -23,8 +23,7 @@
 #include "managers/transaction_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
-    : node(node) {
-}
+    : node(node) { }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
     if (hash.empty())

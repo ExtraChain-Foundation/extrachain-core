@@ -313,6 +313,30 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 }
 } // namespace MessagePack
 
+namespace Token {
+static const std::string folder_tokens = "tokens";
+static const std::string db_tokens = "tokens";
+static const std::string tokenTableName = "tokens";
+static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
+static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
+    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+    "name          TEXT   NOT NULL, "
+    "symbol        TEXT NOT NULL, "
+    "count_coins   TEXT  NOT NULL, "
+    "owner         TEXT  NOT NULL, "
+    "color         TEXT  NOT NULL, "
+    "url           TEXT  NOT NULL);";
+namespace Fields {
+    static const std::string name = "name";
+    static const std::string symbol = "symbol";
+    static const std::string count = "count";
+    static const std::string owner = "owner";
+    static const std::string color = "color";
+    static const std::string url = "url";
+    static const std::vector<std::string> fields = { name, symbol, count, owner, color, url };
+}
+}
+
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
 const static int ReconnectInterval = 5000;
@@ -351,9 +375,9 @@ enum class HashEncode {
 };
 
 #ifdef Q_OS_WIN
-static QString filePrefix = "file:///";
+static const std::wstring filePrefix = L"file:///";
 #else
-static QString filePrefix = "file://";
+static const std::wstring filePrefix = L"file://";
 #endif
 
 template<typename E>

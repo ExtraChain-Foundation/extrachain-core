@@ -36,6 +36,8 @@
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
+#include "managers/create_token_manager.h"
+
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
@@ -68,6 +70,8 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     // test port and address
     m_connectionsManager =
         new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
+
+    m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
 
     connectSignals();
 
@@ -244,6 +248,11 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         m_transactionManager->addTransaction(tx);
 
     return tx;
+}
+
+std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
+{
+    return m_createTokenManager;
 }
 
 std::expected<Transaction, TransactionError>
@@ -511,27 +520,28 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
-    // connect(m_networkManager, &NetworkManager::newSocket, m_blockchain, &Blockchain::updateBlockchain);
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->requestSync();
-        });
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
-        });
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocket,
-        [this]() {
-            m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
-        });
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+        m_dfs->requestSync();
+    });
+
+    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+        m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
+    });
+    connect(m_networkManager, &NetworkManager::newSocket,[this]()
+    {
+        m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
+    });
+
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
+    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
+            [&](const Transaction &tx) { txManager()->addTransaction(tx);
+    });
+    connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
+    [=, this](const QString &pathCreatedTokenJson) {
+        m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
+    });
+    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(), &CreateTokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -544,6 +554,7 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Scripts::folder));
+    QDir().mkpath(QString::fromStdString(Token::folder_tokens));
 
     if (!QFile(".settings").exists())
         createNetworkIdentifier();

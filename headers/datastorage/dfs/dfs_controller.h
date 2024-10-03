@@ -96,6 +96,7 @@ private:
     void eraseFirstUnsynchronizedDir();
     void removeRowFromDB(const DFSP::RemoveFileMessage &msg);
     void requestFileSegment(const DFSP::DirRow &row);
+    void updateFileState(const ActorId &actorId, const std::string fileName, DFS::Basic::FileState state);
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
@@ -142,6 +143,7 @@ signals:
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
     void resultAddFile(const QString &result, const QString &fileName);
+    void checkIsContract(const QString &pathToFile);
 };
 
 class ThreadAddFiles : public QThread {
