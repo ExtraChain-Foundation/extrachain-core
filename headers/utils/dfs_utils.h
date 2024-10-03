@@ -69,6 +69,12 @@ namespace Basic {
     static std::wstring      separator        = std::wstring(1, std::filesystem::path::preferred_separator);
     static const int         miningReward     = 1;
     static const std::string dsStoreExtention = ".DS_Store";
+
+    enum class FileState {
+        Unloaded  = 0,
+        Partially = 1,
+        Loaded    = 2
+    };
 }
 
 namespace Packets {
@@ -337,7 +343,8 @@ namespace Tables {
                                                     "fileHash     TEXT             NOT NULL,"
                                                     "filePath     TEXT             NOT NULL,"
                                                     "fileSize     INTEGER          NOT NULL,"
-                                                    "lastModified INTEGER          NOT NULL "
+                                                    "lastModified INTEGER          NOT NULL,"
+                                                    "state        INTEGER CHECK(state IN (0, 2)) NOT NULL"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);

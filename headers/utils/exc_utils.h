@@ -375,9 +375,9 @@ enum class HashEncode {
 };
 
 #ifdef Q_OS_WIN
-static QString filePrefix = "file:///";
+static const std::wstring filePrefix = L"file:///";
 #else
-static QString filePrefix = "file://";
+static const std::wstring filePrefix = L"file://";
 #endif
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");

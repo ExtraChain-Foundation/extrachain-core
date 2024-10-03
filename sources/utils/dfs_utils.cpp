@@ -115,6 +115,10 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
 std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::path &path) {
     std::wstring p = path.wstring();
 
+    if (p.substr(0, Utils::filePrefix.length()) == Utils::filePrefix) {
+        p = p.substr(Utils::filePrefix.length());
+    }
+
     if (p.find(DFSB::separator) == std::wstring::npos) {
         boost::replace_all(p, L"/", DFSB::separator);
         boost::replace_all(p, L"\\", DFSB::separator);
