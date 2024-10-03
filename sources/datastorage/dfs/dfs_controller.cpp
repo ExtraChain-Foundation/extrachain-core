@@ -153,12 +153,10 @@ std::string DfsController::addLocalFile(const std::shared_ptr<Actor<KeyPrivate>>
 bool DfsController::removeLocalFile(const std::string &actorId, const std::string &fileHash) {
     std::string path = DFS_PATH::filePath(actorId, fileHash).string();
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
-                                    .FileName = std::filesystem::path(path).filename().string() };
-
-    removeRowFromDB(msg);
-    const bool removedFile = std::filesystem::remove(path);
+                                    .FileName = fileHash };
+    bool res = removeFile(msg);
     node.network()->send_message(msg, MessageType::DfsRemoveFile);
-    return removedFile;
+    return res;
 }
 
 std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadBytes) {
@@ -286,10 +284,10 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 }
 
 bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
-    if (msg.Actor != node.accountController()->mainActor()->id().toStdString()) {
-        qDebug() << "[Dfs] Remove file - file has been removed";
-        return false;
-    }
+    // if (msg.Actor != node.accountController()->mainActor()->id().toStdString()) {
+    //     qDebug() << "[Dfs] Remove file - file has been removed";
+    //     return false;
+    // }
     std::string message  = fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}", msg.FileName,
                                       msg.Actor, node.accountController()->mainActor()->id().toStdString());
     qDebug() << message;
