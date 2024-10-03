@@ -47,6 +47,7 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 class VPNConnectorManager;
+class CreateTokenManager;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -62,6 +63,8 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
+    std::shared_ptr<CreateTokenManager> m_createTokenManager = nullptr;
+
     // RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
@@ -129,6 +132,7 @@ public:
 
     void InitVPN();
     std::shared_ptr<VPNConnectorManager> vpnConnectorManager;
+    std::shared_ptr<CreateTokenManager> createTokenManager() const;
 
 private:
     void showMessage(QString from, QString message);

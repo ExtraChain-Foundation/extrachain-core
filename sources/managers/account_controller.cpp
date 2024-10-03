@@ -23,8 +23,7 @@
 #include "managers/tx_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
-    : node(node) {
-}
+    : node(node) { }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
     if (hash.empty())
@@ -217,4 +216,3 @@ void AccountController::renamewallet(const QString &oldWalletName, const QString
         }
     }
 }
-
