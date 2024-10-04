@@ -638,9 +638,9 @@ int Blockchain::addBlock(const BlockVariant &block) {
     }
 
     if (block.getType() == BlockType::Genesis) {
-        qDebug() << "[Blockchain] Adding a genesis block" << block.getIndex() << "to storage";
+        // qDebug() << "[Blockchain] Adding a genesis block" << block.getIndex() << "to storage";
     } else {
-        qDebug() << "[Blockchain] Adding a block" << block.getIndex() << "to storage" << block.getType();
+        // qDebug() << "[Blockchain] Adding a block" << block.getIndex() << "to storage" << block.getType();
     }
 
     const auto indexBlock = block.getIndex();
