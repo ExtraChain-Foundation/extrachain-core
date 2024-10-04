@@ -309,7 +309,7 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
             QString              oneLine = in.readLine();
             static const QString prefix  = "Country:";
             if (oneLine.startsWith(prefix))
-                emit getRemovedVPNLocalizationInfo(oneLine);
+                emit getRemovedVPNLocalizationInfo(oneLine, msg.Actor);
         }
     }
 
