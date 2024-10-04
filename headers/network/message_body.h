@@ -26,7 +26,7 @@ enum class MessageType {
     DfsVerifyList = 60,
     RequestDfsSize = 61,
     ResponseDfsSize = 62,
-    DfsState = 63,
+    // DfsState = 63,
     RequestBlockCount = 64,
     ResponseBlockCount = 65,
 
@@ -37,6 +37,7 @@ enum class MessageType {
     BlockchainDataMiningRewardTransaction = 84,
     BlockchainCoinReward = 85,
     BlockchainRequestBlock = 86,
+    BlockhainSync = 87,
 
     FragmentDataInfo = 90,
     FragmentsDataListInfo = 91,
@@ -56,6 +57,7 @@ enum class MessageType {
     VPNConnection = 1002,
     VPNDisconnect = 1003,
     VPNUpdateConnection = 1004,
+    Unknown = 404
 
 };
 MSGPACK_ADD_ENUM(MessageType)

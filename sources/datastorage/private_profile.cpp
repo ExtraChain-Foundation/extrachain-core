@@ -24,13 +24,11 @@
 #include "enc/enc_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash,
-                                      const Actor<KeyPrivate> &farmingAddress) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
     PrivateProfile user;
     user.m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(actor));
     user.m_main = actor.id();
     user.m_hash = hash;
-    user.m_farmingAddress.push_back(farmingAddress);
     user.save();
     return user;
 }
@@ -57,10 +55,6 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::current() const {
 
 const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &PrivateProfile::actors() const {
     return m_actors;
-}
-
-const std::vector<Actor<KeyPrivate>> &PrivateProfile::farmings() const {
-    return m_farmingAddress;
 }
 
 bool PrivateProfile::changeCurrent(const ActorId &actorId) {
@@ -111,21 +105,14 @@ QJsonObject PrivateProfile::toJson() const {
     }
     json["actors"] = actors;
 
-    QJsonArray farmings;
-    for (const auto &farming : m_farmingAddress) {
-        farmings.append(farming.toJsonArray());
-    }
-
-    json["farming"] = farmings;
     qDebug() << json;
     return json;
 }
 
-void PrivateProfile::renameWallet(const std::string &oldWalletName, const std::string &newWalletName)
-{
-    for(auto &actor : m_actors) {
+void PrivateProfile::renameWallet(const std::string &oldWalletName, const std::string &newWalletName) {
+    for (auto &actor : m_actors) {
         qDebug() << actor->walletName();
-        if(actor->walletName() == oldWalletName) {
+        if (actor->walletName() == oldWalletName) {
             qDebug() << "We found wallet that must rename" << actor->walletName();
             actor->setWalletName(newWalletName);
             save();
@@ -147,23 +134,16 @@ void PrivateProfile::save() {
 void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
-    auto data = file.readAll().toStdString();
+    auto data      = file.readAll().toStdString();
     auto jsonBytes = QByteArray::fromStdString(SecretKey::decryptWithPassword(data, m_hash));
     // decrypt with m_hash
-    auto json = QJsonDocument::fromJson(jsonBytes).object();
-    m_main = json["main"].toString().toStdString();
+    auto json         = QJsonDocument::fromJson(jsonBytes).object();
+    m_main            = json["main"].toString().toStdString();
     const auto actors = json["actors"].toArray();
     for (const auto &actor : actors) {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
-        auto a = Actor<KeyPrivate>::fromJson(json);
+        auto a    = Actor<KeyPrivate>::fromJson(json);
         m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(a));
-    }
-
-    const auto farmings = json["farming"].toArray();
-    for (const auto &farming : farmings) {
-        auto json = QJsonDocument(farming.toArray()).toJson(QJsonDocument::Compact);
-        auto a = Actor<KeyPrivate>::fromJson(json);
-        m_farmingAddress.push_back(a);
     }
 }
 

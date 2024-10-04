@@ -184,31 +184,6 @@ namespace Packets {
         MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
     };
 
-    enum StateMessageType {
-        base = 0
-    };
-
-    struct StateMessage {
-        std::string      FarmingActor;
-        StateMessageType StateTypeMessage;
-        uint64_t         DataAmountStored;
-        double           Coefficient                        = 0.5;
-        double           CoinProducedForNode                = 0.0;
-        uint64_t         CoinProductionAlgorithmTickBlocks  = 100;
-        float            BlockProductionRate                = 0.5;
-        uint64_t         CoinProductionAlgorithmTickPerHour = 18;
-
-        MSGPACK_DEFINE(
-            FarmingActor,
-            StateTypeMessage,
-            DataAmountStored,
-            Coefficient,
-            CoinProducedForNode,
-            CoinProductionAlgorithmTickBlocks,
-            BlockProductionRate,
-            CoinProductionAlgorithmTickPerHour)
-    };
-
     struct Connection {
         std::string port;
         std::string address;
@@ -308,8 +283,7 @@ namespace Historical {
 }
 
 namespace Reward {
-    static const BigNumber coinProductionAlgorithmTick = BigNumber("100", NumeralBase::Dec);
-
+    static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
     struct CoinReward {
         std::string    Actor;
         BigNumberFloat Coin;
@@ -430,9 +404,6 @@ namespace DFS_PATH = DFS::Path;
 namespace DFSR = DFS::Reward;
 
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
-
-MSGPACK_ADD_ENUM(DFS::Packets::StateMessageType)
-
 MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
 
 #endif // DFS_UTILS_H

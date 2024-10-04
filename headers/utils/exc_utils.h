@@ -132,6 +132,7 @@ namespace DataStorage {
     static const std::string TxBlockTable = "Transactions";
     static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
         + " ("
+          "type         INT   NOT NULL, "
           "sender       TEXT  NOT NULL, "
           "receiver     TEXT  NOT NULL, "
           "amount       TEXT  NOT NULL, "
@@ -186,13 +187,6 @@ namespace DataStorage {
         + " ("
           "id   TEXT PRIMARY KEY NOT NULL, "
           "type INT              NOT NULL  "
-          ");";
-
-    static const std::string farmingCacheTable = "FarmingCache";
-    static const std::string farmingTableCreate = "CREATE TABLE IF NOT EXISTS " + farmingCacheTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "blockIndex INT              NOT NULL  "
           ");";
 
     // How many files one section folder will store
@@ -379,6 +373,11 @@ static const std::wstring filePrefix = L"file:///";
 #else
 static const std::wstring filePrefix = L"file://";
 #endif
+
+template<typename E>
+std::string enumFullName(E value) {
+    return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
+}
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64 diskFreeMemory();

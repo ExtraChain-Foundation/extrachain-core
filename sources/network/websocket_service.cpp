@@ -104,12 +104,17 @@ void WebSocketService::sendMessage(const QByteArray &data) {
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
+void WebSocketService::final()
+{
+    if (this->m_activated)
+        m_ws->flush();
+}
+
 void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->m_port = m_ws->peerPort();
     handshake();
     qDebug() << "[WS] New service:" << m_ip << port();
-    emit node.network()->newSocket();
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
@@ -124,10 +129,9 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
     connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
-    //    connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
+    // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
     connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
-    connect(m_ws, QOverload<QAbstractSocket::SocketError>::of(&QWebSocket::error), this,
-            &WebSocketService::onSocketError);
+    connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
 }
 
 void WebSocketService::handshake() {

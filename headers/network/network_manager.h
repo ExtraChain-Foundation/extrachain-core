@@ -231,10 +231,11 @@ private slots:
 public:
     QString localIp(); // TODO: remove
 
-    void sendMessage(
-        const std::string&    serialized_message,
-        Config::Net::TypeSend typeSend,
-        const std::string&    receiver_identifier);
+    void sendMessage(const std::string&    serialized_message,
+                     Config::Net::TypeSend typeSend,
+                     const std::string&    receiver_identifier,
+                     MessageType           type_info,
+                     MessageStatus         status_info);
     void saveToCache(
         const std::string&    serialized_message,
         Config::Net::TypeSend typeSend,
@@ -275,7 +276,7 @@ public:
             receiver_identifier = m_messages[to_message_id];
             //            if (receiver_identifier.empty())
             //                qFatal("Network send message error: receiver_identifier is empty");
-            m_messages.erase(to_message_id);
+            // m_messages.erase(to_message_id);
         }
 
         #ifdef QT_DEBUG
@@ -293,7 +294,7 @@ public:
         }
         #endif
 
-        this->sendMessage(serialized + sign, typeSend, receiver_identifier);
+        this->sendMessage(serialized + sign, typeSend, receiver_identifier, type, status);
 
         return message.message_id;
     }
@@ -304,7 +305,7 @@ public:
     CalculateTraffic* getCalculateTraffic() const;
     
 signals:
-    void newSocket();
+    void newSocketActivated();
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);

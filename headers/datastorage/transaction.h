@@ -25,31 +25,40 @@
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
-enum class TypeTx {
+enum class TransactionType {
     Transaction = 0,
-    RewardTransaction = 1,
-    FarmingTransaction = 2,
-    FarmingLockedTransaction = 3
+    Reward = 1
 };
-MSGPACK_ADD_ENUM(TypeTx)
-FORMAT_ENUM(TypeTx)
-
-struct TransactionData {
-    std::string hash;
-    std::string path;
-    MSGPACK_DEFINE(hash, path)
-};
+MSGPACK_ADD_ENUM(TransactionType)
+FORMAT_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
     EmptyTransaction,
-    NoLastBlock,
+    NoLastBlock, // EmptyBlockchain?
     InsufficientFunds,
     NoCurrentUser,
     ZeroAmount
 };
 // MSGPACK_ADD_ENUM(TransactionError)
 FORMAT_ENUM(TransactionError)
+
+enum class TransactionProveError {
+    NoError,
+    Unknown,
+    AmountZero, // amount == 0
+    AmountLessZero, // amount less 0
+    IdenticalSenderReceiver, // sender == receiver
+    EmptyBlockchain, // no real block
+    SenderNotExists, // sender is not exist
+    ReceiverNotExists, // receiver is not exist
+    ZeroProducer, // producer 0
+    ProducerVerify, // bad signature in fee tx
+    SenderBalanceBelowZero, // sender's balance will be < 0
+    SelfPleasure,
+    RewardWrongToken
+};
+FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
     ActorId sender;
@@ -65,7 +74,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string signature;
-    TypeTx typeTx = TypeTx::Transaction;
+    TransactionType m_type = TransactionType::Transaction;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -127,10 +136,8 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
-    bool isFarmingTransaction() const;
-    bool isLockedFarmingTransaction() const;
-    TypeTx getTypeTx() const;
-    virtual void setTypeTx(TypeTx newTypeTx);
+    TransactionType type() const;
+    virtual void setType(TransactionType newType);
 
     MSGPACK_DEFINE(
         sender,
@@ -144,20 +151,7 @@ public:
         approver,
         producer,
         signature,
-        typeTx)
-};
-
-struct FarmingTransactionData {
-    BigNumber index;
-    Transaction transaction;
-
-    void decrementIndex() {
-        index -= BigNumber(1);
-    }
-
-    bool canImproveTx() {
-        return index <= 0;
-    }
+        m_type)
 };
 
 QDebug operator<<(QDebug debug, const Transaction &tx);

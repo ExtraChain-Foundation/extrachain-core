@@ -21,8 +21,7 @@
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
-#include "managers/thread_pool.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/bignumber_float.h"
@@ -106,7 +105,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-    connect(service, &WebSocketService::activated, this, [&] { node.dfs()->requestDirFileAllActors(); });
+    connect(service, &WebSocketService::activated, this, [&] { emit this->newSocketActivated(); });
     if (!m_connections.contains(service)) {
         m_connections.append(service);
         if (node.isClientApp() && requestListNodes)
@@ -134,7 +133,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
         auto        serialized = message.serialize();
         auto        sign       = mainActor->key().sign(serialized);
-        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
     });
 }
 
@@ -142,7 +141,7 @@ void NetworkManager::removeConnection(const QString &identifier) {
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
 
-    for (auto connection : qAsConst(m_connections)) {
+    for (const auto &connection : std::as_const(m_connections)) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
@@ -153,7 +152,8 @@ NetworkManager::~NetworkManager() {
     delete upnpDis;
     delete local;
 
-    for (const auto &connection : qAsConst(m_connections)) {
+    for (const auto &connection : std::as_const(m_connections)) {
+        connection->final();
         emit connection->close();
         emit connection->finished();
     }
@@ -288,9 +288,10 @@ void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool re
 }
 
 void NetworkManager::sendMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                 const std::string &receiver_identifier) {
+                                 const std::string &receiver_identifier, MessageType type_info,
+                                 MessageStatus status_info) {
     if (!isActiveConnectionExists()) {
-        qDebug() << "[NetworkManager] Save message to cache";
+        qDebug() << "[NetworkManager] Save message to cache" << type_info << status_info;
         saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
@@ -398,7 +399,7 @@ void NetworkManager::sendFromCache() {
         const std::string deserialized_message = deserializedList[0];
         const Config::Net::TypeSend typeSend = typeSendFromString(deserializedList[1]);
         const std::string receiver_identifier = deserializedList[2];
-        sendMessage(deserialized_message, typeSend, receiver_identifier);
+        sendMessage(deserialized_message, typeSend, receiver_identifier, MessageType::Unknown, MessageStatus::NoStatus);
     }
 }
 
@@ -406,7 +407,7 @@ bool NetworkManager::isActiveConnectionExists() {
     if (this->m_connections.isEmpty())
         return false;
 
-    for (const auto &el : qAsConst(this->m_connections)) {
+    for (const auto &el : std::as_const(this->m_connections)) {
         if (el->isActive())
             return true;
     }
@@ -485,6 +486,8 @@ void NetworkManager::messageReceived(
                 if (identifier != item->identifier().toStdString())
                 {
                     qDebug() << item->ip().toStdString();
+                    if (item->ip().isEmpty())
+                        continue;
                     ips.emplace_back(item->ip().toStdString());
                 }
             }
@@ -652,27 +655,12 @@ void NetworkManager::messageReceived(
         break;
     }
 
-    case MessageType::DfsState: {
-        switch (status) {
-        case MessageStatus::Request: {
-            Transaction reward = node.dataMiningManager()->makeRewardTx(mb);
-            this->send_message(reward, MessageType::BlockchainTransaction);
-            break;
-        }
-        case MessageStatus::NoStatus:
-        case MessageStatus::Response:
-            break;
-        }
-
-        break;
-    }
-
     case MessageType::BlockchainGenesisBlock: {
         qDebug() << "BlockchainGenesisBlock";
         // TODO: why temp std::string?
         GenesisBlock genesisBlock = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!genesisBlock.isEmpty()) {
-            node.blockchain()->addGenBlockToBlockchain(genesisBlock);
+            node.blockchain()->addGenesisBlockFromNetwork(genesisBlock);
         } else {
             qDebug() << "false genesis block";
         }
@@ -680,11 +668,11 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::BlockchainNewBlock: {
-        qDebug() << "BlockchainNewBlock";
+        // qDebug() << "BlockchainNewBlock";
         Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node.blockchain()->addBlockToBlockchain(blockVariant);
+            node.blockchain()->addBlockFromNetwork(blockVariant);
         }
         break;
     }
@@ -692,20 +680,7 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        if (!(transaction.getData().empty()) && (transaction.getTypeTx() != TypeTx::RewardTransaction)) {
-            TransactionData transactionData =
-                MessagePack::deserialize<TransactionData>(transaction.getData());
-            qDebug() << "run code from " << transactionData.path.c_str()
-                     << "with hash: " << transactionData.hash.c_str();
-        }
-
-        // TODO deep analisys
-        auto &transactionList = node.txManager()->getReceivedTxListByReference();
-        auto found = std::find(transactionList.begin(), transactionList.end(), transaction);
-        if (found != transactionList.end()) {
-            transactionList.erase(found);
-        }
-        node.txManager()->addTransaction(transaction);
+        node.transactionManager()->addTransaction(transaction);
         break;
     }
 
@@ -726,6 +701,12 @@ void NetworkManager::messageReceived(
         else if (requestData.first == BlockType::Genesis)
             node.blockchain()->sendLastGenesisBlock();
 
+        break;
+    }
+
+    case MessageType::BlockhainSync: {
+        auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
+        node.blockchain()->syncResponse(fromBlock, messageId);
         break;
     }
 
@@ -750,7 +731,7 @@ void NetworkManager::messageReceived(
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.blockchain()->sendCoinsReward(requestReward);
+            node.dataMiningManager()->sendCoinsReward(requestReward);
             break;
         }
         case MessageStatus::Response: {
@@ -847,7 +828,7 @@ void NetworkManager::messageReceived(
         Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec), ActorId(Token::ROCC_TOKEN));
         tx.setDate(QDateTime::currentMSecsSinceEpoch());
         tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node.txManager()->addTransaction(tx);
+        node.transactionManager()->addTransaction(tx);
         node.network()->send_message(tx, MessageType::BlockchainTransaction);
         */
         break;
@@ -892,12 +873,16 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     auto service = qobject_cast<SocketService *>(QObject::sender());
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
-    if (error != Network::SocketServiceError::DuplicateIdentifier) {
+    if (error != Network::SocketServiceError::DuplicateIdentifier && error != Network::SocketServiceError::IncompatibleIdentifier) {
         for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
         {
             if (it->first.ip == service->ip() && it->first.protocol == service->protocol())
             {
-                reconnectSocket(it->first, it->second);
+                auto r = it->first;
+                auto i = it->second;
+                QTimer::singleShot(1000, [this, r, i] {
+                    this->reconnectSocket(r, i);
+                });
                 break;
             }
         }
@@ -976,7 +961,6 @@ void NetworkManager::onNewWsConnection() {
 
     auto service = new WebSocketService(ws, node);
     connectWsService(service);
-    emit newSocket();
     m_reconnectionsToIdentifier.emplace(NetworkReconnect {
                                     .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket }, "");
 }

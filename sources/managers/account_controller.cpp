@@ -20,7 +20,7 @@
 #include "managers/account_controller.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/index/actorindex.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 
 AccountController::AccountController(ExtraChainNode &node)
     : node(node) { }
@@ -29,10 +29,9 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     if (hash.empty())
         qFatal("[Accounts] Create actor: hash is empty");
 
-    Actor<KeyPrivate> actor, farming;
+    Actor<KeyPrivate> actor;
     actor.create(type);
-    farming.create(type);
-    auto profile = PrivateProfile::create(actor, hash, farming);
+    auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node.actorIndex()->addActor(actor.convertToPublic());
@@ -43,7 +42,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     qDebug() << "[Accounts] Created new profile" << actor.id();
 
     node.start(); // TODO: remove
-    node.txManager()->runMakeAndProveBlockTimers();
+    node.transactionManager()->runMakeAndProveBlockTimers();
 
     node.blockchain()->getBlockZero();
     node.calculateBlockCount();
@@ -85,7 +84,7 @@ bool AccountController::load(const std::string &hash) {
             m_currentProfile = profile.main()->id();
             node.start(); // TODO: remove
             if (this->empty())
-                node.txManager()->runMakeAndProveBlockTimers();
+                node.transactionManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
         }
@@ -151,16 +150,6 @@ const std::vector<ActorId> AccountController::accountsIds() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
         ids.push_back(currentProfile().actors()[i]->id());
-    }
-    return ids;
-}
-
-const std::vector<ActorId> AccountController::farmingIds() const
-{
-    std::vector<ActorId> ids;
-    const auto farmings = currentProfile().farmings();
-    for (int i = 0; i < farmings.size(); i++) {
-        ids.push_back(farmings[i].id());
     }
     return ids;
 }

@@ -123,6 +123,7 @@ private:
 
         if (!Utils::is_hex_string_lower(m_id)) {
             qFatal("[ActorId] Not correct hex: %s", m_id.c_str());
+            m_id = "00000000000000000000";
         }
     }
 

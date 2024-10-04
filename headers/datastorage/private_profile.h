@@ -24,32 +24,30 @@
 
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash, const Actor<KeyPrivate> &farmingAddress);
-    static PrivateProfile load(const ActorId &actorId, const std::string &hash);
+    static PrivateProfile                    create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile                    load(const ActorId &actorId, const std::string &hash);
     const std::shared_ptr<Actor<KeyPrivate>> main() const;
     const std::shared_ptr<Actor<KeyPrivate>> current() const;
     const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &actors() const;
-    const std::vector<Actor<KeyPrivate>> &farmings() const;
-    bool changeCurrent(const ActorId &actorId);
-    void addWalet(const Actor<KeyPrivate> &actor);
-    const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
-    bool loaded();
-    const std::string &hash() const;
-    QJsonObject toJson() const;
-    void renameWallet(const std::string& oldWalletName, const std::string& newWalletName);
+    bool                                                   changeCurrent(const ActorId &actorId);
+    void                                                   addWalet(const Actor<KeyPrivate> &actor);
+    const std::shared_ptr<Actor<KeyPrivate>>               getActor(const ActorId &actorId) const;
+    bool                                                   loaded();
+    const std::string                                     &hash() const;
+    QJsonObject                                            toJson() const;
+    void renameWallet(const std::string &oldWalletName, const std::string &newWalletName);
 
 private:
     PrivateProfile() = default;
 
-    void save();
-    void load();
+    void                  save();
+    void                  load();
     std::filesystem::path path();
 
-    ActorId m_main;
-    ActorId m_current;
-    std::string m_hash;
+    ActorId                                         m_main;
+    ActorId                                         m_current;
+    std::string                                     m_hash;
     std::vector<std::shared_ptr<Actor<KeyPrivate>>> m_actors;
-    std::vector<Actor<KeyPrivate>> m_farmingAddress;
 };
 
 #endif // PRIVATE_PROFILE_H
