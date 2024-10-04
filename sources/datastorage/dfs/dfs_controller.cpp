@@ -1383,3 +1383,29 @@ void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, con
     //    };
     emit added(msg, filePath.string());
 }
+
+void DfsController::loadVPNLocalizationFiles() {
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+
+    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {}", DFST::DirsFile::TableName));
+    for (const auto &row : actors) {
+        auto        actorID     = row.begin()->second;
+        DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorID);
+
+        auto actorRows = actrDirFile.select(fmt::format(
+            "SELECT fileName FROM {} WHERE filePath='localizationInfo' AND state={}",
+            DFST::ActorDirFile::TableName,
+            std::to_string(static_cast<int>(DFS::Basic::FileState::Loaded))));
+        for (const auto &actorRow : actorRows) {
+            for (const auto &actorCol : actorRow) {
+                auto fileName = actorCol.second;
+                emit vpnLocalizationLoadedFromStorage(actorID, fileName);
+            }
+        }
+
+        actrDirFile.close();
+    }
+
+    dirsFile.close();
+}
