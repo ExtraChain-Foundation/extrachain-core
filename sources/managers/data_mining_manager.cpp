@@ -164,6 +164,8 @@ void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &reques
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
         transaction.setType(TransactionType::Reward);
         transaction.sign(node->accountController()->mainActor());
+        if (transaction.getAmount() == 0)
+            return;
         node->network()->send_message(transaction, MessageType::BlockchainTransaction);
     }
 }
