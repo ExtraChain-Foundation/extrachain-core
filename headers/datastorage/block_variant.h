@@ -33,7 +33,8 @@ public:
         if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
             return genesisBlock->dataRows();
         }
-        throw std::runtime_error("Not a GenesisBlock");
+        static std::set<GenesisDataRow> rows;
+        return rows;
     }
 
     QString toString() const;

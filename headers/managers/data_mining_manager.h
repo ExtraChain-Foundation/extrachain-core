@@ -20,11 +20,12 @@
 #ifndef DATA_MINING_MANAGER_H
 #define DATA_MINING_MANAGER_H
 
-#include "utils/bignumber_float.h"
-#include <QObject>
-#include <managers/extrachain_node.h>
-#include <network/message_body.h>
 #include <string>
+#include <QObject>
+
+#include "datastorage/dfs/dfs_controller.h"
+#include "utils/bignumber_float.h"
+#include <managers/extrachain_node.h>
 #include <utils/db_connector.h>
 #include <utils/dfs_utils.h>
 
@@ -33,15 +34,7 @@ class DataMiningManager : public QObject {
 
     ExtraChainNode *node;
     const int CoinProductionRate = 100;
-    const BigNumberFloat farmingPercent = BigNumberFloat("0.0002");
-    BigNumberFloat balanceFarming;
-    BigNumber indexBlockFarming = 2;//42300;
-    BigNumber indexBlock;
-    bool isFarmingCashEmpty = true;
     bool isRecalculate = false;
-
-    const std::string farmingCachePath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
-        + DataStorage::ACTOR_INDEX_FOLDER_NAME.toStdString() + "/farming";
 
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
@@ -50,16 +43,25 @@ public:
                                   BigNumberFloat dataAmountTotalStoredInNetwork,
                                   BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
                                   double coefficient);
-    Transaction makeRewardTx(const MessageBody &state);
-    Transaction makeRewardTx(const DFSR::RequestReward &requestReward, const double coefficient = 0.5);
 
-    void coinRewardRequest(const BigNumber &blockIndex);
-    void interestAccrual();
-    BigNumberFloat farmingBalance() const;
-    void calculateFarmingBalanceMainUser();
+    /**
+     * @brief Reward request
+     * */
+    void requestCoinReward();
+    
+     /**
+     * @brief calculate reward amound
+     * @return amount of reward
+     */
+    BigNumberFloat calculateRewardAmount() const;
+    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
+
+    /**
+     * @brief Send reward amount
+     */
+    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
 
 private:
-    void updateLastIndex();
 };
 
 #endif // DATA_MINING_MANAGER_H

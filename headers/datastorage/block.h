@@ -70,7 +70,7 @@ class BlockVariant;
 class EXTRACHAIN_EXPORT Block {
 protected:
     BlockType m_type;                  // simple block, or genesis block (or other)
-    std::set<std::string> m_dataService;      // payload (serialized tx's, or other)
+    std::set<std::string> m_dataService;      // payload (serialized transaction's, or other)
     BigNumber m_index = BigNumber(-1); // block id
     long long m_date;
     std::string m_prevHash;               // previous block hash

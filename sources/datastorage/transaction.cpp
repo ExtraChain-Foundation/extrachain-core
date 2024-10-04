@@ -31,7 +31,7 @@ Transaction::Transaction() {
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TypeTx::Transaction;
+    this->m_type = TransactionType::Transaction;
     calcHash();
 }
 
@@ -49,7 +49,7 @@ Transaction::Transaction(
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TypeTx::Transaction;
+    this->m_type = TransactionType::Transaction;
     this->token = token;
     calcHash();
 }
@@ -66,7 +66,7 @@ Transaction::Transaction(const Transaction &other) {
     this->approver = other.approver;
     this->signature = other.signature;
     this->producer = other.producer;
-    this->typeTx = other.typeTx;
+    this->m_type = other.m_type;
     calcHash();
 }
 
@@ -75,15 +75,7 @@ void Transaction::setReceiver(const ActorId &value) {
 }
 
 bool Transaction::isRewardTransaction() const {
-    return typeTx == TypeTx::RewardTransaction;
-}
-
-bool Transaction::isFarmingTransaction() const {
-    return typeTx == TypeTx::FarmingTransaction;
-}
-
-bool Transaction::isLockedFarmingTransaction() const {
-    return typeTx == TypeTx::FarmingLockedTransaction;
+    return m_type == TransactionType::Reward;
 }
 
 void Transaction::setProducer(const ActorId &value) {
@@ -141,12 +133,12 @@ void Transaction::calcHash() {
     }
 }
 
-TypeTx Transaction::getTypeTx() const {
-    return typeTx;
+TransactionType Transaction::type() const {
+    return m_type;
 }
 
-void Transaction::setTypeTx(TypeTx newTypeTx) {
-    typeTx = newTypeTx;
+void Transaction::setType(TransactionType newType) {
+    m_type = newType;
 }
 
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
@@ -251,17 +243,17 @@ void Transaction::operator=(const Transaction &other) {
     this->approver = other.approver;
     this->signature = other.signature;
     this->producer = other.producer;
-    this->typeTx = other.typeTx;
+    this->m_type = other.m_type;
 }
 
-std::string Transaction::toStdString() const
-{
+std::string Transaction::toStdString() const {
     return toString().toStdString();
 }
 
 QString Transaction::toString() const {
     auto hashQt = QString::fromStdString(hash);
-    return "Transaction { sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
+    auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
+    return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
            + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
            + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)
            + "', token: " + token.toByteArray() + ", prevBlock: " + prevBlock.toByteArray() + ", hash: '"

@@ -117,8 +117,6 @@ public:
     BigNumber getRecords() const;
     BigNumber getCountRealBlocks() const;
     int getCountTransactionsInBlocks() const;
-    BigNumber getIndexBlockByLastFarmingTx() const;
-    std::list<FarmingTransactionData> getAllLockedFarmingTransactions() const;
     int removeById(const BigNumber &id);
     int removeById(const BlockVariant &block);
     void removeDummyBlocks(const BigNumber &id);

@@ -20,7 +20,7 @@
 #include "managers/data_mining_manager.h"
 #include "datastorage/blockchain.h"
 #include "datastorage/dfs/dfs_controller.h"
-#include "managers/tx_manager.h"
+#include "managers/transaction_manager.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
 
@@ -49,6 +49,7 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
     return coinProducedForNode;
 }
 
+/*
 Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     DFSP::StateMessage state = MessagePack::deserialize<DFSP::StateMessage>(mb.data);
     BigNumberFloat circulativeSupply = node->blockchain()->getCirculativeSuply();
@@ -108,53 +109,69 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
             node->network()->send_message(stateMessage, MessageType::DfsState, MessageStatus::Request);
     }
 }
+*/
 
-void DataMiningManager::interestAccrual() {
-    indexBlock++;
-    updateLastIndex();
-    if (indexBlock % indexBlockFarming == 0) {
-        return; // farming not farm
-        if (!isRecalculate) {
-            calculateFarmingBalanceMainUser();
-        }
-        BigNumberFloat result = balanceFarming * farmingPercent;
-        balanceFarming += result;
-        ActorId actorId = node->accountController()->mainActor()->id();
-        auto transaction = node->createFarmingTransaction(actorId, result, TypeTx::FarmingTransaction);
-        if (transaction.has_value())
-            node->txManager()->addTransaction(transaction.value());
-        else
-            qDebug() << "[DataMiningManager] Can't create tx:" << transaction.error();
+void DataMiningManager::requestCoinReward() {
+    const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
+    auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
+
+    auto requestReward = DFS::Reward::RequestReward{ .Actor              = actor->id().toStdString(),
+                   .DataStoredSize     = node->dfs()->sizeTaken(),
+                   .TypeFunctioningObj = DFS::Reward::Base,
+                   .RewardAmount       = calculateRewardAmount(),
+                   .BytesSent          = totalBytes.first,
+                   .BytesReceived      = totalBytes.second,
+                   .BlocksStored       = node->blockchain()->getBlocksStored() };
+
+    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+}
+
+BigNumberFloat DataMiningManager::calculateRewardAmount() const {
+    // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
+    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+
+    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
+        // qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
+        //          << totalBytes.first << node->dfs()->totalDfsSize();
+        return 0;
+    }
+
+    return (
+        BigNumberFloat { node->dfs()->sizeTaken() } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { totalBytes.second } / totalBytes.first
+        + (BigNumberFloat { node->blockchain()->getBlocksStored() } / node->blockchain()->getLastBlock().getIndex() * 100));
+}
+
+BigNumberFloat DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const {
+    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+        // qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
+        //          << requestReward.BytesSent << node->dfs()->totalDfsSize();
+        return 0;
+    }
+
+    return (
+        BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+        + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+        + (BigNumberFloat { requestReward.BlocksStored } / node->blockchain()->getLastBlock().getIndex() * 100));
+}
+
+void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
+    if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
+        Transaction transaction;
+        transaction.setSender(ActorId());
+        transaction.setReceiver(requestReward.Actor);
+        transaction.setAmount(requestReward.RewardAmount);
+        transaction.setDate(QDateTime::currentMSecsSinceEpoch());
+        transaction.setType(TransactionType::Reward);
+        transaction.sign(node->accountController()->mainActor());
+        if (transaction.getAmount() == 0)
+            return;
+        node->network()->send_message(transaction, MessageType::BlockchainTransaction);
     }
 }
 
-BigNumberFloat DataMiningManager::farmingBalance() const {
-    return balanceFarming;
-}
-
-void DataMiningManager::calculateFarmingBalanceMainUser() {
-    auto currentActorId = node->accountController()->currentProfile().current()->id();
-    balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TypeTx::FarmingTransaction);
-    isRecalculate = true;
-}
-
-void DataMiningManager::updateLastIndex() {
-    return; // farming not farm
-    DBConnector db(farmingCachePath);
-    bool isDbOpen = db.open();
-    if (!isFarmingCashEmpty) {
-        db.query(fmt::format(
-            "UPDATE {} SET blockIndex='{}' WHERE id = '1'",
-            Config::DataStorage::farmingCacheTable,
-            indexBlock.toStdString(NumeralBase::Dec)));
-    } else {
-        DBRow row;
-        row.insert({ "id", "1" });
-        row.insert({ "blockIndex", indexBlock.toStdString(NumeralBase::Dec) });
-        const bool inserted = db.insert(Config::DataStorage::farmingCacheTable, row);
-        if (inserted)
-            isFarmingCashEmpty = false;
-    }
-
-    db.close();
-}
+// void DataMiningManager::calculateFarmingBalanceMainUser() {
+//     auto currentActorId = node->accountController()->currentProfile().current()->id();
+//     balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TransactionType::FarmingTransaction);
+//     isRecalculate = true;
+// }

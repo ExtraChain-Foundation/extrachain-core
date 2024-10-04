@@ -57,7 +57,7 @@ int BlockIndex::addBlock(const BlockVariant &block) {
 
 BlockVariant BlockIndex::getLastBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last saved id:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         BlockVariant block = this->getBlockById(id);
 
@@ -77,7 +77,7 @@ BlockVariant BlockIndex::getLastBlock() const {
 
 BlockVariant BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] getLastBlock: last saved id -" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last real block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         BlockVariant block = this->getBlockById(id);
         if ((!block.isEmpty()) && (block.getType() != BlockType::Dummy)) {
@@ -91,7 +91,7 @@ BlockVariant BlockIndex::getLastRealBlock() const {
 
 GenesisBlock BlockIndex::getLastGenesisBlock() const {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] getLastGenesisBlock: last saved id -" << this->lastSavedId;
+    // qDebug() << "[BlockIndex] Last real genesis block:" << this->lastSavedId;
     while (id >= getFirstSavedId()) {
         GenesisBlock block = this->getGenesisBlockById(id);
         if (!block.isEmpty()) {
@@ -114,6 +114,10 @@ GenesisBlock BlockIndex::getGenesisBlockById(const BigNumber &id) const {
 }
 
 BlockVariant BlockIndex::getBlockById(const BigNumber &id) const {
+    if (id < 0) {
+        qFatal("getBlockById < 0");
+    }
+
     auto block = this->getById(id);
     if (block.has_value() && !block->isEmpty()) {
         return *block;
@@ -450,9 +454,9 @@ void BlockIndex::calculationCountBlock() {
         BlockVariant block = this->getBlockById(id);
         if (!block.isEmpty()) {
             if (block.getType() == BlockType::Data) {
-                qDebug() << "[BlockIndex] Block by index" << block.getIndex() << " is real";
+                // qDebug() << "[BlockIndex] Block by index" << block.getIndex() << "is real";
                 realBlockRecords++;
-                qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
+                // qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
             }
             if (block.isBlock()) {
                 countTransactions += block.transactions().size();
@@ -462,16 +466,17 @@ void BlockIndex::calculationCountBlock() {
         --id;
     }
     qDebug() << "[BlockIndex] Count records:" << records << "";
+    removeDummyBlocks(records);
 }
 
 int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     QString path = buildFilePath(id);
     QFile file(path);
 
-    qDebug() << "[BlockIndex] Saving the file:" << path;
+    // qDebug() << "[BlockIndex] Saving the file:" << path << newBlock.getType();
 
     if (file.exists()) {
-        qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";
+        // qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";
         return Errors::FILE_ALREADY_EXISTS;
     }
 
@@ -542,6 +547,7 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
             auto rows = block.transactions();
             for (const auto &tmp : std::as_const(rows)) {
                 DBRow rowRow;
+                rowRow.insert({ "type", std::to_string(std::to_underlying(tmp.type())) });
                 rowRow.insert({ "sender", tmp.getSender().toStdString() });
                 rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
@@ -552,10 +558,8 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
                 rowRow.insert({ "hash", tmp.getHash() });
                 rowRow.insert({ "approver", tmp.getApprover().toStdString() });
                 rowRow.insert({ "signature", tmp.getSignature() });
-                if (tmp.getProducer().isZero())
-                    rowRow.insert({ "producer", "0" });
-                else
-                    rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+                rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+
                 bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
                 if (txInserted)
                     countTransactions++;
@@ -642,14 +646,17 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
     qDebug() << "[BlockIndex] remove dummy blocks";
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
-    while (!isNotDummyBlock) {
+
+    if (lastSavedId < 0 || firstSavedId < 0)
+        return;
+
+    while (lastId != firstSavedId) {
         const auto block = getBlockById(lastId);
-        if (block.getType() != BlockType::Dummy) {
-            isNotDummyBlock = true;
-        } else {
+        if (block.getType() == BlockType::Dummy) {
             removeById(block);
-            lastId--;
         }
+
+        lastId--;
     }
 }
 
@@ -703,55 +710,6 @@ BigNumber BlockIndex::getCountRealBlocks() const {
 
 int BlockIndex::getCountTransactionsInBlocks() const {
     return countTransactions;
-}
-
-BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const {
-    if (getRecords().isEmpty())
-        return BigNumber(-1);
-
-    BigNumber lastBlockId = getLastSavedId();
-
-    while (lastBlockId >= getFirstSavedId()) {
-        BlockVariant lastBlock = getBlockById(lastBlockId);
-
-        if (lastBlock.isBlock()) {
-            auto txs = lastBlock.transactions();
-
-            for (const Transaction &tx : txs) {
-                if (tx.isFarmingTransaction())
-                    return lastBlockId;
-            }
-        }
-        --lastBlockId;
-    }
-    return BigNumber(-1);
-}
-
-std::list<FarmingTransactionData> BlockIndex::getAllLockedFarmingTransactions() const {
-    std::list<FarmingTransactionData> farmingsTxs;
-    if (getRecords().isEmpty())
-        return farmingsTxs;
-
-    BigNumber lastBlockId = getLastSavedId();
-    BigNumber farmingBlockIndex = BigNumber(302400);
-    BigNumber toBlockIndex =
-        (lastBlockId - farmingBlockIndex) > 0 ? (lastBlockId - farmingBlockIndex) : getFirstSavedId();
-
-    while (lastBlockId >= getFirstSavedId() || lastBlockId >= toBlockIndex) {
-        BlockVariant lastBlock = getBlockById(lastBlockId);
-        if (lastBlock.isBlock()) {
-            auto txs = lastBlock.transactions();
-
-            for (const Transaction &tx : txs) {
-                if (tx.isFarmingTransaction())
-                    farmingsTxs.push_front(FarmingTransactionData { .index = farmingBlockIndex - lastBlockId,
-                                                                    .transaction = tx });
-            }
-        }
-        --lastBlockId;
-    }
-
-    return farmingsTxs;
 }
 
 std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
@@ -827,6 +785,7 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
 
         for (const auto &tmp : rows) {
             Transaction tx;
+            tx.setType(TransactionType(std::stoi(tmp.at("type"))));
             tx.setSender(ActorId(tmp.at("sender")));
             tx.setReceiver(ActorId(tmp.at("receiver")));
             tx.setAmount(BigNumber(tmp.at("amount")));
