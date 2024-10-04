@@ -85,6 +85,8 @@ public:
 
     std::atomic_bool vpnIsClient = false;
     std::vector<std::string>         vpnFileAddedHash;
+    std::string                      vpnLocalizationFileHash;
+    std::string                      vpnLocalizationFilePath;
     QString             vpnFileLocalPath;
     std::pair<QString, QString> vpnInitPublicIPAndCountry;
 
