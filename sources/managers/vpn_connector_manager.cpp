@@ -338,11 +338,24 @@ bool VPNConnectorManager::networkCallback(VPNMessage& networkInput, ActorId& sen
             }
         };
 
+        bool canBeServerBeforeInit = vpnManager->canBeServer();
         vpnManager->connectAsProxy(configuration);
 
         if (vpnManager->isConnected())
         {
             vpnHandhakeCacheInProccessLocked->erase(savedIt);
+
+            if (canBeServerBeforeInit) {
+                // delete VPN localization file
+                if (!vpnLocalizationFileHash.empty()) {
+                    if (m_node->dfs()->removeLocalFile(
+                            m_node->accountController()->mainActor()->id().toStdString(),
+                            m_node->vpnConnectorManager->vpnLocalizationFileHash)) {
+                        qDebug() << "DFS localization VPN file deleted";
+                        m_node->vpnConnectorManager->vpnLocalizationFileHash.clear();
+                    }
+                }
+            }
             return true;
         }
         else
@@ -415,6 +428,7 @@ bool VPNConnectorManager::networkCallback(VPNMessage& networkInput, ActorId& sen
     }
     case VPNFunctionType::DISCONNECT:
     {
+        bool canBeServerBeforeDelete   = vpnManager->canBeServer();
         auto vpnUuidToVPNWorkersLocked = *vpnUuidToVPNWorkers;
         auto res = vpnUuidToVPNWorkersLocked->find(networkInput.uuid);
         if (res != vpnUuidToVPNWorkersLocked->end())
@@ -425,6 +439,15 @@ bool VPNConnectorManager::networkCallback(VPNMessage& networkInput, ActorId& sen
 
         if (vpnUuidToVPNWorkers->empty())
             vpnConnectedType = {};
+
+        if (!canBeServerBeforeDelete && vpnManager->canBeServer()) {
+            qInfo() << "Trying to return DFS localization file";
+            m_node->vpnConnectorManager->vpnLocalizationFileHash = m_node->dfs()->addLocalFile(
+                m_node->accountController()->mainActor(),
+                vpnLocalizationFilePath,
+                QFileInfo(QString::fromStdString(vpnLocalizationFilePath)).fileName().toStdString(),
+                DFS::Encryption::Public);
+        }
 
         return true;
     }

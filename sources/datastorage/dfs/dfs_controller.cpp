@@ -299,7 +299,21 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
 
     removeRowFromDB(msg);
     std::string path = DFS_PATH::filePath(msg.Actor, msg.FileName).string();
-    const bool removedFile = std::filesystem::remove(path);
+
+    {
+        QFile file(QString::fromStdString(path));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qDebug() << "Could not open VPN localization file:" << file.errorString();
+        } else {
+            QTextStream          in(&file);
+            QString              oneLine = in.readLine();
+            static const QString prefix  = "Country:";
+            if (oneLine.startsWith(prefix))
+                emit getRemovedVPNLocalizationInfo(oneLine);
+        }
+    }
+
+    const bool removedFile     = std::filesystem::remove(path);
     const bool removeStorjFile = std::filesystem::remove(fmt::format("{}{}", path, DFS::Fragments::Extension));
     message = fmt::format("[Dfs] Remove file {} - {} by path - {}. Storj file has been - {}.", msg.FileName, (removedFile ? "removed" : "not removed")
                           , path, removeStorjFile ? "removed" : "not removed");
