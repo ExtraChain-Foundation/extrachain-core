@@ -234,8 +234,8 @@ public:
     void sendMessage(const std::string&    serialized_message,
                      Config::Net::TypeSend typeSend,
                      const std::string&    receiver_identifier,
-                     MessageType           type_info,
-                     MessageStatus         status_info);
+                     MessageType           type_info = MessageType::Unknown,
+                     MessageStatus         status_info = MessageStatus::NoStatus);
     void saveToCache(
         const std::string&    serialized_message,
         Config::Net::TypeSend typeSend,

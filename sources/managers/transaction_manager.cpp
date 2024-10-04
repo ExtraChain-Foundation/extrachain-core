@@ -81,8 +81,9 @@ void TransactionManager::makeBlock() {
         qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
     }
 
-    if ((lastBlock.getIndex() + 1) % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
-        qDebug() << "[Blockchain] Create genesis block" << lastBlock.getIndex() + 1;
+    auto maybeGenesisId = lastBlock.getIndex() + 1;
+    if (!lastBlock.isEmpty() && maybeGenesisId > 0 && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
+        qDebug() << "[Blockchain] Create genesis block" << maybeGenesisId;
         const auto actor = node.accountController()->mainActor();
         GenesisBlock gB = node.blockchain()->createGenesisBlock(actor);
         node.network()->send_message(gB, MessageType::BlockchainGenesisBlock);
