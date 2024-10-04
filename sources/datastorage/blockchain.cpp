@@ -1065,7 +1065,11 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
                         if (tx.getToken() != ActorId()) {
                             return TransactionProveError::RewardWrongToken;
                         }
-        
+                        if (tx.getAmount() == 0) {
+                            return TransactionProveError::AmountZero;
+                        }
+
+                        // continue;
                         return TransactionProveError::NoError;
                     }
                 }
