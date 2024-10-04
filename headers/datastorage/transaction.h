@@ -27,9 +27,7 @@
 
 enum class TransactionType {
     Transaction = 0,
-    Reward = 1,
-    FarmingTransaction = 2,
-    FarmingLockedTransaction = 3
+    Reward = 1
 };
 MSGPACK_ADD_ENUM(TransactionType)
 FORMAT_ENUM(TransactionType)
@@ -76,7 +74,7 @@ protected:
     ActorId approver;    // address of the transaction approver.
     ActorId producer;
     std::string signature;
-    TransactionType typeTx = TransactionType::Transaction;
+    TransactionType m_type = TransactionType::Transaction;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -138,10 +136,8 @@ public:
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
     bool isRewardTransaction() const;
-    bool isFarmingTransaction() const;
-    bool isLockedFarmingTransaction() const;
-    TransactionType getTypeTx() const;
-    virtual void setTypeTx(TransactionType newTypeTx);
+    TransactionType type() const;
+    virtual void setType(TransactionType newType);
 
     MSGPACK_DEFINE(
         sender,
@@ -155,7 +151,7 @@ public:
         approver,
         producer,
         signature,
-        typeTx)
+        m_type)
 };
 
 QDebug operator<<(QDebug debug, const Transaction &tx);

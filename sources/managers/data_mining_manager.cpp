@@ -133,7 +133,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
                  << totalBytes.first << node->dfs()->totalDfsSize();
-        return 1;
+        return 0;
     }
 
     return (
@@ -146,7 +146,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const DFS::Reward::Reque
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
                  << requestReward.BytesSent << node->dfs()->totalDfsSize();
-        return 1;
+        return 0;
     }
 
     return (
@@ -162,58 +162,14 @@ void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &reques
         transaction.setReceiver(requestReward.Actor);
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
-        transaction.setTypeTx(TransactionType::Reward);
+        transaction.setType(TransactionType::Reward);
         transaction.sign(node->accountController()->mainActor());
         node->network()->send_message(transaction, MessageType::BlockchainTransaction);
     }
 }
 
-void DataMiningManager::interestAccrual() {
-    indexBlock++;
-    updateLastIndex();
-    if (indexBlock % indexBlockFarming == 0) {
-        return; // farming not farm
-        if (!isRecalculate) {
-            calculateFarmingBalanceMainUser();
-        }
-        BigNumberFloat result = balanceFarming * farmingPercent;
-        balanceFarming += result;
-        ActorId actorId = node->accountController()->mainActor()->id();
-        auto transaction = node->createFarmingTransaction(actorId, result, TransactionType::FarmingTransaction);
-        if (transaction.has_value())
-            node->transactionManager()->addTransaction(transaction.value());
-        else
-            qDebug() << "[DataMiningManager] Can't create tx:" << transaction.error();
-    }
-}
-
-BigNumberFloat DataMiningManager::farmingBalance() const {
-    return balanceFarming;
-}
-
-void DataMiningManager::calculateFarmingBalanceMainUser() {
-    auto currentActorId = node->accountController()->currentProfile().current()->id();
-    balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TransactionType::FarmingTransaction);
-    isRecalculate = true;
-}
-
-void DataMiningManager::updateLastIndex() {
-    return; // farming not farm
-    DBConnector db(farmingCachePath);
-    bool isDbOpen = db.open();
-    if (!isFarmingCashEmpty) {
-        db.query(fmt::format(
-            "UPDATE {} SET blockIndex='{}' WHERE id = '1'",
-            Config::DataStorage::farmingCacheTable,
-            indexBlock.toStdString(NumeralBase::Dec)));
-    } else {
-        DBRow row;
-        row.insert({ "id", "1" });
-        row.insert({ "blockIndex", indexBlock.toStdString(NumeralBase::Dec) });
-        const bool inserted = db.insert(Config::DataStorage::farmingCacheTable, row);
-        if (inserted)
-            isFarmingCashEmpty = false;
-    }
-
-    db.close();
-}
+// void DataMiningManager::calculateFarmingBalanceMainUser() {
+//     auto currentActorId = node->accountController()->currentProfile().current()->id();
+//     balanceFarming = node->blockchain()->getUserBalance(currentActorId, ActorId(), TransactionType::FarmingTransaction);
+//     isRecalculate = true;
+// }

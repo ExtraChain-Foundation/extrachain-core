@@ -132,6 +132,7 @@ namespace DataStorage {
     static const std::string TxBlockTable = "Transactions";
     static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
         + " ("
+          "type         INT   NOT NULL, "
           "sender       TEXT  NOT NULL, "
           "receiver     TEXT  NOT NULL, "
           "amount       TEXT  NOT NULL, "
@@ -186,13 +187,6 @@ namespace DataStorage {
         + " ("
           "id   TEXT PRIMARY KEY NOT NULL, "
           "type INT              NOT NULL  "
-          ");";
-
-    static const std::string farmingCacheTable = "FarmingCache";
-    static const std::string farmingTableCreate = "CREATE TABLE IF NOT EXISTS " + farmingCacheTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "blockIndex INT              NOT NULL  "
           ");";
 
     // How many files one section folder will store

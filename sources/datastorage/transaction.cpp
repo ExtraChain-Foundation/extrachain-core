@@ -31,7 +31,7 @@ Transaction::Transaction() {
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TransactionType::Transaction;
+    this->m_type = TransactionType::Transaction;
     calcHash();
 }
 
@@ -49,7 +49,7 @@ Transaction::Transaction(
     this->prevBlock = BigNumber(0);
     this->hash = "";
     this->signature = std::string();
-    this->typeTx = TransactionType::Transaction;
+    this->m_type = TransactionType::Transaction;
     this->token = token;
     calcHash();
 }
@@ -66,7 +66,7 @@ Transaction::Transaction(const Transaction &other) {
     this->approver = other.approver;
     this->signature = other.signature;
     this->producer = other.producer;
-    this->typeTx = other.typeTx;
+    this->m_type = other.m_type;
     calcHash();
 }
 
@@ -75,15 +75,7 @@ void Transaction::setReceiver(const ActorId &value) {
 }
 
 bool Transaction::isRewardTransaction() const {
-    return typeTx == TransactionType::Reward;
-}
-
-bool Transaction::isFarmingTransaction() const {
-    return typeTx == TransactionType::FarmingTransaction;
-}
-
-bool Transaction::isLockedFarmingTransaction() const {
-    return typeTx == TransactionType::FarmingLockedTransaction;
+    return m_type == TransactionType::Reward;
 }
 
 void Transaction::setProducer(const ActorId &value) {
@@ -141,12 +133,12 @@ void Transaction::calcHash() {
     }
 }
 
-TransactionType Transaction::getTypeTx() const {
-    return typeTx;
+TransactionType Transaction::type() const {
+    return m_type;
 }
 
-void Transaction::setTypeTx(TransactionType newTypeTx) {
-    typeTx = newTypeTx;
+void Transaction::setType(TransactionType newType) {
+    m_type = newType;
 }
 
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
@@ -251,7 +243,7 @@ void Transaction::operator=(const Transaction &other) {
     this->approver = other.approver;
     this->signature = other.signature;
     this->producer = other.producer;
-    this->typeTx = other.typeTx;
+    this->m_type = other.m_type;
 }
 
 std::string Transaction::toStdString() const {
@@ -260,7 +252,7 @@ std::string Transaction::toStdString() const {
 
 QString Transaction::toString() const {
     auto hashQt = QString::fromStdString(hash);
-    auto typeStr = QString::fromStdString(Utils::enumFullName(typeTx));
+    auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
     return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
            + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
            + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)

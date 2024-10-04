@@ -92,7 +92,6 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    emit m_networkManager->finished();
     delete m_dfs;
     delete m_actorIndex;
     delete m_transactionManager;
@@ -100,6 +99,7 @@ ExtraChainNode::~ExtraChainNode() {
     delete m_accountController;
     delete m_dmm;
     delete m_connectionsManager;
+    delete m_networkManager;
 }
 
 bool ExtraChainNode::createNewNetwork(
@@ -240,12 +240,6 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     // 3) sign transaction
     tx.sign(actor);
     qDebug() << "[Transaction] Send" << tx.getAmountDec() << "to" << tx.getReceiver();
-
-    if (tx.isFarmingTransaction() || tx.isLockedFarmingTransaction()) {
-        m_transactionManager->addTransaction(tx);
-    }
-    if (tx.getSender().isZero() || tx.getSender() == m_actorIndex->firstId())
-        m_transactionManager->addTransaction(tx);
 
     return tx;
 }
@@ -400,15 +394,6 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError>
-ExtraChainNode::createFarmingTransaction(ActorId sender, const BigNumberFloat& amount, const TransactionType& typeTx) {
-    qDebug() << sender;
-    Transaction tx(sender, sender, 0);
-    tx.setTypeTx(typeTx);
-    tx.setAmount(amount);
-    return this->createTransaction(tx);
-}
-
 std::string ExtraChainNode::transactionErrorDescription(const TransactionError &error)
 {
     switch(error) {
@@ -517,25 +502,28 @@ void ExtraChainNode::connectSignals() {
     connectActorIndex();
     dfsConnection();
 
-    connect(m_networkManager, &NetworkManager::newSocket, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
-    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+        m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
     });
 
-    connect(m_networkManager, &NetworkManager::newSocket, [this]() {
+    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
     });
-    connect(m_networkManager, &NetworkManager::newSocket,[this]()
-    {
+    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
+    });
+    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+        m_blockchain->sync();
     });
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
-            [&](const Transaction &tx) { txManager()->addTransaction(tx);
+            [&](const Transaction &tx) { m_transactionManager->addTransaction(tx);
     });
     connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
     [=, this](const QString &pathCreatedTokenJson) {

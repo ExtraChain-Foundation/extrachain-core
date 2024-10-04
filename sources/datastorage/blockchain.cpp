@@ -92,11 +92,21 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &has
 
 void Blockchain::sync() {
     auto lastBlock = getLastBlock();
+    auto fromBlock = lastBlock.getIndex();
+    if (fromBlock < 0)
+        fromBlock = 0;
+    qDebug() << "[Blockchain] Request sync from" << lastBlock.getIndex();
     node.network()->send_message(lastBlock.getIndex(), MessageType::BlockhainSync, MessageStatus::Request);
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
     BigNumber lastIndex = getLastBlock().getIndex();
+
+    if (lastIndex < fromBlock) {
+        this->sync();
+        return;
+    }
+
     BigNumber from = fromBlock;
     if (from < 0)
         from = 0;
@@ -296,7 +306,8 @@ void Blockchain::sendLastGenesisBlock() const {
 // Genesis block //
 
 bool Blockchain::shouldStartGenesisCreation() {
-    return Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == this->blocksFromLastGenesis;
+    auto lastBlock = getLastBlock();
+    return lastBlock.getIndex() % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0;
 }
 
 void Blockchain::addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2) {
@@ -420,13 +431,13 @@ int Blockchain::mergeBlockWithLocal(BlockVariant &received) {
     const auto   receivedBlockIndex = received.getIndex();
     BlockVariant existed            = getBlockByIndex(receivedBlockIndex);
     if (!canMergeBlocks(received, existed)) {
-        qWarning() << "Blocks with id" << receivedBlockIndex << "can't be merged";
+        qDebug() << "[Blockchain] Blocks with id" << receivedBlockIndex << "can't be merged";
         return Errors::BLOCKS_CANT_MERGE;
     }
 
-    qDebug() << "Start merging block" << receivedBlockIndex;
-    if (received == existed) {
-        qDebug() << "Blocks" << receivedBlockIndex << "are equal";
+    qDebug() << "[Blockchain] Merging block" << receivedBlockIndex;
+    if (received == existed && received.signatures() == existed.signatures()) {
+        // qDebug() << "[Blockchain] Blocks" << receivedBlockIndex << "are equal";
         return Errors::BLOCKS_ARE_EQUAL;
     }
     //    if (received.contain(existed)) // hui znaet nahuya ono
@@ -457,7 +468,10 @@ int Blockchain::mergeBlockWithLocal(BlockVariant &received) {
         BigNumber lastBlockId = existed.getIndex();
         BigNumber nextBlockId = lastBlockIndex;
         for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
-            tmpBlocks << getBlockByIndex(i);
+            auto block = getBlockByIndex(i);
+            if (block.isBlock()) {
+                tmpBlocks << getBlockByIndex(i);
+            }
         }
         if (tmpBlocks.isEmpty()) {
             qWarning() << "Error: There is no blocks found locally while merging block" << receivedBlockIndex;
@@ -671,7 +685,7 @@ int Blockchain::addBlock(const BlockVariant &block) {
         break;
     }
     case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "[Blockchain] Block" << indexBlock << blockType << "is already in blockchain";
+        // qDebug() << "[Blockchain] Block" << indexBlock << blockType << "is already in blockchain";
         if (blockType == BlockType::Data || blockType == BlockType::DataMerge
             || blockType == BlockType::Dummy) {
             resultCode = mergeBlockWithLocal(newBlock);
@@ -691,21 +705,19 @@ int Blockchain::addBlock(const BlockVariant &block) {
     }
 
     // after adding genesis block we don't need to increment counter
-    if (!newBlock.isGenesisBlock() && resultCode == 0 && newBlock.getType() != BlockType::Dummy) {
-        blocksFromLastGenesis++;
-        if (shouldStartGenesisCreation()) {
-            const auto actor = node.accountController()->mainActor();
+    // if (!newBlock.isGenesisBlock() && resultCode == 0 /*&& newBlock.getType() != BlockType::Dummy*/) {
+    //     if (shouldStartGenesisCreation()) {
+    //         const auto actor = node.accountController()->mainActor();
 
-            GenesisBlock gB = createGenesisBlock(actor);
-            if (blockIndex.addBlock(BlockVariant(gB)) == 0) {
-                qDebug() << "[Blockchain] Genesis block" << gB.getIndex()
-                         << "is successfully added to blockchain" << gB.getType();
-                // TODONEW emit sendMessage(gB.serialize(),
-                // Messages::ChainMessage::GenesisBlockMessage);
-                blocksFromLastGenesis = 0;
-            }
-        }
-    }
+    //         GenesisBlock gB = createGenesisBlock(actor);
+    //         if (blockIndex.addBlock(BlockVariant(gB)) == 0) {
+    //             qDebug() << "[Blockchain] Genesis block" << gB.getIndex()
+    //                      << "is successfully added to blockchain" << gB.getType();
+    //             // TODONEW emit sendMessage(gB.serialize(),
+    //             // Messages::ChainMessage::GenesisBlockMessage);
+    //         }
+    //     }
+    // }
 
     return resultCode;
 }
@@ -882,13 +894,17 @@ int Blockchain::getCountTransactionsInBlocks() const {
     return blockIndex.getCountTransactionsInBlocks();
 }
 
-BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TransactionType typeTx) const {
+BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, TransactionType txType) const {
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         BlockVariant currentBlock = blockIndex.getBlockById(i);
 
-        if (currentBlock.getType() == BlockType::Genesis && currentBlock.isGenesisBlock()) {
+        if (currentBlock.getType() == BlockType::Dummy) {
+            continue;
+        }
+
+        if (currentBlock.isGenesisBlock()) {
             GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
             const auto   rows    = genesis.dataRows();
 
@@ -905,8 +921,8 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, Trans
 
         auto txs = currentBlock.transactions();
         for (auto &tx : txs) {
-            if (tx.getTypeTx() != typeTx)
-                continue;
+            // if (tx.type() != txType)
+            //     continue;
 
             if (tx.getReceiver() == userId && tx.getToken() == tokenId) {
                 balance += tx.getAmount();
@@ -972,10 +988,6 @@ bool Blockchain::getPossibleMining() const {
     return possibleMining;
 }
 
-BigNumber Blockchain::getBlockIndexLastFarmingTx() const {
-    return blockIndex.getIndexBlockByLastFarmingTx();
-}
-
 BigNumber Blockchain::getBlockCount() {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
 
@@ -984,7 +996,12 @@ BigNumber Blockchain::getBlockCount() {
 
 void Blockchain::addBlockFromNetwork(const BlockVariant &block) {
     BlockVariant lastBlock = this->getLastBlock();
-    if (block.getType() != BlockType::Dummy) {
+    if (block.isEmpty()) {
+        return;
+    }
+    // if (block.getType() == BlockType::DataMerge || block.getType() == BlockType::GenesisMerge)
+    //     return;
+    if (block.getType() != BlockType::Dummy && block.getType() != BlockType::Genesis) {
         this->removeAllDummyBlocks(lastBlock);
     }
 
@@ -1059,7 +1076,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
     }
 
     // reward check
-    if (tx.isRewardTransaction() || tx.isFarmingTransaction()) {
+    if (tx.isRewardTransaction()) {
         targetSender = tx.getApprover();
         // TODO: add extended check of validity
         auto res = this->blockIndex.getLastTxByData(tx.getData(), ActorId());

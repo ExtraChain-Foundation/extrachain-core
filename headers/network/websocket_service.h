@@ -34,6 +34,8 @@ public:
 
 public:
     virtual void sendMessage(const QByteArray &data) override;
+    virtual void final() override;
+
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);

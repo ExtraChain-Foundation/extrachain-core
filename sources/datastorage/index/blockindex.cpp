@@ -454,9 +454,9 @@ void BlockIndex::calculationCountBlock() {
         BlockVariant block = this->getBlockById(id);
         if (!block.isEmpty()) {
             if (block.getType() == BlockType::Data) {
-                qDebug() << "[BlockIndex] Block by index" << block.getIndex() << "is real";
+                // qDebug() << "[BlockIndex] Block by index" << block.getIndex() << "is real";
                 realBlockRecords++;
-                qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
+                // qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
             }
             if (block.isBlock()) {
                 countTransactions += block.transactions().size();
@@ -466,16 +466,17 @@ void BlockIndex::calculationCountBlock() {
         --id;
     }
     qDebug() << "[BlockIndex] Count records:" << records << "";
+    removeDummyBlocks(records);
 }
 
 int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     QString path = buildFilePath(id);
     QFile file(path);
 
-    qDebug() << "[BlockIndex] Saving the file:" << path << newBlock.getType();
+    // qDebug() << "[BlockIndex] Saving the file:" << path << newBlock.getType();
 
     if (file.exists()) {
-        qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";
+        // qDebug() << "[BlockIndex] Can't save the file" << path << "(file already exits)";
         return Errors::FILE_ALREADY_EXISTS;
     }
 
@@ -546,6 +547,7 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
             auto rows = block.transactions();
             for (const auto &tmp : std::as_const(rows)) {
                 DBRow rowRow;
+                rowRow.insert({ "type", std::to_string(std::to_underlying(tmp.type())) });
                 rowRow.insert({ "sender", tmp.getSender().toStdString() });
                 rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
                 rowRow.insert({ "amount", tmp.getAmount().toStdString() });
@@ -710,28 +712,6 @@ int BlockIndex::getCountTransactionsInBlocks() const {
     return countTransactions;
 }
 
-BigNumber BlockIndex::getIndexBlockByLastFarmingTx() const {
-    if (getRecords().isEmpty())
-        return BigNumber(-1);
-
-    BigNumber lastBlockId = getLastSavedId();
-
-    while (lastBlockId >= getFirstSavedId()) {
-        BlockVariant lastBlock = getBlockById(lastBlockId);
-
-        if (lastBlock.isBlock()) {
-            auto txs = lastBlock.transactions();
-
-            for (const Transaction &tx : txs) {
-                if (tx.isFarmingTransaction())
-                    return lastBlockId;
-            }
-        }
-        --lastBlockId;
-    }
-    return BigNumber(-1);
-}
-
 std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
     std::string path = buildFilePath(id).toStdString();
 
@@ -805,6 +785,7 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
 
         for (const auto &tmp : rows) {
             Transaction tx;
+            tx.setType(TransactionType(std::stoi(tmp.at("type"))));
             tx.setSender(ActorId(tmp.at("sender")));
             tx.setReceiver(ActorId(tmp.at("receiver")));
             tx.setAmount(BigNumber(tmp.at("amount")));

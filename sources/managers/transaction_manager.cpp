@@ -72,8 +72,6 @@ void TransactionManager::makeBlock() {
     if (node.accountController()->empty())
         return;
 
-    node.dataMiningManager()->interestAccrual();
-
     BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
     BlockVariant lastBlock = node.blockchain()->getLastBlock();
 
@@ -81,6 +79,14 @@ void TransactionManager::makeBlock() {
         qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex() << "| last real:" << lastRealBlock.getIndex() << "|" <<  lastRealBlock.getType();
     } else {
         qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
+    }
+
+    if ((lastBlock.getIndex() + 1) % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
+        qDebug() << "[Blockchain] Create genesis block" << lastBlock.getIndex() + 1;
+        const auto actor = node.accountController()->mainActor();
+        GenesisBlock gB = node.blockchain()->createGenesisBlock(actor);
+        node.network()->send_message(gB, MessageType::BlockchainGenesisBlock);
+        return;
     }
 
     if (m_pendingTxList.empty()) {
@@ -93,7 +99,9 @@ void TransactionManager::makeBlock() {
 
         // creating dummy block in as ordinary block
         if (!node.network()->isActiveConnectionExists()) {
-            qDebug() << "[TransactionManager] Dummy: no active connections";
+            // qDebug() << "[TransactionManager] Dummy: no active connections";
+            if (lastRealBlock.getIndex() != lastBlock.getIndex())
+                node.blockchain()->removeAllDummyBlocks(lastBlock);
             return;
         }
 

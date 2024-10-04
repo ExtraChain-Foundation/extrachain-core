@@ -34,15 +34,7 @@ class DataMiningManager : public QObject {
 
     ExtraChainNode *node;
     const int CoinProductionRate = 100;
-    const BigNumberFloat farmingPercent = BigNumberFloat("0.0002");
-    BigNumberFloat balanceFarming;
-    BigNumber indexBlockFarming = 2;//42300;
-    BigNumber indexBlock;
-    bool isFarmingCashEmpty = true;
     bool isRecalculate = false;
-
-    const std::string farmingCachePath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
-        + DataStorage::ACTOR_INDEX_FOLDER_NAME.toStdString() + "/farming";
 
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
@@ -69,12 +61,7 @@ public:
      */
     void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
 
-    void interestAccrual();
-    BigNumberFloat farmingBalance() const;
-    void calculateFarmingBalanceMainUser();
-
 private:
-    void updateLastIndex();
 };
 
 #endif // DATA_MINING_MANAGER_H

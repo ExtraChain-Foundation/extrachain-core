@@ -65,7 +65,6 @@ private:
                            //    Actor<KeyPrivate>   approver;       // current user.
     // service //
     std::vector<GenesisDataRow> genBlockData; // actorid -> token
-    int blocksFromLastGenesis = 0;
 
     bool launched;
     BigNumber circulativeSupply;
@@ -281,7 +280,7 @@ public:
     int getCountTransactionsInBlocks() const;
 
     BigNumberFloat
-    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TransactionType typeTx = TransactionType::Transaction) const;
+    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TransactionType txType = TransactionType::Transaction) const;
 
     /**
      * @brief Show blockchain
@@ -314,11 +313,6 @@ public:
      * @brief Get possible mining
      */
     bool getPossibleMining() const;
-
-    /**
-     * @brief Get block index contains farming transaction
-     */
-    BigNumber getBlockIndexLastFarmingTx() const;
 
 signals:
     void newNotify(Notification ntf);

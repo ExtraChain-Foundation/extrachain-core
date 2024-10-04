@@ -305,7 +305,7 @@ public:
     CalculateTraffic* getCalculateTraffic() const;
     
 signals:
-    void newSocket();
+    void newSocketActivated();
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);

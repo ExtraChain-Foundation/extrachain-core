@@ -105,7 +105,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
-    connect(service, &WebSocketService::activated, this, [&] { node.dfs()->requestDirFileAllActors(); });
+    connect(service, &WebSocketService::activated, this, [&] { emit this->newSocketActivated(); });
     if (!m_connections.contains(service)) {
         m_connections.append(service);
         if (node.isClientApp() && requestListNodes)
@@ -153,6 +153,7 @@ NetworkManager::~NetworkManager() {
     delete local;
 
     for (const auto &connection : std::as_const(m_connections)) {
+        connection->final();
         emit connection->close();
         emit connection->finished();
     }
@@ -485,6 +486,8 @@ void NetworkManager::messageReceived(
                 if (identifier != item->identifier().toStdString())
                 {
                     qDebug() << item->ip().toStdString();
+                    if (item->ip().isEmpty())
+                        continue;
                     ips.emplace_back(item->ip().toStdString());
                 }
             }
@@ -665,7 +668,7 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::BlockchainNewBlock: {
-        qDebug() << "BlockchainNewBlock";
+        // qDebug() << "BlockchainNewBlock";
         Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
@@ -870,12 +873,16 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     auto service = qobject_cast<SocketService *>(QObject::sender());
     qDebug() << "[NetworkManager] Error socket:" << error << service->identifier();
 
-    if (error != Network::SocketServiceError::DuplicateIdentifier) {
+    if (error != Network::SocketServiceError::DuplicateIdentifier && error != Network::SocketServiceError::IncompatibleIdentifier) {
         for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
         {
             if (it->first.ip == service->ip() && it->first.protocol == service->protocol())
             {
-                reconnectSocket(it->first, it->second);
+                auto r = it->first;
+                auto i = it->second;
+                QTimer::singleShot(1000, [this, r, i] {
+                    this->reconnectSocket(r, i);
+                });
                 break;
             }
         }
@@ -954,7 +961,6 @@ void NetworkManager::onNewWsConnection() {
 
     auto service = new WebSocketService(ws, node);
     connectWsService(service);
-    emit newSocket();
     m_reconnectionsToIdentifier.emplace(NetworkReconnect {
                                     .ip = service->ip(), .port = service->port(), .protocol = Network::Protocol::WebSocket }, "");
 }
