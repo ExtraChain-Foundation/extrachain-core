@@ -130,7 +130,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
-    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
+    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0 || node->blockchain()->getLastBlock().getIndex() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
         //          << totalBytes.first << node->dfs()->totalDfsSize();
         return 0;
@@ -143,7 +143,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const {
-    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0 || node->blockchain()->getLastBlock().getIndex() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
         //          << requestReward.BytesSent << node->dfs()->totalDfsSize();
         return 0;

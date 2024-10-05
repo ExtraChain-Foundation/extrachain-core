@@ -152,10 +152,6 @@ void NetworkManager::removeConnection(const QString &identifier) {
 }
 
 NetworkManager::~NetworkManager() {
-    delete upnpNet;
-    delete upnpDis;
-    delete local;
-
     for (const auto &connection : std::as_const(m_connections)) {
         connection->final();
         emit connection->close();
@@ -1522,7 +1518,7 @@ void NetworkManager::localInizialization() {
     connect(&m_networkStatus, &NetworkStatus::statusChanged,
             [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
+    local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
 
     if (local == nullptr) {
@@ -1538,13 +1534,13 @@ void NetworkManager::localInizialization() {
         return;
     }
 
-    upnpDis = new UPNPConnection(*local);
-    upnpNet = new UPNPConnection(*local);
+    upnpDis = std::make_unique<UPNPConnection>(local);
+    upnpNet = std::make_unique<UPNPConnection>(local);
     // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-    connect(upnpNet, &UPNPConnection::upnpError,
+    connect(upnpNet.get(), &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
-    connect(upnpDis, &UPNPConnection::upnpError,
+    connect(upnpDis.get(), &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
     // qDebug() << "Tunnel creation started!";
     // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
