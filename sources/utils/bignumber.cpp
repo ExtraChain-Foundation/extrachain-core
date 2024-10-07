@@ -88,19 +88,19 @@ BigNumber BigNumber::operator>>=(const uint &value) {
     return *this;
 }
 
-BigNumber BigNumber::operator+(const BigNumber &bigNumber) {
+BigNumber BigNumber::operator+(const BigNumber &bigNumber) const {
     return BigNumber(m_data + bigNumber.data());
 }
 
-BigNumber BigNumber::operator+(long long number) {
+BigNumber BigNumber::operator+(long long number) const {
     return BigNumber(m_data + number);
 }
 
-BigNumber BigNumber::operator-(const BigNumber &bigNumber) {
+BigNumber BigNumber::operator-(const BigNumber &bigNumber) const {
     return BigNumber(m_data - bigNumber.data());
 }
 
-BigNumber BigNumber::operator-(long long number) {
+BigNumber BigNumber::operator-(long long number) const {
     return BigNumber(m_data - number);
 }
 
@@ -108,27 +108,23 @@ BigNumber BigNumber::operator*(const BigNumber &bigNumber) const {
     return BigNumber(m_data * bigNumber.data());
 }
 
-BigNumber BigNumber::operator*(long long number) {
+BigNumber BigNumber::operator*(long long number) const {
     return BigNumber(m_data * number);
 }
 
-BigNumber BigNumber::operator/(const BigNumber &bigNumber) {
+BigNumber BigNumber::operator/(const BigNumber &bigNumber) const {
     return BigNumber(m_data / bigNumber.data());
 }
 
-BigNumber BigNumber::operator/(long long number) {
+BigNumber BigNumber::operator/(long long number) const {
     return BigNumber(m_data / number);
-}
-
-BigNumber BigNumber::operator%(const BigNumber &bigNumber) {
-    return BigNumber(m_data % bigNumber.data());
 }
 
 BigNumber BigNumber::operator%(const BigNumber &bigNumber) const {
     return BigNumber(m_data % bigNumber.data());
 }
 
-BigNumber BigNumber::operator%(long long number) {
+BigNumber BigNumber::operator%(long long number) const {
     return BigNumber(m_data % number);
 }
 

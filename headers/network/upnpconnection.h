@@ -44,7 +44,7 @@ public:
     };
 
 private:
-    QNetworkAddressEntry localAddress;
+    std::shared_ptr<QNetworkAddressEntry> localAddress;
     int internalPort;
     QHostAddress externalAddress;
     int externalPort;
@@ -65,7 +65,7 @@ private:
     int waitTime;
 
 public:
-    explicit UPNPConnection(QNetworkAddressEntry &local, QObject *parent = nullptr);
+    explicit UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent = nullptr);
     ~UPNPConnection();
 
 public:

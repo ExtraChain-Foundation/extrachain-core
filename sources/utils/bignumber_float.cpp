@@ -73,19 +73,19 @@ BigNumberFloat::BigNumberFloat(uint64_t number) {
     UPDATE_DEBUG()
 }
 
-BigNumberFloat BigNumberFloat::operator+(const BigNumberFloat &bigNumberFloat) {
+BigNumberFloat BigNumberFloat::operator+(const BigNumberFloat &bigNumberFloat) const {
     return BigNumberFloat(m_data + bigNumberFloat.data());
 }
 
-BigNumberFloat BigNumberFloat::operator+(long long number) {
+BigNumberFloat BigNumberFloat::operator+(long long number) const {
     return BigNumberFloat(m_data + number);
 }
 
-BigNumberFloat BigNumberFloat::operator-(const BigNumberFloat &bigNumberFloat) {
+BigNumberFloat BigNumberFloat::operator-(const BigNumberFloat &bigNumberFloat) const {
     return BigNumberFloat(m_data - bigNumberFloat.data());
 }
 
-BigNumberFloat BigNumberFloat::operator-(long long number) {
+BigNumberFloat BigNumberFloat::operator-(long long number) const {
     return BigNumberFloat(m_data - number);
 }
 
@@ -93,17 +93,17 @@ BigNumberFloat BigNumberFloat::operator*(const BigNumberFloat &bigNumberFloat) c
     return BigNumberFloat(m_data * bigNumberFloat.data());
 }
 
-BigNumberFloat BigNumberFloat::operator*(long long number) {
+BigNumberFloat BigNumberFloat::operator*(long long number) const {
     return BigNumberFloat(m_data * number);
 }
 
-BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) {
+BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) const {
     if (bigNumberFloat == 0)
         qFatal("BigNumberFloat: Division by zero");
     return BigNumberFloat(m_data / bigNumberFloat.data());
 }
 
-BigNumberFloat BigNumberFloat::operator/(long long number) {
+BigNumberFloat BigNumberFloat::operator/(long long number) const {
     return BigNumberFloat(m_data / number);
 }
 
