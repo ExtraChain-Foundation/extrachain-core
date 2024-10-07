@@ -37,8 +37,6 @@
 #include <QTemporaryFile>
 #include <QtNetwork/QHostAddress>
 #include <cassert>
-// database
-#include "utils/db_connector.h"
 
 class TransactionManager;
 
@@ -57,6 +55,7 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
+
 private:
     ExtraChainNode &node;
 
@@ -179,6 +178,7 @@ public:
      * @return last real blockchain block
      */
     BlockVariant getLastRealBlock() const;
+
     /**
      * Gets the block from blockchain by *value* of a certain *type*
      * @param value
@@ -186,6 +186,7 @@ public:
      * @return last blockchain block
      */
     BlockVariant getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
      * @param value
@@ -230,6 +231,7 @@ public:
      * @return merged block
      */
     Block mergeBlocks(const Block &blockA, const Block &blockB);
+
     GenesisBlock mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB);
 
     /**
@@ -276,7 +278,6 @@ public:
      * @brief getCountTransactionsInBlocks
      * @return count transactions in blocks
      */
-
     int getCountTransactionsInBlocks() const;
 
     BigNumberFloat
@@ -334,4 +335,5 @@ public:
      */
     TransactionProveError proveTransaction(const Transaction &tx);
 };
+
 #endif // BLOCKCHAIN_H

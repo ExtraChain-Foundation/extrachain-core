@@ -152,6 +152,8 @@ void NetworkManager::removeConnection(const QString &identifier) {
 }
 
 NetworkManager::~NetworkManager() {
+    qDebug() << "[NetworkManager] Finish him with" << m_connections.length() << "connections";
+
     for (const auto &connection : std::as_const(m_connections)) {
         connection->final();
         emit connection->close();
@@ -181,7 +183,7 @@ void NetworkManager::checkConnectionsStatus() {
 void NetworkManager::startNetwork() {
     qDebug() << "[NetworkManager] Start servers..." << (wsPort == 2222 ? "Network" : "DFS");
 
-    if (local == nullptr) {
+    if (!local) {
         qDebug() << "[NetworkManager] Can't detect local ip";
         return;
     }
@@ -1521,7 +1523,7 @@ void NetworkManager::localInizialization() {
     local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
 
-    if (local == nullptr) {
+    if (!local) {
         qDebug() << "[NetworkManager] Local not found";
         return;
     }
