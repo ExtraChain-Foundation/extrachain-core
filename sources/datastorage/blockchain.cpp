@@ -443,12 +443,6 @@ int Blockchain::mergeBlockWithLocal(BlockVariant &received) {
         // qDebug() << "[Blockchain] Blocks" << receivedBlockIndex << "are equal";
         return Errors::BLOCKS_ARE_EQUAL;
     }
-    //    if (received.contain(existed)) // hui znaet nahuya ono
-    //    {
-    //        removeBlock(existed);
-    //        int res = addBlock(received);
-    //        return res;
-    //    }
 
     // step 1 - create merged block
     if (received.isGenesisBlock() || existed.isGenesisBlock()) {
@@ -461,48 +455,11 @@ int Blockchain::mergeBlockWithLocal(BlockVariant &received) {
     if (merged.isEmpty())
         return Errors::BLOCKS_CANT_MERGE;
 
-    // step 2 - collect all blocks from old to latest
-    QList<BlockVariant> tmpBlocks; // from existed to last block;
-
-    const auto lastBlockIndex = getLastBlock().getIndex();
-    // only if indexes is different
-    if (receivedBlockIndex != lastBlockIndex) {
-        // we should collect temp blocks
-        BigNumber lastBlockId = existed.getIndex();
-        BigNumber nextBlockId = lastBlockIndex;
-        for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
-            auto block = getBlockByIndex(i);
-            if (block.isBlock()) {
-                tmpBlocks << getBlockByIndex(i);
-            }
-        }
-        if (tmpBlocks.isEmpty()) {
-            qWarning() << "Error: There is no blocks found locally while merging block" << receivedBlockIndex;
-            return Errors::NO_BLOCKS;
-        }
-    }
-
-    // step 3 - update hash, prevHash and approver for all modified blocks
-    std::string newHash = merged.getHash();
-    std::string oldHash = existed.getHash();
-    for (BlockVariant &b : tmpBlocks) {
-        if (b.getPrevHash() == oldHash) {
-            oldHash = b.getHash();
-            b.setPrevHash(newHash);
-            b.setType(BlockType::DataMerge);
-            signBlock(b);
-            newHash = b.getHash();
-        }
-    }
-
-    // step 4 - remove existed block (and all blocks after them)
+    // step - remove existed block (and all blocks after them)
     // and save updated blocks with new hash
     removeBlock(existed);
     auto mergedVariant = BlockVariant(merged);
     addBlock(mergedVariant);
-    for (BlockVariant &b : tmpBlocks) {
-        addBlock(b);
-    }
 
     return 0;
 }
@@ -511,56 +468,22 @@ int Blockchain::mergeGenesisBlockWithLocal(const GenesisBlock &received) {
     const auto   receivedIndex = received.getIndex();
     GenesisBlock existed       = blockIndex.getGenesisBlockById(receivedIndex);
     if (!existed.isEmpty()) {
-        // saved block with the same id is genesis
-        qDebug() << QString("Start merging genesis block [%1] with exising [%2]")
-                        .arg(received.toString(), existed.toString());
-
-        // step 1
-        GenesisBlock merged = mergeGenesisBlocks(received, existed);
-
-        // step 2 - collect all blocks from old to latest
-        QList<BlockVariant> tmpBlocks; // from existed to last block;
-
-        const auto lastBlockIndex = getLastBlock().getIndex();
-        // only if indexes is different
-        if (receivedIndex != lastBlockIndex) {
-            // we should collect temp blocks
-            BigNumber lastBlockId = existed.getIndex();
-            BigNumber nextBlockId = lastBlockIndex;
-            for (BigNumber i = lastBlockId; i <= nextBlockId; i++) {
-                tmpBlocks << getBlockByIndex(i);
-            }
-            if (tmpBlocks.isEmpty()) {
-                qWarning() << "Error: There is no blocks found locally while merging block" << receivedIndex;
-                return Errors::NO_BLOCKS;
-            }
-        }
-
-        // step 3 - update hash, prevHash and approver for all modified blocks
-        std::string newHash = merged.getHash();
-        std::string oldHash = existed.getHash();
-        for (BlockVariant &b : tmpBlocks) {
-            if (b.getPrevHash() == oldHash) {
-                oldHash = b.getHash();
-                b.setPrevHash(newHash);
-                b.setType(BlockType::GenesisMerge);
-                signBlock(b);
-                newHash = b.getHash();
-            }
-        }
-
-        // step 4 - remove existed block (and all blocks after them)
-        // and save updated blocks with new hash
-        removeBlock(BlockVariant(existed));
-        auto mergedVariant = BlockVariant(merged);
-        addBlock(mergedVariant);
-        for (BlockVariant &b : tmpBlocks) {
-            addBlock(b);
-        }
-    } else {
-        qCritical() << "Can't find genesis block with id=" << receivedIndex << "locally";
+        qCritical() << "Can't find genesis block with id" << receivedIndex << "locally";
         return Errors::NO_BLOCKS;
     }
+
+    // saved block with the same id is genesis
+    qDebug() << QString("Start merging genesis block [%1] with exising [%2]")
+                    .arg(received.toString(), existed.toString());
+
+    GenesisBlock merged = mergeGenesisBlocks(received, existed);
+
+    // remove existed block (and all blocks after them)
+    // and save updated blocks with new hash
+    removeBlock(BlockVariant(existed));
+    auto mergedVariant = BlockVariant(merged);
+    addBlock(mergedVariant);
+
     return 0;
 }
 
