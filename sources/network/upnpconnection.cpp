@@ -27,7 +27,7 @@ int UPNPConnection::getPort() {
     return externalPort;
 }
 
-UPNPConnection::UPNPConnection(QNetworkAddressEntry &local, QObject *parent)
+UPNPConnection::UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent)
     : QObject(parent) {
     conn_state = State::NotOpened;
     localAddress = local;
@@ -36,15 +36,17 @@ UPNPConnection::UPNPConnection(QNetworkAddressEntry &local, QObject *parent)
     http_socket = new QNetworkAccessManager();
     http_reply = nullptr;
     timer = new QTimer(this);
-    udp_socket->bind(localAddress.ip(), 1900);
+    udp_socket->bind(localAddress->ip(), 1900);
     QObject::connect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
 }
 
 UPNPConnection::~UPNPConnection() {
+    qInfo() << "UPNPConnection::~UPNPConnection start";
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
     timer->deleteLater();
+    qInfo() << "UPNPConnection::~UPNPConnection end";
 }
 
 void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text) {
@@ -60,7 +62,7 @@ void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QS
         QObject::connect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
         QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
         udp_socket->writeDatagram(discover_string.toLatin1(), discover_string.size(),
-                                  localAddress.broadcast(), 1900);
+                                  localAddress->broadcast(), 1900);
         timer->start(waitTime);
     } else {
         emit upnpError("Invalid protocol");
@@ -76,7 +78,7 @@ void UPNPConnection::getUdp() {
         quint16 senderPort;
         udp_socket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
         QHostAddress st_addr(sender.toIPv4Address());
-        if (st_addr != localAddress.ip()) {
+        if (st_addr != localAddress->ip()) {
             timer->stop();
             gateway = st_addr;
             emit stageSucceded(st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data()
@@ -281,11 +283,11 @@ void UPNPConnection::setTunnel() {
     message += QString::number(internalPort);
     message += QString("</NewInternalPort>"
                        "<NewInternalClient>");
-    message += localAddress.ip().toString();
+    message += localAddress->ip().toString();
     message += QString("</NewInternalClient>"
                        "<NewEnabled>1</NewEnabled>"
                        "<NewPortMappingDescription>");
-    message += info + localAddress.ip().toString() + QString(":") + QString::number(internalPort);
+    message += info + localAddress->ip().toString() + QString(":") + QString::number(internalPort);
     message += QString("</NewPortMappingDescription>"
                        "<NewLeaseDuration>0</NewLeaseDuration>"
                        "</u:AddPortMapping>\r\n"

@@ -78,17 +78,16 @@ public:
     BigNumber operator&(const BigNumber &);
     BigNumber operator>>(const uint &);
     BigNumber operator>>=(const uint &);
-    BigNumber operator+(const BigNumber &);
-    BigNumber operator+(long long);
-    BigNumber operator-(const BigNumber &);
-    BigNumber operator-(long long);
+    BigNumber operator+(const BigNumber &) const;
+    BigNumber operator+(long long) const;
+    BigNumber operator-(const BigNumber &) const;
+    BigNumber operator-(long long) const;
     BigNumber operator*(const BigNumber &) const;
-    BigNumber operator*(long long);
-    BigNumber operator/(const BigNumber &);
-    BigNumber operator/(long long);
-    BigNumber operator%(const BigNumber &);
+    BigNumber operator*(long long) const;
+    BigNumber operator/(const BigNumber &) const;
+    BigNumber operator/(long long) const;
     BigNumber operator%(const BigNumber &) const;
-    BigNumber operator%(long long);
+    BigNumber operator%(long long) const;
     BigNumber &operator=(const BigNumber &);
     BigNumber &operator=(long long);
     BigNumber &operator++();   // pre increment

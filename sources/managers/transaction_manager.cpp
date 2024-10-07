@@ -50,12 +50,12 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransaction(const Transaction &tx) {
-    qDebug() << "[TransactionManager] Transaction is being added to the waiting list:" << tx;
+    // qDebug() << "[TransactionManager] Transaction is being added to the waiting list:" << tx;
     m_receivedTxList.insert(tx);
 }
 
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
-    qDebug() << "[TransactionManager] Add proved transaction:" << tx;
+    // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
     emit addToCache(tx.getReceiver().toStdString(), tx);
 }
@@ -83,7 +83,7 @@ void TransactionManager::makeBlock() {
 
     auto maybeGenesisId = lastBlock.getIndex() + 1;
     if (!lastBlock.isEmpty() && maybeGenesisId > 0 && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
-        qDebug() << "[Blockchain] Create genesis block" << maybeGenesisId;
+        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
         const auto actor = node.accountController()->mainActor();
         GenesisBlock gB = node.blockchain()->createGenesisBlock(actor);
         node.network()->send_message(gB, MessageType::BlockchainGenesisBlock);
@@ -91,14 +91,12 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
-        // if (lastRealBlock.isEmpty())
-            lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
-        // qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType();
+        lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
+
         if (lastRealBlock.isEmpty()) {
             return;
         }
 
-        // creating dummy block in as ordinary block
         if (!node.network()->isActiveConnectionExists()) {
             // qDebug() << "[TransactionManager] Dummy: no active connections";
             if (lastRealBlock.getIndex() != lastBlock.getIndex())
@@ -106,14 +104,20 @@ void TransactionManager::makeBlock() {
             return;
         }
 
+        static BigNumber prevDummy = -1;
+
+        if (prevDummy == lastBlock.getIndex() + 1)
+            return;
+
+        // creating dummy block in as ordinary block
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock);
         dummyBlock.addData(lastRealBlock.getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node.blockchain()->signBlock(dummyBlockVariant);
-
         node.network()->send_message(dummyBlockVariant.getBlockConst(), MessageType::BlockchainNewBlock);
+        prevDummy = lastBlock.getIndex() + 1;
         return;
     }
 
@@ -149,7 +153,7 @@ void TransactionManager::proveTransactions() {
         TransactionProveError res = node.blockchain()->proveTransaction(tx);
 
         if (res == TransactionProveError::NoError) {
-            qDebug() << "[TransactionManager]" << tx;
+            qDebug() << "[TransactionManager] Transaction approved:" << tx;
             qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {

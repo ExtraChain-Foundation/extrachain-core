@@ -57,6 +57,16 @@ GenesisBlock::GenesisBlock(
 }
 
 bool GenesisBlock::addRow(const GenesisDataRow &row) {
+    // TODO: maybe use ordered map?
+    auto it = std::find_if(m_dataRows.begin(), m_dataRows.end(),
+                           [&row](const GenesisDataRow& existingRow) {
+                               return existingRow.actorId == row.actorId;
+                           });
+
+    if (it != m_dataRows.end()) {
+        m_dataRows.erase(it);
+    }
+
     auto res = m_dataRows.insert(row);
     return res.second;
 }

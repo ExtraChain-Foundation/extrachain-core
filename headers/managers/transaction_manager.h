@@ -88,66 +88,8 @@ public slots:
 
     void proveTransactions();
     void addTransaction(const Transaction &tx);
-    // Unapproved tx's //
-
-    /**
-     * @brief isUnaproved
-     * @param txHash
-     * @return true if there is txHash in unApprovedTxHashes, false otherwise
-     */
-    // bool isUnapproved(const std::string &txHash);
-
-    /**
-     * @brief Removes hash from unApprovedTxHashes list
-     * @param txHash to remove
-     */
-    // void removeUnapprovedHash(const std::string &txHash);
-
-    /**
-     * @brief addUnapprovedHash
-     * @param txHash
-     */
-    // void addUnapprovedHash(const std::string &txHash);
-
-    /**
-     * @brief Adds transaction to pending list
-     * @param tx - already verified transaction
-     */
-    // void addVerifiedTx(Transaction tx);
 
 signals:
-    /**
-     * @brief Signal to blockchain. We need to enshure, that this is really new tx.
-     * (By checking tx existanse in previous blocks)
-     * @param tx - transaction to check
-     */
-    // void VerifyTx(Transaction tx);
-
-    /**
-     * @brief Sends new verified block to the network
-     * @param block
-     */
-    // void SendBlock(QByteArray block, unsigned int msgType);
-    /**
-     * @brief Send transaction request
-     * @param senderId
-     * @param receiverId
-     */
-    // void SendProveTransactionRequest(BigNumber senderId, BigNumber receiverId, QByteArray txHash);
-
-    /**
-     * @brief sends transaction request to compare transaction
-     * between network and blockchain
-     */
-    // void ApproveTX();
-    /**
-     * @brief Sends a compared transaaction no the network manager
-     * @param Transaction compared between local blockchain and transaction
-     */
-    // void GetTxResponse(Transaction tx);
-
-    void finished();
-
     void addToCache(std::string actor, Transaction tx);
 };
 
