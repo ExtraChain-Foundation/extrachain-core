@@ -44,7 +44,7 @@ class Actor;
 class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
-class CreateTokenManager;
+class TokenManager;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -52,15 +52,15 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
-    DfsController*      m_dfs                = nullptr;
-    ActorIndex*         m_actorIndex         = nullptr;
-    Blockchain*         m_blockchain         = nullptr;
-    NetworkManager*     m_networkManager     = nullptr;
-    TransactionManager* m_transactionManager = nullptr;
-    AccountController*  m_accountController  = nullptr;
-    DataMiningManager*  m_dmm                = nullptr;
-    ConnectionsManager* m_connectionsManager = nullptr;
-    std::shared_ptr<CreateTokenManager> m_createTokenManager = nullptr;
+    DfsController*                m_dfs                = nullptr;
+    ActorIndex*                   m_actorIndex         = nullptr;
+    Blockchain*                   m_blockchain         = nullptr;
+    NetworkManager*               m_networkManager     = nullptr;
+    TransactionManager*           m_transactionManager = nullptr;
+    AccountController*            m_accountController  = nullptr;
+    DataMiningManager*            m_dmm                = nullptr;
+    ConnectionsManager*           m_connectionsManager = nullptr;
+    std::shared_ptr<TokenManager> m_tokenManager       = nullptr;
 
     // RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
@@ -116,6 +116,8 @@ public:
     std::expected<Transaction, TransactionError>
     createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction);
+
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();
     bool        importUser(const std::string& data, const std::string& login, const std::string& password);
@@ -125,7 +127,7 @@ public:
 
     uint64_t getBlockCount() const;
 
-    std::shared_ptr<CreateTokenManager> createTokenManager() const;
+    std::shared_ptr<TokenManager> tokenManager() const;
 
 private:
     void showMessage(QString from, QString message);

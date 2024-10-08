@@ -23,6 +23,7 @@
 #include <QtConcurrent>
 
 #include "managers/extrachain_node.h"
+#include "datastorage/blockchain.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {
     return m_receivedTxList;
@@ -36,8 +37,11 @@ TransactionManager::TransactionManager(ExtraChainNode &node)
     : node(node) {
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
-    connect(&blockCreationTimer, &QTimer::timeout, this,
-            &TransactionManager::makeBlockAndProveTransactionsInThread);
+    connect(
+        &blockCreationTimer,
+        &QTimer::timeout,
+        this,
+        &TransactionManager::makeBlockAndProveTransactionsInThread);
 
     blockCreationTimer.start();
     // prove timer
@@ -73,19 +77,22 @@ void TransactionManager::makeBlock() {
         return;
 
     BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
-    BlockVariant lastBlock = node.blockchain()->getLastBlock();
+    BlockVariant lastBlock     = node.blockchain()->getLastBlock();
 
     if (lastRealBlock.getIndex() != lastBlock.getIndex()) {
-        qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex() << "| last real:" << lastRealBlock.getIndex() << "|" <<  lastRealBlock.getType();
+        qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex()
+                 << "| last real:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
     } else {
         qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
     }
 
     auto maybeGenesisId = lastBlock.getIndex() + 1;
-    if (!lastBlock.isEmpty() && maybeGenesisId > 0 && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
-        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto actor = node.accountController()->mainActor();
-        GenesisBlock gB = node.blockchain()->createGenesisBlock(actor);
+    if (!lastBlock.isEmpty() && maybeGenesisId > 0
+        && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
+        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
+                           << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
+        const auto   actor = node.accountController()->mainActor();
+        GenesisBlock gB    = node.blockchain()->createGenesisBlock(actor);
         node.network()->send_message(gB, MessageType::BlockchainGenesisBlock);
         return;
     }
@@ -94,20 +101,23 @@ void TransactionManager::makeBlock() {
         lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
 
         if (lastRealBlock.isEmpty()) {
+            qDebug() << "[TransactionManager] lastRealBlock.isEmpty()";
             return;
         }
 
         if (!node.network()->isActiveConnectionExists()) {
-            // qDebug() << "[TransactionManager] Dummy: no active connections";
-            if (lastRealBlock.getIndex() != lastBlock.getIndex())
-                node.blockchain()->removeAllDummyBlocks(lastBlock);
+            qDebug() << "[TransactionManager] Dummy: no active connections";
+            // if (lastRealBlock.getIndex() != lastBlock.getIndex())
+                // node.blockchain()->removeAllDummyBlocks(lastBlock);
             return;
         }
 
         static BigNumber prevDummy = -1;
 
-        if (prevDummy == lastBlock.getIndex() + 1)
-            return;
+        // if (prevDummy == lastBlock.getIndex() + 1) {
+        //     qDebug() << "[TransactionManager] prevDummy == lastBlock.getIndex() + 1";
+        //     return;
+        // }
 
         // creating dummy block in as ordinary block
         Block dummyBlock = Block();
@@ -159,11 +169,6 @@ void TransactionManager::proveTransactions() {
         } else {
             qDebug() << "[TransactionManager]" << tx;
             qDebug() << "[TransactionManager] Transaction not approved:" << res;
-
-            // hack
-            if (res == TransactionProveError::SelfPleasure && tx.isRewardTransaction()) {
-                // node.network()->send_message(tx, MessageType::BlockchainTransaction);
-            }
         }
     }
 

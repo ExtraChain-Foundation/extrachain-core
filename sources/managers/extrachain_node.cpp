@@ -36,7 +36,7 @@
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
-#include "managers/create_token_manager.h"
+#include "managers/token_manager.h"
 
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
@@ -61,17 +61,16 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     m_networkManager = new NetworkManager(*this);
     //    ThreadPool::addThread(m_networkManager);
 
-    m_blockchain = new Blockchain(*this);
+    m_blockchain         = new Blockchain(*this);
     m_transactionManager = new TransactionManager(*this);
-    m_dfs        = new DfsController(*this);
-
+    m_dfs                = new DfsController(*this);
 
     m_dmm = new DataMiningManager(this);
     // test port and address
     m_connectionsManager =
         new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
 
-    m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
+    m_tokenManager = std::make_shared<TokenManager>(*this, this);
 
     connectSignals();
 
@@ -84,7 +83,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     }
 
     // ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_txManager);
+    // ThreadPool::addThread(m_transactionManager);
 }
 
 uint64_t ExtraChainNode::getBlockCount() const {
@@ -115,6 +114,7 @@ bool ExtraChainNode::createNewNetwork(
         auto consoleHash = Utils::calcHash(email.toStdString() + password.toStdString());
         auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
         m_actorIndex->setFirstId(first.id());
+        m_accountController->getProfile(first.id()).renameWallet(first.id(), "King of the World");
     } else {
         qInfo() << "You cannot create a new network, data is not empty";
         return false;
@@ -126,14 +126,16 @@ bool ExtraChainNode::createNewNetwork(
 
         QMap<ActorId, BigNumberFloat> tm;
         tm.insert(ActorId(), 0);
-        GenesisBlock tmp        = m_blockchain->createGenesisBlock(first, tm);
-        m_blockchain->addGenesisBlockFromNetwork(tmp);
+        GenesisBlock block        = m_blockchain->createGenesisBlock(first, tm);
+        auto         blockVariant = BlockVariant(block);
+        m_blockchain->addBlockFromNetwork(blockVariant);
 
-        // TEST
-        //        Block lastBlock = m_blockchain->getLastBlock();
-        //        Block block(std::string(""), lastBlock);
-        //        m_blockchain->addBlock(block);
-        // TEST
+        // m_tokenManager->createToken(
+        //     tokenCount.toStdString(),
+        //     tokenName.toStdString(),
+        //     "",
+        //     first->id().toStdString(),
+        //     tokenColor.toStdString());
 
         //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
         //                             tokenColor.toLatin1());
@@ -200,17 +202,13 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     }
 
     if (tx.isEmpty() && !tx.isBurn()) {
-        qWarning() << fmt::format(
-            "Can not create tx:[{}]. Transaction is empty",
-            tx.toStdString());
+        qWarning() << fmt::format("Can not create tx:[{}]. Transaction is empty", tx.toStdString());
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
     auto actor = m_accountController->currentWallet();
     if (actor->empty()) {
-        qWarning() << fmt::format(
-            "Can not create tx:[{}]. There no current user",
-            tx.toStdString());
+        qWarning() << fmt::format("Can not create tx:[{}]. There no current user", tx.toStdString());
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -244,9 +242,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     return tx;
 }
 
-std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
-{
-    return m_createTokenManager;
+std::shared_ptr<TokenManager> ExtraChainNode::tokenManager() const {
+    return m_tokenManager;
 }
 
 std::expected<Transaction, TransactionError>
@@ -296,10 +293,10 @@ bool ExtraChainNode::importUser(
         return false;
     }
 
-    auto extrachainVersion     = array[0].toString();
-    auto date                  = array[1].toInteger();
-    auto profile               = array[2].toObject();
-    auto profileBytes          = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto extrachainVersion = array[0].toString();
+    auto date              = array[1].toInteger();
+    auto profile           = array[2].toObject();
+    auto profileBytes      = QJsonDocument(profile).toJson(QJsonDocument::Compact);
     auto profileBytesEncrypted =
         QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
 
@@ -341,35 +338,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             qDebug() << QString("Attempting to create tx: [%1] from user [%2]")
                             .arg(tx.toString(), QString(actor->id().toByteArray()));
 
-            // 1) set prev block id
-            BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
-            if (lastBlockId.isEmpty()) {
-                qWarning() << QString("Can not create tx: [%1]. There is no last block in blockchain")
-                                  .arg(tx.toString())
-                                  .toStdString();
-                return std::unexpected(TransactionError::NoLastBlock);
-            }
-            tx.setPrevBlock(lastBlockId);
-
-            // 2) check coin availability
-            //                if (blockchain()->getUserBalance(actor.id(), tx.getToken()) <
-            //                tx.getAmount()) {
-            //                    qDebug() << QString("Warning: can not create tx:[%1]. There is not
-            //                    enough "
-            //                                        "coins/tokens in wallet")
-            //                                    .arg(tx.toString());
-            //                    return Transaction();
-            //                }
-
-            // 3) sign transaction
-
             tx.sign(actor);
             qDebug() << "[Transaction] Send tx" << tx.getAmountDec() << "to" << tx.getReceiver();
             auto createdTx = this->createTransaction(tx);
-            if (createdTx.has_value()) {
-                m_transactionManager->addTransaction(createdTx.value());
-                return createdTx;
-            }
+            return createdTx;
         }
 
         return std::unexpected(TransactionError::Unknown);
@@ -394,16 +366,42 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::string ExtraChainNode::transactionErrorDescription(const TransactionError &error)
-{
-    switch(error) {
-    case TransactionError::Unknown: return "Unknown error";
-    case TransactionError::ZeroAmount: return "Can not create transaction without amount.";
-    case TransactionError::EmptyTransaction: return "Can not create transaction. Transaction is empty.";
-    case TransactionError::NoLastBlock: return "There is no last block in blockchain.";
-    case TransactionError::InsufficientFunds: return "Can not create transaction. There is not enough coins/tokens in wallet.";
-    case TransactionError::NoCurrentUser: return "Can not create transaction. There no current user.";
-    default: return "";
+std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction transaction) {
+    BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
+    if (lastBlockId.isEmpty()) {
+        qWarning() << "[Node] Can't send tx" << transaction
+                   << ", because there is no last block in blockchain";
+        return std::unexpected(TransactionError::NoLastBlock);
+    }
+
+    transaction.setPrevBlock(lastBlockId);
+
+    if (!transaction.isSigned()) {
+        qFatal("Transaction sending: no sign");
+        // transaction.sign(actor);
+    }
+
+    network()->send_message(transaction, MessageType::BlockchainTransaction);
+
+    return transaction;
+}
+
+std::string ExtraChainNode::transactionErrorDescription(const TransactionError& error) {
+    switch (error) {
+    case TransactionError::Unknown:
+        return "Unknown error";
+    case TransactionError::ZeroAmount:
+        return "Can not create transaction without amount.";
+    case TransactionError::EmptyTransaction:
+        return "Can not create transaction. Transaction is empty.";
+    case TransactionError::NoLastBlock:
+        return "There is no last block in blockchain.";
+    case TransactionError::InsufficientFunds:
+        return "Can not create transaction. There is not enough coins/tokens in wallet.";
+    case TransactionError::NoCurrentUser:
+        return "Can not create transaction. There no current user.";
+    default:
+        return "";
     }
 }
 
@@ -462,9 +460,9 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
         //      seconds the network has been online.
         // Ef - efficiency coefficient
 
-        std::string ip = m_networkManager->localIp().toStdString();
+        std::string ip   = m_networkManager->localIp().toStdString();
         std::string port = QString::number(m_networkManager->wsPort).toStdString();
-        blockCount = m_connectionsManager->getActivityScore(Connection { ip, port, true })
+        blockCount       = m_connectionsManager->getActivityScore(Connection { ip, port, true })
                      / (std::stoi(middleCount.toStdString()) * 2);
     }
 }
@@ -490,19 +488,20 @@ void ExtraChainNode::dfsConnection() {
 }
 
 void ExtraChainNode::connectSignals() {
-    connect(
-        this,
-        &ExtraChainNode::ready,
-        []() {
-            qInfo() << "Node: started";
-        });
+    connect(this, &ExtraChainNode::ready, []() {
+        qInfo() << "Node: started";
+    });
     connectTransactionManager();
     connectContractManager();
     //    connectAccountController();
     connectActorIndex();
     dfsConnection();
 
-    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(
+        m_networkManager,
+        &NetworkManager::newSocketActivated,
+        this,
+        &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
@@ -522,14 +521,21 @@ void ExtraChainNode::connectSignals() {
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
-            [&](const Transaction &tx) { m_transactionManager->addTransaction(tx);
-    });
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
-    [=, this](const QString &pathCreatedTokenJson) {
-        m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
-    });
-    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(), &CreateTokenManager::checkIsContract);
+    connect(
+        m_tokenManager.get(),
+        &TokenManager::sendTransactionCreateToken,
+        this,
+        [&](const Transaction& tx) {
+            this->sendTransaction(tx);
+        });
+    connect(
+        m_tokenManager.get(),
+        &TokenManager::sendToken,
+        this,
+        [=, this](const QString& pathCreatedTokenJson) {
+            m_dfs->addListFiles(QStringList(QList<QString> { pathCreatedTokenJson }));
+        });
+    connect(m_dfs, &DfsController::checkIsContract, m_tokenManager.get(), &TokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -550,7 +556,7 @@ void ExtraChainNode::prepareFolders() {
 
 void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
-    DFSP::RequestDfsSize msg{ actorId.toStdString() };
+    DFSP::RequestDfsSize msg { actorId.toStdString() };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
 }

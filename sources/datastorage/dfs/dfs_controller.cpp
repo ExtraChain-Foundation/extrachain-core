@@ -983,7 +983,7 @@ void DfsController::loadBytesLimit() {
     } else {
         m_bytesLimit = DFSB::minDfsLimit;
     }
-    qDebug() << "Limit dfs is " << m_bytesLimit;
+    qDebug() << "[DFS] Limit is" << m_bytesLimit;
     dirsFile.close();
 }
 

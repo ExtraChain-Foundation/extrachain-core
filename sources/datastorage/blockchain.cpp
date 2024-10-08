@@ -103,8 +103,9 @@ void Blockchain::sync() {
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
     BigNumber lastIndex = getLastBlock().getIndex();
 
-    if (lastIndex < fromBlock) {
-        this->sync();
+    if (lastIndex <= fromBlock) {
+        // this->sync();
+        qDebug() << "[Blockchain] No sync: lastIndex <= fromBlock" << lastIndex << fromBlock;
         return;
     }
 
@@ -137,7 +138,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         }
     }
 
-    qDebug() << "[Blockchain] Send sync from" << from << "to" << lastIndex;
+    qDebug() << "[Blockchain] Send sync blocks from" << from << "to" << lastIndex;
 }
 
 std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const ActorId &token) {
@@ -578,8 +579,15 @@ int Blockchain::addBlock(const BlockVariant &block) {
 
     if (blockId != 0) {
         auto lastBlock = this->getBlockByIndex(blockId - 1);
+
+        if (blockId > lastBlock.getIndex() + 1) {
+            qDebug() << "[Blockchain] New block id is greater than last id, sync request";
+            sync();
+            return Errors::BLOCK_IS_NOT_VALID;
+        }
+
         if (block.getPrevHash() != lastBlock.getHash()) {
-            qDebug() << "[Blockchain] Can't chained";
+            qDebug() << "[Blockchain] Can't chained, sync request";
             sync();
             return Errors::BLOCK_IS_NOT_VALID;
         }
@@ -947,11 +955,10 @@ void Blockchain::addBlockFromNetwork(const BlockVariant &block) {
     if (block.isEmpty()) {
         return;
     }
-    // if (block.getType() == BlockType::DataMerge || block.getType() == BlockType::GenesisMerge)
-    //     return;
-    if (block.getType() != BlockType::Dummy && block.getType() != BlockType::Genesis) {
-        this->removeAllDummyBlocks(lastBlock);
-    }
+
+    // if (block.getType() != BlockType::Dummy) {
+    //     this->removeAllDummyBlocks(lastBlock);
+    // }
 
     int resultCode = addBlock(block);
 
@@ -981,13 +988,6 @@ void Blockchain::addBlockFromNetwork(const BlockVariant &block) {
                              tmp.getSender().toByteArray() });
         }
     }
-}
-
-void Blockchain::addGenesisBlockFromNetwork(const GenesisBlock &block) {
-    auto blockVariant = BlockVariant(block);
-    updateFirstId(blockVariant);
-    addBlock(blockVariant);
-    // emit sendMessage(block.serialize(), Messages::ChainMessage::GenesisBlockMessage);
 }
 
 // Actors //

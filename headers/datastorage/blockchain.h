@@ -114,10 +114,11 @@ public:
         const std::shared_ptr<Actor<KeyPrivate>> actor,
         QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
-                                                        BigNumber from = -1,
-                                                        int count = 10,
-                                                        ActorId token = ActorId());
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(
+        const BigNumber &id,
+        BigNumber from = -1,
+        int count = 10,
+        ActorId token = ActorId());
     void getBlockZero();
     BigNumber getSupply(const QByteArray &idToken);
     BigNumber getFullSupply(const QByteArray &idToken);
@@ -280,8 +281,10 @@ public:
      */
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat
-    getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TransactionType txType = TransactionType::Transaction) const;
+    BigNumberFloat getUserBalance(
+        ActorId userId,
+        ActorId tokenId = ActorId(),
+        TransactionType txType = TransactionType::Transaction) const;
 
     /**
      * @brief Show blockchain
@@ -316,6 +319,7 @@ public:
     bool getPossibleMining() const;
 
 signals:
+    void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
 
@@ -327,13 +331,16 @@ signals:
 
 public:
     void addBlockFromNetwork(const BlockVariant &block);
-    void addGenesisBlockFromNetwork(const GenesisBlock &block);
     BigNumber getBlockCount();
 
     /**
      * @brief finds needed transaction by sender or receiver
      */
     TransactionProveError proveTransaction(const Transaction &tx);
+
+public slots:
+    void process() {
+    }
 };
 
 #endif // BLOCKCHAIN_H

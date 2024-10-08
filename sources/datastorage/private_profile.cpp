@@ -66,9 +66,19 @@ bool PrivateProfile::changeCurrent(const ActorId &actorId) {
     return true;
 }
 
-void PrivateProfile::addWalet(const Actor<KeyPrivate> &actor) {
+void PrivateProfile::addWallet(const Actor<KeyPrivate> &actor) {
     m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(actor));
     save();
+}
+
+bool PrivateProfile::renameWallet(const ActorId &actorId, const std::string &walletName) {
+    if (walletName.empty()) {
+        return false;
+    }
+
+    walletNames[actorId] = walletName;
+    save();
+    return true;
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId &actorId) const {
@@ -105,25 +115,20 @@ QJsonObject PrivateProfile::toJson() const {
     }
     json["actors"] = actors;
 
-    qDebug() << json;
-    return json;
-}
-
-void PrivateProfile::renameWallet(const std::string &oldWalletName, const std::string &newWalletName) {
-    for (auto &actor : m_actors) {
-        qDebug() << actor->walletName();
-        if (actor->walletName() == oldWalletName) {
-            qDebug() << "We found wallet that must rename" << actor->walletName();
-            actor->setWalletName(newWalletName);
-            save();
-        }
+    QJsonObject walletNames;
+    for (const auto &[actor, name] : this->walletNames) {
+        walletNames[actor.toString()] = QString::fromStdString(name);
     }
+    json["walletNames"] = walletNames;
+
+    qDebug() << "[PrivateProfile] JSON:" << json;
+    return json;
 }
 
 void PrivateProfile::save() {
     auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact);
     auto data = QByteArray::fromStdString(SecretKey::encryptWithPassword(jsonBytes.toStdString(), m_hash));
-    qDebug() << "Save data: " << data;
+    // qDebug() << "Save data:" << data;
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
     if (file.write(data) == 0)
@@ -134,16 +139,24 @@ void PrivateProfile::save() {
 void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
-    auto data      = file.readAll().toStdString();
+    auto data = file.readAll().toStdString();
     auto jsonBytes = QByteArray::fromStdString(SecretKey::decryptWithPassword(data, m_hash));
-    // decrypt with m_hash
-    auto json         = QJsonDocument::fromJson(jsonBytes).object();
-    m_main            = json["main"].toString().toStdString();
+
+    auto json = QJsonDocument::fromJson(jsonBytes).object();
+    m_main = json["main"].toString().toStdString();
     const auto actors = json["actors"].toArray();
+    const auto walletNames = json["walletNames"].toObject();
+
     for (const auto &actor : actors) {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
-        auto a    = Actor<KeyPrivate>::fromJson(json);
+        auto a = Actor<KeyPrivate>::fromJson(json);
         m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(a));
+    }
+
+    for (auto it = walletNames.begin(); it != walletNames.end(); ++it) {
+        auto actorId = it.key().toStdString();
+        auto name = it.value().toString().toStdString();
+        this->walletNames.insert({ ActorId(actorId), name });
     }
 }
 
