@@ -885,6 +885,45 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, ActorId tokenId, Trans
     return balance;
 }
 
+BalanceDataInfo Blockchain::getBalanceInfo(ActorId userId, ActorId tokenId)
+{
+    BalanceDataInfo balanceDataInfo(userId);
+
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
+        BlockVariant currentBlock = blockIndex.getBlockById(i);
+
+        if (currentBlock.getType() == BlockType::Dummy) {
+            continue;
+        }
+
+        if (currentBlock.isGenesisBlock()) {
+            GenesisBlock genesis = blockIndex.getGenesisBlockById(i);
+            const auto   rows    = genesis.dataRows();
+
+            for (const auto &row : rows) {
+                if (userId == row.actorId && tokenId == row.token) {
+                    BalanceDataInfo::BalanceDataItem bdi;
+                    bdi.balanceChange += row.state;
+                    bdi.date = genesis.getDate();
+                    bdi.participant = ActorId();
+                    balanceDataInfo.add(bdi);
+                }
+            }
+        }
+
+        auto txs = currentBlock.transactions();
+        for (auto &tx : txs) {
+            if(tx.getToken() == tokenId) {
+                BalanceDataInfo::BalanceDataItem bdi;
+                bdi.fromTx(userId, tx);
+                balanceDataInfo.add(bdi);
+            }
+        }
+
+    }
+    return balanceDataInfo;
+}
+
 void Blockchain::showBlockchain() const {
     qDebug() << "[Blockchain] Show blockchain:";
 

@@ -40,6 +40,40 @@
 
 class TransactionManager;
 
+struct BalanceDataInfo
+{
+    struct BalanceDataItem {
+        long long date;
+        BigNumberFloat balanceChange;
+        ActorId participant;
+
+        void fromTx(const ActorId& actorId, const Transaction& tx) {
+            date = tx.getDate();
+            if(tx.getSender() == actorId) {
+                balanceChange -= tx.getAmount();
+                participant = tx.getReceiver();
+            }
+
+            if(tx.getReceiver() == actorId) {
+                balanceChange += tx.getAmount();
+                participant = tx.getSender();
+            }
+        };
+    };
+
+    ActorId actor;
+    BigNumberFloat totalBalance;
+    std::vector<BalanceDataItem> listBalanceDataItem;
+    BalanceDataInfo(const ActorId& actor) : actor(actor) {}
+
+    void add(const BalanceDataItem& balanceDataItem) {
+        totalBalance += balanceDataItem.balanceChange;
+        listBalanceDataItem.push_back(balanceDataItem);
+    }
+
+    int size() { return listBalanceDataItem.size(); }
+};
+
 /*
  * Main database class
  *
@@ -282,6 +316,8 @@ public:
 
     BigNumberFloat
     getUserBalance(ActorId userId, ActorId tokenId = ActorId(), TransactionType txType = TransactionType::Transaction) const;
+
+    BalanceDataInfo getBalanceInfo(ActorId userId, ActorId tokenId = ActorId());
 
     /**
      * @brief Show blockchain
