@@ -73,6 +73,7 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
+    return;
     if (node.accountController()->empty())
         return;
 
