@@ -24,7 +24,6 @@
 
 #include "datastorage/actor.h"
 #include "datastorage/private_profile.h"
-#include "datastorage/transaction.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;
@@ -43,9 +42,12 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate> createWallet(const ActorId &profileActor = ActorId(), const std::string &nameWallet = std::string(), const std::string &tokenName = std::string());
+    Actor<KeyPrivate>
+    createWallet(const ActorId &profileActor = ActorId(), const std::string &walletName = std::string());
     // createDAppMaster
-    // createService
+    Actor<KeyPrivate> createService(const ActorId &profileActor = ActorId());
+
+    void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     bool load(const std::string &hash);
 
@@ -65,12 +67,11 @@ public:
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &accounts() const; // temp
     const std::vector<ActorId> accountsIds() const;
-    const std::shared_ptr<Actor<KeyPrivate>> currentWallet() const;         // temp
+    const std::shared_ptr<Actor<KeyPrivate>> currentWallet() const; // temp
     void clear();
 
     static std::vector<ActorId> profilesList();
     void addToProfileList(const ActorId &actorId);
-    void renamewallet(const QString &oldWalletName, const QString &newWalletName);
 
 private:
     ExtraChainNode &node;

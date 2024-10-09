@@ -207,6 +207,10 @@ bool Transaction::isBurn() const {
            && hash.empty();
 }
 
+bool Transaction::isSigned() const {
+    return !this->approver.isZero() && !this->signature.empty();
+}
+
 bool Transaction::operator==(const Transaction &transaction) const {
     if (this->sender != transaction.getSender())
         return false;
@@ -253,8 +257,8 @@ std::string Transaction::toStdString() const {
 QString Transaction::toString() const {
     auto hashQt = QString::fromStdString(hash);
     auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
-    return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: " + receiver.toByteArray()
-           + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
+    return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: "
+           + receiver.toByteArray() + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
            + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)
            + "', token: " + token.toByteArray() + ", prevBlock: " + prevBlock.toByteArray() + ", hash: '"
            + hashQt.left(5) + ".." + hashQt.right(5) + "', approver: " + approver.toByteArray()

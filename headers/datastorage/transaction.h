@@ -46,15 +46,15 @@ FORMAT_ENUM(TransactionError)
 enum class TransactionProveError {
     NoError,
     Unknown,
-    AmountZero, // amount == 0
-    AmountLessZero, // amount less 0
+    AmountZero,              // amount == 0
+    AmountLessZero,          // amount less 0
     IdenticalSenderReceiver, // sender == receiver
-    EmptyBlockchain, // no real block
-    SenderNotExists, // sender is not exist
-    ReceiverNotExists, // receiver is not exist
-    ZeroProducer, // producer 0
-    ProducerVerify, // bad signature in fee tx
-    SenderBalanceBelowZero, // sender's balance will be < 0
+    EmptyBlockchain,         // no real block
+    SenderNotExists,         // sender is not exist
+    ReceiverNotExists,       // receiver is not exist
+    ZeroProducer,            // producer 0
+    ProducerVerify,          // bad signature in fee tx
+    SenderBalanceBelowZero,  // sender's balance will be < 0
     SelfPleasure,
     RewardWrongToken
 };
@@ -122,6 +122,7 @@ public:
 
     virtual bool isEmpty() const;
     virtual bool isBurn() const;
+    bool isSigned() const;
     auto operator<=>(const Transaction &) const = default;
     bool operator==(const Transaction &transaction) const;
     void operator=(const Transaction &transaction);

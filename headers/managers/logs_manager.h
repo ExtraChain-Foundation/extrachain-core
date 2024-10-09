@@ -1,4 +1,4 @@
-/*
+    /*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -55,6 +55,7 @@ public:
     static bool antiFilter;
     static bool debugLogs;
     static VariantModel logs;
+    static QString currentThread;
 
     static QStringList filesFilter;
     static void setFilesFilter(const QStringList& value);

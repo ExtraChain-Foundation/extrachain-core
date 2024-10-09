@@ -644,6 +644,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
 }
 
 void BlockIndex::removeDummyBlocks(const BigNumber &id) {
+    std::vector<std::string> removedForLogs;
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
 
@@ -654,12 +655,13 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
         const auto block = getBlockById(lastId);
         if (block.getType() == BlockType::Dummy) {
             removeById(block);
+            removedForLogs.push_back(block.getIndex().toStdString());
         }
 
         lastId--;
     }
 
-    qDebug() << "[BlockIndex] Remove dummy blocks from" << lastSavedId << "to" << lastId;
+    qDebug() << "[BlockIndex] Remove dummy blocks:" << removedForLogs;
 }
 
 void BlockIndex::removeAll() {
