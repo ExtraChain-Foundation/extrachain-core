@@ -74,12 +74,11 @@ public:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
     ~ExtraChainNode();
 
-    bool createNewNetwork(
-        const QString& email,
-        const QString& password,
-        const QString& tokenName,
-        const QString& tokenCount,
-        const QString& tokenColor);
+    bool createNewNetwork(const QString& login,
+                          const QString& password,
+                          const QString& tokenName,
+                          const QString& tokenCount,
+                          const QString& tokenColor);
     void start();
 
     bool isClientApp() {

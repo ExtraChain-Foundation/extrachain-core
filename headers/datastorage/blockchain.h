@@ -25,17 +25,13 @@
 #include "datastorage/genesis_block.h"
 #include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
-#include "network/message_body.h"
-#include "network/network_manager.h"
+#include "utils/dfs_utils.h"
 #include "utils/bignumber.h"
+
 #include <QByteArray>
 #include <QMutex>
 #include <QObject>
 #include <QString>
-#include <QTemporaryFile>
-#include <QtNetwork/QHostAddress>
 #include <cassert>
 
 class TransactionManager;
@@ -50,6 +46,8 @@ class TransactionManager;
  *
  */
 
+class ExtraChainNode;
+
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
@@ -63,27 +61,21 @@ private:
     BlockIndex blockIndex; // blocks (if fileMode is true)
                            //    Actor<KeyPrivate>   approver;       // current user.
     // service //
-    std::vector<GenesisDataRow> genBlockData; // actorid -> token
-
-    bool launched;
-    BigNumber circulativeSupply;
-    bool possibleMining = true;
 
 public:
     explicit Blockchain(ExtraChainNode &node);
-    BlockVariant getBlockByHash(const QByteArray &hash);
+    std::expected<BlockVariant, BlockError> getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 
-    BlockVariant getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
+    std::expected<BlockVariant, BlockError>
+    getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
 
     void sync();
     void syncResponse(const BigNumber fromBlock, const std::string &messageId);
 
 private:
-    BlockVariant getBlockByData(const QByteArray &data);
-
-    std::string getBlockDataByIndex(const BigNumber &index);
+    std::expected<BlockVariant, BlockError> getBlockByData(const QByteArray &data);
 
     std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const ActorId &token = ActorId());
     std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const ActorId &token = ActorId());
@@ -94,41 +86,41 @@ private:
     std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const ActorId &token = ActorId());
     std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const ActorId &token = ActorId());
 
-    void saveTxInfoInEC(const std::set<Transaction> &transactions) const;
-
     // genesis blocks //
-    bool shouldStartGenesisCreation();
-
-    void addRecordsIfNew(const GenesisDataRow &row1, const GenesisDataRow &row2);
-    QByteArray findRecordsInBlock(const BlockVariant &block);
-    bool signCheckAdd(BlockVariant &block);
+    QByteArray                  findRecordsInBlock(const BlockVariant &block);
+    bool                        signCheckAdd(BlockVariant &block);
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
-    const int COUNT_APPROVER_BLOCK = 1;
-    const int COUNT_CHECKER_BLOCK = 2;
-    const int COUNT_UNFROZE_FEE = 3;
-    const BigNumber StakingCoef = 5;
+    const int       COUNT_APPROVER_BLOCK = 1;
+    const int       COUNT_CHECKER_BLOCK  = 2;
+    const int       COUNT_UNFROZE_FEE    = 3;
+    const BigNumber StakingCoef          = 5;
 
 public:
-    GenesisBlock createGenesisBlock(
-        const std::shared_ptr<Actor<KeyPrivate>> actor,
-        QMap<ActorId, BigNumberFloat> states = QMap<ActorId, BigNumberFloat>());
+    static BigNumber lastGenesisIdFor(const BigNumber &id);
+    static bool      isGenesisId(const BigNumber &id);
+
+    std::expected<BlockVariant, BlockError>
+    createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor);
+
+    std::expected<BlockVariant, BlockError>
+    createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>>
+                         actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
-        BigNumber from = -1,
-        int count = 10,
-        ActorId token = ActorId());
-    void getBlockZero();
-    BigNumber getSupply(const QByteArray &idToken);
-    BigNumber getFullSupply(const QByteArray &idToken);
+        BigNumber        from  = -1,
+        int              count = 10,
+        ActorId          token = ActorId());
+    // BigNumber getSupply(const QByteArray &idToken);
+    // BigNumber getFullSupply(const QByteArray &idToken);
+    bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
 
 private:
     // merging //
-    int mergeBlockWithLocal(BlockVariant &received);
-    int mergeGenesisBlockWithLocal(const GenesisBlock &received);
+    std::expected<BlockVariant, BlockError> mergeBlockWithLocal(const BlockVariant &received);
 
     /**
      * @brief validates block digital signature
@@ -156,19 +148,12 @@ public:
      */
     void updateFirstId(const BlockVariant &block);
 
-    /**
-     * Compares prevHash field of every block
-     * with the hash of the prev block
-     * @return 0 if integrity is ok, or block id where integrity is corrupted
-     */
-    BigNumber checkIntegrity();
-
     // - BLOCKS - //
 
     /**
      * @return last blockchain block
      */
-    BlockVariant getLastBlock() const;
+    std::expected<BlockVariant, BlockError> getLastBlock() const;
 
     /**
      * @return Amount of blockchain blocks
@@ -178,7 +163,7 @@ public:
     /**
      * @return last real blockchain block
      */
-    BlockVariant getLastRealBlock() const;
+    std::expected<BlockVariant, BlockError> getLastRealBlock() const;
 
     /**
      * Gets the block from blockchain by *value* of a certain *type*
@@ -186,7 +171,7 @@ public:
      * @param type of param
      * @return last blockchain block
      */
-    BlockVariant getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+    std::expected<BlockVariant, BlockError> getBlock(SearchEnum::BlockParam type, const QByteArray &value);
 
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
@@ -203,7 +188,8 @@ private:
      * Convert block to MemBlock or FileBlock according to a fileMode.
      * @return 0 is success, or error code
      */
-    int addBlock(const BlockVariant &block);
+    std::expected<BlockVariant, BlockError> addBlock(const BlockVariant &block);
+    std::expected<BlockVariant, BlockError> replaceBlock(const BlockVariant &block);
 
 public:
     /**
@@ -231,9 +217,9 @@ public:
      * @param blockB
      * @return merged block
      */
-    Block mergeBlocks(const Block &blockA, const Block &blockB);
-
-    GenesisBlock mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB);
+    std::expected<BlockVariant, BlockError> mergeBlocks(const Block &blockA, const Block &blockB);
+    std::expected<BlockVariant, BlockError>
+    mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB);
 
     /**
      * @brief Sign Block with current approver
@@ -282,9 +268,9 @@ public:
     int getCountTransactionsInBlocks() const;
 
     BigNumberFloat getUserBalance(
-        ActorId userId,
-        ActorId tokenId = ActorId(),
-        TransactionType txType = TransactionType::Transaction) const;
+        ActorId         userId,
+        TokenId         tokenId = TokenId(),
+        TransactionType txType  = TransactionType::Transaction) const;
 
     /**
      * @brief Show blockchain
@@ -292,31 +278,6 @@ public:
     void showBlockchain() const;
 
     void getSmContractMembers(const BlockVariant &block) const;
-
-    /**
-     *  @brief Get circulative supply
-     */
-    BigNumber getCirculativeSuply() const;
-
-    /**
-     * @brief Set new value circulative supply
-     */
-    void setCirculativeSupply(const BigNumber &newValue);
-
-    /**
-     * @brief Increase circulative supply value
-     */
-    void increaseCirculativeSupply(const BigNumber &value);
-
-    /**
-     * @brief Set possible mining
-     */
-    void setPossibleMining(const bool &value);
-
-    /**
-     * @brief Get possible mining
-     */
-    bool getPossibleMining() const;
 
 signals:
     void finished();
@@ -330,7 +291,7 @@ signals:
     void possibleMiningChange(const bool &possibleMinig);
 
 public:
-    void addBlockFromNetwork(const BlockVariant &block);
+    void      addBlockFromNetwork(const BlockVariant &block);
     BigNumber getBlockCount();
 
     /**
@@ -339,8 +300,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx);
 
 public slots:
-    void process() {
-    }
+    void process();
 };
 
 #endif // BLOCKCHAIN_H

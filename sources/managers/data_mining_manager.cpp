@@ -142,11 +142,21 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
         return 0;
     }
 
-    return (
-        BigNumberFloat { node->dfs()->sizeTaken() } / node->dfs()->totalDfsSize()
-        + BigNumberFloat { totalBytes.second } / totalBytes.first
-        + (BigNumberFloat { node->blockchain()->getBlocksStored() }
-           / node->blockchain()->getLastBlock().getIndex() * 100));
+    auto lastBlock = node->blockchain()->getLastBlock();
+    if (!lastBlock.has_value() && lastBlock->isEmpty())
+        return 0;
+    auto lastIndex = lastBlock->getIndex();
+    if (lastIndex == 0)
+        return 0;
+
+    auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
+    auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
+    auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
+    auto totalBytesSecond = BigNumberFloat(totalBytes.second);
+    auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
+
+    return sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+           + (blocksStored / lastIndex * 100);
 }
 
 BigNumberFloat
@@ -157,11 +167,17 @@ DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &reque
         return 0;
     }
 
+    auto lastBlock = node->blockchain()->getLastBlock();
+    if (!lastBlock.has_value() && lastBlock->isEmpty())
+        return 0;
+    auto lastIndex = lastBlock->getIndex();
+    if (lastIndex == 0)
+        return 0;
+
     return (
         BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
         + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-        + (BigNumberFloat { requestReward.BlocksStored } / node->blockchain()->getLastBlock().getIndex()
-           * 100));
+        + (BigNumberFloat { requestReward.BlocksStored } / lastIndex * 100));
 }
 
 void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {

@@ -58,20 +58,32 @@ QDebug operator<<(QDebug debug, const Approver &approvers);
 enum class BlockType {
     Data,
     Genesis,
-    DataMerge,
-    GenesisMerge,
     Dummy,
 };
 MSGPACK_ADD_ENUM(BlockType)
 FORMAT_ENUM(BlockType)
 
+enum class BlockError {
+    Unknown,
+    EmptyBlockchain,
+    NoGenesis,
+    NotExists,
+    Invalid,
+    AlreadyExists,
+
+    CantMerge,
+    MergeEqual
+};
+// MSGPACK_ADD_ENUM(TransactionError)
+FORMAT_ENUM(BlockError)
+
 class BlockVariant;
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    BlockType m_type;                  // simple block, or genesis block (or other)
-    std::set<std::string> m_dataService;      // payload (serialized transaction's, or other)
-    BigNumber m_index = BigNumber(-1); // block id
+    BlockType m_type;                    // simple block, or genesis block (or other)
+    std::set<std::string> m_dataService; // payload (serialized transaction's, or other)
+    BigNumber m_index = BigNumber(-1);   // block id
     long long m_date;
     std::string m_prevHash;               // previous block hash
     std::string m_hash;                   // this block hash (from all previous fields)
@@ -203,8 +215,8 @@ inline bool operator<(const Block &l, const Block &r) {
 }
 
 inline bool operator==(const Block &l, const Block &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
-           && l.transactions() == r.transactions();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
+           && l.dataService() == r.dataService() && l.transactions() == r.transactions();
 }
 
 QDebug operator<<(QDebug debug, const Block &block);

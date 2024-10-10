@@ -23,7 +23,9 @@
 #include <QtConcurrent>
 
 #include "managers/extrachain_node.h"
+#include "managers/account_controller.h"
 #include "datastorage/blockchain.h"
+#include "network/network_manager.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {
     return m_receivedTxList;
@@ -76,39 +78,40 @@ void TransactionManager::makeBlock() {
     if (node.accountController()->empty())
         return;
 
-    BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
-    BlockVariant lastBlock     = node.blockchain()->getLastBlock();
+    auto lastRealBlock = node.blockchain()->getLastRealBlock();
+    auto lastBlock     = node.blockchain()->getLastBlock();
 
-    if (lastRealBlock.getIndex() != lastBlock.getIndex()) {
-        qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex()
-                 << "| last real:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
-    } else {
-        qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
+    if (!lastBlock.has_value() || !lastRealBlock.has_value() || lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
+        qDebug() << "[TransactionManager] last or real last block is empty";
+        return;
     }
 
-    auto maybeGenesisId = lastBlock.getIndex() + 1;
-    if (!lastBlock.isEmpty() && maybeGenesisId > 0
-        && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
+    if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
+        qDebug() << "[Blockchain] Last block:" << lastBlock->getIndex()
+                 << "| last real:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+    } else {
+        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+    }
+
+    auto maybeGenesisId = lastBlock->getIndex() + 1;
+    if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
                            << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto   actor = node.accountController()->mainActor();
-        GenesisBlock gB    = node.blockchain()->createGenesisBlock(actor);
-        node.network()->send_message(gB, MessageType::BlockchainGenesisBlock);
+        const auto actor   = node.accountController()->mainActor();
+        const auto genesis = node.blockchain()->createGenesisBlock(actor);
+
+        if (genesis.has_value() && !genesis->isEmpty()) {
+            node.blockchain()->sendBlock(genesis.value());
+        }
+
         return;
     }
 
     if (m_pendingTxList.empty()) {
-        lastRealBlock = node.blockchain()->getBlockIndex().getLastRealBlockById();
-
-        if (lastRealBlock.isEmpty()) {
-            qDebug() << "[TransactionManager] lastRealBlock.isEmpty()";
-            return;
-        }
-
         if (!node.network()->isActiveConnectionExists()) {
             qDebug() << "[TransactionManager] Dummy: no active connections";
             // if (lastRealBlock.getIndex() != lastBlock.getIndex())
-                // node.blockchain()->removeAllDummyBlocks(lastBlock);
+            // node.blockchain()->removeAllDummyBlocks(lastBlock);
             return;
         }
 
@@ -122,22 +125,22 @@ void TransactionManager::makeBlock() {
         // creating dummy block in as ordinary block
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
-        dummyBlock.setPrev(lastBlock);
-        dummyBlock.addData(lastRealBlock.getIndex().toStdString());
+        dummyBlock.setPrev(lastBlock.value());
+        dummyBlock.addData(lastRealBlock->getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node.blockchain()->signBlock(dummyBlockVariant);
         node.network()->send_message(dummyBlockVariant.getBlockConst(), MessageType::BlockchainNewBlock);
-        prevDummy = lastBlock.getIndex() + 1;
+        prevDummy = lastBlock->getIndex() + 1;
         return;
     }
 
     // remove all dummy blocks
-    node.blockchain()->removeAllDummyBlocks(lastBlock);
+    node.blockchain()->removeAllDummyBlocks(lastBlock.value());
 
-    if (lastRealBlock.isEmpty())
+    if (lastRealBlock->isEmpty())
         lastRealBlock = node.blockchain()->getLastRealBlock();
     Block block;
-    block.setPrev(lastRealBlock);
+    block.setPrev(lastRealBlock.value());
     block.addTransactions(m_pendingTxList);
     this->m_pendingTxList.clear();
 

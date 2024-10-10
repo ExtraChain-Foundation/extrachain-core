@@ -76,6 +76,15 @@ std::set<Transaction> BlockVariant::transactions() const {
         m_block);
 }
 
+const std::map<std::pair<ActorId, ActorId>, GenesisDataRow> &BlockVariant::dataRows() const {
+    if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
+        return genesisBlock->dataRows();
+    }
+
+    static std::map<std::pair<ActorId, ActorId>, GenesisDataRow> rows;
+    return rows;
+}
+
 QString BlockVariant::toString() const {
     return std::visit(
         [](const auto& b) {
@@ -166,10 +175,4 @@ std::optional<std::reference_wrapper<GenesisBlock>> BlockVariant::getGenesisBloc
         return std::ref(*block);
     }
     return std::nullopt;
-}
-
-Block BlockVariant::getAny() {
-    if (isGenesisBlock())
-        return getGenesisBlock()->get();
-    return getBlock()->get();
 }

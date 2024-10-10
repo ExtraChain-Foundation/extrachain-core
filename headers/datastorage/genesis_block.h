@@ -28,33 +28,22 @@
 
 class EXTRACHAIN_EXPORT GenesisDataRow {
 public:
-    ActorId actorId;
-    BigNumberFloat state;
-    ActorId token;
-    DataStorage::DataRowType type;
+    // ActorId actorId;
+    BigNumberFloat state = 0;
+    DataStorage::DataRowType type = DataStorage::DataRowType::Universal;
 
 public:
     GenesisDataRow() = default;
 
-    GenesisDataRow(
-        const ActorId &actorId,
-        const BigNumberFloat &state,
-        const ActorId &token,
-        const DataStorage::DataRowType &type)
-        : actorId(actorId)
-        , state(state)
-        , token(token)
+    GenesisDataRow(const BigNumberFloat &state, const DataStorage::DataRowType &type)
+        : state(state)
         , type(type) {
     }
 
-    // bool operator==(const GenesisDataRow &other) const {
-    //     return this->actorId == other.actorId && this->state == other.state && this->token == other.token
-    //            && this->type == other.type;
-    // }
     auto operator<=>(const GenesisDataRow &) const = default;
-    bool operator==(const GenesisDataRow &) const  = default;
+    bool operator==(const GenesisDataRow &) const = default;
 
-    MSGPACK_DEFINE(actorId, state, token, type)
+    MSGPACK_DEFINE(state, type)
 };
 
 /**
@@ -64,7 +53,7 @@ public:
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 private:
     std::string m_prevGenHash; // previous genesis block hashes
-    std::set<GenesisDataRow> m_dataRows;
+    std::map<std::pair<ActorId, TokenId>, GenesisDataRow> m_dataRows;
 
 public:
     GenesisBlock();
@@ -79,20 +68,20 @@ public:
         std::string &&hash,
         std::string &&prevGenHash,
         std::set<Approver> &&signatures,
-        std::set<GenesisDataRow> &&dataRows);
+        std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &&dataRows);
 
     // Block interface
 public:
-    bool addRow(const GenesisDataRow &row);
-    int addRows(const std::set<GenesisDataRow> &rows);
-    int addRows(const std::vector<GenesisDataRow> &rows);
+    void addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataRow &row);
+    void addRows(const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &dataRows);
+
     const std::string &getDataForSignature() const override;
 
     /**
      * @brief extract non-empty genesisDataRows from data
      * @return genesis data row list
      */
-    const std::set<GenesisDataRow> &dataRows() const;
+    const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &dataRows() const;
     std::string toStdString() const override;
 
 protected:

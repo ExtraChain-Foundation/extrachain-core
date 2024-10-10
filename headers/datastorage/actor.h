@@ -130,6 +130,8 @@ private:
     std::string m_id;
 };
 
+using TokenId = ActorId;
+
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
     static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),

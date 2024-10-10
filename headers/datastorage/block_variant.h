@@ -29,13 +29,7 @@ public:
     std::string getSignature() const;
     std::set<Approver> signatures() const;
     std::set<Transaction> transactions() const;
-    const std::set<GenesisDataRow>& dataRows() const {
-        if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
-            return genesisBlock->dataRows();
-        }
-        static std::set<GenesisDataRow> rows;
-        return rows;
-    }
+    const std::map<std::pair<ActorId, ActorId>, GenesisDataRow>& dataRows() const;
 
     QString toString() const;
     std::string toStdString() const;
@@ -54,7 +48,6 @@ public:
     std::optional<std::reference_wrapper<const GenesisBlock>> getGenesisBlockConst() const;
     std::optional<std::reference_wrapper<Block>> getBlock();
     std::optional<std::reference_wrapper<GenesisBlock>> getGenesisBlock();
-    Block getAny();
 
     bool operator==(const BlockVariant& other) const {
         if (isGenesisBlock()) {

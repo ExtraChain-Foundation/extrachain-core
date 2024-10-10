@@ -94,7 +94,7 @@ void Block::calcHash() {
 }
 
 void Block::setType(BlockType value) {
-    if (value == BlockType::Genesis || value == BlockType::GenesisMerge) {
+    if (value == BlockType::Genesis) {
         qFatal("Block: try to set not data type");
     }
 
@@ -104,10 +104,6 @@ void Block::setType(BlockType value) {
 void Block::setType(const std::string &value) {
     if (value == "data") {
         m_type = BlockType::Data;
-    } else if (value == "datamerge") {
-        m_type = BlockType::DataMerge;
-        // } else if (value == "genesismerge") {
-        //     m_type = BlockType::GenesisMerge;
     } else if (value == "dummy") {
         m_type = BlockType::Dummy;
     } else {
@@ -247,7 +243,7 @@ const std::set<Approver> &Block::signatures() const {
 }
 
 const std::set<Transaction> &Block::transactions() const {
-    if (m_type == BlockType::Genesis || m_type == BlockType::GenesisMerge) {
+    if (m_type == BlockType::Genesis) {
         qFatal("GenesisBlock: try to use transactions");
     }
 

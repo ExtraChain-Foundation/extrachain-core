@@ -32,16 +32,15 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
     this->m_dataRows    = block.dataRows();
 }
 
-GenesisBlock::GenesisBlock(
-    std::string              &&type,
-    std::string              &&data,
-    BigNumber                  idx,
-    long long                  date,
-    std::string              &&prevHash,
-    std::string              &&hash,
-    std::string              &&prevGenHash,
-    std::set<Approver>       &&signatures,
-    std::set<GenesisDataRow> &&dataRows)
+GenesisBlock::GenesisBlock(std::string              &&type,
+                           std::string              &&data,
+                           BigNumber                  idx,
+                           long long                  date,
+                           std::string              &&prevHash,
+                           std::string              &&hash,
+                           std::string              &&prevGenHash,
+                           std::set<Approver>       &&signatures,
+                           std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &&dataRows)
     : Block(
           std::move(type),
           std::move(data),
@@ -56,39 +55,14 @@ GenesisBlock::GenesisBlock(
     setType(type);
 }
 
-bool GenesisBlock::addRow(const GenesisDataRow &row) {
-    // TODO: maybe use ordered map?
-    auto it = std::find_if(m_dataRows.begin(), m_dataRows.end(),
-                           [&row](const GenesisDataRow& existingRow) {
-                               return existingRow.actorId == row.actorId;
-                           });
-
-    if (it != m_dataRows.end()) {
-        m_dataRows.erase(it);
-    }
-
-    auto res = m_dataRows.insert(row);
-    return res.second;
+void GenesisBlock::addRow(const ActorId& actorId, const TokenId& tokenId, const GenesisDataRow &row) {
+    m_dataRows[{ actorId, tokenId }] = row;
 }
 
-int GenesisBlock::addRows(const std::set<GenesisDataRow> &rows) {
-    int count = 0;
-    for (const auto &row : std::as_const(rows)) {
-        auto res = addRow(row);
-        if (res)
-            count++;
+void GenesisBlock::addRows(const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &dataRows) {
+    for (const auto& [key, row] : dataRows) {
+        m_dataRows[key] = row;
     }
-    return count;
-}
-
-int GenesisBlock::addRows(const std::vector<GenesisDataRow> &rows) {
-    int count = 0;
-    for (const auto &row : std::as_const(rows)) {
-        auto res = addRow(row);
-        if (res)
-            count++;
-    }
-    return count;
 }
 
 const std::string &GenesisBlock::getDataForSignature() const {
@@ -104,17 +78,18 @@ void GenesisBlock::calcHash() {
         sha3.add(data.c_str(), data.size());
     }
 
-    for (const GenesisDataRow &row : std::as_const(m_dataRows)) {
-        sha3.add(row.actorId.toStdString().c_str(), row.actorId.toStdString().size());
+    for (const auto &[key, row] : std::as_const(m_dataRows)) {
+        auto &[actorId, tokenId] = key;
+        sha3.add(actorId.toStdString().c_str(), actorId.toStdString().size());
         sha3.add(row.state.toStdString().c_str(), row.state.toStdString().size());
-        sha3.add(row.token.toStdString().c_str(), row.token.toStdString().size());
+        sha3.add(tokenId.toStdString().c_str(), tokenId.toStdString().size());
         sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
     this->m_hash = sha3.getHash();
 }
 
-const std::set<GenesisDataRow> &GenesisBlock::dataRows() const {
+const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &GenesisBlock::dataRows() const {
     return m_dataRows;
 }
 
@@ -123,7 +98,7 @@ void GenesisBlock::setPrevGenHash(const std::string &value) {
 }
 
 void GenesisBlock::setType(BlockType value) {
-    if (value != BlockType::Genesis || value != BlockType::GenesisMerge) {
+    if (value != BlockType::Genesis) {
         qFatal("GenesisBlock: try to set not genesis type");
     }
 
@@ -133,8 +108,6 @@ void GenesisBlock::setType(BlockType value) {
 void GenesisBlock::setType(const std::string &value) {
     if (value == "genesis") {
         m_type = BlockType::Genesis;
-    } else if (value == "genesismerge") {
-        m_type = BlockType::GenesisMerge;
     } else {
         qFatal("GenesisBlock: try to set not genesis type");
     }

@@ -213,8 +213,8 @@ void NetworkManager::startNetwork() {
             qDebug() << "[WS] Server socker error:" << socketError;
         });
 
-        qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
-                           << wsServer->serverPort() << wsServer->serverName();
+        qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
+                           << wsServer->serverPort(); // << wsServer->serverName();
         DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
                                                   .port    = static_cast<uint64_t>((int)wsPort) };
         m_wsConnections.push_back(wsConnection);

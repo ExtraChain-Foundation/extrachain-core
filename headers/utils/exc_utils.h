@@ -232,12 +232,12 @@ static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED = 102;
 
 // Blocks
-static const int BLOCK_IS_NOT_VALID = 201;
-static const int BLOCKS_CANT_MERGE = 202;
-static const int BLOCKS_ARE_EQUAL = 203;
+// static const int BLOCK_IS_NOT_VALID = 201;
+// static const int BLOCKS_CANT_MERGE = 202;
+// static const int BLOCKS_ARE_EQUAL = 203;
 
 // Mem and Block index
-static const int NO_BLOCKS = 401;
+// static const int NO_BLOCKS = 401;
 } // namespace Errors
 
 namespace Serialization {
@@ -312,7 +312,8 @@ static const std::string folder_tokens = "tokens";
 static const std::string db_tokens = "tokens";
 static const std::string tokenTableName = "tokens";
 static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
-static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
+static const std::string tokenTableCreate =
+    "CREATE TABLE IF NOT EXISTS tokens("
     "id INTEGER PRIMARY KEY AUTOINCREMENT, "
     "name          TEXT   NOT NULL, "
     "symbol        TEXT NOT NULL, "
@@ -374,7 +375,7 @@ static const std::wstring filePrefix = L"file:///";
 static const std::wstring filePrefix = L"file://";
 #endif
 
-template<typename E>
+template <typename E>
 std::string enumFullName(E value) {
     return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
 }
@@ -393,17 +394,19 @@ std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 typedef std::vector<std::string> MerkleDataBlocks;
 
-EXTRACHAIN_EXPORT void rootMerkleHash(std::vector<std::string> &listHashes,
-                                      std::vector<MerkleDataBlocks> &branchesTree, const bool isHahsing,
-                                      std::string &result);
+EXTRACHAIN_EXPORT void rootMerkleHash(
+    std::vector<std::string> &listHashes,
+    std::vector<MerkleDataBlocks> &branchesTree,
+    const bool isHahsing,
+    std::string &result);
 EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
-EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
-                                                                  const bool isHahsing);
+EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks>
+splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
 EXTRACHAIN_EXPORT void hashingElements(std::vector<std::string> &vector);
 EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
-EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                              HashEncode encode = HashEncode::Sha3_512);
+EXTRACHAIN_EXPORT std::string
+calcHashForFile(const std::filesystem::path &fileName, HashEncode encode = HashEncode::Sha3_512);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
@@ -414,12 +417,18 @@ std::string bytesDecodeStdString(const std::string &data, HashEncode encode = Ha
 QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
-EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
-                                   const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
-                                   const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
-                                                      int blockSize = 60007);
+EXTRACHAIN_EXPORT bool encryptFile(
+    const QString &originalName,
+    const QString &encryptName,
+    const QByteArray &key,
+    int blockSize = 60007);
+EXTRACHAIN_EXPORT bool decryptFile(
+    const QString &encryptName,
+    const QString &decryptName,
+    const QByteArray &key,
+    int blockSize = 60007);
+EXTRACHAIN_EXPORT QByteArray
+decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 QString fileMimeSuffix(const QString &filePath);
 
@@ -457,7 +466,6 @@ static const int DATA_OFFSET = 512;
 
 enum DataRowType {
     Universal,
-    Staking
 };
 } // namespace DataStorage
 MSGPACK_ADD_ENUM(DataStorage::DataRowType)

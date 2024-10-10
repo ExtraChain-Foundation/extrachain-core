@@ -45,7 +45,6 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     node.start(); // TODO: remove
     node.transactionManager()->runMakeAndProveBlockTimers();
 
-    node.blockchain()->getBlockZero();
     node.calculateBlockCount();
     //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
     //        node.blockchain()->getBlockZero();

@@ -102,33 +102,31 @@ ExtraChainNode::~ExtraChainNode() {
 }
 
 bool ExtraChainNode::createNewNetwork(
-    const QString& email,
+    const QString& login,
     const QString& password,
     const QString& tokenName,
     const QString& tokenCount,
     const QString& tokenColor) {
-    // TODO: check correct color in tokenColor
+    // TODO: check correct color in tokenColor?
 
-    if (QDir("keystore/profile").isEmpty()) {
-        qDebug() << "[Node] Create network with e-mail" << email;
-        auto consoleHash = Utils::calcHash(email.toStdString() + password.toStdString());
-        auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
-        m_actorIndex->setFirstId(first.id());
-        m_accountController->getProfile(first.id()).renameWallet(first.id(), "King of the World");
-    } else {
-        qInfo() << "You cannot create a new network, data is not empty";
+    if (!QDir("keystore/profile").isEmpty()) {
+        qInfo() << "Cannot create a new network: existing profile data found";
         return false;
     }
 
-    if (m_blockchain->getRecords() <= 0) {
-        auto& first = m_accountController->mainActor();
-        // QString firstId = first.id().toString();
+    qDebug() << "[Node] Create network with login" << login;
+    auto consoleHash = Utils::calcHash(login.toStdString() + password.toStdString());
+    auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
+    m_actorIndex->setFirstId(first.id());
+    m_accountController->getProfile(first.id()).renameWallet(first.id(), "King of the World");
 
-        QMap<ActorId, BigNumberFloat> tm;
-        tm.insert(ActorId(), 0);
-        GenesisBlock block        = m_blockchain->createGenesisBlock(first, tm);
-        auto         blockVariant = BlockVariant(block);
-        m_blockchain->addBlockFromNetwork(blockVariant);
+    if (m_blockchain->getRecords() <= 0) {
+        auto& first      = m_accountController->mainActor();
+        auto  firstBlock = m_blockchain->createFirstBlock(first);
+        if (!firstBlock.has_value())
+            return false;
+
+        m_blockchain->addBlockFromNetwork(firstBlock.value());
 
         // m_tokenManager->createToken(
         //     tokenCount.toStdString(),
@@ -136,22 +134,6 @@ bool ExtraChainNode::createNewNetwork(
         //     "",
         //     first->id().toStdString(),
         //     tokenColor.toStdString());
-
-        //  emit generateSmartContract(tokenCount.toLatin1(), tokenName.toUtf8(), first.id().toByteArray(),
-        //                             tokenColor.toLatin1());
-
-        //        // TODO: usernames: move to console
-        //        DBConnector dbc(
-        //            (DfsStruct::ROOT_FOOLDER_NAME + "/" + firstId + "/" +
-        //            DfsStruct::ACTOR_CARD_FILE).toStdString());
-        //        dbc.open();
-        //        dbc.createTable(Config::DataStorage::cardTableCreation);
-        //        dbc.createTable(Config::DataStorage::cardDeletedTableCreation);
-        //        QString usernamesPath = QString(DfsStruct::ROOT_FOOLDER_NAME +
-        //        "/%1/services/usernames").arg(firstId); DBConnector
-        //        usernamesDB(usernamesPath.toStdString());
-        //        usernamesDB.createTable(Config::DataStorage::userNameTableCreation);
-        //        // m_dfs->save(DfsStruct::DfsSave::Static, "usernames", "", DfsStruct::Type::Service);
     }
 
     return true;
@@ -218,14 +200,14 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         actor->id().toStdString());
 
     // 1) set prev block id
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
-    if (lastBlockId.isEmpty()) {
+    auto lastRealBlock = m_blockchain->getLastRealBlock();
+    if (!lastRealBlock.has_value() || lastRealBlock->isEmpty()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There is no last block in blockchain",
             tx.toStdString());
         return std::unexpected(TransactionError::NoLastBlock);
     }
-    tx.setPrevBlock(lastBlockId);
+    tx.setPrevBlock(lastRealBlock->getIndex());
 
     // 2) check coin availability
     if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
@@ -367,7 +349,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction transaction) {
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock().getIndex();
+    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
     if (lastBlockId.isEmpty()) {
         qWarning() << "[Node] Can't send tx" << transaction
                    << ", because there is no last block in blockchain";
