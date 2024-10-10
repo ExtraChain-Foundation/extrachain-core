@@ -4,12 +4,12 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject
     : SocketService(node, parent) {
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
-        qDebug() << "[WS] Create new ws";
+        qDebug() << "[WS] Create new ws" << reinterpret_cast<quintptr>(QThread::currentThreadId());
     } else {
         m_ws = ws;
         this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->m_port = m_ws->peerPort();
-        qDebug() << "[WS] New service:" << m_ip;
+        qDebug() << "[WS] New service:" << m_ip << reinterpret_cast<quintptr>(QThread::currentThreadId());
         connections();
         handshake();
     }
@@ -114,7 +114,8 @@ void WebSocketService::onConnected() {
     this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->m_port = m_ws->peerPort();
     handshake();
-    qDebug() << "[WS] New service:" << m_ip << port();
+    qDebug() << "[WS] New service:" << m_ip << port()
+             << reinterpret_cast<quintptr>(QThread::currentThreadId());
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {

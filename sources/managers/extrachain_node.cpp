@@ -44,6 +44,14 @@
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     : isClientApplication(isClientApp) {
+    connect(this, &ExtraChainNode::InitNode, &ExtraChainNode::InitNodeSlot);
+}
+
+void ExtraChainNode::InitNodeSlot() {
+    std::stringstream ss;
+    ss << std::this_thread::get_id();
+    qInfo() << "MY 1" << ss.str() << reinterpret_cast<quintptr>(QThread::currentThreadId());
+
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -62,10 +70,9 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     m_networkManager = new NetworkManager(*this);
     //    ThreadPool::addThread(m_networkManager);
 
-    m_blockchain = new Blockchain(*this);
+    m_blockchain         = new Blockchain(*this);
     m_transactionManager = new TransactionManager(*this);
-    m_dfs        = new DfsController(*this);
-
+    m_dfs                = new DfsController(*this);
 
     m_dmm = new DataMiningManager(this);
     // test port and address
@@ -74,10 +81,12 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
 
     m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
 
-
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
+
+    connectSignals();
+    emit NodeInitialised();
 }
 
 uint64_t ExtraChainNode::getBlockCount() const {
@@ -492,6 +501,11 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         emit this->vpnConnectorManager->ready();
+
+        std::stringstream ss;
+        ss << std::this_thread::get_id();
+        qInfo() << "MY 2" << ss.str();
+
         m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
     });

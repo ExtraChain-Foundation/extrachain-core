@@ -151,6 +151,8 @@ private:
     void prepareFolders();
 
 signals:
+    void InitNode();
+    void NodeInitialised();
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
@@ -167,5 +169,6 @@ public slots:
     void calculateBlockCount();
     void moveToThredObjects(QThread *thread);
     void cleanUp();
+    void InitNodeSlot();
 };
 #endif // EXTRACHAIN_NODE_H
