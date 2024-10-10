@@ -75,6 +75,7 @@ void TransactionManager::makeBlock() {
     BlockVariant lastRealBlock = node.blockchain()->getLastRealBlock();
     BlockVariant lastBlock = node.blockchain()->getLastBlock();
 
+    qDebug() << "[Blockchain] current thread: " << QThread::currentThreadId();
     if (lastRealBlock.getIndex() != lastBlock.getIndex()) {
         qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex() << "| last real:" << lastRealBlock.getIndex() << "|" <<  lastRealBlock.getType();
     } else {

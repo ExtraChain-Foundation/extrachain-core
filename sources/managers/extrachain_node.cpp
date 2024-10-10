@@ -74,18 +74,10 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
 
     m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
 
-    connectSignals();
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     getAllActorsTimer.start(30000);
-
-    if (allowRunRestApiServer) {
-        // m_restApiServerManager = new RestApiServerManager(this);
-    }
-
-    // ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_txManager);
 }
 
 uint64_t ExtraChainNode::getBlockCount() const {
@@ -93,14 +85,6 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    delete m_dfs;
-    delete m_actorIndex;
-    delete m_transactionManager;
-    delete m_blockchain;
-    delete m_accountController;
-    delete m_dmm;
-    delete m_connectionsManager;
-    delete m_networkManager;
 }
 
 bool ExtraChainNode::createNewNetwork(
@@ -503,7 +487,7 @@ void ExtraChainNode::connectSignals() {
     connectActorIndex();
     dfsConnection();
 
-    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall, Qt::QueuedConnection);
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
@@ -526,12 +510,13 @@ void ExtraChainNode::connectSignals() {
     //         &Blockchain::updateBlockchain);
     connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
             [&](const Transaction &tx) { m_transactionManager->addTransaction(tx);
-    });
+    }, Qt::QueuedConnection);
     connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
     [=, this](const QString &pathCreatedTokenJson) {
         m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
-    });
-    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(), &CreateTokenManager::checkIsContract);
+    }, Qt::QueuedConnection);
+    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(),
+            &CreateTokenManager::checkIsContract, Qt::QueuedConnection);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -555,6 +540,34 @@ void ExtraChainNode::calculateBlockCount() {
     DFSP::RequestDfsSize msg{ actorId.toStdString() };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+}
+
+void ExtraChainNode::moveToThredObjects(QThread *thread){
+    connectSignals();
+    m_networkManager->moveToThread(thread);
+    m_blockchain->moveToThread(thread);
+    m_transactionManager->moveToThread(thread);
+    m_dfs->moveToThread(thread);
+}
+
+void ExtraChainNode::cleanUp()
+{
+    if (!vpnConnectorManager->vpnFileAddedHash.empty())
+    {
+        for (auto& it : vpnConnectorManager->vpnFileAddedHash)
+        {
+            if(dfs()->removeLocalFile(accountController()->mainActor()->id().toStdString(), it))
+                qDebug() << "DFS file with VPN keys deleted";
+        }
+    }
+    if (!vpnConnectorManager->vpnFileLocalPath.isEmpty())
+        vpnConnectorManager->vpnManager->removePublicKeyToFile(
+            vpnConnectorManager->vpnFileLocalPath);
+
+    m_networkManager->deleteLater();
+    m_blockchain->deleteLater();
+    m_transactionManager->deleteLater();
+    m_dfs->deleteLater();
 }
 
 AccountController* ExtraChainNode::accountController() const {

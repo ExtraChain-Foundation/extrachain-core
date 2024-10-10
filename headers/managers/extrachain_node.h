@@ -165,5 +165,7 @@ public slots:
     void handleCountMessageReceived(BigNumber count);
 
     void calculateBlockCount();
+    void moveToThredObjects(QThread *thread);
+    void cleanUp();
 };
 #endif // EXTRACHAIN_NODE_H
