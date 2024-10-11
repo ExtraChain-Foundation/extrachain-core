@@ -48,10 +48,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
 }
 
 void ExtraChainNode::InitNodeSlot() {
-    std::stringstream ss;
-    ss << std::this_thread::get_id();
-    qInfo() << "MY 1" << ss.str() << reinterpret_cast<quintptr>(QThread::currentThreadId());
-
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -94,6 +90,7 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
+    qInfo() << "Destructor ExtraChainNode";
 }
 
 bool ExtraChainNode::createNewNetwork(
@@ -549,14 +546,6 @@ void ExtraChainNode::calculateBlockCount() {
     DFSP::RequestDfsSize msg{ actorId.toStdString() };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
-}
-
-void ExtraChainNode::moveToThredObjects(QThread *thread){
-    connectSignals();
-    m_networkManager->moveToThread(thread);
-    m_blockchain->moveToThread(thread);
-    m_transactionManager->moveToThread(thread);
-    m_dfs->moveToThread(thread);
 }
 
 void ExtraChainNode::cleanUp()
