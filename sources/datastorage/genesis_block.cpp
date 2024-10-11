@@ -126,7 +126,7 @@ std::string GenesisBlock::toStdString() const {
     oss << "GenesisBlock { "
         << "type: " << magic_enum::enum_name(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toStdString() << ", "
+        << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."

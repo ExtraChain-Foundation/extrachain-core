@@ -148,8 +148,6 @@ void TransactionManager::makeBlock() {
         return;
     }
 
-    if (lastRealBlock->isEmpty())
-        lastRealBlock = node.blockchain()->getLastRealBlock();
     Block block;
     block.setPrev(lastRealBlock.value());
     block.addTransactions(m_pendingTxList);

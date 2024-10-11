@@ -136,16 +136,6 @@ private:
     BlockVariant validateAndReturnBlock(const BlockVariant &block) const;
 
 public:
-    /**
-     * @brief calculate reward amound of income reward request
-     * @param requestReward - request reward data
-     * @return amount of reward
-     */
-    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
-
-    /**
-     *
-     */
     void updateFirstId(const BlockVariant &block);
 
     // - BLOCKS - //

@@ -56,6 +56,8 @@ enum class TransactionProveError {
     ProducerVerify,          // bad signature in fee tx
     SenderBalanceBelowZero,  // sender's balance will be < 0
     SelfPleasure,
+    MissingSignature,
+    InvalidSignature,
     RewardWrongToken
 };
 FORMAT_ENUM(TransactionProveError)

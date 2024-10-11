@@ -736,7 +736,7 @@ void NetworkManager::messageReceived(
         break;
     }
 
-    case MessageType::BlockhainSync: {
+    case MessageType::BlockchainSync: {
         auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
         node.blockchain()->syncResponse(fromBlock, messageId);
         break;

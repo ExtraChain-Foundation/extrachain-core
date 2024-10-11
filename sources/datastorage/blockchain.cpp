@@ -92,7 +92,7 @@ void Blockchain::sync() {
     if (fromBlock < 0)
         fromBlock = 0;
     qDebug() << "[Blockchain] Request sync from" << lastBlock->getIndex();
-    node.network()->send_message(lastBlock->getIndex(), MessageType::BlockhainSync, MessageStatus::Request);
+    node.network()->send_message(lastBlock->getIndex(), MessageType::BlockchainSync, MessageStatus::Request);
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
@@ -285,7 +285,7 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     // genesis.addRows(dataRows);
     genesis.addRow(ActorId(), ActorId(), GenesisDataInfo(0, DataStorage::DataRowType::Universal));
     genesis.addData(actor->id().toStdString());
-    genesis.sign(node.accountController()->currentProfile().getActor(node.actorIndex()->firstId()));
+    genesis.sign(actor);
     return BlockVariant(genesis);
 }
 
@@ -369,7 +369,7 @@ Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, co
     case SearchEnum::TxParam::UserSenderOrReceiver:
         return getTxBySenderOrReceiver(value.toStdString(), token);
     default:
-        qWarning() << "Can't get tx: incorrent SearchEnum::TxParam. Value:" << value;
+        qWarning() << "Can't get tx: incorrect SearchEnum::TxParam. Value:" << value;
         return { Transaction(), "-1" };
     }
 }
@@ -421,7 +421,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             return std::unexpected(BlockError::Invalid);
         }
 
-        if ((!block.isGenesisBlock() && block.getPrevHash() != lastBlock->getHash()) || (block.isGenesisBlock() && block.getPrevHash() != lastRealBlock->getHash())) {
+        auto expectedPrevHash = block.isGenesisBlock() ? lastRealBlock->getHash() : lastBlock->getHash();
+        if (block.getPrevHash() != expectedPrevHash) {            qDebug() << "[Blockchain] Can't chained, sync request";
             qDebug() << "[Blockchain] Can't chained, sync request";
             qDebug() << "jb" << block;
             qDebug() << "lb" << lastBlock.value();
@@ -564,8 +565,10 @@ Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &b
     }
 
     auto prev = getBlockByIndex(blockA.getIndex() - 1);
-    if (!prev.has_value() && prev->isEmpty()) {
-        // qWarning() << "[Blockchain] Can't merge" << blockA << "with" << blockB << " - there no prev block";
+    if (!prev.has_value()) {
+        return std::unexpected(BlockError::CantMerge);
+    }
+    if (prev->isEmpty()) {
         return std::unexpected(BlockError::CantMerge);
     }
 
@@ -636,6 +639,9 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
         auto currentBlock = blockIndex.getBlockById(i);
 
         if (!currentBlock.has_value()) {
+            continue;
+        }
+        if (!currentBlock->isBlock() && !currentBlock->isGenesisBlock()) {
             continue;
         }
         if (currentBlock->getType() == BlockType::Dummy) {
@@ -709,7 +715,7 @@ void Blockchain::getSmContractMembers(const BlockVariant &block) const {
 
 BigNumber Blockchain::getBlockCount() {
     qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
-
+    // return this->blockIndex.getRecords(); ?
     return this->blockIndex.getLastSavedId();
 }
 
@@ -723,11 +729,11 @@ void Blockchain::addBlockFromNetwork(const BlockVariant &block) {
         return;
     }
 
-    auto res = addBlock(block);
-
     if (block.getType() != BlockType::Dummy) {
         this->removeDummyBlocks();
     }
+
+    auto res = addBlock(block);
 
     if (!res.has_value() /*&& res.error() == BlockError::Invalid*/) {
         return;
@@ -844,6 +850,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
         return TransactionProveError::ReceiverNotExists;
     }
 
+    if (tx.getSignature().empty()) {
+        return TransactionProveError::MissingSignature;
+    }
+
     // special conditions: receiver is null - coins burning
     if (targetSender.isZero()) {
         Actor<KeyPublic> producerActor;
@@ -865,8 +875,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
     //    tx->getSignature().toStdString()))
     //    {
     //        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
-    //        node.transactionManager()->removeUnApprovedTransaction(tx);
-    //        return;
+    //        return TransactionProveError::InvalidSignature;
     //    }
 
     // special conditions: receiver is null - coins burning, contract creation

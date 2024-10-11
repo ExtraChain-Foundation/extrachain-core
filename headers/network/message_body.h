@@ -37,7 +37,7 @@ enum class MessageType {
     BlockchainDataMiningRewardTransaction = 84,
     BlockchainCoinReward = 85,
     BlockchainRequestBlock = 86,
-    BlockhainSync = 87,
+    BlockchainSync = 87,
 
     FragmentDataInfo = 90,
     FragmentsDataListInfo = 91,
