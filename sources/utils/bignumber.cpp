@@ -56,6 +56,12 @@ BigNumber::BigNumber(const BigNumber &other) {
     UPDATE_DEBUG()
 }
 
+BigNumber::BigNumber(BigNumber &&other) noexcept {
+    this->m_data = std::move(other.m_data);
+    UPDATE_DEBUG()
+    // other.m_data = boost::multiprecision::cpp_int(0);
+}
+
 BigNumber::BigNumber(const cpp_int &number) {
     this->m_data = number;
     UPDATE_DEBUG()

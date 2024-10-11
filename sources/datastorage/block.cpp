@@ -222,7 +222,7 @@ std::string Block::toStdString() const {
 }
 
 bool Block::isEmpty() const {
-    return this->getHash().empty() && this->getSignature().empty() && this->getPrevHash().empty();
+    return this->getHash().empty() && this->getSignature().empty() && (m_index == 0 || this->getPrevHash().empty());
 }
 
 BlockType Block::getType() const {

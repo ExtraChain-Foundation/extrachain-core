@@ -201,7 +201,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->getLastRealBlock();
-    if (!lastRealBlock.has_value() || lastRealBlock->isEmpty()) {
+    if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There is no last block in blockchain",
             tx.toStdString());

@@ -139,11 +139,13 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
         //          << totalBytes.first << node->dfs()->totalDfsSize();
-        return 0;
+        return 1;
     }
 
     auto lastBlock = node->blockchain()->getLastBlock();
-    if (!lastBlock.has_value() && lastBlock->isEmpty())
+    if (!lastBlock.has_value())
+        return 0;
+    if (lastBlock->isEmpty())
         return 0;
     auto lastIndex = lastBlock->getIndex();
     if (lastIndex == 0)
@@ -164,11 +166,13 @@ DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &reque
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
         //          << requestReward.BytesSent << node->dfs()->totalDfsSize();
-        return 0;
+        return 1;
     }
 
     auto lastBlock = node->blockchain()->getLastBlock();
-    if (!lastBlock.has_value() && lastBlock->isEmpty())
+    if (!lastBlock.has_value())
+        return 0;
+    if (lastBlock->isEmpty())
         return 0;
     auto lastIndex = lastBlock->getIndex();
     if (lastIndex == 0)

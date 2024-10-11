@@ -36,15 +36,16 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         qDebug() << "[WS] Open" << url;
         connections();
         m_ws->open(url);
-        m_ip = m_ws->peerAddress().toString();
-        m_port = m_ws->peerPort();
+        m_ip = ip; // m_ws->peerAddress().toString();
+        m_port = port; // m_ws->peerPort();
     }
 }
 
 void WebSocketService::closeSocket() {
     qDebug() << "[WS] Close socket";
     m_activated = false;
-    m_ws->close();
+    if (m_ws->isValid())
+        m_ws->close();
     emit disconnected();
 }
 
@@ -106,7 +107,7 @@ void WebSocketService::sendMessage(const QByteArray &data) {
 
 void WebSocketService::final()
 {
-    if (this->m_activated)
+    if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
         m_ws->flush();
 }
 

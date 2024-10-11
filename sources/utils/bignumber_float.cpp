@@ -49,8 +49,14 @@ BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
     UPDATE_DEBUG()
 }
 
+BigNumberFloat::BigNumberFloat(BigNumberFloat &&other) noexcept {
+    this->m_data = std::move(other.m_data);
+    UPDATE_DEBUG()
+}
+
 BigNumberFloat::BigNumberFloat(const BigNumber &other) {
     this->m_data = cpp_dec_float_exc(other.data());
+    UPDATE_DEBUG()
 }
 
 BigNumberFloat::BigNumberFloat(const cpp_dec_float_exc &number) {

@@ -117,7 +117,7 @@ public:
     int getCountTransactionsInBlocks() const;
     int removeById(const BigNumber &id);
     int removeById(const BlockVariant &block);
-    void removeDummyBlocks(const BigNumber &id);
+    void removeDummyBlocks();
     QString buildFilePath(const BigNumber &id) const;
 
     void calculationCountBlock();

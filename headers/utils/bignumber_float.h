@@ -52,6 +52,7 @@ public:
     BigNumberFloat();
     BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
     BigNumberFloat(const BigNumberFloat &other);
+    BigNumberFloat(BigNumberFloat &&other) noexcept;
     BigNumberFloat(const BigNumber &other);
     BigNumberFloat(int number);
     BigNumberFloat(long long number);

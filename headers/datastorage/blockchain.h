@@ -201,7 +201,7 @@ public:
     /**
      *
      */
-    void removeAllDummyBlocks(const BlockVariant &block);
+    void removeDummyBlocks();
 
     /**
      * @brief Check if two blocks can be merged

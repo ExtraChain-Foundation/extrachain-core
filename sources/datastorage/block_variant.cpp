@@ -76,12 +76,12 @@ std::set<Transaction> BlockVariant::transactions() const {
         m_block);
 }
 
-const std::map<std::pair<ActorId, ActorId>, GenesisDataRow> &BlockVariant::dataRows() const {
+const GenesisDataRows& BlockVariant::dataRows() const {
     if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
         return genesisBlock->dataRows();
     }
 
-    static std::map<std::pair<ActorId, ActorId>, GenesisDataRow> rows;
+    static GenesisDataRows rows;
     return rows;
 }
 
@@ -175,4 +175,14 @@ std::optional<std::reference_wrapper<GenesisBlock>> BlockVariant::getGenesisBloc
         return std::ref(*block);
     }
     return std::nullopt;
+}
+
+QDebug operator<<(QDebug debug, const BlockVariant &block) {
+    QDebugStateSaver saver(debug);
+    if (block.isGenesisBlock()) {
+        debug << block.getGenesisBlockConst().value();
+    } else {
+        debug << block.getBlockConst().value();
+    }
+    return debug;
 }

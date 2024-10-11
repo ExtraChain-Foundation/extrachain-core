@@ -45,6 +45,12 @@ TransactionManager::TransactionManager(ExtraChainNode &node)
         this,
         &TransactionManager::makeBlockAndProveTransactionsInThread);
 
+
+    int milliseconds = QDateTime::currentDateTime().time().msec();
+    int seconds = QDateTime::currentDateTime().time().second();
+    int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
+    QThread::msleep(delayToEvenSecond);
+
     blockCreationTimer.start();
     // prove timer
     //    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
@@ -81,7 +87,11 @@ void TransactionManager::makeBlock() {
     auto lastRealBlock = node.blockchain()->getLastRealBlock();
     auto lastBlock     = node.blockchain()->getLastBlock();
 
-    if (!lastBlock.has_value() || !lastRealBlock.has_value() || lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
+    if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
+        qDebug() << "[TransactionManager] last or real last block is not exists";
+        return;
+    }
+    if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
         qDebug() << "[TransactionManager] last or real last block is empty";
         return;
     }
@@ -90,7 +100,17 @@ void TransactionManager::makeBlock() {
         qDebug() << "[Blockchain] Last block:" << lastBlock->getIndex()
                  << "| last real:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
     } else {
-        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|"
+                 << lastRealBlock->getType();
+    }
+
+    if (!node.network()->isActiveConnectionExists()) {
+        qDebug() << "[TransactionManager] No active connections";
+
+        if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
+            node.blockchain()->removeDummyBlocks();
+        }
+        return;
     }
 
     auto maybeGenesisId = lastBlock->getIndex() + 1;
@@ -108,13 +128,6 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
-        if (!node.network()->isActiveConnectionExists()) {
-            qDebug() << "[TransactionManager] Dummy: no active connections";
-            // if (lastRealBlock.getIndex() != lastBlock.getIndex())
-            // node.blockchain()->removeAllDummyBlocks(lastBlock);
-            return;
-        }
-
         static BigNumber prevDummy = -1;
 
         // if (prevDummy == lastBlock.getIndex() + 1) {
@@ -123,19 +136,17 @@ void TransactionManager::makeBlock() {
         // }
 
         // creating dummy block in as ordinary block
+        // return;
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock.value());
         dummyBlock.addData(lastRealBlock->getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node.blockchain()->signBlock(dummyBlockVariant);
-        node.network()->send_message(dummyBlockVariant.getBlockConst(), MessageType::BlockchainNewBlock);
+        node.blockchain()->sendBlock(dummyBlockVariant);
         prevDummy = lastBlock->getIndex() + 1;
         return;
     }
-
-    // remove all dummy blocks
-    node.blockchain()->removeAllDummyBlocks(lastBlock.value());
 
     if (lastRealBlock->isEmpty())
         lastRealBlock = node.blockchain()->getLastRealBlock();
@@ -146,14 +157,7 @@ void TransactionManager::makeBlock() {
 
     auto blockVariant = BlockVariant(block);
     node.blockchain()->signBlock(blockVariant);
-
-    if (blockVariant.isGenesisBlock()) {
-        auto genesisBlock = blockVariant.getGenesisBlockConst();
-        node.network()->send_message(genesisBlock, MessageType::BlockchainGenesisBlock);
-    } else {
-        auto dataBlock = blockVariant.getBlockConst();
-        node.network()->send_message(dataBlock, MessageType::BlockchainNewBlock);
-    }
+    node.blockchain()->sendBlock(blockVariant);
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {

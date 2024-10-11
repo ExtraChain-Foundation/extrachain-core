@@ -29,7 +29,7 @@ public:
     std::string getSignature() const;
     std::set<Approver> signatures() const;
     std::set<Transaction> transactions() const;
-    const std::map<std::pair<ActorId, ActorId>, GenesisDataRow>& dataRows() const;
+    const GenesisDataRows &dataRows() const;
 
     QString toString() const;
     std::string toStdString() const;
@@ -59,5 +59,8 @@ public:
 private:
     std::variant<Block, GenesisBlock> m_block;
 };
+
+
+QDebug operator<<(QDebug debug, const BlockVariant &block);
 
 #endif // BLOCKVARIANT_H

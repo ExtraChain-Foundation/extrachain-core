@@ -61,6 +61,7 @@ public:
     BigNumber();
     BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     BigNumber(const BigNumber &other);
+    BigNumber(BigNumber &&other) noexcept;
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(const boost::multiprecision::cpp_int &number);

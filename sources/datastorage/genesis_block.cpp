@@ -19,6 +19,8 @@
 
 #include "datastorage/genesis_block.h"
 
+#include "datastorage/block_variant.h"
+
 #include "sha3.h"
 
 GenesisBlock::GenesisBlock()
@@ -40,7 +42,7 @@ GenesisBlock::GenesisBlock(std::string              &&type,
                            std::string              &&hash,
                            std::string              &&prevGenHash,
                            std::set<Approver>       &&signatures,
-                           std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &&dataRows)
+                           std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
     : Block(
           std::move(type),
           std::move(data),
@@ -55,11 +57,11 @@ GenesisBlock::GenesisBlock(std::string              &&type,
     setType(type);
 }
 
-void GenesisBlock::addRow(const ActorId& actorId, const TokenId& tokenId, const GenesisDataRow &row) {
+void GenesisBlock::addRow(const ActorId& actorId, const TokenId& tokenId, const GenesisDataInfo &row) {
     m_dataRows[{ actorId, tokenId }] = row;
 }
 
-void GenesisBlock::addRows(const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &dataRows) {
+void GenesisBlock::addRows(const GenesisDataRows &dataRows) {
     for (const auto& [key, row] : dataRows) {
         m_dataRows[key] = row;
     }
@@ -89,12 +91,13 @@ void GenesisBlock::calcHash() {
     this->m_hash = sha3.getHash();
 }
 
-const std::map<std::pair<ActorId, TokenId>, GenesisDataRow> &GenesisBlock::dataRows() const {
+const GenesisDataRows &GenesisBlock::dataRows() const {
     return m_dataRows;
 }
 
-void GenesisBlock::setPrevGenHash(const std::string &value) {
-    m_prevGenHash = value;
+void GenesisBlock::setPrevGen(const BlockVariant &block) {
+    m_prevGenHash = block.getHash();
+    m_index = block.getIndex() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 void GenesisBlock::setType(BlockType value) {
@@ -125,11 +128,16 @@ std::string GenesisBlock::toStdString() const {
         << "data service: [" << m_dataService.size() << "], "
         << "index: " << m_index.toStdString() << ", "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
-        << "prev_hash: '"
+        << "prev hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
                                            + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
                                      : m_prevHash)
                + "', "
+        << "prev gen: '"
+        << (m_prevGenHash.length() > 10
+                ? m_prevGenHash.substr(0, 5) + "..." + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
+                : m_prevGenHash)
+        << "', "
         << "hash: '"
         << (m_hash.length() > 10
                 ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
