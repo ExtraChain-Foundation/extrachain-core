@@ -501,11 +501,6 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         emit this->vpnConnectorManager->ready();
-
-        std::stringstream ss;
-        ss << std::this_thread::get_id();
-        qInfo() << "MY 2" << ss.str();
-
         m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
     });

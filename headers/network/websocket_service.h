@@ -36,6 +36,9 @@ public:
     virtual void sendMessage(const QByteArray &data) override;
     virtual void final() override;
 
+signals:
+    void sendMessageInternal(const QByteArray &data);
+
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
@@ -43,6 +46,7 @@ private slots:
     void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
+    void sendMessageInternalSlot(const QByteArray &data);
 
 private:
     void connections();

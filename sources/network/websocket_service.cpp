@@ -13,6 +13,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject
         connections();
         handshake();
     }
+
+    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
 }
 
 WebSocketService::~WebSocketService() {
@@ -101,6 +103,10 @@ void WebSocketService::sendMessage(const QByteArray &data) {
     if (data.isEmpty())
         qFatal("[WS] Error send size");
 
+    emit sendMessageInternal(data);
+}
+
+void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
