@@ -123,7 +123,7 @@ BlockVariant BlockIndex::getBlockById(const BigNumber &id) const {
         return *block;
     }
 
-    qDebug() << "[BlockIndex]" << id << "is not block";
+    // qDebug() << "[BlockIndex]" << id << "not exists, maybe past dummy?";
     return BlockVariant(Block());
 }
 
@@ -481,10 +481,10 @@ int BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     }
 
     if (recordLimitIsReached()) {
-        if (this->firstSavedId != 0) {
-            this->removeById(getBlockById(getFirstSavedId()));
-            this->firstSavedId++; // todo: check!
-        }
+        // if (this->firstSavedId != 0) {
+        //     this->removeById(getBlockById(getFirstSavedId()));
+        //     this->firstSavedId++; // todo: check!
+        // }
     }
 
     DBConnector db(
@@ -612,17 +612,18 @@ int BlockIndex::removeById(const BlockVariant &block) {
     BigNumber id = block.getIndex();
     BlockType typeBlock = block.getType();
     auto countTxInBlock = block.transactions().size();
-    qDebug() << "[BlockIndex] Removing record with id" << id.toByteArray();
+    if (block.getType() != BlockType::Dummy)
+        qDebug() << "[BlockIndex] Removing block with id" << id << block.getType();
     if (id < firstSavedId) {
         removeAll();
     }
-    qDebug() << "[BlockIndex]" << lastSavedId << "(last saved id)" << id << "(id to remove)";
+    // qDebug() << "[BlockIndex]" << lastSavedId << "(last saved id)" << id << "(id to remove)";
 
     BigNumber currentIdToRemove = id;
 
-    while (currentIdToRemove <= lastSavedId) {
+    // while (currentIdToRemove <= lastSavedId) {
         QString pathToFile = buildFilePath(currentIdToRemove);
-        qDebug() << "[BlockIndex] To remove:" << pathToFile;
+        // qDebug() << "[BlockIndex] To remove:" << pathToFile;
         QFile file(pathToFile);
         if (file.exists() && !file.isOpen()) {
             bool isRemoved = file.remove();
@@ -630,20 +631,19 @@ int BlockIndex::removeById(const BlockVariant &block) {
                 this->records--;
             }
 
-            if (isRemoved && typeBlock == BlockType::Data) {
+            if (isRemoved && (typeBlock == BlockType::Data || typeBlock == BlockType::Genesis)) {
                 this->realBlockRecords--;
                 countTransactions -= countTxInBlock;
             }
         }
-        currentIdToRemove++;
-    }
+        // currentIdToRemove++;
+    // }
 
     this->lastSavedId = BigNumber(id) - 1;
     return 0;
 }
 
 void BlockIndex::removeDummyBlocks(const BigNumber &id) {
-    qDebug() << "[BlockIndex] remove dummy blocks";
     bool isNotDummyBlock = false;
     auto lastId = lastSavedId;
 
@@ -658,6 +658,8 @@ void BlockIndex::removeDummyBlocks(const BigNumber &id) {
 
         lastId--;
     }
+
+    qDebug() << "[BlockIndex] Remove dummy blocks from" << lastSavedId << "to" << lastId;
 }
 
 void BlockIndex::removeAll() {
@@ -716,7 +718,7 @@ std::optional<BlockVariant> BlockIndex::getByIdUnsafe(const BigNumber &id) const
     std::string path = buildFilePath(id).toStdString();
 
     if (!std::filesystem::exists(path)) {
-        qDebug() << "[BlockIndex] Can't get the file" << path << "(file is not exits)";
+        // qDebug() << "[BlockIndex] Can't get the file" << path << "(file is not exits)";
         return std::nullopt;
     }
 

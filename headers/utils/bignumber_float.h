@@ -68,14 +68,14 @@ private:
 #endif
 
 public:
-    BigNumberFloat operator+(const BigNumberFloat &);
-    BigNumberFloat operator+(long long);
-    BigNumberFloat operator-(const BigNumberFloat &);
-    BigNumberFloat operator-(long long);
+    BigNumberFloat operator+(const BigNumberFloat &) const;
+    BigNumberFloat operator+(long long) const;
+    BigNumberFloat operator-(const BigNumberFloat &) const;
+    BigNumberFloat operator-(long long) const;
     BigNumberFloat operator*(const BigNumberFloat &) const;
-    BigNumberFloat operator*(long long);
-    BigNumberFloat operator/(const BigNumberFloat &);
-    BigNumberFloat operator/(long long);
+    BigNumberFloat operator*(long long) const;
+    BigNumberFloat operator/(const BigNumberFloat &) const;
+    BigNumberFloat operator/(long long) const;
     BigNumberFloat &operator=(const BigNumberFloat &);
     BigNumberFloat &operator=(long long);
     BigNumberFloat &operator++();   // pre increment
