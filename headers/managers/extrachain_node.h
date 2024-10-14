@@ -21,15 +21,16 @@
 #define EXTRACHAIN_NODE_H
 
 #include <memory>
+#include <functional>
+#include <expected>
 
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
 
-#include <expected>
-
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
+#include "utils/vpn_types.h"
 
 class DfsController;
 class ActorIndex;
@@ -48,10 +49,20 @@ class KeyPublic;
 class ConnectionsManager;
 class VPNConnectorManager;
 class CreateTokenManager;
+struct VPNMessage;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
+
+public:
+    typedef std::function<bool(
+        VPNMessage&         networkInput,
+        ActorId&            senderId,
+        VPNFunctionType     funcType,
+        VPNFunctionsResult& output)>
+                                  VpnFunctionType;
+    typedef std::function<void()> VpnFunctionClearType;
 
 private:
     // common object for
@@ -73,8 +84,14 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
+    VpnFunctionClearType m_vpnClearFunc = nullptr;
+
 public:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false);
+    ExtraChainNode(
+        QObject* parent,
+        bool     isClientApp           = false,
+        bool     allowRunRestApiServer = false,
+        bool     isRaccoon             = false);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -128,9 +145,12 @@ public:
 
     uint64_t getBlockCount() const;
 
-    void InitVPN();
-    std::shared_ptr<VPNConnectorManager> vpnConnectorManager;
+    void                                InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
+    VpnFunctionType                     vpnConnectorManagerFunc = nullptr;
     std::shared_ptr<CreateTokenManager> createTokenManager() const;
+    bool                                isRaccoon;
+
+    VPNConfigStorage vpnConfigStorage;
 
 private:
     void showMessage(QString from, QString message);
@@ -154,6 +174,7 @@ signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
+    void readyInitLocalizationFiles();
     void vpnConnected();
     void vpnDisconnect();
 
