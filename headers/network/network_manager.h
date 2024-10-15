@@ -193,6 +193,8 @@ signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage& msg);
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
+    void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                            const std::string &receiver_identifier);
 
 protected:
     void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);
@@ -223,6 +225,8 @@ public slots:
         quint16                  port,
         const QString&           user,
         const QString&           password);
+    void sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                const std::string &receiver_identifier);
 
 private slots:
     void removeWsConnection();
@@ -244,6 +248,8 @@ public:
     bool isActiveConnectionExists();
 
     void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
+
+    QString foundCurrentIdentifier(QString ip, quint16 port);
 
     template <class T>
     std::string send_message(

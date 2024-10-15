@@ -299,7 +299,21 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
 
     removeRowFromDB(msg);
     std::string path = DFS_PATH::filePath(msg.Actor, msg.FileName).string();
-    const bool removedFile = std::filesystem::remove(path);
+
+    {
+        QFile file(QString::fromStdString(path));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qDebug() << "Could not open VPN localization file:" << file.errorString();
+        } else {
+            QTextStream          in(&file);
+            QString              oneLine = in.readLine();
+            static const QString prefix  = "Country:";
+            if (oneLine.startsWith(prefix))
+                emit getRemovedVPNLocalizationInfo(oneLine, msg.Actor);
+        }
+    }
+
+    const bool removedFile     = std::filesystem::remove(path);
     const bool removeStorjFile = std::filesystem::remove(fmt::format("{}{}", path, DFS::Fragments::Extension));
     message = fmt::format("[Dfs] Remove file {} - {} by path - {}. Storj file has been - {}.", msg.FileName, (removedFile ? "removed" : "not removed")
                           , path, removeStorjFile ? "removed" : "not removed");
@@ -1368,4 +1382,30 @@ void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, con
     //        std::filesystem::copy(filePath, scriptPath);
     //    };
     emit added(msg, filePath.string());
+}
+
+void DfsController::loadVPNLocalizationFiles() {
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+
+    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {}", DFST::DirsFile::TableName));
+    for (const auto &row : actors) {
+        auto        actorID     = row.begin()->second;
+        DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorID);
+
+        auto actorRows = actrDirFile.select(fmt::format(
+            "SELECT fileName FROM {} WHERE filePath='localizationInfo' AND state={}",
+            DFST::ActorDirFile::TableName,
+            std::to_string(static_cast<int>(DFS::Basic::FileState::Loaded))));
+        for (const auto &actorRow : actorRows) {
+            for (const auto &actorCol : actorRow) {
+                auto fileName = actorCol.second;
+                emit vpnLocalizationLoadedFromStorage(actorID, fileName);
+            }
+        }
+
+        actrDirFile.close();
+    }
+
+    dirsFile.close();
 }

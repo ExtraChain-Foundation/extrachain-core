@@ -38,8 +38,6 @@ find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 
-
-
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/msgpack ${CMAKE_CURRENT_BINARY_DIR}/msgpack)
 
 set(EXTRACHAIN_CORE_INCLUDES
@@ -96,6 +94,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/cpp-base64/base64.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm

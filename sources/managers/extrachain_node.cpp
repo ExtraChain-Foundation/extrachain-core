@@ -41,8 +41,14 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
-    : isClientApplication(isClientApp) {
+ExtraChainNode::ExtraChainNode(
+    QObject* parent,
+    bool     isClientApp,
+    bool     allowRunRestApiServer,
+    bool     isRaccoonCheck)
+    : QObject(parent)
+    , isClientApplication(isClientApp)
+    , isRaccoon(isRaccoonCheck) {
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -92,6 +98,13 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
+    qInfo("ExtraChainNode::~ExtraChainNode");
+    if (m_vpnClearFunc) {
+        qInfo("ExtraChainNode::~ExtraChainNode inside");
+        m_vpnClearFunc();
+    }
+
+
     delete m_dfs;
     delete m_actorIndex;
     delete m_transactionManager;
@@ -506,6 +519,7 @@ void ExtraChainNode::connectSignals() {
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+        emit readyInitLocalizationFiles();
         m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
     });
@@ -591,4 +605,9 @@ void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
     std::exit(0);
+}
+
+void ExtraChainNode::InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFunc) {
+    vpnConnectorManagerFunc = vpnFunc;
+    m_vpnClearFunc          = vpnClearFunc;
 }

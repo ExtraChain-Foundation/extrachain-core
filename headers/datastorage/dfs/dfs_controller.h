@@ -118,7 +118,8 @@ public:
     void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
     void fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
     void verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
-    float percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
+    float       percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
+    void        loadVPNLocalizationFiles();
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
@@ -144,6 +145,8 @@ signals:
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
     void resultAddFile(const QString &result, const QString &fileName);
     void checkIsContract(const QString &pathToFile);
+    void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);
+    void vpnLocalizationLoadedFromStorage(const std::string actorId, const std::string fileName);
 };
 
 class ThreadAddFiles : public QThread {
