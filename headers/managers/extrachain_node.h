@@ -63,8 +63,8 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
-    std::shared_ptr<CreateTokenManager> m_createTokenManager = nullptr;
-
+    CreateTokenManager* m_createTokenManager = nullptr;
+    QTimer*             getAllActorsTimer    = nullptr;
     // RestApiServerManager *m_restApiServerManager = nullptr;
     // ContractManager *m_contractManager = nullptr;
 
@@ -129,8 +129,8 @@ public:
     uint64_t getBlockCount() const;
 
     void InitVPN();
-    std::shared_ptr<VPNConnectorManager> vpnConnectorManager;
-    std::shared_ptr<CreateTokenManager> createTokenManager() const;
+    VPNConnectorManager* vpnConnectorManager;
+    CreateTokenManager *createTokenManager() const;
 
 private:
     void showMessage(QString from, QString message);

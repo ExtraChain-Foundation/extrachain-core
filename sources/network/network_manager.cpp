@@ -62,14 +62,13 @@ NetworkManager::NetworkManager(ExtraChainNode &node)
     localInizialization();
     m_reconnectTimer = new QTimer(this);
     calculateTraffic = CalculateTraffic::GetInstance();
-
     connect(this, &NetworkManager::sendNetworkMessage, this, &NetworkManager::sendNetworkMessageSlot);
+    connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection, Qt::QueuedConnection);
 }
 
 void NetworkManager::process() {
     if (!node.isClientApp())
         return;
-    connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
     m_reconnectTimer->start(Utils::ReconnectInterval);
 }
 
@@ -1519,10 +1518,8 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
 
 void NetworkManager::localInizialization() {
     qDebug() << "Doesn't find service. Start find local service.";
-    connect(&m_networkStatus, &NetworkStatus::statusChanged,
-            [](NetworkStatus::Status status) { qDebug() << "[NetworkStatus]" << status; });
 
-    local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
+    local = new QNetworkAddressEntry(Utils::findLocalIp(Utils::PrintDebug::Off));
     qDebug().noquote() << "[NetworkManager] Found local IP:" << local->ip().toString();
 
     if (!local) {
@@ -1538,13 +1535,13 @@ void NetworkManager::localInizialization() {
         return;
     }
 
-    upnpDis = std::make_unique<UPNPConnection>(local);
-    upnpNet = std::make_unique<UPNPConnection>(local);
+    upnpDis = new UPNPConnection(local);
+    upnpNet = new UPNPConnection(local);
     // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-    connect(upnpNet.get(), &UPNPConnection::upnpError,
+    connect(upnpNet, &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP error:" << msg; });
-    connect(upnpDis.get(), &UPNPConnection::upnpError,
+    connect(upnpDis, &UPNPConnection::upnpError,
             [](QString msg) { qDebug() << "[NetworkManager] UPnP Discovery error:" << msg; });
     // qDebug() << "Tunnel creation started!";
     // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");

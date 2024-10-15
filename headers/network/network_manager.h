@@ -147,16 +147,15 @@ private:
     bool                   reservedActorListUse = false;
     bool                   active               = false;
     bool                   shouldRequest        = false;
-    std::unique_ptr<UPNPConnection>        upnpDis;
-    std::unique_ptr<UPNPConnection>        upnpNet;
+    UPNPConnection        *upnpDis;
+    UPNPConnection        *upnpNet;
     QMap<std::string, int> msgHashList = {};
 
     ExtraChainNode&        node;
-    std::shared_ptr<QNetworkAddressEntry>  local;
+    QNetworkAddressEntry  *local;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
     std::map<NetworkReconnect, QString> m_reconnectionsToIdentifier;
-    NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
     std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;

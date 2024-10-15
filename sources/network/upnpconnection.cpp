@@ -27,7 +27,7 @@ int UPNPConnection::getPort() {
     return externalPort;
 }
 
-UPNPConnection::UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent)
+UPNPConnection::UPNPConnection(QNetworkAddressEntry* local, QObject *parent)
     : QObject(parent) {
     conn_state = State::NotOpened;
     localAddress = local;

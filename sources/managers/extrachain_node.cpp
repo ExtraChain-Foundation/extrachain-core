@@ -75,11 +75,10 @@ void ExtraChainNode::InitNodeSlot() {
     m_connectionsManager =
         new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
 
-    m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
-
-    static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    getAllActorsTimer.start(30000);
+    m_createTokenManager = new CreateTokenManager(m_actorIndex, this);
+    getAllActorsTimer = new QTimer(this);
+    connect(getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
+    getAllActorsTimer->start(30000);
 
     connectSignals();
     emit NodeInitialised();
@@ -235,7 +234,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     return tx;
 }
 
-std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
+CreateTokenManager* ExtraChainNode::createTokenManager() const
 {
     return m_createTokenManager;
 }
@@ -514,14 +513,14 @@ void ExtraChainNode::connectSignals() {
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
+    connect(m_createTokenManager, &CreateTokenManager::sendTransactionCreateToken,this,
             [&](const Transaction &tx) { m_transactionManager->addTransaction(tx);
     }, Qt::QueuedConnection);
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
+    connect(m_createTokenManager, &CreateTokenManager::sendToken, this,
     [=, this](const QString &pathCreatedTokenJson) {
         m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
     }, Qt::QueuedConnection);
-    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(),
+    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager,
             &CreateTokenManager::checkIsContract, Qt::QueuedConnection);
 }
 
@@ -608,5 +607,5 @@ void ExtraChainNode::logout() {
 
 void ExtraChainNode::InitVPN()
 {
-    vpnConnectorManager = std::make_shared<VPNConnectorManager>(this);
+    vpnConnectorManager = new VPNConnectorManager(this);
 }
