@@ -39,7 +39,7 @@ class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
 private:
-    ExtraChainNode &node;
+    ExtraChainNode                             *node;
     uint64_t m_bytesLimit = 10995116277760;
     uint64_t m_sizeTaken = 0;
     std::map<std::string, DFSP::AddFileMessage> files;
@@ -49,7 +49,7 @@ private:
     std::vector<DFSP::DirRow> m_dirRows;
 
 public:
-    explicit DfsController(ExtraChainNode &node, QObject *parent = nullptr);
+    explicit DfsController(ExtraChainNode *node);
     ~DfsController();
 
     void initializeActor(const ActorId &actorId);

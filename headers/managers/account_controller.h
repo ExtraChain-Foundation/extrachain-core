@@ -34,9 +34,10 @@ class ExtraChainNode;
  * One client can have several accounts, so AccountController is storing this accounts
  * and provides access to them.
  */
-class EXTRACHAIN_EXPORT AccountController {
+class EXTRACHAIN_EXPORT AccountController : public QObject {
+    Q_OBJECT
 public:
-    explicit AccountController(ExtraChainNode &node);
+    explicit AccountController(ExtraChainNode *node);
 
     /**
      * @brief Generates a new actor and adds it into accounts list
@@ -73,7 +74,7 @@ public:
     void renamewallet(const QString &oldWalletName, const QString &newWalletName);
 
 private:
-    ExtraChainNode &node;
+    ExtraChainNode *node;
     AutologinHash autologinHash;
 
     std::vector<PrivateProfile> m_profiles;

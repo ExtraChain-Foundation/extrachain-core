@@ -25,8 +25,9 @@ ActorId ActorIndex::firstId() {
     return m_firstId;
 }
 
-ActorIndex::ActorIndex(ExtraChainNode &node)
-    : node(node) {
+ActorIndex::ActorIndex(ExtraChainNode *node)
+    : QObject(node)
+    , node(node) {
     DBConnector db(folderPath + "actors");
     bool isDbOpen = db.open();
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
@@ -93,7 +94,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         qFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
-        node.network()->send_message(
+        node->network()->send_message(
             actor,
             MessageType::Actor,
             MessageStatus::Response,
@@ -105,13 +106,13 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
 }
 
 void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId) {
-    if (node.accountController()->empty())
+    if (node->accountController()->empty())
         return;
 
     std::vector<std::string> result = allActorsStd();
     result.erase(std::remove(result.begin(), result.end(), ignoredActorId.toStdString()), result.end());
     if (!result.empty()) {
-        node.network()->send_message(
+        node->network()->send_message(
             result,
             MessageType::ActorAll,
             MessageStatus::Response,
@@ -126,8 +127,8 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
 void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
-    if (!node.accountController()->empty()) {
-        node.network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
+    if (!node->accountController()->empty()) {
+        node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
         qDebug() << "[ActorIndex] Get all actors request";
     }
@@ -157,7 +158,7 @@ void ActorIndex::handleNewAllActors(const std::vector<std::string> &actors) {
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
     qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
 
-    node.network()->send_message(
+    node->network()->send_message(
         std::to_string(this->getRecords()),
         MessageType::ActorCount,
         MessageStatus::Response);
@@ -242,7 +243,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
         qFatal("Can't get actor by zero id");
     }
 
-    node.network()->send_message(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
+    node->network()->send_message(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -272,10 +273,10 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         if (!dbInsert)
             qFatal("db actor insert error");
 
-        node.dfs()->initializeActor(actor.id());
+        node->dfs()->initializeActor(actor.id());
 
         qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
-        node.network()->send_message(actor, MessageType::NewActor);
+        node->network()->send_message(actor, MessageType::NewActor);
     }
 
     return result;
