@@ -47,7 +47,18 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(
     bool     allowRunRestApiServer,
     bool     isRaccoonCheck)
     : QObject(parent)
-    , node(new ExtraChainNode(parent, isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+    , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+}
+
+ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
+    qInfo() << "ExtraChainNodeWrapper::~ExtraChainNodeWrapper";
+
+    if (m_thread) {
+        m_thread->quit();
+        m_thread->wait();
+        node->deleteLater();
+    } else
+        delete node;
 }
 
 void ExtraChainNodeWrapper::Init(bool makeAsync) {
@@ -64,16 +75,10 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
         node->InitNodeSlot();
 }
 
-ExtraChainNode::ExtraChainNode(
-    QObject* parent,
-    bool     isClientApp,
-    bool     allowRunRestApiServer,
-    bool     isRaccoonCheck)
-    : QObject(parent)
-    , isClientApplication(isClientApp)
+ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, bool isRaccoonCheck)
+    : isClientApplication(isClientApp)
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
-    connect(this, &ExtraChainNode::InitNode, &ExtraChainNode::InitNodeSlot);
 }
 
 void ExtraChainNode::InitNodeSlot() {

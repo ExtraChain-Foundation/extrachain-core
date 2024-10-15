@@ -63,12 +63,14 @@ public:
         bool     allowRunRestApiServer = false,
         bool     isRaccoon             = false);
 
+    ~ExtraChainNodeWrapper();
+
     void Init(bool makeAsync = false);
 
     ExtraChainNode* node;
 
 private:
-    QThread* m_thread;
+    QThread* m_thread = nullptr;
 };
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
@@ -169,7 +171,6 @@ public:
 
 private:
     ExtraChainNode(
-        QObject* parent,
         bool     isClientApp           = false,
         bool     allowRunRestApiServer = false,
         bool     isRaccoon             = false);
