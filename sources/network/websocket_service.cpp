@@ -1,6 +1,6 @@
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject *parent)
+WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent)
     : SocketService(node, parent) {
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
@@ -13,6 +13,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode &node, QObject
         connections();
         handshake();
     }
+
+    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
 }
 
 WebSocketService::~WebSocketService() {
@@ -87,7 +89,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
-        node.network()->messageReceived(mess.toStdString(), m_ip.toStdString(), m_identifier.toStdString());
+        node->network()->messageReceived(mess.toStdString(), m_ip.toStdString(), m_identifier.toStdString());
     } else {
         qFatal("[WS] Messsage is empty after prepare");
     }
@@ -101,6 +103,10 @@ void WebSocketService::sendMessage(const QByteArray &data) {
     if (data.isEmpty())
         qFatal("[WS] Error send size");
 
+    emit sendMessageInternal(data);
+}
+
+void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
@@ -140,12 +146,12 @@ void WebSocketService::handshake() {
 }
 
 quint16 WebSocketService::port() const {
-    if (m_ws->peerPort() != node.network()->wsPort)
+    if (m_ws->peerPort() != node->network()->wsPort)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
 }
 
 quint16 WebSocketService::serverPort() const {
-    return node.network()->wsPort;
+    return node->network()->wsPort;
 }

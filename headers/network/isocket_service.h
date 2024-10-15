@@ -18,7 +18,7 @@ public:
     };
     Q_ENUM(SendType)
 
-    explicit SocketService(ExtraChainNode &node, QObject *parent = nullptr);
+    explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
     const QString &identifier() const;
     virtual QString protocolString() const = 0;
     virtual Network::Protocol protocol() const = 0;
@@ -53,7 +53,7 @@ protected:
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
 
-    ExtraChainNode &node;
+    ExtraChainNode *node;
     QString m_identifier;
     QString m_ip;
     quint16 m_port = 0;

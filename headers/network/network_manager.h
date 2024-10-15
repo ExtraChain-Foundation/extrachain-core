@@ -151,7 +151,7 @@ private:
     std::unique_ptr<UPNPConnection>        upnpNet;
     QMap<std::string, int> msgHashList = {};
 
-    ExtraChainNode&        node;
+    ExtraChainNode*                        node;
     std::shared_ptr<QNetworkAddressEntry>  local;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
@@ -168,7 +168,7 @@ private:
     std::string m_networkHashForVPN;
 
 public:
-    explicit NetworkManager(ExtraChainNode& node);
+    explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void localInizialization();
 
@@ -267,12 +267,12 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
-        if (node.accountController()->empty()) {
+        if (node->accountController()->empty()) {
             // qFatal("Can't send");
             return "";
         }
 
-        auto&       mainActor = node.accountController()->mainActor();
+        auto&       mainActor = node->accountController()->mainActor();
         MessageBody message   =
             make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
         auto        serialized = message.serialize();

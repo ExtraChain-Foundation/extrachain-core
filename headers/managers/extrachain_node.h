@@ -50,7 +50,26 @@ class ConnectionsManager;
 class VPNConnectorManager;
 class CreateTokenManager;
 struct VPNMessage;
+class ExtraChainNode;
 // class RestApiServerManager;
+
+class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
+    Q_OBJECT
+
+public:
+    ExtraChainNodeWrapper(
+        QObject* parent,
+        bool     isClientApp           = false,
+        bool     allowRunRestApiServer = false,
+        bool     isRaccoon             = false);
+
+    void Init(bool makeAsync = false);
+
+    ExtraChainNode* node;
+
+private:
+    QThread* m_thread;
+};
 
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
@@ -81,17 +100,13 @@ private:
 
     bool                   started             = false;
     bool                   isClientApplication = false;
+    bool                   allowRunRestApiServer = false;
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
 
     VpnFunctionClearType m_vpnClearFunc = nullptr;
 
 public:
-    ExtraChainNode(
-        QObject* parent,
-        bool     isClientApp           = false,
-        bool     allowRunRestApiServer = false,
-        bool     isRaccoon             = false);
     ~ExtraChainNode();
 
     bool createNewNetwork(
@@ -153,6 +168,14 @@ public:
     VPNConfigStorage vpnConfigStorage;
 
 private:
+    ExtraChainNode(
+        QObject* parent,
+        bool     isClientApp           = false,
+        bool     allowRunRestApiServer = false,
+        bool     isRaccoon             = false);
+
+    friend class ExtraChainNodeWrapper;
+
     void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetworkManager and Blockchain
@@ -171,6 +194,8 @@ private:
     void prepareFolders();
 
 signals:
+    void InitNode();
+    void NodeInitialised();
     void ready();
     void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
@@ -186,5 +211,7 @@ public slots:
     void handleCountMessageReceived(BigNumber count);
 
     void calculateBlockCount();
+    void cleanUp();
+    void InitNodeSlot();
 };
 #endif // EXTRACHAIN_NODE_H

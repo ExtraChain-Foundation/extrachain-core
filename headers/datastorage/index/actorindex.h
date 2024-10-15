@@ -32,9 +32,10 @@ class ExtraChainNode;
 /**
  * @brief Actors that stored in blockchain
  */
-class EXTRACHAIN_EXPORT ActorIndex {
+class EXTRACHAIN_EXPORT ActorIndex : public QObject {
+    Q_OBJECT
 private:
-    ExtraChainNode &node;
+    ExtraChainNode *node;
 
     uint64_t records = 0;
     const std::string folderPath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
@@ -46,7 +47,7 @@ public:
     /**
      * @brief ActorIndex
      */
-    explicit ActorIndex(ExtraChainNode &node);
+    explicit ActorIndex(ExtraChainNode *node);
     /**
      * @brief ~ActorIndex
      */
