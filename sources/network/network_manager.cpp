@@ -1499,7 +1499,7 @@ void NetworkManager::messageReceived(
     default:
         std::string error =
             fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
-        qFatal(error.data());
+        qFatal("%s", error.data());
         break;
     }
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
