@@ -111,11 +111,7 @@ private:
 public:
     ~ExtraChainNode();
 
-    bool createNewNetwork(const QString& login,
-                          const QString& password,
-                          const QString& tokenName,
-                          const QString& tokenCount,
-                          const QString& tokenColor);
+    bool createNewNetwork(const std::string &login, const std::string &password);
     void start();
 
     bool isClientApp() {

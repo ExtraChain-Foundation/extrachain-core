@@ -68,7 +68,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId &profileActor) 
     actor.create(ActorType::Service);
     auto &profile = getProfile(profileActor.isZero() ? m_currentProfile : profileActor);
     profile.addWallet(actor);
-    node.actorIndex()->addActor(actor.convertToPublic());
+    node->actorIndex()->addActor(actor.convertToPublic());
     return actor;
 }
 

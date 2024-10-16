@@ -91,7 +91,7 @@ void TransactionManager::makeBlock() {
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
-        node.blockchain()->sync();
+        node->blockchain()->sync();
         return;
     }
     if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
@@ -107,7 +107,7 @@ void TransactionManager::makeBlock() {
                  << lastRealBlock->getType();
     }
 
-    if (!node.network()->isActiveConnectionExists()) {
+    if (!node->network()->isActiveConnectionExists()) {
         qDebug() << "[TransactionManager] No active connections";
 
         if (lastRealBlock->getIndex() != lastBlock->getIndex()) {

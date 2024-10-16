@@ -37,6 +37,7 @@
 // #include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
 #include "managers/token_manager.h"
+#include "managers/thread_pool.h"
 
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
@@ -144,21 +145,14 @@ void ExtraChainNode::cleanUp() {
     m_dfs->deleteLater();
 }
 
-bool ExtraChainNode::createNewNetwork(
-    const QString& login,
-    const QString& password,
-    const QString& tokenName,
-    const QString& tokenCount,
-    const QString& tokenColor) {
-    // TODO: check correct color in tokenColor?
-
+bool ExtraChainNode::createNewNetwork(const std::string& login, const std::string& password) {
     if (!QDir("keystore/profile").isEmpty()) {
         qInfo() << "Cannot create a new network: existing profile data found";
         return false;
     }
 
     qDebug() << "[Node] Create network with login" << login;
-    auto consoleHash = Utils::calcHash(login.toStdString() + password.toStdString());
+    auto consoleHash = Utils::calcHash(login + password);
     auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
     m_actorIndex->setFirstId(first.id());
     m_accountController->getProfile(first.id()).renameWallet(first.id(), "King of the World");
@@ -170,13 +164,6 @@ bool ExtraChainNode::createNewNetwork(
             return false;
 
         m_blockchain->addBlockFromNetwork(firstBlock.value());
-
-        // m_tokenManager->createToken(
-        //     tokenCount.toStdString(),
-        //     tokenName.toStdString(),
-        //     "",
-        //     first->id().toStdString(),
-        //     tokenColor.toStdString());
     }
 
     return true;

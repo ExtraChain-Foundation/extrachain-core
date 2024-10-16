@@ -136,7 +136,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
-    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0 || node->blockchain()->getLastBlock().getIndex() == 0) {
+    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
         //          << totalBytes.first << node->dfs()->totalDfsSize();
         return 0;
@@ -192,11 +192,11 @@ void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &reques
         transaction.setAmount(requestReward.RewardAmount);
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
         transaction.setType(TransactionType::Reward);
-        transaction.sign(node->accountController()->mainActor());
+
         if (transaction.getAmount() == 0)
             return;
 
-        node->sendTransaction(transaction);
+        node->sendTransaction(transaction, node->accountController()->mainActor());
     }
 }
 

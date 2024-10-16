@@ -119,49 +119,30 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (node->isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
-    connect(
-        service,
-        &WebSocketService::shareConnections,
-        this,
-        [&](const std::string &identifier, const QString ip, const quint16 port) {
-            qInfo() << "shareConnections" << identifier << ip << port;
-            bool isUpdated = false;
-            for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end();
-                 ++it) {
-                if (it->first.ip == ip && it->first.port == port) {
-                    qInfo() << "shareConnections updated";
-                    isUpdated  = true;
-                    it->second = QString::fromStdString(identifier);
-                }
-            }
-
-            if (!isUpdated)
-                m_reconnectionsToIdentifier.emplace(
-                    NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
-                    QString::fromStdString(identifier));
-
-        qInfo() << "shareConnections" << identifier << ip << port;
-        bool isUpdated = false;
-        for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
-        {
-            if (it->first.ip == ip && it->first.port == port)
+    connect(service, &WebSocketService::shareConnections, this, [&](const std::string& identifier, const QString ip, const quint16 port)
             {
-                qInfo() << "shareConnections updated";
-                isUpdated = true;
-                it->second = QString::fromStdString(identifier);
-            }
-        }
+                qInfo() << "shareConnections" << identifier << ip << port;
+                bool isUpdated = false;
+                for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+                {
+                    if (it->first.ip == ip && it->first.port == port)
+                    {
+                        qInfo() << "shareConnections updated";
+                        isUpdated = true;
+                        it->second = QString::fromStdString(identifier);
+                    }
+                }
 
-        if (!isUpdated)
-            m_reconnectionsToIdentifier.emplace(NetworkReconnect{.ip = ip, .port = port, .protocol = Network::Protocol::WebSocket}, QString::fromStdString(identifier));
+                if (!isUpdated)
+                    m_reconnectionsToIdentifier.emplace(NetworkReconnect{.ip = ip, .port = port, .protocol = Network::Protocol::WebSocket}, QString::fromStdString(identifier));
 
-        auto        mainActor = node->accountController()->mainActor();
-        MessageBody message   =
-            make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
-        auto        serialized = message.serialize();
-        auto        sign       = mainActor->key().sign(serialized);
-        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
-    });
+                auto        mainActor = node->accountController()->mainActor();
+                MessageBody message   =
+                    make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
+                auto        serialized = message.serialize();
+                auto        sign       = mainActor->key().sign(serialized);
+                this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
+            });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
