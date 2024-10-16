@@ -27,6 +27,7 @@
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
+#include <QTimer>
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
@@ -87,25 +88,22 @@ public:
 
 private:
     // common object for
-    DfsController*                m_dfs                = nullptr;
-    ActorIndex*                   m_actorIndex         = nullptr;
-    Blockchain*                   m_blockchain         = nullptr;
-    NetworkManager*               m_networkManager     = nullptr;
-    TransactionManager*           m_transactionManager = nullptr;
-    AccountController*            m_accountController  = nullptr;
-    DataMiningManager*            m_dmm                = nullptr;
-    ConnectionsManager*           m_connectionsManager = nullptr;
-    std::shared_ptr<TokenManager> m_tokenManager       = nullptr;
-
-    // RestApiServerManager *m_restApiServerManager = nullptr;
-    // ContractManager *m_contractManager = nullptr;
+    DfsController*      m_dfs                = nullptr;
+    ActorIndex*         m_actorIndex         = nullptr;
+    Blockchain*         m_blockchain         = nullptr;
+    NetworkManager*     m_networkManager     = nullptr;
+    TransactionManager* m_transactionManager = nullptr;
+    AccountController*  m_accountController  = nullptr;
+    DataMiningManager*  m_dmm                = nullptr;
+    ConnectionsManager* m_connectionsManager = nullptr;
+    TokenManager* m_tokenManager = nullptr;
+    QTimer*             timer                = nullptr;
 
     bool                   started             = false;
     bool                   isClientApplication = false;
     bool                   allowRunRestApiServer = false;
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
-
     VpnFunctionClearType m_vpnClearFunc = nullptr;
 
 public:
@@ -161,7 +159,7 @@ public:
 
     void                                InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
     VpnFunctionType                     vpnConnectorManagerFunc = nullptr;
-    std::shared_ptr<TokenManager> tokenManager() const;
+    CreateTokenManager *tokenManager() const;
     bool                                isRaccoon;
 
     VPNConfigStorage vpnConfigStorage;

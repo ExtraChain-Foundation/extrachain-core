@@ -221,11 +221,10 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
     const DBRow rowData = makeActrDirDBRow(msg.FileName, lastFileName, msg.FileHash, msg.Path, msg.Size);
 
     if (!actrDirFile.insert(DFST::ActorDirFile::TableName, rowData)) {
-        const auto errorStr = fmt::format("[Dfs] addFile: insert failed:{} {}", actrDirFile.file().c_str(),
-                                          DFST::ActorDirFile::TableName.c_str())
-                                  .c_str();
+        auto errorStr = fmt::format("[Dfs] addFile: insert failed:{} {}", actrDirFile.file().c_str(),
+                                    DFST::ActorDirFile::TableName.c_str());
         qDebug() << errorStr;
-        qFatal("Error 2: %s", errorStr);
+        qFatal("Error 2: %s", errorStr.c_str());
         return "";
     }
     actrDirFile.close();

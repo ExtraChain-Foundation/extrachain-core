@@ -67,8 +67,6 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
         connect(m_thread, &QThread::started, node, &ExtraChainNode::InitNodeSlot);
-
-        connect(m_thread, &QThread::finished, node, &QObject::deleteLater);
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
         connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
         m_thread->start();
@@ -95,33 +93,22 @@ void ExtraChainNode::InitNodeSlot() {
     }
 
     prepareFolders();
-    m_actorIndex        = new ActorIndex(this);
-    m_accountController = new AccountController(this);
-
-    m_networkManager = new NetworkManager(this);
-    //    ThreadPool::addThread(m_networkManager);
-
+    m_actorIndex         = new ActorIndex(this);
+    m_accountController  = new AccountController(this);
+    m_networkManager     = new NetworkManager(this);
     m_blockchain         = new Blockchain(this);
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
+    m_dmm                = new DataMiningManager(this);
+    auto key             = actorIndex()->firstId().toByteArray();
+    auto address         = "12.12.12.12";
+    auto port            = "1212";
+    m_connectionsManager = new ConnectionsManager(address, port, key, this);
+    m_tokenManager = new TokenManager(m_actorIndex, this);
 
-    m_dmm = new DataMiningManager(this);
-    // test port and address
-    m_connectionsManager =
-        new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
-
-    m_tokenManager = std::make_shared<TokenManager>(*this, this);
-
-    static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    getAllActorsTimer.start(30000);
-
-    if (allowRunRestApiServer) {
-        // m_restApiServerManager = new RestApiServerManager(this);
-    }
-
-    // ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_transactionManager);
+    timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
+    timer->start(30000);
 
     connectSignals();
     emit NodeInitialised();
@@ -254,7 +241,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     return tx;
 }
 
-std::shared_ptr<TokenManager> ExtraChainNode::tokenManager() const {
+TokenManager* ExtraChainNode::tokenManager() const {
     return m_tokenManager;
 }
 
@@ -532,22 +519,24 @@ void ExtraChainNode::connectSignals() {
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(
-        m_tokenManager.get(),
+        m_tokenManager,
         &TokenManager::sendTransactionCreateToken,
         this,
         [&](const Transaction& tx) {
             this->sendTransaction(tx, this->accountController()->mainActor());
-            // TODO: use token owner
-        });
+            // TODO: use token owner        });
     connect(
-        m_tokenManager.get(),
+        m_tokenManager,
         &TokenManager::sendToken,
         this,
-        [=, this](const ActorId &actorId, const QString& pathCreatedTokenJson) {
-            auto actor = m_accountController->currentProfile().getActor(actorId);
+        [=, this](const QString& pathCreatedTokenJson) {
             m_dfs->addLocalFile(actor, pathCreatedTokenJson.toStdString(), "contract/token-description.json", DFS::Encryption::Public);
         });
-    connect(m_dfs, &DfsController::checkIsContract, m_tokenManager.get(), &TokenManager::checkIsContract);
+    connect(
+        m_dfs,
+        &DfsController::checkIsContract,
+        m_tokenManager,
+        &TokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
