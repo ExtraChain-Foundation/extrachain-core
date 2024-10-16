@@ -66,8 +66,6 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
         connect(m_thread, &QThread::started, node, &ExtraChainNode::InitNodeSlot);
-
-        connect(m_thread, &QThread::finished, node, &QObject::deleteLater);
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
         connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
         m_thread->start();
