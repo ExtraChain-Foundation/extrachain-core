@@ -27,6 +27,7 @@
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
+#include <QTimer>
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"

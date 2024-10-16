@@ -119,7 +119,12 @@ uint64_t ExtraChainNode::getBlockCount() const {
     return blockCount;
 }
 
-ExtraChainNode::~ExtraChainNode() {}
+ExtraChainNode::~ExtraChainNode() {
+    qInfo("ExtraChainNode::~ExtraChainNode");
+    if (m_vpnClearFunc) {
+        m_vpnClearFunc();
+    }
+}
 
 void ExtraChainNode::cleanUp() {
     m_networkManager->deleteLater();
