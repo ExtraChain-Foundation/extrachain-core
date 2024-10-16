@@ -25,6 +25,7 @@ public:
     BigNumber getIndex() const;
     std::set<std::string> dataService() const;
     std::string getPrevHash() const;
+    std::string getPrevGenHash() const;
     std::string getHash() const;
     std::string getSignature() const;
     std::set<Approver> signatures() const;

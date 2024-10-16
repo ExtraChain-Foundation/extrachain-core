@@ -40,6 +40,14 @@ std::string BlockVariant::getPrevHash() const {
         m_block);
 }
 
+std::string BlockVariant::getPrevGenHash() const {
+    if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
+        return genesisBlock->getPrevGenHash();
+    }
+
+    return "";
+}
+
 std::string BlockVariant::getHash() const {
     return std::visit(
         [](const auto& b) {

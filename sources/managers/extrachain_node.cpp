@@ -348,21 +348,18 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction transaction) {
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
-    if (lastBlockId.isEmpty()) {
-        qWarning() << "[Node] Can't send tx" << transaction
-                   << ", because there is no last block in blockchain";
+std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer) {
+    auto lastRealBlock = m_blockchain->getLastRealBlock();
+
+    if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
         return std::unexpected(TransactionError::NoLastBlock);
     }
 
+    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
     transaction.setPrevBlock(lastBlockId);
+    transaction.sign(signer);
 
-    if (!transaction.isSigned()) {
-        qFatal("Transaction sending: no sign");
-        // transaction.sign(actor);
-    }
-
+    qDebug() << "[Blockchain] Send" << transaction;
     network()->send_message(transaction, MessageType::BlockchainTransaction);
 
     return transaction;
@@ -508,14 +505,16 @@ void ExtraChainNode::connectSignals() {
         &TokenManager::sendTransactionCreateToken,
         this,
         [&](const Transaction& tx) {
-            this->sendTransaction(tx);
+            this->sendTransaction(tx, this->accountController()->mainActor());
+            // TODO: use token owner
         });
     connect(
         m_tokenManager.get(),
         &TokenManager::sendToken,
         this,
-        [=, this](const QString& pathCreatedTokenJson) {
-            m_dfs->addListFiles(QStringList(QList<QString> { pathCreatedTokenJson }));
+        [=, this](const ActorId &actorId, const QString& pathCreatedTokenJson) {
+            auto actor = m_accountController->currentProfile().getActor(actorId);
+            m_dfs->addLocalFile(actor, pathCreatedTokenJson.toStdString(), "contract/token-description.json", DFS::Encryption::Public);
         });
     connect(m_dfs, &DfsController::checkIsContract, m_tokenManager.get(), &TokenManager::checkIsContract);
 }

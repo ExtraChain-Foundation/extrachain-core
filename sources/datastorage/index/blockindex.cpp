@@ -103,7 +103,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock() const 
             return block.value();
         }
 
-        id -= 100;
+        id -= Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
     }
 
     qFatal("No genesis?");

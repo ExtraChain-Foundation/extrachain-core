@@ -10,11 +10,10 @@
 class ExtraChainNode;
 class Transaction;
 
-static const std::string contract_profile = "contract_profile";
 static const uint size_of_data_list = 7;
 
 struct TokenData {
-    std::string owner, count, name, symbol, color, url;
+    std::string actor, owner, count, name, ticker, color, smart;
 
     QJsonDocument toJsonDocument();
     DBRow toDBRow();
@@ -33,7 +32,7 @@ class TokenManager : public QObject {
     // std::shared_ptr<Actor<KeyPrivate>> createPrivateActor();
     void initializeTokenArray();
     bool tokenExist(const std::string &nameToken);
-    bool tokenSymbolExist(const std::string &symbolToken);
+    bool tokentTickerExist(const std::string &tickerToken);
 
 public:
     TokenManager(ExtraChainNode &node, QObject *parent = nullptr);
@@ -42,12 +41,11 @@ public:
     bool isContract(const QString &pathFile);
 
 public slots:
-    void createToken(
-        const std::string &tokenCount,
-        const std::string &tokenName,
-        const std::string &symbol,
-        const ActorId &rulAddress,
-        const std::string &color);
+    void createToken(const std::string &tokenCount,
+                     const std::string &tokenName,
+                     const std::string &symbol,
+                     const ActorId &owner,
+                     const std::string &color);
     void checkIsContract(const QString &pathToFile);
 
 protected:
@@ -61,9 +59,9 @@ signals:
         const QString &type = "wallet",
         const bool &rewrite = false);
     void errorNameTokenExist(const QString &);
-    void errorSymbolTokenExist(const QString &);
+    void errorTickerTokenExist(const QString &);
     void added();
-    void sendToken(const QString &pathToJson);
+    void sendToken(const ActorId &actor, const QString &pathToJson);
 };
 
 #endif // TOKEN_MANAGER_H

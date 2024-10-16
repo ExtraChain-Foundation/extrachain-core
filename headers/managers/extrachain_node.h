@@ -115,7 +115,7 @@ public:
     std::expected<Transaction, TransactionError>
     createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction);
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();

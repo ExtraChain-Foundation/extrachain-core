@@ -84,15 +84,11 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByHash(const QByteArray &has
 
 void Blockchain::sync() {
     auto lastBlock = getLastBlock();
-    if (!lastBlock.has_value()) {
-        return;
-    }
-
-    auto fromBlock = lastBlock->getIndex();
+    auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : BigNumber("0");
     if (fromBlock < 0)
         fromBlock = 0;
-    qDebug() << "[Blockchain] Request sync from" << lastBlock->getIndex();
-    node.network()->send_message(lastBlock->getIndex(), MessageType::BlockchainSync, MessageStatus::Request);
+    qDebug() << "[Blockchain] Request sync from" << fromBlock;
+    node.network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
@@ -172,7 +168,7 @@ std::pair<Transaction, QByteArray> Blockchain::getTxByUser(const BigNumber &id, 
 }
 
 BigNumber Blockchain::lastGenesisIdFor(const BigNumber &id) {
-    return id / 100 * 100;
+    return id / Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 std::set<Transaction>
@@ -263,7 +259,8 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
             auto sender   = transaction.getSender();
             auto receiver = transaction.getReceiver();
             auto tokenId  = transaction.getToken();
-            lastDataRows[{ sender, tokenId }].state -= transaction.getAmount();
+            if (sender == ActorId() || tokenId != TokenId() && transaction.getData() != "InitContract")
+                lastDataRows[{ sender, tokenId }].state -= transaction.getAmount();
             lastDataRows[{ receiver, tokenId }].state += transaction.getAmount();
         }
     }
@@ -409,23 +406,25 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     if (blockId != 0) {
         auto lastBlock = this->getBlockByIndex(blockId - 1);
         auto lastRealBlock = this->getLastRealBlock();
+        auto lastGenesis = blockIndex.getLastGenesisBlock();
 
-        if (!lastBlock.has_value()) {
+        if (!block.isGenesisBlock() && !lastBlock.has_value()) {
             // sync();
             return std::unexpected(BlockError::Invalid);
         }
 
-        if (blockId > lastBlock->getIndex() + 1) {
+        if (!block.isGenesisBlock() && blockId > lastBlock->getIndex() + 1) {
             qDebug() << "[Blockchain] New block id is greater than last id, sync request";
             sync();
             return std::unexpected(BlockError::Invalid);
         }
 
-        auto expectedPrevHash = block.isGenesisBlock() ? lastRealBlock->getHash() : lastBlock->getHash();
-        if (block.getPrevHash() != expectedPrevHash) {            qDebug() << "[Blockchain] Can't chained, sync request";
+        auto checkedPrevHash = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
+        auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : lastBlock->getHash();
+        if (checkedPrevHash != expectedPrevHash) {
             qDebug() << "[Blockchain] Can't chained, sync request";
-            qDebug() << "jb" << block;
-            qDebug() << "lb" << lastBlock.value();
+            // qDebug() << "jb" << block;
+            // qDebug() << "lb" << lastBlock.value();
             sync(); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }
@@ -887,7 +886,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
         return TransactionProveError::NoError;
     } else {
         if (tx.getData() == "InitContract") {
-            return TransactionProveError::Unknown;
+            return TransactionProveError::NoError;
         }
 
         if (targetSender != firstId) {
@@ -905,8 +904,8 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
             // sign?
             return TransactionProveError::NoError;
         } else {
-            Transaction provedTx(tx);
-            provedTx.sign(node.accountController()->currentWallet());
+            // Transaction provedTx(tx);
+            // provedTx.sign(node.accountController()->currentWallet());
             return TransactionProveError::NoError;
         }
 

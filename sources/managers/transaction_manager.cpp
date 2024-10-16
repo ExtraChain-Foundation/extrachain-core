@@ -46,6 +46,7 @@ TransactionManager::TransactionManager(ExtraChainNode &node)
         &TransactionManager::makeBlockAndProveTransactionsInThread);
 
 
+    qDebug() << "Wait for it...";
     int milliseconds = QDateTime::currentDateTime().time().msec();
     int seconds = QDateTime::currentDateTime().time().second();
     int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
@@ -62,7 +63,7 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransaction(const Transaction &tx) {
-    // qDebug() << "[TransactionManager] Transaction is being added to the waiting list:" << tx;
+    // qDebug() << "[TransactionManager] Added to the waiting list:" << tx;
     m_receivedTxList.insert(tx);
 }
 
@@ -89,6 +90,7 @@ void TransactionManager::makeBlock() {
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
+        node.blockchain()->sync();
         return;
     }
     if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
@@ -172,7 +174,7 @@ void TransactionManager::proveTransactions() {
             qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager]" << tx;
+            qDebug() << "[TransactionManager] Transaction not approved:" << tx;
             qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }

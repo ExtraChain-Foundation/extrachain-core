@@ -6,6 +6,7 @@
 #include "managers/account_controller.h"
 #include "datastorage/transaction.h"
 #include "enc/key_private.h"
+#include "network/network_manager.h"
 #include "utils/exc_utils.h"
 
 TokenManager::TokenManager(ExtraChainNode &node, QObject *parent)
@@ -47,35 +48,35 @@ void TokenManager::sendInitialTransaction(
     Transaction tx(sender->id(), receiver, BigNumberFloat(quantity, NumeralBase::Dec));
     tx.setData("InitContract");
     tx.setToken(sender->id());
-    tx.sign(sender);
+    // tx.sign(sender);
 
-           // emit sendTransactionCreateToken(tx);
-    node.sendTransaction(tx);
+    // emit sendTransactionCreateToken(tx);
+    node.sendTransaction(tx, sender);
     emit added();
 }
 
 void TokenManager::initializeTokenArray() {
-    QDir directory(contract_profile.c_str());
-    QStringList contractProfilies = directory.entryList(QDir::Files);
+    // QDir directory(contract_profile.c_str());
+    // QStringList contractProfilies = directory.entryList(QDir::Files);
 
-    for (QString &filename : contractProfilies) {
-        QFile file(
-            QString("%1/%2%3").arg(Token::folder_tokens.c_str()).arg(contract_profile.c_str()).arg(filename));
+    // for (QString &filename : contractProfilies) {
+    //     QFile file(
+    //         QString("%1/%2%3").arg(Token::folder_tokens.c_str()).arg(contract_profile.c_str()).arg(filename));
 
-        if (file.open(QIODevice::ReadOnly)) {
-            QByteArray data = file.readLine();
-            auto deserializedDataList = Serialization::deserialize(data.toStdString());
-            if (deserializedDataList.size() != size_of_data_list) {
-                qDebug() << "[TokenManager] Error when open file " << file.fileName() << " list size !=7";
-                return;
-            }
+    //     if (file.open(QIODevice::ReadOnly)) {
+    //         QByteArray data = file.readLine();
+    //         auto deserializedDataList = Serialization::deserialize(data.toStdString());
+    //         if (deserializedDataList.size() != size_of_data_list) {
+    //             qDebug() << "[TokenManager] Error when open file " << file.fileName() << " list size !=7";
+    //             return;
+    //         }
 
-            tokenBalance[deserializedDataList.at(6)] = { { deserializedDataList.at(4),
-                                                           deserializedDataList.at(5) } };
+    //         tokenBalance[deserializedDataList.at(6)] = { { deserializedDataList.at(4),
+    //                                                        deserializedDataList.at(5) } };
 
-            file.close();
-        }
-    }
+    //         file.close();
+    //     }
+    // }
 }
 
 bool TokenManager::tokenExist(const std::string &nameToken) {
@@ -95,13 +96,13 @@ bool TokenManager::tokenExist(const std::string &nameToken) {
     return countRow > 0;
 }
 
-bool TokenManager::tokenSymbolExist(const std::string &symbolToken) {
+bool TokenManager::tokentTickerExist(const std::string &tickerToken) {
     DBConnector db(Token::db_tokens_path);
     bool isDbOpen = db.open();
 
     if (isDbOpen) {
-        auto countRow = db.count(Token::tokenTableName, fmt::format("symbol='{}'", symbolToken));
-        qDebug() << "[TokenManager] Symbol: count row:" << countRow;
+        auto countRow = db.count(Token::tokenTableName, fmt::format("ticker='{}'", tickerToken));
+        qDebug() << "[TokenManager] Ticker: count row:" << countRow;
         return countRow > 0;
     }
 
@@ -109,40 +110,46 @@ bool TokenManager::tokenSymbolExist(const std::string &symbolToken) {
 }
 
 void TokenManager::createToken(
-    const std::string &tokenCount,
-    const std::string &tokenName,
-    const std::string &symbol,
-    const ActorId &rulAddress,
+    const std::string &count,
+    const std::string &name,
+    const std::string &ticker,
+    const ActorId &owner,
     const std::string &color) {
-    auto upperTokenName = QString::fromStdString(tokenName).toUpper();
+    qDebug() << "[TokenManager] Create token. Count:" << count << "| name:" << name << "| ticker:" << ticker << "| rull address:" << owner << "| color:" << color;
 
-    if (tokenExist(tokenName) || upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN") {
+    if (!node.network()->isActiveConnectionExists()) {
+        qDebug() << "[TokenManager] No connections";
+    }
+
+    auto upperTokenName = QString::fromStdString(name).toUpper();
+
+    if (tokenExist(name) || upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN") {
         qDebug() << "token name exist";
-        emit errorNameTokenExist(QString::fromStdString(tokenName));
+        emit errorNameTokenExist(QString::fromStdString(name));
         return;
     }
 
-    auto upperSymbol = QString::fromStdString(symbol).toUpper();
-    if (tokenSymbolExist(symbol) || upperSymbol == "ROCC" || upperSymbol == "EXC") {
-        qDebug() << "token symbol exist";
-        emit errorSymbolTokenExist(QString::fromStdString(symbol));
+    auto tickerSymbol = QString::fromStdString(ticker).toUpper();
+    if (tokentTickerExist(ticker) || tickerSymbol == "ROCC" || tickerSymbol == "EXC") {
+        qDebug() << "token ticker exist";
+        emit errorTickerTokenExist(QString::fromStdString(ticker));
         return;
     }
 
-    tokenBalance[rulAddress] = { { tokenName, tokenCount } };
+    tokenBalance[owner] = { { name, count } };
     auto actor = this->node.accountController()->createService();
 
-    QString contractProfile = QString::fromStdString(contract_profile);
     QString actorId = QString(actor.id().toString());
 
-    QString jsonFilePath = QString("%1/%2.json").arg(contractProfile).arg(tokenName.c_str());
+    QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
     TokenData tokenData;
-    tokenData.name = tokenName;
+    tokenData.actor = actor.id().toStdString();
+    tokenData.name = name;
     tokenData.color = color;
     tokenData.owner = actorId.toStdString();
-    tokenData.symbol = symbol;
-    tokenData.count = tokenCount;
+    tokenData.ticker = ticker;
+    tokenData.count = count;
 
     DBConnector db(Token::db_tokens_path);
     bool isDbOpen = db.open();
@@ -160,13 +167,15 @@ void TokenManager::createToken(
         stream << jsonDoc.toJson();
         fileSaveJson.close();
 
-        emit sendToken(jsonFilePath);
+        emit sendToken(actor.id(), jsonFilePath);
     } else {
         qDebug() << "[TokenManager] Error save json into file. File" << fileSaveJson.fileName()
         << " not open.";
     }
 
-    sendInitialTransaction(std::make_shared<Actor<KeyPrivate>>(actor), ActorId(rulAddress), tokenCount);
+    // add to dfs
+
+    sendInitialTransaction(std::make_shared<Actor<KeyPrivate>>(actor), ActorId(owner), count);
 }
 
 void TokenManager::checkIsContract(const QString &pathToFile) {
@@ -185,13 +194,14 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 return;
 
             DBRow rowRow;
+            rowRow.insert({ "actorId", "" }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
-            rowRow.insert({ "symbol", jsonObj[Token::Fields::symbol.c_str()].toString().toStdString() });
-            rowRow.insert({ "count_coins",
+            rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
+            rowRow.insert({ "count",
                             QString::number(jsonObj[Token::Fields::count.c_str()].toInt()).toStdString() });
             rowRow.insert({ "owner", jsonObj[Token::Fields::owner.c_str()].toString().toStdString() });
             rowRow.insert({ "color", jsonObj[Token::Fields::color.c_str()].toString().toStdString() });
-            rowRow.insert({ "url", std::string() });
+            rowRow.insert({ "smart", std::string() });
 
             DBConnector db(Token::db_tokens_path);
             bool isDbOpen = db.open();
@@ -215,23 +225,25 @@ bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
 
 QJsonDocument TokenData::toJsonDocument() {
     QJsonObject jsonObj;
+    // jsonObj[Token::Fields::actorId.c_str()] = actor.c_str();
     jsonObj[Token::Fields::owner.c_str()] = owner.c_str();
     jsonObj[Token::Fields::count.c_str()] = std::stoi(count);
     jsonObj[Token::Fields::name.c_str()] = name.c_str();
-    jsonObj[Token::Fields::symbol.c_str()] = symbol.c_str();
+    jsonObj[Token::Fields::ticker.c_str()] = ticker.c_str();
     jsonObj[Token::Fields::color.c_str()] = color.c_str();
-    jsonObj[Token::Fields::url.c_str()] = "";
+    jsonObj[Token::Fields::smart.c_str()] = smart.c_str();
     QJsonDocument jsonDoc(jsonObj);
     return jsonDoc;
 }
 
 DBRow TokenData::toDBRow() {
     DBRow dbRow;
+    dbRow.insert({ "actor", actor });
     dbRow.insert({ "name", name });
-    dbRow.insert({ "symbol", symbol });
-    dbRow.insert({ "count_coins", count });
+    dbRow.insert({ "ticker", ticker });
+    dbRow.insert({ "count", count });
     dbRow.insert({ "owner", owner });
     dbRow.insert({ "color", color });
-    dbRow.insert({ "url", std::string() });
+    dbRow.insert({ "smart", smart });
     return dbRow;
 }

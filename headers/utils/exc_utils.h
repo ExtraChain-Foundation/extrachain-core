@@ -314,21 +314,22 @@ static const std::string tokenTableName = "tokens";
 static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
 static const std::string tokenTableCreate =
     "CREATE TABLE IF NOT EXISTS tokens("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-    "name          TEXT   NOT NULL, "
-    "symbol        TEXT NOT NULL, "
-    "count_coins   TEXT  NOT NULL, "
+    "actorId       TEXT  PRIMARY KEY NOT NULL, "
+    "name          TEXT  NOT NULL, "
+    "ticker        TEXT  NOT NULL, "
+    "count         TEXT  NOT NULL, "
     "owner         TEXT  NOT NULL, "
     "color         TEXT  NOT NULL, "
-    "url           TEXT  NOT NULL);";
+    "smart           TEXT  NOT NULL);";
 namespace Fields {
+    static const std::string actorId = "actorId";
     static const std::string name = "name";
-    static const std::string symbol = "symbol";
+    static const std::string ticker = "ticker";
     static const std::string count = "count";
     static const std::string owner = "owner";
     static const std::string color = "color";
-    static const std::string url = "url";
-    static const std::vector<std::string> fields = { name, symbol, count, owner, color, url };
+    static const std::string smart = "smart";
+    static const std::vector<std::string> fields = { actorId, name, ticker, count, owner, color, smart };
 }
 }
 
