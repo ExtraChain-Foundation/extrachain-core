@@ -23,8 +23,9 @@
 #include "datastorage/index/actorindex.h"
 #include "managers/transaction_manager.h"
 
-AccountController::AccountController(ExtraChainNode &node)
-    : node(node) {
+AccountController::AccountController(ExtraChainNode *node)
+    : QObject(node)
+    , node(node) {
 }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
@@ -36,16 +37,16 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
-    node.actorIndex()->addActor(actor.convertToPublic());
+    node->actorIndex()->addActor(actor.convertToPublic());
     addToProfileList(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
     qDebug() << "[Accounts] Created new profile:" << actor.id();
 
-    node.start(); // TODO: remove
-    node.transactionManager()->runMakeAndProveBlockTimers();
+    node->start(); // TODO: remove
+    node->transactionManager()->runMakeAndProveBlockTimers();
 
-    node.calculateBlockCount();
+    node->calculateBlockCount();
     //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
     //        node.blockchain()->getBlockZero();
     return actor;
@@ -58,7 +59,7 @@ AccountController::createWallet(const ActorId &profileActor, const std::string &
     auto &profile = getProfile(profileActor.isZero() ? m_currentProfile : profileActor);
     profile.addWallet(actor);
     profile.renameWallet(actor.id(), walletName);
-    node.actorIndex()->addActor(actor.convertToPublic());
+    node->actorIndex()->addActor(actor.convertToPublic());
     return actor;
 }
 
@@ -87,16 +88,16 @@ bool AccountController::load(const std::string &hash) {
         if (profile.loaded()) {
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
-                if (node.actorIndex()->getById(actor->id()).isEmpty()) {
-                    node.actorIndex()->addActor(actor->convertToPublic());
+                if (node->actorIndex()->getById(actor->id()).isEmpty()) {
+                    node->actorIndex()->addActor(actor->convertToPublic());
                 }
             }
 
             m_profiles.push_back(profile);
             m_currentProfile = profile.main()->id();
-            node.start(); // TODO: remove
+            node->start(); // TODO: remove
             if (this->empty())
-                node.transactionManager()->runMakeAndProveBlockTimers();
+                node->transactionManager()->runMakeAndProveBlockTimers();
             autologinHash.save(hash); // TODO: add arg
             return true;
         }

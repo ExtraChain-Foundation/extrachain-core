@@ -151,7 +151,7 @@ private:
     std::unique_ptr<UPNPConnection>        upnpNet;
     QMap<std::string, int> msgHashList = {};
 
-    ExtraChainNode&        node;
+    ExtraChainNode*                        node;
     std::shared_ptr<QNetworkAddressEntry>  local;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
@@ -168,7 +168,7 @@ private:
     std::string m_networkHashForVPN;
 
 public:
-    explicit NetworkManager(ExtraChainNode& node);
+    explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void localInizialization();
 
@@ -193,6 +193,8 @@ signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage& msg);
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
+    void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                            const std::string &receiver_identifier);
 
 protected:
     void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);
@@ -223,6 +225,8 @@ public slots:
         quint16                  port,
         const QString&           user,
         const QString&           password);
+    void sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                const std::string &receiver_identifier);
 
 private slots:
     void removeWsConnection();
@@ -245,6 +249,8 @@ public:
 
     void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
 
+    QString foundCurrentIdentifier(QString ip, quint16 port);
+
     template <class T>
     std::string send_message(
         T                     data,
@@ -261,12 +267,12 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
-        if (node.accountController()->empty()) {
+        if (node->accountController()->empty()) {
             // qFatal("Can't send");
             return "";
         }
 
-        auto&       mainActor = node.accountController()->mainActor();
+        auto&       mainActor = node->accountController()->mainActor();
         MessageBody message   =
             make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
         auto        serialized = message.serialize();

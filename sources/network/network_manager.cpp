@@ -22,6 +22,7 @@
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
+#include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
@@ -55,15 +56,18 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
-NetworkManager::NetworkManager(ExtraChainNode &node)
-    : node(node) {
+NetworkManager::NetworkManager(ExtraChainNode *node)
+    : QObject(node)
+    , node(node) {
     localInizialization();
     m_reconnectTimer = new QTimer(this);
     calculateTraffic = CalculateTraffic::GetInstance();
+
+    connect(this, &NetworkManager::sendNetworkMessage, this, &NetworkManager::sendNetworkMessageSlot);
 }
 
 void NetworkManager::process() {
-    if (!node.isClientApp())
+    if (!node->isClientApp())
         return;
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
     m_reconnectTimer->start(Utils::ReconnectInterval);
@@ -112,7 +116,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     });
     if (!m_connections.contains(service)) {
         m_connections.append(service);
-        if (node.isClientApp() && requestListNodes)
+        if (node->isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
     connect(
@@ -136,18 +140,28 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
                     QString::fromStdString(identifier));
 
-            auto        mainActor = node.accountController()->mainActor();
-            MessageBody message =
-                make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
-            auto serialized = message.serialize();
-            auto sign       = mainActor->key().sign(serialized);
-            this->sendMessage(
-                serialized + sign,
-                Config::Net::TypeSend::Focused,
-                identifier,
-                MessageType::ShareConnections,
-                MessageStatus::Request);
-        });
+        qInfo() << "shareConnections" << identifier << ip << port;
+        bool isUpdated = false;
+        for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+        {
+            if (it->first.ip == ip && it->first.port == port)
+            {
+                qInfo() << "shareConnections updated";
+                isUpdated = true;
+                it->second = QString::fromStdString(identifier);
+            }
+        }
+
+        if (!isUpdated)
+            m_reconnectionsToIdentifier.emplace(NetworkReconnect{.ip = ip, .port = port, .protocol = Network::Protocol::WebSocket}, QString::fromStdString(identifier));
+
+        auto        mainActor = node->accountController()->mainActor();
+        MessageBody message   =
+            make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
+        auto        serialized = message.serialize();
+        auto        sign       = mainActor->key().sign(serialized);
+        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
+    });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -218,7 +232,7 @@ void NetworkManager::startNetwork() {
         DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
                                                   .port    = static_cast<uint64_t>((int)wsPort) };
         m_wsConnections.push_back(wsConnection);
-    } else if (!wsServer->listen(QHostAddress::Any, wsPort) /* && !node.isClientApp()*/) {
+    } else if (!wsServer->listen(QHostAddress::Any, wsPort) /* && !node->isClientApp()*/) {
         bool listen = false;
         connectToNode(local->ip().toString(), Network::Protocol::WebSocket);
 
@@ -301,7 +315,7 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
 }
 
 void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool requestListNodes) {
-    auto service = new WebSocketService(nullptr, node);
+    auto service = new WebSocketService(nullptr, node, this);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
     m_reconnectionsToIdentifier.emplace(
@@ -526,7 +540,7 @@ void NetworkManager::messageReceived(
             }
 
             if (!ips.empty()) {
-                node.network()->send_message(
+                node->network()->send_message(
                     MessagePack::serializeContainer(ips),
                     MessageType::ShareConnections,
                     MessageStatus::Response,
@@ -561,7 +575,7 @@ void NetworkManager::messageReceived(
     }
     case MessageType::RequestDfsSize: {
         const auto msgStruct = MessagePack::deserialize<DFSP::RequestDfsSize>(serialized);
-        node.dfs()->sendSizeReponseMsg(msgStruct, messageId);
+        node->dfs()->sendSizeReponseMsg(msgStruct, messageId);
         break;
     }
     case MessageType::ResponseBlockCount: {
@@ -572,33 +586,33 @@ void NetworkManager::messageReceived(
     }
     case MessageType::RequestBlockCount: {
         const auto msgStruct = MessagePack::deserialize<DFSP::RequestBlockCount>(serialized);
-        BigNumber  dfsCount  = node.blockchain()->getBlockCount();
-        node.dfs()->sendCountReponseMsg(msgStruct, messageId, dfsCount);
+        BigNumber  dfsCount  = node->blockchain()->getBlockCount();
+        node->dfs()->sendCountReponseMsg(msgStruct, messageId, dfsCount);
         break;
     }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        node.actorIndex()->handleNewActor(actor);
+        node->actorIndex()->handleNewActor(actor);
         break;
     }
     case MessageType::Actor: {
         // actor get, test use ActorId
         if (status == MessageStatus::Request) {
             auto actorId = MessagePack::deserialize<ActorId>(serialized);
-            node.actorIndex()->handleGetActor(actorId, messageId);
+            node->actorIndex()->handleGetActor(actorId, messageId);
         } else if (status == MessageStatus::Response) {
             auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-            node.actorIndex()->handleNewActor(actor);
+            node->actorIndex()->handleNewActor(actor);
         }
         break;
     }
     case MessageType::ActorAll: {
         if (status == MessageStatus::Request) {
             auto ignoredActorId = MessagePack::deserialize<ActorId>(serialized);
-            node.actorIndex()->handleGetAllActor(ignoredActorId, messageId);
+            node->actorIndex()->handleGetAllActor(ignoredActorId, messageId);
         } else if (status == MessageStatus::Response) {
             auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            node.actorIndex()->handleNewAllActors(actors);
+            node->actorIndex()->handleNewAllActors(actors);
         }
         break;
     }
@@ -608,27 +622,27 @@ void NetworkManager::messageReceived(
     case MessageType::DfsDirData: {
         if (status == MessageStatus::Request) {
             auto actorId = MessagePack::deserialize<ActorId>(serialized); // TODO: add last modified
-            node.dfs()->sendDirData(actorId, 0, messageId);
+            node->dfs()->sendDirData(actorId, 0, messageId);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
                 MessagePack::deserialize<std::pair<ActorId, std::vector<DFSP::DirRow>>>(serialized);
-            node.dfs()->addDirData(actorId, dirRows);
+            node->dfs()->addDirData(actorId, dirRows);
         }
         break;
     }
     case MessageType::DfsLastModified: {
         auto msg = MessagePack::deserialize<uint64_t>(serialized);
-        node.dfs()->sendSync(msg, messageId);
+        node->dfs()->sendSync(msg, messageId);
         break;
     }
     case MessageType::DfsAddFile: {
         auto msg = MessagePack::deserialize<DFSP::AddFileMessage>(serialized);
-        node.dfs()->addFile(msg, true);
+        node->dfs()->addFile(msg, true);
         break;
     }
     case MessageType::DfsRequestFile: {
         auto [actorId, fileName] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        node.dfs()->sendFile(actorId.toStdString(), fileName, messageId);
+        node->dfs()->sendFile(actorId.toStdString(), fileName, messageId);
         break;
     }
     case MessageType::DfsRequestFileSegment: {
@@ -643,17 +657,17 @@ void NetworkManager::messageReceived(
     }
     case MessageType::DfsEditSegment: {
         auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
-        node.dfs()->insertFragment(msg);
+        node->dfs()->insertFragment(msg);
         break;
     }
     case MessageType::DfsDeleteSegment: {
         auto msg = MessagePack::deserialize<DFSP::DeleteSegmentMessage>(serialized);
-        node.dfs()->deleteFragment(msg);
+        node->dfs()->deleteFragment(msg);
         break;
     }
     case MessageType::DfsRemoveFile: {
         auto msg = MessagePack::deserialize<DFSP::RemoveFileMessage>(serialized);
-        node.dfs()->removeFile(msg);
+        node->dfs()->removeFile(msg);
         break;
     }
     case MessageType::DfsSendingFileDone: { // TODO
@@ -671,7 +685,7 @@ void NetworkManager::messageReceived(
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
                 MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
-            node.dfs()->verifyFiles(listVerifiedMessage, messageId);
+            node->dfs()->verifyFiles(listVerifiedMessage, messageId);
             break;
         }
         case MessageStatus::Response: {
@@ -679,7 +693,7 @@ void NetworkManager::messageReceived(
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
                 MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
-            float percentVerified = node.dfs()->percentVerified(listVerifiedMessage);
+            float percentVerified = node->dfs()->percentVerified(listVerifiedMessage);
             break;
         }
         }
@@ -692,7 +706,7 @@ void NetworkManager::messageReceived(
         GenesisBlock block = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node.blockchain()->addBlockFromNetwork(blockVariant);
+            node->blockchain()->addBlockFromNetwork(blockVariant);
         } else {
             qDebug() << "false genesis block";
         }
@@ -704,7 +718,7 @@ void NetworkManager::messageReceived(
         Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node.blockchain()->addBlockFromNetwork(blockVariant);
+            node->blockchain()->addBlockFromNetwork(blockVariant);
         }
         break;
     }
@@ -712,7 +726,7 @@ void NetworkManager::messageReceived(
     case MessageType::BlockchainTransaction: {
         qDebug() << "BlockchainTransaction";
         Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        node.transactionManager()->addTransaction(transaction);
+        node->transactionManager()->addTransaction(transaction);
         break;
     }
 
@@ -729,16 +743,16 @@ void NetworkManager::messageReceived(
         std::pair<BlockType, BigNumber> requestData =
             MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
         if (requestData.first == BlockType::Data)
-            node.blockchain()->sendBlockByNumber(requestData.second);
+            node->blockchain()->sendBlockByNumber(requestData.second);
         else if (requestData.first == BlockType::Genesis)
-            node.blockchain()->sendLastGenesisBlock();
+            node->blockchain()->sendLastGenesisBlock();
 
         break;
     }
 
     case MessageType::BlockchainSync: {
         auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
-        node.blockchain()->syncResponse(fromBlock, messageId);
+        node->blockchain()->syncResponse(fromBlock, messageId);
         break;
     }
 
@@ -763,7 +777,7 @@ void NetworkManager::messageReceived(
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node.dataMiningManager()->sendCoinsReward(requestReward);
+            node->dataMiningManager()->sendCoinsReward(requestReward);
             break;
         }
         case MessageStatus::Response: {
@@ -785,15 +799,15 @@ void NetworkManager::messageReceived(
 
     case MessageType::NewListConnections: {
         auto connection = MessagePack::deserialize<DFSP::Connection>(serialized);
-        node.connectionsManager()->addNewConnection(connection);
-        node.connectionsManager()->addActivity(connection);
+        node->connectionsManager()->addNewConnection(connection);
+        node->connectionsManager()->addActivity(connection);
         break;
     }
 
     case MessageType::GetListConnections: {
         DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
-        node.connectionsManager()->addConnection(connection);
-        for (const auto &connection : node.connectionsManager()->getActiveConnection()) {
+        node->connectionsManager()->addConnection(connection);
+        for (const auto &connection : node->connectionsManager()->getActiveConnection()) {
             this->send_message(connection, MessageType::NewListConnections);
         }
         this->send_message("", MessageType::ProcessNewConnections);
@@ -801,7 +815,7 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::ProcessNewConnections: {
-        node.connectionsManager()->tryToNewConnect();
+        node->connectionsManager()->tryToNewConnect();
         break;
     }
 
@@ -810,7 +824,7 @@ void NetworkManager::messageReceived(
         DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
         m_reconnectionsToIdentifier.emplace(NetworkReconnect::fromWsConnection(wsConnection), "");
         m_wsConnections.push_back(wsConnection);
-        if (!node.isClientApp()) {
+        if (!node->isClientApp()) {
             send_message(wsConnection, MessageType::SpreadNodeConnection);
         }
         break;
@@ -828,7 +842,7 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::RequestListNodes: {
-        if (status == MessageStatus::Response && node.isClientApp()) {
+        if (status == MessageStatus::Response && node->isClientApp()) {
             std::vector<std::string> newWsConnectionsList =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DFSP::WSConnection> newWSConnections =
@@ -862,9 +876,665 @@ void NetworkManager::messageReceived(
         Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
         ActorId(Token::ROCC_TOKEN)); tx.setDate(QDateTime::currentMSecsSinceEpoch());
         tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node.transactionManager()->addTransaction(tx);
-        node.network()->send_message(tx, MessageType::BlockchainTransaction);
+        node->transactionManager()->addTransaction(tx);
+        node->network()->send_message(tx, MessageType::BlockchainTransaction);
         */
+        break;
+    }
+
+    case MessageType::VPNHandshake: {
+        if (node->isRaccoon && node->vpnConnectorManagerFunc) {
+            auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+            if (status == MessageStatus::Response) {
+                qInfo() << "Achieved VPNHandshake(Response)" << magic_enum::enum_name(inputMsg.vpnType)
+                        << messageId;
+                if (inputMsg.vpnType == VPNType::SERVER || inputMsg.vpnType == VPNType::PROXY) {
+                    qInfo() << "Response 1";
+                    if (node->vpnConfigStorage.vpnIsClient) {
+                        qInfo() << "Response 1 1";
+                        std::string chainIndexStr = inputMsg.resultChainIndex < 10
+                                                        ? "0" + std::to_string(inputMsg.resultChainIndex)
+                                                        : std::to_string(inputMsg.resultChainIndex);
+                        qInfo() << "Response 1 1 1";
+                        VPNMessage outputMsg;
+                        outputMsg.vpnType = VPNType::PROXY;
+                        outputMsg.allIPsToSet.emplace_back("100.1" + chainIndexStr + ".0.1");
+                        outputMsg.publicKeyFile    = node->vpnConfigStorage.vpnFileAddedHash[0];
+                        outputMsg.proxyCounter     = 1;
+                        outputMsg.resultChainIndex = inputMsg.resultChainIndex;
+                        outputMsg.uuid             = inputMsg.uuid;
+
+                        qInfo() << "Response 1 1 2";
+
+                        auto        mainActor = node->accountController()->mainActor();
+                        MessageBody message   = make_message(
+                            MessagePack::serialize(outputMsg),
+                            MessageType::VPNConnection,
+                            MessageStatus::Request,
+                            mainActor->id(),
+                            "");
+                        auto serialized = message.serialize();
+                        auto sign       = mainActor->key().sign(serialized);
+                        this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+
+                        qInfo() << "SENDED VPN CONNECTION REQUEST";
+                    } else {
+                        qInfo() << "Response 1 2";
+                        VPNMessage outputMsg;
+                        outputMsg.uuid             = inputMsg.uuid;
+                        outputMsg.vpnType          = inputMsg.vpnType;
+                        outputMsg.resultChainIndex = inputMsg.resultChainIndex;
+
+                        qInfo() << "Response 1 2 1";
+
+                        std::string messageIdToReturn;
+                        {
+                            qInfo() << "MUTEX 5";
+                            auto vpnHandhakeCacheInProccessLocked =
+                                *node->vpnConfigStorage.vpnHandhakeCacheInProccess;
+                            for (auto &it : *vpnHandhakeCacheInProccessLocked) {
+                                if (it.uuid == inputMsg.uuid) {
+                                    messageIdToReturn = it.proxyResponseMessageID;
+                                    it.nextIdentifier = identifier;
+                                    it.timestamp      = QDateTime::currentDateTime();
+                                    it.chainIndex     = inputMsg.resultChainIndex;
+                                    break;
+                                }
+                            }
+                        }
+
+                        qInfo() << "Response 1 2 2";
+                        if (!messageIdToReturn.empty()) {
+                            node->network()->send_message(
+                                outputMsg,
+                                MessageType::VPNHandshake,
+                                MessageStatus::Response,
+                                messageIdToReturn,
+                                Config::Net::TypeSend::Focused);
+                            qInfo() << "SENDED VPN handshake response";
+                        } else
+                            qCritical() << "VPNHandshake Proxy messageId to return not found!";
+                    }
+                }
+            } else if (status == MessageStatus::Request) {
+                qInfo() << "Achieved VPNHandshake(Request)" << magic_enum::enum_name(inputMsg.vpnType)
+                        << messageId;
+                // achieved request connection from client -> If node can be setup as VPN server than send
+                // response.
+
+                if (inputMsg.vpnType == VPNType::SERVER) {
+                    qInfo() << "Request server 1";
+                    VPNMessage tempHandshakeData;
+                    tempHandshakeData.handshakeIdentifier = identifier;
+                    tempHandshakeData.handshakeCounter    = 100;
+                    VPNFunctionsResult tempRes;
+                    if (!node->vpnConnectorManagerFunc(
+                            tempHandshakeData,
+                            mb.sender_id,
+                            VPNFunctionType::CHECK_VPN_HANDSHAKE_ACCESS,
+                            tempRes))
+                        return;
+
+                    qInfo() << "Request server 2";
+
+                    if (!inputMsg.countryEndpoint.empty()
+                        && inputMsg.countryEndpoint
+                               != node->vpnConfigStorage.vpnInitPublicIPAndCountry.second.toStdString()) {
+                        qInfo() << "Request server 2 1 FAIL" << inputMsg.countryEndpoint
+                                << node->vpnConfigStorage.vpnInitPublicIPAndCountry.second.toStdString();
+                        return;
+                    }
+
+                    qInfo() << "Request server 3";
+
+                    if (!inputMsg.networkIdentifiersToIgnore.contains(
+                            node->accountController()->mainActor()->id().toStdString())) {
+                        qInfo() << "Request server 3 1";
+                        VPNFunctionsResult output;
+                        if (node->vpnConnectorManagerFunc(
+                                inputMsg,
+                                mb.sender_id,
+                                VPNFunctionType::CHECK_SERVER,
+                                output)) {
+                            qInfo() << "Request server 3 1 1";
+                            VPNMessage outputMsg;
+                            outputMsg.vpnType = VPNType::SERVER;
+                            outputMsg.uuid    = inputMsg.uuid;
+                            output.str.clear();
+
+                            qInfo() << "Request server 3 1 2";
+
+                            node->vpnConnectorManagerFunc(
+                                inputMsg,
+                                mb.sender_id,
+                                VPNFunctionType::GET_LOCKED_CHAIN_INDEXES,
+                                output);
+                            qInfo() << "Request server 3 1 3";
+                            std::set<int> lockedChainIndexAll = inputMsg.lockedChainIndex;
+                            lockedChainIndexAll.insert(
+                                output.blockedChainIndexes.begin(),
+                                output.blockedChainIndexes.end());
+                            qInfo() << "Request server 3 1 4";
+                            bool isFound = false;
+                            for (int i = 0; i < 100; ++i) {
+                                if (!lockedChainIndexAll.contains(i)) {
+                                    outputMsg.resultChainIndex = i;
+                                    isFound                    = true;
+                                    break;
+                                }
+                            }
+                            qInfo() << "Request server 3 1 5" << isFound << outputMsg.resultChainIndex;
+                            if (!isFound)
+                                return;
+
+                            node->network()->send_message(
+                                outputMsg,
+                                MessageType::VPNHandshake,
+                                MessageStatus::Response,
+                                messageId,
+                                Config::Net::TypeSend::Focused);
+
+                            qInfo() << "Request server SEND Response";
+
+                            qInfo() << "Emplaced vpnHandhakeCacheInProccess" << inputMsg.uuid
+                                    << outputMsg.resultChainIndex;
+                            node->vpnConfigStorage.vpnHandhakeCacheInProccess->emplaceBack(
+                                VPNConfigStorage::VPNHandhakeCache { .uuid                = inputMsg.uuid,
+                                                                     .requesterIdentifier = identifier,
+                                                                     .chainIndex = outputMsg.resultChainIndex,
+                                                                     .timestamp =
+                                                                         QDateTime::currentDateTime() });
+                        } else
+                            qCritical() << "Achieved VPNHandshake(Request) command but Server is impossible "
+                                           "to create.";
+                    }
+                    qInfo() << "Request server end";
+                } else if (inputMsg.vpnType == VPNType::PROXY) {
+                    qInfo() << "Request proxy 1";
+                    VPNMessage tempHandshakeData;
+                    tempHandshakeData.handshakeIdentifier = identifier;
+                    tempHandshakeData.handshakeCounter    = 8;
+                    VPNFunctionsResult tempRes;
+                    if (!node->vpnConnectorManagerFunc(
+                            tempHandshakeData,
+                            mb.sender_id,
+                            VPNFunctionType::CHECK_VPN_HANDSHAKE_ACCESS,
+                            tempRes))
+                        return;
+
+                    qInfo() << "Request proxy 2";
+
+                    if (!inputMsg.networkIdentifiersToIgnore.contains(
+                            node->accountController()->mainActor()->id().toStdString())) {
+                        qInfo() << "Request proxy 2 1";
+                        VPNFunctionsResult output;
+                        if (node->vpnConnectorManagerFunc(
+                                inputMsg,
+                                mb.sender_id,
+                                VPNFunctionType::CHECK_PROXY,
+                                output)) {
+                            qInfo() << "Request proxy 2 1 1";
+                            VPNMessage outputMsg;
+                            outputMsg.uuid                       = inputMsg.uuid;
+                            outputMsg.countryEndpoint            = inputMsg.countryEndpoint;
+                            outputMsg.networkIdentifiersToIgnore = inputMsg.networkIdentifiersToIgnore;
+                            outputMsg.networkIdentifiersToIgnore.emplace(
+                                node->accountController()->mainActor()->id().toStdString());
+
+                            output = {};
+                            node->vpnConnectorManagerFunc(
+                                inputMsg,
+                                mb.sender_id,
+                                VPNFunctionType::GET_LOCKED_CHAIN_INDEXES,
+                                output);
+
+                            outputMsg.lockedChainIndex = inputMsg.lockedChainIndex;
+                            outputMsg.lockedChainIndex.insert(
+                                output.blockedChainIndexes.begin(),
+                                output.blockedChainIndexes.end());
+
+                            if (inputMsg.proxyCounter - 1 > 0) {
+                                outputMsg.vpnType      = VPNType::PROXY;
+                                outputMsg.proxyCounter = inputMsg.proxyCounter - 1;
+                            } else {
+                                outputMsg.vpnType = VPNType::SERVER;
+                            }
+
+                            qInfo() << "Emplaced vpnHandhakeCacheInProccess" << inputMsg.uuid
+                                    << outputMsg.resultChainIndex;
+                            node->vpnConfigStorage.vpnHandhakeCacheInProccess->emplaceBack(
+                                VPNConfigStorage::VPNHandhakeCache { .uuid                = inputMsg.uuid,
+                                                                     .requesterIdentifier = identifier,
+                                                                     .nextIdentifierType  = outputMsg.vpnType,
+                                                                     .timestamp =
+                                                                         QDateTime::currentDateTime(),
+                                                                     .proxyResponseMessageID = messageId });
+
+                            qInfo() << "Request proxy 2 1 6";
+                            send_message(outputMsg, MessageType::VPNHandshake, MessageStatus::Request);
+                            qInfo() << "Request proxy SEND Request" << outputMsg.vpnType;
+                        } else
+                            qCritical() << "Achieved VPNHandshake(Request) command but Proxy is impossible "
+                                           "to create.";
+                    }
+                    qInfo() << "Request proxy end";
+                }
+            }
+        }
+
+        break;
+    }
+    case MessageType::VPNConnection: {
+        if (node->isRaccoon && node->vpnConnectorManagerFunc) {
+            auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+            if (status == MessageStatus::Response) {
+                qInfo() << "Achieved VPNConnection(Response)";
+
+                if (inputMsg.vpnType == VPNType::SERVER || inputMsg.vpnType == VPNType::PROXY) {
+                    if (node->vpnConfigStorage.vpnIsClient) {
+                        QTimer::singleShot(
+                            2000,
+                            this,
+                            [this, inputMsg, senderID = mb.sender_id, identifier]() mutable {
+                                qInfo() << "Response client 1";
+                                // here open client VPN
+                                VPNFunctionsResult output;
+                                if (node->vpnConnectorManagerFunc(
+                                        inputMsg,
+                                        senderID,
+                                        VPNFunctionType::SET_CLIENT,
+                                        output)) {
+                                    qInfo() << "Response client 1 1";
+                                    output = {};
+                                    if (node->vpnConnectorManagerFunc(
+                                            inputMsg,
+                                            senderID,
+                                            VPNFunctionType::IS_CONNECTED,
+                                            output)) {
+                                        QString ip;
+                                        quint16 port;
+                                        QString tempIdentifier = QString::fromStdString(identifier);
+                                        for (auto it = m_reconnectionsToIdentifier.begin();
+                                             it != m_reconnectionsToIdentifier.end();
+                                             ++it) {
+                                            if (it->second == tempIdentifier) {
+                                                ip   = it->first.ip;
+                                                port = it->first.port;
+                                                break;
+                                            }
+                                        }
+
+                                        qInfo() << "Response client 1 1 1";
+                                        node->vpnConfigStorage.vpnUuidToVPNWorkers->emplace(
+                                            inputMsg.uuid,
+                                            VPNConfigStorage::VPNWorkers {
+                                                .uuid             = inputMsg.uuid,
+                                                .chainIndex       = inputMsg.resultChainIndex,
+                                                .nextIdentifier   = identifier,
+                                                .nextIP           = ip,
+                                                .nextPort         = port,
+                                                .lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch(),
+                                                .lastSendedNextTS = QDateTime::currentMSecsSinceEpoch() });
+                                        node->vpnConfigStorage.vpnConnectedType = VPNType::CLIENT;
+                                        // node->network()->reconnection();
+
+                                        emit node->vpnConnected();
+                                    }
+                                }
+                                qInfo() << "Response client end";
+                            });
+                    } else {
+                        qInfo() << "Response proxy 1";
+                        qInfo() << "MUTEX 9";
+                        auto vpnHandhakeCacheInProccessLocked =
+                            *node->vpnConfigStorage.vpnHandhakeCacheInProccess;
+                        for (auto it = vpnHandhakeCacheInProccessLocked->begin();
+                             it != vpnHandhakeCacheInProccessLocked->end();
+                             ++it) {
+                            if (it->chainIndex == inputMsg.resultChainIndex && it->uuid == inputMsg.uuid) {
+                                qInfo() << "Response proxy 2";
+                                it->timestamp         = QDateTime::currentDateTime();
+                                it->nextPublicKeyFile = inputMsg.publicKeyFile;
+                                it->nextPublicIP      = inputMsg.publicIP;
+
+                                qInfo() << "Response proxy 3";
+                                VPNMessage outputMsg;
+                                outputMsg.publicKeyFile =
+                                    node->vpnConfigStorage
+                                        .vpnFileAddedHash[node->vpnConfigStorage.vpnUuidToVPNWorkers->size()];
+                                outputMsg.vpnType          = VPNType::PROXY;
+                                outputMsg.resultChainIndex = inputMsg.resultChainIndex;
+                                outputMsg.uuid             = inputMsg.uuid;
+                                outputMsg.publicIP =
+                                    node->vpnConfigStorage.vpnInitPublicIPAndCountry.first.toStdString();
+
+                                auto        mainActor = node->accountController()->mainActor();
+                                MessageBody message   = make_message(
+                                    MessagePack::serialize(outputMsg),
+                                    MessageType::VPNConnection,
+                                    MessageStatus::Response,
+                                    mainActor->id(),
+                                    "");
+                                auto serialized = message.serialize();
+                                auto sign       = mainActor->key().sign(serialized);
+                                this->sendMessage(
+                                    serialized + sign,
+                                    Config::Net::TypeSend::Focused,
+                                    it->requesterIdentifier);
+
+                                qInfo() << "Response proxy SEND connection response";
+
+                                QTimer::singleShot(
+                                    200,
+                                    this,
+                                    [this,
+                                     inputMsg,
+                                     outputMsg,
+                                     senderID       = mb.sender_id,
+                                     requesterIdent = it->requesterIdentifier,
+                                     nextIdent      = it->nextIdentifier]() mutable {
+                                        VPNFunctionsResult output;
+                                        if (node->vpnConnectorManagerFunc(
+                                                inputMsg,
+                                                senderID,
+                                                VPNFunctionType::SET_PROXY,
+                                                output)) {
+                                            QString requesterIP, nextIP;
+                                            quint16 requesterPort, nextPort;
+                                            QString requesterIdentifier =
+                                                QString::fromStdString(requesterIdent);
+                                            QString nextIdentifier = QString::fromStdString(nextIdent);
+                                            qInfo() << "Identifiers req&next" << requesterIdent << nextIdent;
+                                            int i = 0;
+                                            for (auto it = m_reconnectionsToIdentifier.begin();
+                                                 it != m_reconnectionsToIdentifier.end();
+                                                 ++it) {
+                                                qInfo() << "Identifiers req&next" << it->first.ip
+                                                        << it->first.port << it->second;
+                                                if (it->second == requesterIdentifier) {
+                                                    requesterIP   = it->first.ip;
+                                                    requesterPort = it->first.port;
+                                                } else if (it->second == nextIdentifier) {
+                                                    nextIP   = it->first.ip;
+                                                    nextPort = it->first.port;
+                                                }
+                                                if (!requesterIP.isEmpty() && !nextIP.isEmpty())
+                                                    break;
+                                            }
+
+                                            qInfo() << "Response proxy connected";
+                                            qInfo() << "RequestIP_Port & NEXT IP_PORT" << requesterIP
+                                                    << requesterPort << nextIP << nextPort;
+                                            node->vpnConfigStorage.vpnUuidToVPNWorkers->emplace(
+                                                inputMsg.uuid,
+                                                VPNConfigStorage::VPNWorkers {
+                                                    .uuid                = inputMsg.uuid,
+                                                    .chainIndex          = inputMsg.resultChainIndex,
+                                                    .requesterIdentifier = requesterIdent,
+                                                    .requesterIP         = requesterIP,
+                                                    .requesterPort       = requesterPort,
+                                                    .nextIdentifier      = nextIdent,
+                                                    .nextIP              = nextIP,
+                                                    .nextPort            = nextPort,
+                                                    .lastUpdateRequsterTS =
+                                                        QDateTime::currentMSecsSinceEpoch(),
+                                                    .lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch(),
+                                                    .lastSendedNextTS =
+                                                        QDateTime::currentMSecsSinceEpoch() });
+                                            node->vpnConfigStorage.vpnConnectedType = VPNType::PROXY;
+                                        } else {
+                                            qInfo() << "Init proxy failed, delete all next";
+                                            VPNMessage outputMsg;
+                                            outputMsg.uuid = inputMsg.uuid;
+                                            auto mainActor = node->accountController()->mainActor();
+                                            qInfo() << "VPNDisconnect send because PROXY init failed";
+                                            MessageBody message = make_message(
+                                                MessagePack::serialize(outputMsg),
+                                                MessageType::VPNDisconnect,
+                                                MessageStatus::Request,
+                                                mainActor->id(),
+                                                "");
+                                            auto serialized = message.serialize();
+                                            auto sign       = mainActor->key().sign(serialized);
+
+                                            node->network()->sendMessage(
+                                                serialized + sign,
+                                                Config::Net::TypeSend::Focused,
+                                                nextIdent);
+                                        }
+                                    });
+                                break;
+                            }
+                        }
+                        qInfo() << "Response proxy end";
+                    }
+                }
+
+            } else if (status == MessageStatus::Request) {
+                qInfo() << "Achieved VPNConnection(Request)";
+                if (inputMsg.vpnType == VPNType::SERVER) {
+                    qInfo() << "Request server 1";
+                    bool canProccess = false;
+                    {
+                        qInfo() << "MUTEX 11" << inputMsg.resultChainIndex << inputMsg.uuid << identifier;
+                        auto vpnHandhakeCacheInProccessLocked =
+                            *node->vpnConfigStorage.vpnHandhakeCacheInProccess;
+                        for (auto &it : *vpnHandhakeCacheInProccessLocked) {
+                            qInfo() << "vpnHandhakeCacheInProccess" << it.chainIndex << it.uuid
+                                    << it.requesterIdentifier;
+                            if (it.chainIndex == inputMsg.resultChainIndex && it.uuid == inputMsg.uuid
+                                && it.requesterIdentifier == identifier) {
+                                qInfo() << "vpnHandhakeCacheInProccess inside";
+                                canProccess  = true;
+                                it.timestamp = QDateTime::currentDateTime();
+                            }
+                        }
+                    }
+
+                    if (canProccess) {
+                        VPNFunctionsResult output;
+
+                        qInfo() << "Request server 2 1";
+
+                        // open VPN server
+                        if (node->vpnConnectorManagerFunc(
+                                inputMsg,
+                                mb.sender_id,
+                                VPNFunctionType::SET_SERVER,
+                                output)) {
+                            qInfo() << "Request server 2 1 1";
+                            VPNMessage outputMsg;
+                            outputMsg.publicKeyFile    = node->vpnConfigStorage.vpnFileAddedHash[0];
+                            outputMsg.vpnType          = VPNType::SERVER;
+                            outputMsg.resultChainIndex = inputMsg.resultChainIndex;
+                            outputMsg.uuid             = inputMsg.uuid;
+
+                            output = {};
+                            if (!node->vpnConnectorManagerFunc(
+                                    inputMsg,
+                                    mb.sender_id,
+                                    VPNFunctionType::GET_PUBLIC_IP,
+                                    output)) {
+                                qCritical() << "Achieved VPNConnection(Request) SERVER command but cannot "
+                                               "get Public IP";
+                                break;
+                            }
+                            outputMsg.publicIP = output.str;
+
+                            {
+                                QString ip;
+                                quint16 port;
+                                QString tempIdentifier = QString::fromStdString(identifier);
+                                for (auto it = m_reconnectionsToIdentifier.begin();
+                                     it != m_reconnectionsToIdentifier.end();
+                                     ++it) {
+                                    if (it->second == tempIdentifier) {
+                                        ip   = it->first.ip;
+                                        port = it->first.port;
+                                        break;
+                                    }
+                                }
+
+                                node->vpnConfigStorage.vpnUuidToVPNWorkers->emplace(
+                                    inputMsg.uuid,
+                                    VPNConfigStorage::VPNWorkers { .uuid       = inputMsg.uuid,
+                                                                   .chainIndex = inputMsg.resultChainIndex,
+                                                                   .requesterIdentifier = identifier,
+                                                                   .requesterIP         = ip,
+                                                                   .requesterPort       = port,
+                                                                   .lastUpdateRequsterTS =
+                                                                       QDateTime::currentMSecsSinceEpoch() });
+                                node->vpnConfigStorage.vpnConnectedType = VPNType::SERVER;
+                            }
+
+                            {
+                                auto vpnHandhakeCacheInProccessLocked =
+                                    *node->vpnConfigStorage.vpnHandhakeCacheInProccess;
+                                for (auto it = vpnHandhakeCacheInProccessLocked->begin();
+                                     it != vpnHandhakeCacheInProccessLocked->end();
+                                     ++it) {
+                                    if (it->chainIndex == inputMsg.resultChainIndex
+                                        && it->uuid == inputMsg.uuid) {
+                                        vpnHandhakeCacheInProccessLocked->erase(it);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            node->network()->send_message(
+                                outputMsg,
+                                MessageType::VPNConnection,
+                                MessageStatus::Response,
+                                messageId,
+                                Config::Net::TypeSend::Focused);
+
+                            qInfo() << "Request server SEND connection response";
+                        }
+                    }
+                    qInfo() << "Request server end";
+                } else if (inputMsg.vpnType == VPNType::PROXY) {
+                    qInfo() << "Request proxy 1" << inputMsg.resultChainIndex << inputMsg.uuid << identifier;
+                    qInfo() << "MUTEX 13";
+                    auto vpnHandhakeCacheInProccessLocked =
+                        *node->vpnConfigStorage.vpnHandhakeCacheInProccess;
+                    for (auto &it : *vpnHandhakeCacheInProccessLocked) {
+                        qInfo() << "inside check" << it.chainIndex << it.uuid << it.requesterIdentifier;
+                        if (it.chainIndex == inputMsg.resultChainIndex && it.uuid == inputMsg.uuid
+                            && it.requesterIdentifier == identifier) {
+                            it.timestamp              = QDateTime::currentDateTime();
+                            std::string chainIndexStr = inputMsg.resultChainIndex < 10
+                                                            ? "0" + std::to_string(inputMsg.resultChainIndex)
+                                                            : std::to_string(inputMsg.resultChainIndex);
+
+                            it.localIPForSetup =
+                                "101." + std::to_string(inputMsg.proxyCounter) + chainIndexStr + ".0.1";
+                            it.proxyCounter           = inputMsg.proxyCounter;
+                            it.allIPsToSet            = inputMsg.allIPsToSet;
+                            it.requesterPublicKeyFile = inputMsg.publicKeyFile;
+                            it.requesterId            = mb.sender_id;
+
+                            VPNMessage outputMsg;
+                            outputMsg.vpnType     = it.nextIdentifierType;
+                            outputMsg.allIPsToSet = inputMsg.allIPsToSet;
+                            outputMsg.allIPsToSet.emplace_back(it.localIPForSetup);
+                            outputMsg.publicKeyFile =
+                                node->vpnConfigStorage
+                                    .vpnFileAddedHash[node->vpnConfigStorage.vpnUuidToVPNWorkers->size()];
+                            outputMsg.proxyCounter = inputMsg.proxyCounter + 1;
+                            outputMsg.uuid         = inputMsg.uuid;
+
+                            auto        mainActor = node->accountController()->mainActor();
+                            MessageBody message   = make_message(
+                                MessagePack::serialize(outputMsg),
+                                MessageType::VPNConnection,
+                                MessageStatus::Request,
+                                mainActor->id(),
+                                "");
+                            auto serialized = message.serialize();
+                            auto sign       = mainActor->key().sign(serialized);
+                            this->sendMessage(
+                                serialized + sign,
+                                Config::Net::TypeSend::Focused,
+                                it.nextIdentifier);
+
+                            qInfo() << "Request proxy SEND connection request";
+
+                            break;
+                        }
+                    }
+                    qInfo() << "Request server end";
+                }
+            }
+        }
+
+        break;
+    }
+    case MessageType::VPNDisconnect: {
+        if (node->isRaccoon && node->vpnConnectorManagerFunc) {
+            auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+
+            qInfo() << "Achieved VPNDisconnect(Request)";
+
+            if (node->vpnConfigStorage.vpnConnectedType.has_value()
+                && node->vpnConfigStorage.vpnConnectedType.value() != VPNType::SERVER) {
+                qInfo() << "MUTEX 14";
+                auto res = node->vpnConfigStorage.vpnUuidToVPNWorkers->find(inputMsg.uuid);
+                if (res != node->vpnConfigStorage.vpnUuidToVPNWorkers->end()) {
+                    VPNMessage outputMsg = inputMsg;
+                    auto       mainActor = node->accountController()->mainActor();
+                    qInfo() << "VPNDisconnect send VPNDisconnect achieved";
+                    MessageBody message = make_message(
+                        MessagePack::serialize(outputMsg),
+                        MessageType::VPNDisconnect,
+                        MessageStatus::Request,
+                        mainActor->id(),
+                        "");
+                    auto serialized = message.serialize();
+                    auto sign       = mainActor->key().sign(serialized);
+
+                    auto newIdentifier = foundCurrentIdentifier(res->second.nextIP, res->second.nextPort);
+                    qInfo() << "Port and IP" << res->second.nextIP << res->second.nextPort << newIdentifier;
+                    if (!newIdentifier.isEmpty())
+                        node->network()->sendMessage(
+                            serialized + sign,
+                            Config::Net::TypeSend::Focused,
+                            newIdentifier.toStdString());
+                }
+            }
+
+            QTimer::singleShot(200, this, [this, inputMsg, senderID = mb.sender_id]() mutable {
+                VPNFunctionsResult output;
+                node->vpnConnectorManagerFunc(inputMsg, senderID, VPNFunctionType::DISCONNECT, output);
+            });
+        }
+
+        break;
+    }
+    case MessageType::VPNUpdateConnection: {
+        if (node->isRaccoon && node->vpnConnectorManagerFunc) {
+            auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
+            qInfo() << "Achieved VPNUpdateConnection";
+            if (node->vpnConfigStorage.vpnConnectedType.has_value()) {
+                auto res = node->vpnConfigStorage.vpnUuidToVPNWorkers->find(inputMsg.uuid);
+                if (res != node->vpnConfigStorage.vpnUuidToVPNWorkers->end()) {
+                    if (status == MessageStatus::Response)
+                        res->second.lastUpdateNextTS = QDateTime::currentMSecsSinceEpoch();
+                    else if (status == MessageStatus::Request) {
+                        res->second.lastUpdateRequsterTS = QDateTime::currentMSecsSinceEpoch();
+
+                        VPNMessage outputMsg;
+                        outputMsg.uuid = inputMsg.uuid;
+                        node->network()->send_message(
+                            outputMsg,
+                            MessageType::VPNUpdateConnection,
+                            MessageStatus::Response,
+                            messageId,
+                            Config::Net::TypeSend::Focused);
+                    }
+                }
+            }
+        }
+
         break;
     }
 
@@ -879,7 +1549,7 @@ void NetworkManager::messageReceived(
 
 void NetworkManager::requestWSNodeList(std::string message_id) {
     qDebug() << "requestWSNodeList" << m_wsConnections.size();
-    if (m_wsConnections.empty() || node.isClientApp())
+    if (m_wsConnections.empty() || node->isClientApp())
         return;
 
     std::vector<std::string> serializedData = MessagePack::serializeContainer(m_wsConnections);
@@ -977,7 +1647,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            key.publicKey() + node.accountController()->mainActor()->id().toString().toStdString() + salt,
+            key.publicKey() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }
@@ -996,7 +1666,7 @@ void NetworkManager::onNewWsConnection() {
         return;
     }
 
-    auto service = new WebSocketService(ws, node);
+    auto service = new WebSocketService(ws, node, this);
     connectWsService(service);
     m_reconnectionsToIdentifier.emplace(
         NetworkReconnect { .ip       = service->ip(),
@@ -1045,4 +1715,24 @@ std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
             acc.second += connection.second.bytesReceived;
             return acc;
         });
+}
+
+QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
+{
+    QString res;
+    for (auto it = m_reconnectionsToIdentifier.begin(); it != m_reconnectionsToIdentifier.end(); ++it)
+    {
+        if (it->first.ip == ip && it->first.port == port)
+        {
+            res = it->second;
+            break;
+        }
+    }
+    return res;
+}
+
+void NetworkManager::sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
+                                            const std::string &receiver_identifier)
+{
+    sendMessage(serialized_message, type_send, receiver_identifier);
 }

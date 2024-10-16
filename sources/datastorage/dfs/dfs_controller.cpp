@@ -1,7 +1,7 @@
 #include "datastorage/dfs/dfs_controller.h"
 
-DfsController::DfsController(ExtraChainNode &node, QObject *parent)
-    : QObject(parent)
+DfsController::DfsController(ExtraChainNode *node)
+    : QObject(node)
     , node(node) {
     std::filesystem::create_directories(DFSB::fsActrRoot);
 
@@ -17,11 +17,12 @@ DfsController::DfsController(ExtraChainNode &node, QObject *parent)
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
 
-    if (!node.accountController()->empty())
+    if (!node->accountController()->empty())
         requestDirFileAllActors();
 }
 
 DfsController::~DfsController() {
+    qInfo("DfsController::~DfsController()");
 }
 
 void DfsController::initializeActor(const ActorId &actorId) {
@@ -155,7 +156,7 @@ bool DfsController::removeLocalFile(const std::string &actorId, const std::strin
     DFSP::RemoveFileMessage msg = { .Actor = actorId,
                                     .FileName = fileHash };
     bool res = removeFile(msg);
-    node.network()->send_message(msg, MessageType::DfsRemoveFile);
+    node->network()->send_message(msg, MessageType::DfsRemoveFile);
     return res;
 }
 
@@ -243,8 +244,10 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
                                                            .FileHash = msg.FileHash,
                                                            .Path = msg.Path,
                                                            .Offset = 0 };
-            node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment,
-                                         MessageStatus::Request);
+            node->network()->send_message(
+                reqMessage,
+                MessageType::DfsRequestFileSegment,
+                MessageStatus::Request);
         }
     }
 
@@ -260,7 +263,7 @@ std::string DfsController::addFile(const DFSP::AddFileMessage &msg, bool loadByt
 }
 
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileName) {
-    auto localOwner = node.accountController()->currentProfile().getActor(owner);
+    auto                  localOwner      = node->accountController()->currentProfile().getActor(owner);
     std::string pathDelim = Utils::platformDelimeter();
     const std::string ownerPath = DFSB::fsActrRoot + pathDelim + owner.toStdString() + pathDelim;
     std::filesystem::path realFilePath = fmt::format("{}{}", ownerPath, fileName);
@@ -293,13 +296,30 @@ bool DfsController::removeFile(const DFSP::RemoveFileMessage &msg) {
     //     qDebug() << "[Dfs] Remove file - file has been removed";
     //     return false;
     // }
-    std::string message  = fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}", msg.FileName,
-                                      msg.Actor, node.accountController()->mainActor()->id().toStdString());
+    std::string message = fmt::format(
+        "[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}",
+        msg.FileName,
+        msg.Actor,
+        node->accountController()->mainActor()->id().toStdString());
     qDebug() << message;
 
     removeRowFromDB(msg);
     std::string path = DFS_PATH::filePath(msg.Actor, msg.FileName).string();
-    const bool removedFile = std::filesystem::remove(path);
+
+    {
+        QFile file(QString::fromStdString(path));
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            qDebug() << "Could not open VPN localization file:" << file.errorString();
+        } else {
+            QTextStream          in(&file);
+            QString              oneLine = in.readLine();
+            static const QString prefix  = "Country:";
+            if (oneLine.startsWith(prefix))
+                emit getRemovedVPNLocalizationInfo(oneLine, msg.Actor);
+        }
+    }
+
+    const bool removedFile     = std::filesystem::remove(path);
     const bool removeStorjFile = std::filesystem::remove(fmt::format("{}{}", path, DFS::Fragments::Extension));
     message = fmt::format("[Dfs] Remove file {} - {} by path - {}. Storj file has been - {}.", msg.FileName, (removedFile ? "removed" : "not removed")
                           , path, removeStorjFile ? "removed" : "not removed");
@@ -359,7 +379,7 @@ std::string DfsController::insertFragment(const DFSP::SegmentMessage &msg) {
 
 void DfsController::addListFiles(const QStringList &files) {
     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
-    const auto actor = node.accountController()->mainActor();
+    const auto     actor = node->accountController()->mainActor();
     ThreadAddFiles addFilesThread(this, actor, files);
     connect(&addFilesThread, &ThreadAddFiles::added, this,
             [&](DFSP::AddFileMessage msg, std::string filePath, std::string scriptPath) {
@@ -379,7 +399,7 @@ void DfsController::addListFiles(const QStringList &files) {
     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
             [&](DFSP::AddFileMessage msg, MessageType messageType) {
                 qDebug() << "send file: " << msg.FileName.c_str();
-                node.network()->send_message(msg, MessageType::DfsAddFile);
+                node->network()->send_message(msg, MessageType::DfsAddFile);
             });
     connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
         qDebug() << error.c_str();
@@ -679,34 +699,37 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
 
 void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DFSP::RequestDfsSize msg { actorId.toStdString() };
-    node.network()->send_message(msg, MessageType::RequestDfsSize, MessageStatus::Request);
+    node->network()->send_message(msg, MessageType::RequestDfsSize, MessageStatus::Request);
 }
 
 void DfsController::sendSizeReponseMsg(const DFS::Packets::RequestDfsSize &msg,
                                        const std::string &messageId) const {
     const auto dfsSize = calculateSizeTaken();
     DFSP::ResponseDfsSize response { .Actor = msg.Actor, .Size = dfsSize };
-    node.network()->send_message(response, MessageType::ResponseDfsSize, MessageStatus::Response, messageId);
+    node->network()->send_message(response, MessageType::ResponseDfsSize, MessageStatus::Response, messageId);
 }
 
 void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
     DFSP::RequestDfsSize msg { actorId.toStdString() };
-    node.network()->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+    node->network()->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
 }
 
 void DfsController::sendCountReponseMsg(const DFS::Packets::RequestBlockCount &msg,
                                        const std::string &messageId, BigNumber dfsCount) const {
     DFSP::ResponseBlockCount response { .Actor = msg.Actor, .blockCount = dfsCount };
-    node.network()->send_message(response, MessageType::ResponseBlockCount, MessageStatus::Response, messageId);
+    node->network()
+        ->send_message(response, MessageType::ResponseBlockCount, MessageStatus::Response, messageId);
 }
 
 void DfsController::requestSync() {
-    node.network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified,
-                                 MessageStatus::Request);
+    node->network()->send_message(
+        Utils::currentDateSecs(),
+        MessageType::DfsLastModified,
+        MessageStatus::Request);
 }
 
 void DfsController::requestDirFileAllActors() {
-    m_unsynchonizedDirs = node.actorIndex()->allActorsStd();
+    m_unsynchonizedDirs = node->actorIndex()->allActorsStd();
     if (!m_unsynchonizedDirs.empty())
         requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
 }
@@ -722,7 +745,7 @@ void DfsController::sendSync(uint64_t lastModified, const std::string &messageId
 }
 
 void DfsController::requestDirData(const ActorId &actorId) {
-    node.network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
+    node->network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
 }
 
 void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId) {
@@ -731,8 +754,12 @@ void DfsController::sendDirData(const ActorId &actorId, uint64_t lastModified, c
     }
     auto rows = DFST::ActorDirFile::getDirRows(actorId.toStdString(), lastModified);
     if (!rows.empty()) {
-        node.network()->send_message(std::pair { actorId, rows }, MessageType::DfsDirData,
-                                     MessageStatus::Response, messageId, Config::Net::TypeSend::Focused);
+        node->network()->send_message(
+            std::pair { actorId, rows },
+            MessageType::DfsDirData,
+            MessageStatus::Response,
+            messageId,
+            Config::Net::TypeSend::Focused);
     } else {
         eraseFirstUnsynchronizedDir();
     }
@@ -756,8 +783,10 @@ void DfsController::requestFile(const ActorId &actorId, const std::string &fileN
         return;
 
     std::filesystem::remove(DFS_PATH::filePath(actorId, fileName));
-    node.network()->send_message(std::pair { actorId, fileName }, MessageType::DfsRequestFile,
-                                 MessageStatus::Request);
+    node->network()->send_message(
+        std::pair { actorId, fileName },
+        MessageType::DfsRequestFile,
+        MessageStatus::Request);
 }
 
 void DfsController::sendFile(const std::string &actorId, const std::string &fileName,
@@ -774,10 +803,14 @@ void DfsController::sendFile(const std::string &actorId, const std::string &file
                                  .Size = dirRow.fileSize };
 
     if (messageId.empty()) {
-        node.network()->send_message(msg, MessageType::DfsAddFile);
+        node->network()->send_message(msg, MessageType::DfsAddFile);
     } else {
-        node.network()->send_message(msg, MessageType::DfsAddFile, MessageStatus::Response, messageId,
-                                     Config::Net::TypeSend::Focused);
+        node->network()->send_message(
+            msg,
+            MessageType::DfsAddFile,
+            MessageStatus::Response,
+            messageId,
+            Config::Net::TypeSend::Focused);
     }
 }
 
@@ -792,7 +825,7 @@ void DfsController::requestFileSegment(const DFSP::DirRow &row) {
                                                        .FileHash = row.fileHash,
                                                        .Path = row.filePath,
                                                        .Offset = 0 };
-        node.network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
+        node->network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
     }
 }
 
@@ -811,7 +844,7 @@ void DfsController::beginFetchNextFile() {
 
 void DfsController::requestNextFragment(const DFS::Packets::RequestFileSegmentMessage &msg) {
     qDebug() << "request next fragment";
-    node.network()->send_message(msg, MessageType::DfsRequestFileSegment, MessageStatus::Request);
+    node->network()->send_message(msg, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 }
 
 std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &msg,
@@ -837,8 +870,12 @@ std::string DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &m
                                       .Data = std::move(data),
                                       .Offset = msg.Offset };
 
-    node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
-                                 Config::Net::TypeSend::Focused);
+    node->network()->send_message(
+        fragment,
+        MessageType::DfsAddSegment,
+        MessageStatus::Response,
+        messageId,
+        Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
         emit uploaded(msg.Actor, msg.FileName);
         return "";
@@ -882,14 +919,17 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
                                           .Data = std::move(data),
                                           .Offset = totalOffset };
 
-        messageId =
-            node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response,
-                                         messageId, Config::Net::TypeSend::Focused);
+        messageId = node->network()->send_message(
+            fragment,
+            MessageType::DfsAddSegment,
+            MessageStatus::Response,
+            messageId,
+            Config::Net::TypeSend::Focused);
 
         if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
             if (std::filesystem::exists(Scripts::folder + "/" + msg.FileName)) {
-                node.network()->send_message(fragment, MessageType::BlockchainCopyScript);
+                node->network()->send_message(fragment, MessageType::BlockchainCopyScript);
             }
         } else {
             emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
@@ -932,8 +972,12 @@ void DfsController::fetchFragment(DFS::Packets::RequestFileSegmentMessage &msg, 
                                       .Data = std::move(data),
                                       .Offset = totalOffset };
 
-    node.network()->send_message(fragment, MessageType::DfsAddSegment, MessageStatus::Response, messageId,
-                                 Config::Net::TypeSend::Focused);
+    node->network()->send_message(
+        fragment,
+        MessageType::DfsAddSegment,
+        MessageStatus::Response,
+        messageId,
+        Config::Net::TypeSend::Focused);
 
     if (lastFragment) {
         emit uploaded(msg.Actor, msg.FileName);
@@ -957,8 +1001,12 @@ void DfsController::verifyFiles(std::vector<DFS::Packets::VerifyFileMessage> &fi
         }
     }
     std::vector<std::string> serializedData = MessagePack::serializeContainer(fileList);
-    node.network()->send_message(serializedData, MessageType::DfsVerifyList, MessageStatus::Response,
-                                 messageId, Config::Net::TypeSend::Focused);
+    node->network()->send_message(
+        serializedData,
+        MessageType::DfsVerifyList,
+        MessageStatus::Response,
+        messageId,
+        Config::Net::TypeSend::Focused);
 }
 
 float DfsController::percentVerified(std::vector<DFS::Packets::VerifyFileMessage> &fileList) {
@@ -1368,4 +1416,30 @@ void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, con
     //        std::filesystem::copy(filePath, scriptPath);
     //    };
     emit added(msg, filePath.string());
+}
+
+void DfsController::loadVPNLocalizationFiles() {
+    DBConnector dirsFile(DFSB::dirsPath);
+    dirsFile.open();
+
+    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {}", DFST::DirsFile::TableName));
+    for (const auto &row : actors) {
+        auto        actorID     = row.begin()->second;
+        DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorID);
+
+        auto actorRows = actrDirFile.select(fmt::format(
+            "SELECT fileName FROM {} WHERE filePath='localizationInfo' AND state={}",
+            DFST::ActorDirFile::TableName,
+            std::to_string(static_cast<int>(DFS::Basic::FileState::Loaded))));
+        for (const auto &actorRow : actorRows) {
+            for (const auto &actorCol : actorRow) {
+                auto fileName = actorCol.second;
+                emit vpnLocalizationLoadedFromStorage(actorID, fileName);
+            }
+        }
+
+        actrDirFile.close();
+    }
+
+    dirsFile.close();
 }

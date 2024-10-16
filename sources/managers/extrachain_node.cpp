@@ -41,8 +41,47 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
-    : isClientApplication(isClientApp) {
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(
+    QObject* parent,
+    bool     isClientApp,
+    bool     allowRunRestApiServer,
+    bool     isRaccoonCheck)
+    : QObject(parent)
+    , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+}
+
+ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
+    qInfo() << "ExtraChainNodeWrapper::~ExtraChainNodeWrapper";
+
+    if (m_thread) {
+        m_thread->quit();
+        m_thread->wait();
+        node->deleteLater();
+    } else
+        delete node;
+}
+
+void ExtraChainNodeWrapper::Init(bool makeAsync) {
+    if (makeAsync) {
+        m_thread = new QThread();
+        node->moveToThread(m_thread);
+        connect(m_thread, &QThread::started, node, &ExtraChainNode::InitNodeSlot);
+
+        connect(m_thread, &QThread::finished, node, &QObject::deleteLater);
+        connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
+        connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
+        m_thread->start();
+    } else
+        node->InitNodeSlot();
+}
+
+ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, bool isRaccoonCheck)
+    : isClientApplication(isClientApp)
+    , isRaccoon(isRaccoonCheck)
+    , allowRunRestApiServer(allowRunRestApiServer) {
+}
+
+void ExtraChainNode::InitNodeSlot() {
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -55,15 +94,15 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
     }
 
     prepareFolders();
-    m_actorIndex        = new ActorIndex(*this);
-    m_accountController = new AccountController(*this);
+    m_actorIndex        = new ActorIndex(this);
+    m_accountController = new AccountController(this);
 
-    m_networkManager = new NetworkManager(*this);
+    m_networkManager = new NetworkManager(this);
     //    ThreadPool::addThread(m_networkManager);
 
-    m_blockchain         = new Blockchain(*this);
-    m_transactionManager = new TransactionManager(*this);
-    m_dfs                = new DfsController(*this);
+    m_blockchain         = new Blockchain(this);
+    m_transactionManager = new TransactionManager(this);
+    m_dfs                = new DfsController(this);
 
     m_dmm = new DataMiningManager(this);
     // test port and address
@@ -71,8 +110,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
         new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
 
     m_tokenManager = std::make_shared<TokenManager>(*this, this);
-
-    connectSignals();
 
     static QTimer getAllActorsTimer;
     connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
@@ -84,6 +121,9 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer)
 
     // ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_transactionManager);
+
+    connectSignals();
+    emit NodeInitialised();
 }
 
 uint64_t ExtraChainNode::getBlockCount() const {
@@ -91,14 +131,17 @@ uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    delete m_dfs;
-    delete m_actorIndex;
-    delete m_transactionManager;
-    delete m_blockchain;
-    delete m_accountController;
-    delete m_dmm;
-    delete m_connectionsManager;
-    delete m_networkManager;
+    qInfo("ExtraChainNode::~ExtraChainNode");
+    if (m_vpnClearFunc) {
+        m_vpnClearFunc();
+    }
+}
+
+void ExtraChainNode::cleanUp() {
+    m_networkManager->deleteLater();
+    m_blockchain->deleteLater();
+    m_transactionManager->deleteLater();
+    m_dfs->deleteLater();
 }
 
 bool ExtraChainNode::createNewNetwork(
@@ -484,6 +527,7 @@ void ExtraChainNode::connectSignals() {
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+        emit readyInitLocalizationFiles();
         m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
     });
@@ -578,4 +622,9 @@ void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
     std::exit(0);
+}
+
+void ExtraChainNode::InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFunc) {
+    vpnConnectorManagerFunc = vpnFunc;
+    m_vpnClearFunc          = vpnClearFunc;
 }

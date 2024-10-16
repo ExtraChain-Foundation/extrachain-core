@@ -55,7 +55,7 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     Q_OBJECT
 
 private:
-    ExtraChainNode &node;
+    ExtraChainNode *node;
 
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
@@ -63,7 +63,7 @@ private:
     // service //
 
 public:
-    explicit Blockchain(ExtraChainNode &node);
+    explicit Blockchain(ExtraChainNode *node);
     std::expected<BlockVariant, BlockError> getBlockByHash(const QByteArray &hash);
     ~Blockchain();
 

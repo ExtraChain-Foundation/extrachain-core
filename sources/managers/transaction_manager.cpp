@@ -35,8 +35,9 @@ std::set<Transaction> TransactionManager::getPendingTxs() const {
     return m_pendingTxList;
 }
 
-TransactionManager::TransactionManager(ExtraChainNode &node)
-    : node(node) {
+TransactionManager::TransactionManager(ExtraChainNode *node)
+    : QObject(node)
+    , node(node) {
     // setup timer
     blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
     connect(
@@ -82,11 +83,11 @@ void TransactionManager::runMakeAndProveBlockTimers() {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if (node.accountController()->empty())
+    if (node->accountController()->empty())
         return;
 
-    auto lastRealBlock = node.blockchain()->getLastRealBlock();
-    auto lastBlock     = node.blockchain()->getLastBlock();
+    auto lastRealBlock = node->blockchain()->getLastRealBlock();
+    auto lastBlock     = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
@@ -110,7 +111,7 @@ void TransactionManager::makeBlock() {
         qDebug() << "[TransactionManager] No active connections";
 
         if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-            node.blockchain()->removeDummyBlocks();
+            node->blockchain()->removeDummyBlocks();
         }
         return;
     }
@@ -119,11 +120,11 @@ void TransactionManager::makeBlock() {
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
                            << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto actor   = node.accountController()->mainActor();
-        const auto genesis = node.blockchain()->createGenesisBlock(actor);
+        const auto actor   = node->accountController()->mainActor();
+        const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
-            node.blockchain()->sendBlock(genesis.value());
+            node->blockchain()->sendBlock(genesis.value());
         }
 
         return;
@@ -144,8 +145,8 @@ void TransactionManager::makeBlock() {
         dummyBlock.setPrev(lastBlock.value());
         dummyBlock.addData(lastRealBlock->getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
-        node.blockchain()->signBlock(dummyBlockVariant);
-        node.blockchain()->sendBlock(dummyBlockVariant);
+        node->blockchain()->signBlock(dummyBlockVariant);
+        node->blockchain()->sendBlock(dummyBlockVariant);
         prevDummy = lastBlock->getIndex() + 1;
         return;
     }
@@ -156,8 +157,8 @@ void TransactionManager::makeBlock() {
     this->m_pendingTxList.clear();
 
     auto blockVariant = BlockVariant(block);
-    node.blockchain()->signBlock(blockVariant);
-    node.blockchain()->sendBlock(blockVariant);
+    node->blockchain()->signBlock(blockVariant);
+    node->blockchain()->sendBlock(blockVariant);
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
@@ -167,7 +168,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 
 void TransactionManager::proveTransactions() {
     for (const Transaction &tx : std::as_const(m_receivedTxList)) {
-        TransactionProveError res = node.blockchain()->proveTransaction(tx);
+        TransactionProveError res = node->blockchain()->proveTransaction(tx);
 
         if (res == TransactionProveError::NoError) {
             qDebug() << "[TransactionManager] Transaction approved:" << tx;

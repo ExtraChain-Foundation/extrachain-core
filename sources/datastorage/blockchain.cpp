@@ -28,8 +28,9 @@
 #undef qCritical // temp
 #define qCritical qDebug
 
-Blockchain::Blockchain(ExtraChainNode &node)
-    : node(node) {
+Blockchain::Blockchain(ExtraChainNode *node)
+    : QObject(node)
+    , node(node) {
 }
 
 Blockchain::~Blockchain() {
@@ -42,7 +43,7 @@ Blockchain::getBlockByIndex(const BigNumber &index, const bool makeRequestBlock)
         return std::unexpected(BlockError::NotExists);
     if (block->isEmpty() && index >= 0 && makeRequestBlock) {
         std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
-        // node.network()->send_message(requestData, MessageType::BlockchainRequestBlock);
+        // node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
         return std::unexpected(BlockError::NotExists);
     }
     return block;
@@ -88,7 +89,7 @@ void Blockchain::sync() {
     if (fromBlock < 0)
         fromBlock = 0;
     qDebug() << "[Blockchain] Request sync from" << fromBlock;
-    node.network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
+    node->network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
@@ -122,14 +123,14 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         }
 
         if (block->isGenesisBlock()) {
-            node.network()->send_message(
+            node->network()->send_message(
                 block->getGenesisBlockConst(),
                 MessageType::BlockchainGenesisBlock,
                 MessageStatus::Response,
                 messageId,
                 Config::Net::TypeSend::Focused);
         } else {
-            node.network()->send_message(
+            node->network()->send_message(
                 block->getBlockConst(),
                 MessageType::BlockchainNewBlock,
                 MessageStatus::Response,
@@ -183,10 +184,10 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
 
     if (block.isGenesisBlock()) {
         auto genesisBlock = block.getGenesisBlockConst();
-        node.network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock);
+        node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock);
     } else {
         auto dataBlock = block.getBlockConst();
-        node.network()->send_message(*dataBlock, MessageType::BlockchainNewBlock);
+        node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock);
     }
 
     qDebug() << "Send" << block;
@@ -372,7 +373,7 @@ Blockchain::getTransaction(SearchEnum::TxParam type, const QByteArray &value, co
 }
 
 bool Blockchain::validateBlock(const BlockVariant &block) {
-    return node.actorIndex()->validateBlock(block);
+    return node->actorIndex()->validateBlock(block);
 }
 
 BlockVariant Blockchain::validateAndReturnBlock(const BlockVariant &block) const {
@@ -389,7 +390,7 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
 
     auto firstId = ActorId(*block.dataService().begin());
     if (!firstId.isZero())
-        node.actorIndex()->setFirstId(firstId);
+        node->actorIndex()->setFirstId(firstId);
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant &block) {
@@ -468,7 +469,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     // getSmContractMembers(newBlock);
 
     if (blockId > 0 && blockId % DFS::Reward::coinProductionAlgorithmTick == 0) {
-        node.dataMiningManager()->requestCoinReward();
+        node->dataMiningManager()->requestCoinReward();
     }
 
     return res;
@@ -616,7 +617,7 @@ Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &b
 }
 
 void Blockchain::signBlock(BlockVariant &block) const {
-    block.sign(node.accountController()->currentWallet());
+    block.sign(node->accountController()->currentWallet());
 }
 
 BigNumber Blockchain::getRecords() const {
@@ -706,8 +707,8 @@ void Blockchain::getSmContractMembers(const BlockVariant &block) const {
     auto txList = block.transactions();
     for (const Transaction &tx : txList) {
         if (tx.getData() == "InitContract") {
-            node.actorIndex()->getActor(tx.getSender());
-            node.actorIndex()->getActor(tx.getReceiver());
+            node->actorIndex()->getActor(tx.getSender());
+            node->actorIndex()->getActor(tx.getReceiver());
         }
     }
 }
@@ -747,7 +748,7 @@ void Blockchain::addBlockFromNetwork(const BlockVariant &block) {
     auto list = block.transactions();
     for (const auto &tmp : std::as_const(list)) {
         QList<ActorId> list;
-        auto           accounts = node.accountController()->accounts();
+        auto           accounts = node->accountController()->accounts();
         for (const auto &tmp : std::as_const(accounts))
             list.append(tmp->id());
         if (list.contains(tmp.getSender())) {
@@ -768,10 +769,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
     ActorId        targetSender   = tx.getSender();
     ActorId        targetReceiver = tx.getReceiver();
-    const ActorId &mainActorId    = node.accountController()->mainActor()->id();
-    const ActorId &firstId        = node.actorIndex()->firstId();
+    const ActorId &mainActorId    = node->accountController()->mainActor()->id();
+    const ActorId &firstId        = node->actorIndex()->firstId();
 
-    const auto accounts = node.accountController()->accountsIds();
+    const auto accounts = node->accountController()->accountsIds();
     for (const auto &accountId : accounts) {
         if (accountId == firstId)
             continue;
@@ -780,7 +781,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
             if (tx.isRewardTransaction()) {
                 auto approverId = tx.getApprover();
                 if (targetSender == ActorId() && !approverId.isZero()) {
-                    auto approver = node.actorIndex()->getActor(approverId);
+                    auto approver = node->actorIndex()->getActor(approverId);
                     bool res      = tx.verify(approver);
                     if (res) {
                         if (tx.getToken() != ActorId()) {
@@ -817,11 +818,11 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
     Actor<KeyPublic> senderActor;
     if (!targetSender.isZero())
-        senderActor = node.actorIndex()->getActor(targetSender);
+        senderActor = node->actorIndex()->getActor(targetSender);
     Actor<KeyPublic> receiverActor;
 
     if (!targetReceiver.isZero())
-        receiverActor = node.actorIndex()->getActor(targetReceiver);
+        receiverActor = node->actorIndex()->getActor(targetReceiver);
 
     if (tx.getAmount() == 0) {
         return TransactionProveError::AmountZero;
@@ -857,7 +858,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
     if (targetSender.isZero()) {
         Actor<KeyPublic> producerActor;
         if (!tx.getProducer().isZero())
-            producerActor = node.actorIndex()->getActor(tx.getProducer());
+            producerActor = node->actorIndex()->getActor(tx.getProducer());
         else {
             // return TransactionProveError::ZeroProducer;
         }
@@ -882,7 +883,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
         qDebug() << "target received is empty";
 
         Transaction provedTx(tx);
-        provedTx.sign(node.accountController()->currentWallet());
+        provedTx.sign(node->accountController()->currentWallet());
         return TransactionProveError::NoError;
     } else {
         if (tx.getData() == "InitContract") {
@@ -891,7 +892,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
         if (targetSender != firstId) {
             BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx.getToken());
-            senderCurrentBalance += node.transactionManager()->checkPendingTxsList(targetSender);
+            senderCurrentBalance += node->transactionManager()->checkPendingTxsList(targetSender);
 
             BigNumberFloat transactionAmount = tx.getAmount();
             BigNumberFloat transactionFee    = 0; // transactionAmount / 100;
@@ -905,7 +906,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
             return TransactionProveError::NoError;
         } else {
             // Transaction provedTx(tx);
-            // provedTx.sign(node.accountController()->currentWallet());
+            // provedTx.sign(node->accountController()->currentWallet());
             return TransactionProveError::NoError;
         }
 

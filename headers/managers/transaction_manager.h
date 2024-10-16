@@ -47,12 +47,12 @@ private:
     std::set<Transaction> m_pendingTxList;
     std::set<Transaction> m_receivedTxList;
 
-    ExtraChainNode &node;
+    ExtraChainNode *node;
     // received transactions that we need to compare between network and blockchain
 
 public:
     // todo: add ref to blockchain
-    TransactionManager(ExtraChainNode &node);
+    TransactionManager(ExtraChainNode *node);
 
 private:
     void addTransaction(const Transaction &tx);
