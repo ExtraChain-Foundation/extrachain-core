@@ -27,6 +27,7 @@
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
+#include <QTimer>
 
 #include "datastorage/transaction.h"
 #include "extrachain_global.h"
@@ -95,17 +96,14 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
-    std::shared_ptr<CreateTokenManager> m_createTokenManager = nullptr;
-
-    // RestApiServerManager *m_restApiServerManager = nullptr;
-    // ContractManager *m_contractManager = nullptr;
+    CreateTokenManager* m_createTokenManager = nullptr;
+    QTimer*             timer                = nullptr;
 
     bool                   started             = false;
     bool                   isClientApplication = false;
     bool                   allowRunRestApiServer = false;
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
-
     VpnFunctionClearType m_vpnClearFunc = nullptr;
 
 public:
@@ -164,7 +162,7 @@ public:
 
     void                                InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
     VpnFunctionType                     vpnConnectorManagerFunc = nullptr;
-    std::shared_ptr<CreateTokenManager> createTokenManager() const;
+    CreateTokenManager *createTokenManager() const;
     bool                                isRaccoon;
 
     VPNConfigStorage vpnConfigStorage;

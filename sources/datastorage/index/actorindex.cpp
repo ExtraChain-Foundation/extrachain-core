@@ -33,7 +33,7 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal(QString("db for actors (open: %1, create: %2)")
+        qFatal("%s", QString("db for actors (open: %1, create: %2)")
                    .arg(isDbOpen, isDbCreate)
                    .toStdString()
                    .c_str());
@@ -200,7 +200,7 @@ void ActorIndex::setFirstId(const ActorId &value) {
                                .arg(firstId().toString())
                                .arg(value.toString())
                                .toStdString();
-            qFatal(message.c_str());
+            qFatal("%s", message.c_str());
         }
         return;
     }
