@@ -56,7 +56,6 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     if (m_thread) {
         m_thread->quit();
         m_thread->wait();
-        node->deleteLater();
     } else
         delete node;
 }
@@ -94,30 +93,23 @@ void ExtraChainNode::InitNodeSlot() {
     }
 
     prepareFolders();
-    m_actorIndex        = new ActorIndex(this);
-    m_accountController = new AccountController(this);
-
-    m_networkManager = new NetworkManager(this);
-    //    ThreadPool::addThread(m_networkManager);
-
+    m_actorIndex         = new ActorIndex(this);
+    m_accountController  = new AccountController(this);
+    m_networkManager     = new NetworkManager(this);
     m_blockchain         = new Blockchain(this);
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
-
-    m_dmm = new DataMiningManager(this);
-    // test port and address
+    m_dmm                = new DataMiningManager(this);
+    auto key = actorIndex()->firstId().toByteArray();
+    auto address = "12.12.12.12";
+    auto port = "1212";
     m_connectionsManager =
-        new ConnectionsManager("12.12.12.12", "1212", actorIndex()->firstId().toByteArray(), this);
+        new ConnectionsManager(address, port, key, this);
+    m_createTokenManager = new CreateTokenManager(m_actorIndex, this);
 
-    m_createTokenManager = std::make_shared<CreateTokenManager>(m_actorIndex, this);
-
-    static QTimer getAllActorsTimer;
-    connect(&getAllActorsTimer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    getAllActorsTimer.start(30000);
-
-    if (allowRunRestApiServer) {
-        // m_restApiServerManager = new RestApiServerManager(this);
-    }
+    timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
+    timer->start(30000);
 
     connectSignals();
     emit NodeInitialised();
@@ -127,12 +119,7 @@ uint64_t ExtraChainNode::getBlockCount() const {
     return blockCount;
 }
 
-ExtraChainNode::~ExtraChainNode() {
-    qInfo("ExtraChainNode::~ExtraChainNode");
-    if (m_vpnClearFunc) {
-        m_vpnClearFunc();
-    }
-}
+ExtraChainNode::~ExtraChainNode() {}
 
 void ExtraChainNode::cleanUp() {
     m_networkManager->deleteLater();
@@ -283,7 +270,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     return tx;
 }
 
-std::shared_ptr<CreateTokenManager> ExtraChainNode::createTokenManager() const
+CreateTokenManager* ExtraChainNode::createTokenManager() const
 {
     return m_createTokenManager;
 }
@@ -562,14 +549,14 @@ void ExtraChainNode::connectSignals() {
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendTransactionCreateToken,this,
+    connect(m_createTokenManager, &CreateTokenManager::sendTransactionCreateToken,this,
             [&](const Transaction &tx) { m_transactionManager->addTransaction(tx);
     });
-    connect(m_createTokenManager.get(), &CreateTokenManager::sendToken, this,
+    connect(m_createTokenManager, &CreateTokenManager::sendToken, this,
     [=, this](const QString &pathCreatedTokenJson) {
         m_dfs->addListFiles(QStringList(QList<QString>{pathCreatedTokenJson}));
     });
-    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager.get(), &CreateTokenManager::checkIsContract);
+    connect(m_dfs, &DfsController::checkIsContract, m_createTokenManager, &CreateTokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
