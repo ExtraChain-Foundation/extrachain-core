@@ -40,7 +40,7 @@
 //                                    '2', '3', '4', '5', '6', '7', '8', '9' };
 // }
 
-const int float_size = 100;
+const int float_size    = 100;
 using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
 
 /**
@@ -53,7 +53,7 @@ public:
     BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
     BigNumberFloat(const BigNumberFloat &other);
     BigNumberFloat(BigNumberFloat &&other) noexcept;
-    BigNumberFloat(const BigNumber &other);
+    explicit BigNumberFloat(const BigNumber &other);
     BigNumberFloat(int number);
     BigNumberFloat(long long number);
     BigNumberFloat(uint64_t number);
@@ -69,20 +69,20 @@ private:
 #endif
 
 public:
-    BigNumberFloat operator+(const BigNumberFloat &) const;
-    BigNumberFloat operator+(long long) const;
-    BigNumberFloat operator-(const BigNumberFloat &) const;
-    BigNumberFloat operator-(long long) const;
-    BigNumberFloat operator*(const BigNumberFloat &) const;
-    BigNumberFloat operator*(long long) const;
-    BigNumberFloat operator/(const BigNumberFloat &) const;
-    BigNumberFloat operator/(long long) const;
+    BigNumberFloat  operator+(const BigNumberFloat &) const;
+    BigNumberFloat  operator+(long long) const;
+    BigNumberFloat  operator-(const BigNumberFloat &) const;
+    BigNumberFloat  operator-(long long) const;
+    BigNumberFloat  operator*(const BigNumberFloat &) const;
+    BigNumberFloat  operator*(long long) const;
+    BigNumberFloat  operator/(const BigNumberFloat &) const;
+    BigNumberFloat  operator/(long long) const;
     BigNumberFloat &operator=(const BigNumberFloat &);
     BigNumberFloat &operator=(long long);
-    BigNumberFloat &operator++();   // pre increment
-    BigNumberFloat operator++(int); // post increment
-    BigNumberFloat &operator--();   // pre increment
-    BigNumberFloat operator--(int); // post increment
+    BigNumberFloat &operator++();    // pre increment
+    BigNumberFloat  operator++(int); // post increment
+    BigNumberFloat &operator--();    // pre increment
+    BigNumberFloat  operator--(int); // post increment
     BigNumberFloat &operator+=(const BigNumberFloat &);
     BigNumberFloat &operator+=(long long);
     BigNumberFloat &operator-=(const BigNumberFloat &);
@@ -91,17 +91,20 @@ public:
     BigNumberFloat &operator*=(long long);
     BigNumberFloat &operator/=(const BigNumberFloat &);
     BigNumberFloat &operator/=(long long);
-    BigNumberFloat operator-() const;
+    BigNumberFloat  operator-() const;
 
 public:
     const cpp_dec_float_exc &data() const;
-    bool isEmpty() const;
-    QByteArray toByteArray(NumeralBase base = NumeralBase::Hex) const;
-    std::string toStdString(NumeralBase base = NumeralBase::Hex) const;
-    QByteArray toZeroByteArray(int size) const;
-    BigNumberFloat pow(unsigned long number);
+    bool                     isEmpty() const;
+    QByteArray               toByteArray(NumeralBase base = NumeralBase::Hex) const;
+    std::string              toStdString(NumeralBase base = NumeralBase::Hex) const;
+    QByteArray               toZeroByteArray(int size) const;
+    BigNumberFloat           pow(unsigned long number);
     // BigNumberFloat sqrt(unsigned long number = 2) const;
     BigNumberFloat abs() const;
+
+    static std::expected<BigNumberFloat, BigNumberError>
+                          create(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
     static BigNumberFloat random(int n, bool zeroAllowed = true);
     static BigNumberFloat random(int n, const BigNumberFloat &max, bool zeroAllowed = true);
     static BigNumberFloat random(BigNumberFloat max, bool zeroAllowed = true);
@@ -140,7 +143,7 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this = BigNumberFloat(num);
+        *this           = BigNumberFloat(num);
     }
 };
 
@@ -148,8 +151,8 @@ inline size_t qHash(const BigNumberFloat &key, size_t seed) {
     return qHash(key, seed);
 }
 
-QDebug operator<<(QDebug debug, const BigNumberFloat &BigNumberFloat);
-QDebug operator<<(QDebug debug, const cpp_dec_float_exc &BigNumberFloat);
+QDebug        operator<<(QDebug debug, const BigNumberFloat &BigNumberFloat);
+QDebug        operator<<(QDebug debug, const cpp_dec_float_exc &BigNumberFloat);
 std::ostream &operator<<(std::ostream &os, const BigNumberFloat &BigNumberFloat);
 
 #endif // BIGNUMBER_FLOAT_H

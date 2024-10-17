@@ -268,6 +268,29 @@ BigNumberFloat BigNumberFloat::abs() const {
     return BigNumberFloat(res);
 }
 
+std::expected<BigNumberFloat, BigNumberError>
+BigNumberFloat::create(const std::string &bigNumberFloat, NumeralBase base) {
+    if (bigNumberFloat == "inf") {
+        return std::unexpected(BigNumberError::Infinity);
+    }
+
+    try {
+        BigNumberFloat bn;
+        if (bigNumberFloat.empty()) {
+            bn.m_data = cpp_dec_float_exc(0);
+        } else {
+            if (base == NumeralBase::Dec) {
+                bn.m_data = cpp_dec_float_exc(bigNumberFloat);
+            } else {
+                bn = fromHex(bigNumberFloat);
+            }
+        }
+        return bn;
+    } catch (std::exception &) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
+}
+
 BigNumberFloat BigNumberFloat::random(int n, bool zeroAllowed) {
     QByteArray str;
     str.resize(n);
@@ -305,7 +328,7 @@ BigNumberFloat BigNumberFloat::random(BigNumberFloat max, bool zeroAllowed) {
     BigNumberFloat t(b.toStdString());
 
     while (t >= max) {
-        int size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
+        int        size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
         QByteArray res;
         res.clear();
         for (int i = 0; i < size; i++) {

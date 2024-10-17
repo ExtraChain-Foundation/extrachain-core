@@ -71,7 +71,7 @@ public:
     getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
 
-    void sync();
+    void sync(const BigNumber &from = BigNumber());
     void syncResponse(const BigNumber fromBlock, const std::string &messageId);
 
 private:
@@ -273,6 +273,8 @@ signals:
     void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
+    void updateSelf();
+    void addBlockFromNetwork(const BlockVariant &block);
 
     /**
      * @brief possibleMiningChange
@@ -281,7 +283,6 @@ signals:
     void possibleMiningChange(const bool &possibleMinig);
 
 public:
-    void      addBlockFromNetwork(const BlockVariant &block);
     BigNumber getBlockCount();
 
     /**
@@ -290,6 +291,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx);
 
 public slots:
+    void addBlockNetwork(const BlockVariant &block);
     void process();
 };
 

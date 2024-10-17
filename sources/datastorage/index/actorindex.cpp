@@ -29,14 +29,13 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
     DBConnector db(folderPath + "actors");
-    bool isDbOpen = db.open();
-    bool isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
+    bool        isDbOpen   = db.open();
+    bool        isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
 
     if (!isDbOpen || !isDbCreate)
-        qFatal("%s", QString("db for actors (open: %1, create: %2)")
-                   .arg(isDbOpen, isDbCreate)
-                   .toStdString()
-                   .c_str());
+        qFatal(
+            "%s",
+            QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toStdString().c_str());
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
@@ -61,12 +60,12 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
 bool ActorIndex::validateBlock(const BlockVariant &block) {
     auto signatures = block.signatures();
 
-    for (const auto &signature : signatures) {
-        Actor<KeyPublic> actor = this->getActor(signature.actorId);
+    for (const auto &[actorId, signature] : signatures) {
+        Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            qWarning() << "Can not validate block" << block.getIndex() << ": There no actor"
-                       << signature.actorId << "in local storage";
+            qWarning() << "Can not validate block" << block.getIndex() << ": There no actor" << actorId
+                       << "in local storage";
             continue;
         }
 

@@ -35,7 +35,7 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
     TokenId tokenId; /**< Identifier for the associated token */
 
     auto operator<=>(const GenesisDataActor &) const = default;
-    bool operator==(const GenesisDataActor &) const = default;
+    bool operator==(const GenesisDataActor &) const  = default;
 
     /**
      * @brief MessagePack serialization definition
@@ -47,11 +47,12 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
  * @brief Information associated with genesis data
  */
 struct EXTRACHAIN_EXPORT GenesisDataInfo {
-    BigNumberFloat state = 0; /**< State represented as a big number float, default is 0 */
-    DataStorage::DataRowType type = DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
+    BigNumberFloat           state = 0; /**< State represented as a big number float, default is 0 */
+    DataStorage::DataRowType type =
+        DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
 
     auto operator<=>(const GenesisDataInfo &) const = default;
-    bool operator==(const GenesisDataInfo &) const = default;
+    bool operator==(const GenesisDataInfo &) const  = default;
 
     /**
      * @brief MessagePack serialization definition
@@ -71,7 +72,7 @@ using GenesisDataRows = std::map<GenesisDataActor, GenesisDataInfo>;
  */
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 private:
-    std::string m_prevGenHash; // previous genesis block hashes
+    std::string     m_prevGenHash; // previous genesis block hashes
     GenesisDataRows m_dataRows;
 
 public:
@@ -79,14 +80,14 @@ public:
     GenesisBlock(const GenesisBlock &block);
 
     GenesisBlock(
-        std::string &&type,
-        std::string &&data,
-        BigNumber idx,
-        long long date,
-        std::string &&prevHash,
-        std::string &&hash,
-        std::string &&prevGenHash,
-        std::set<Approver> &&signatures,
+        std::string     &&type,
+        std::string     &&data,
+        BigNumber         idx,
+        long long         date,
+        std::string     &&prevHash,
+        std::string     &&hash,
+        std::string     &&prevGenHash,
+        Signatures      &&signatures,
         GenesisDataRows &&dataRows);
 
     // Block interface
@@ -101,16 +102,16 @@ public:
      * @return genesis data row list
      */
     const GenesisDataRows &dataRows() const;
-    std::string toStdString() const override;
+    std::string            toStdString() const override;
 
 protected:
     void calcHash() override;
 
 public:
     std::string getPrevGenHash() const;
-    void setPrevGen(const BlockVariant &block);
-    void setType(BlockType value) override;
-    void setType(const std::string &value) override;
+    void        setPrevGen(const BlockVariant &block);
+    void        setType(BlockType value) override;
+    void        setType(const std::string &value) override;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {

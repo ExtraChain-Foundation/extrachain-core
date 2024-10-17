@@ -158,7 +158,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
 
     return sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-           + (blocksStored / lastIndex * 100);
+           + (blocksStored / BigNumberFloat(lastIndex) * 100);
 }
 
 BigNumberFloat
@@ -181,7 +181,7 @@ DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &reque
     return (
         BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
         + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-        + (BigNumberFloat { requestReward.BlocksStored } / lastIndex * 100));
+        + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
 }
 
 void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {

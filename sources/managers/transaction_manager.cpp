@@ -36,27 +36,9 @@ std::set<Transaction> TransactionManager::getPendingTxs() const {
 }
 
 TransactionManager::TransactionManager(ExtraChainNode *node)
-    : QObject(node)
-    , node(node) {
-    // setup timer
-    blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
-    connect(
-        &blockCreationTimer,
-        &QTimer::timeout,
-        this,
-        &TransactionManager::makeBlockAndProveTransactionsInThread);
-
-
-    qDebug() << "Wait for it...";
-    int milliseconds = QDateTime::currentDateTime().time().msec();
-    int seconds = QDateTime::currentDateTime().time().second();
-    int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
-    QThread::msleep(delayToEvenSecond);
-
-    blockCreationTimer.start();
-    // prove timer
-    //    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
-    //    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
+    : /* QObject(node)
+    ,*/
+    node(node) {
 }
 
 void TransactionManager::removeTransaction(int i) {
@@ -72,12 +54,6 @@ void TransactionManager::addProvedTransaction(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
     emit addToCache(tx.getReceiver().toStdString(), tx);
-}
-
-void TransactionManager::runMakeAndProveBlockTimers() {
-    qDebug() << "[TransactionManager] Start timers";
-    blockCreationTimer.start();
-    proveTimer.start();
 }
 
 // Block making
@@ -195,4 +171,17 @@ BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
         }
     }
     return res;
+}
+
+void TransactionManager::process() {
+    qDebug() << "[TM]";
+    blockTimer = new QTimer(this);
+    connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
+
+    int milliseconds      = QDateTime::currentDateTime().time().msec();
+    int seconds           = QDateTime::currentDateTime().time().second();
+    int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
+    QThread::msleep(delayToEvenSecond);
+
+    blockTimer->start(Config::DataStorage::BLOCK_CREATION_PERIOD);
 }

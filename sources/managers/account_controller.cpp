@@ -44,7 +44,6 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     qDebug() << "[Accounts] Created new profile:" << actor.id();
 
     node->start(); // TODO: remove
-    node->transactionManager()->runMakeAndProveBlockTimers();
 
     node->calculateBlockCount();
     //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
@@ -73,8 +72,8 @@ Actor<KeyPrivate> AccountController::createService(const ActorId &profileActor) 
 }
 
 void AccountController::renameWallet(
-    const ActorId &profileActor,
-    const ActorId &actorId,
+    const ActorId     &profileActor,
+    const ActorId     &actorId,
     const std::string &walletName) {
     auto &profile = getProfile(profileActor.isZero() ? m_currentProfile : profileActor);
     profile.renameWallet(actorId, walletName);
@@ -95,9 +94,7 @@ bool AccountController::load(const std::string &hash) {
 
             m_profiles.push_back(profile);
             m_currentProfile = profile.main()->id();
-            node->start(); // TODO: remove
-            if (this->empty())
-                node->transactionManager()->runMakeAndProveBlockTimers();
+            node->start();            // TODO: remove
             autologinHash.save(hash); // TODO: add arg
             return true;
         }
@@ -183,7 +180,7 @@ std::vector<ActorId> AccountController::profilesList() {
         return {};
 
     file.open(QFile::ReadOnly);
-    auto jsonBytes = file.readAll();
+    auto jsonBytes    = file.readAll();
     auto profilesJson = QJsonDocument::fromJson(jsonBytes).array();
 
     std::vector<ActorId> profiles;

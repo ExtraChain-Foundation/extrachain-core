@@ -104,7 +104,10 @@ void ExtraChainNode::InitNodeSlot() {
     auto address         = "12.12.12.12";
     auto port            = "1212";
     m_connectionsManager = new ConnectionsManager(address, port, key, this);
-    m_tokenManager = new TokenManager(m_actorIndex, this);
+    m_tokenManager       = new TokenManager(this);
+
+    auto thread = ThreadPool::addThread(m_blockchain);
+    ThreadPool::addThread(m_transactionManager, thread);
 
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
@@ -365,7 +368,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer) {
+std::expected<Transaction, TransactionError>
+ExtraChainNode::sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer) {
     auto lastRealBlock = m_blockchain->getLastRealBlock();
 
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
@@ -522,21 +526,24 @@ void ExtraChainNode::connectSignals() {
         m_tokenManager,
         &TokenManager::sendTransactionCreateToken,
         this,
-        [&](const Transaction& tx) {
-            this->sendTransaction(tx, this->accountController()->mainActor());
-            // TODO: use token owner        });
+        [&](const ActorId& actorId, const Transaction& tx) {
+            auto actor = m_accountController->currentProfile().getActor(actorId);
+            this->sendTransaction(tx, actor);
+        });
+
     connect(
         m_tokenManager,
         &TokenManager::sendToken,
         this,
-        [=, this](const QString& pathCreatedTokenJson) {
-            m_dfs->addLocalFile(actor, pathCreatedTokenJson.toStdString(), "contract/token-description.json", DFS::Encryption::Public);
+        [=, this](const ActorId& actorId, const QString& pathToJson) {
+            auto actor = m_accountController->currentProfile().getActor(actorId);
+            m_dfs->addLocalFile(
+                actor,
+                pathToJson.toStdString(),
+                "contract/token-description.json",
+                DFS::Encryption::Public);
         });
-    connect(
-        m_dfs,
-        &DfsController::checkIsContract,
-        m_tokenManager,
-        &TokenManager::checkIsContract);
+    connect(m_dfs, &DfsController::checkIsContract, m_tokenManager, &TokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {

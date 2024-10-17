@@ -30,12 +30,12 @@
 
 // Block comparison result
 struct Approver {
-    ActorId actorId;
-    std::string sign = "";
-    bool isApprove = false;
+    ActorId     actorId;
+    std::string sign      = "";
+    bool        isApprove = false;
 
     std::string toStdString() const {
-        auto actorIdStr = actorId.toStdString();
+        auto               actorIdStr = actorId.toStdString();
         std::ostringstream oss;
         oss << "Approver { "
             << "actor_id: \""
@@ -48,7 +48,7 @@ struct Approver {
     }
 
     auto operator<=>(const Approver &) const = default;
-    bool operator==(const Approver &) const = default;
+    bool operator==(const Approver &) const  = default;
 
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
@@ -74,21 +74,30 @@ enum class BlockError {
     CantMerge,
     MergeEqual
 };
-// MSGPACK_ADD_ENUM(TransactionError)
 FORMAT_ENUM(BlockError)
 
+enum class BlockSignError {
+    NoError,
+    InvalidSignature,
+    NoActorSignature,
+    EmptySignatures
+};
+FORMAT_ENUM(BlockSignError)
+
 class BlockVariant;
+using Signatures   = std::map<ActorId, std::string>;
+using Transactions = std::set<Transaction>;
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    BlockType m_type;                    // simple block, or genesis block (or other)
-    std::set<std::string> m_dataService; // payload (serialized transaction's, or other)
-    BigNumber m_index = BigNumber(-1);   // block id
-    long long m_date;
-    std::string m_prevHash;               // previous block hash
-    std::string m_hash;                   // this block hash (from all previous fields)
-    std::set<Approver> m_signatures;      // digital signature
-    std::set<Transaction> m_transactions; // all transactions
+    BlockType             m_type;                  // simple block, or genesis block (or other)
+    std::set<std::string> m_dataService;           // payload (serialized transaction's, or other)
+    BigNumber             m_index = BigNumber(-1); // block id
+    long long             m_date;
+    std::string           m_prevHash;     // previous block hash
+    std::string           m_hash;         // this block hash (from all previous fields)
+    Signatures            m_signatures;   // digital signature
+    Transactions          m_transactions; // all transactions
 
 public:
     Block();
@@ -102,13 +111,13 @@ public:
      * @brief Block
      */
     Block(
-        std::string &&type,
-        std::string &&data,
-        BigNumber idx,
-        long long date,
-        std::string &&prevHash,
-        std::string &&hash,
-        std::set<Approver> &&signatures,
+        std::string           &&type,
+        std::string           &&data,
+        BigNumber               idx,
+        long long               date,
+        std::string           &&prevHash,
+        std::string           &&hash,
+        Signatures            &&signatures,
         std::set<Transaction> &&transactions);
 
     virtual ~Block();
@@ -118,7 +127,7 @@ protected:
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    virtual void calcHash();
+    virtual void               calcHash();
     virtual const std::string &getDataForSignature() const;
 
 public:
@@ -134,41 +143,38 @@ public:
 
     Transaction getTransactionByHash(std::string hash) const;
 
-    bool contain(Block &from) const;
-
     // digital signature
-    virtual void sign(const std::shared_ptr<Actor<KeyPrivate>> actor) final;
-    virtual bool verify(const Actor<KeyPublic> &actor) const final;
+    void           sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    BlockSignError verify(const Actor<KeyPublic> &actor) const;
 
-    bool equals(const Block &block) const;
-    bool isEmpty() const;
-    QString toString() const;
+    bool                equals(const Block &block) const;
+    bool                isEmpty() const;
+    QString             toString() const;
     virtual std::string toStdString() const;
-    bool operator<(const Block &other);
-    bool isApprover(const ActorId &) const;
+    bool                operator<(const Block &other);
+    bool                isApprover(const ActorId &) const;
 
 public:
-    void setPrevHash(const std::string &value);
-    BlockType getType() const;
-    std::string getTypeStr() const;
-    BigNumber getIndex() const;
-    long long getDate() const;
+    void                         setPrevHash(const std::string &value);
+    BlockType                    getType() const;
+    std::string                  getTypeStr() const;
+    BigNumber                    getIndex() const;
+    long long                    getDate() const;
     const std::set<std::string> &dataService() const;
-    std::string getDataMessagePack() const;
-    std::string getHash() const;
-    std::string getPrevHash() const;
-    std::string getSignature() const;
-    const std::set<Approver> &signatures() const;
-    const std::set<Transaction> &transactions() const;
+    std::string                  getDataMessagePack() const;
+    std::string                  getHash() const;
+    std::string                  getPrevHash() const;
+    const Signatures            &signatures() const;
+    const Transactions          &transactions() const;
 
-    void addSignature(const std::string &id, const std::string &sign, bool isApprove);
-    void addSignatures(const std::set<Approver> &approvers);
+    void addSignature(const ActorId &id, const std::string &sign, bool isApprove);
+    void addSignatures(const Signatures &approvers);
     void clearSignatures();
 
-    void setIndex(const BigNumber &index);
-    void setDate(long long value);
-    void setDataServiceFromMessagePack(const std::string &value);
-    Block operator=(const Block &block);
+    void         setIndex(const BigNumber &index);
+    void         setDate(long long value);
+    void         setDataServiceFromMessagePack(const std::string &value);
+    Block        operator=(const Block &block);
     virtual void setType(BlockType value);
     virtual void setType(const std::string &value);
 

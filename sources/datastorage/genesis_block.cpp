@@ -34,15 +34,16 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
     this->m_dataRows    = block.dataRows();
 }
 
-GenesisBlock::GenesisBlock(std::string              &&type,
-                           std::string              &&data,
-                           BigNumber                  idx,
-                           long long                  date,
-                           std::string              &&prevHash,
-                           std::string              &&hash,
-                           std::string              &&prevGenHash,
-                           std::set<Approver>       &&signatures,
-                           std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
+GenesisBlock::GenesisBlock(
+    std::string                                 &&type,
+    std::string                                 &&data,
+    BigNumber                                     idx,
+    long long                                     date,
+    std::string                                 &&prevHash,
+    std::string                                 &&hash,
+    std::string                                 &&prevGenHash,
+    Signatures                                  &&signatures,
+    std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
     : Block(
           std::move(type),
           std::move(data),
@@ -57,12 +58,12 @@ GenesisBlock::GenesisBlock(std::string              &&type,
     setType(type);
 }
 
-void GenesisBlock::addRow(const ActorId& actorId, const TokenId& tokenId, const GenesisDataInfo &row) {
+void GenesisBlock::addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataInfo &row) {
     m_dataRows[{ actorId, tokenId }] = row;
 }
 
 void GenesisBlock::addRows(const GenesisDataRows &dataRows) {
-    for (const auto& [key, row] : dataRows) {
+    for (const auto &[key, row] : dataRows) {
         m_dataRows[key] = row;
     }
 }
@@ -97,7 +98,7 @@ const GenesisDataRows &GenesisBlock::dataRows() const {
 
 void GenesisBlock::setPrevGen(const BlockVariant &block) {
     m_prevGenHash = block.getHash();
-    m_index = block.getIndex() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
+    m_index       = block.getIndex() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 void GenesisBlock::setType(BlockType value) {
@@ -135,7 +136,8 @@ std::string GenesisBlock::toStdString() const {
                + "', "
         << "prev gen: '"
         << (m_prevGenHash.length() > 10
-                ? m_prevGenHash.substr(0, 5) + "..." + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
+                ? m_prevGenHash.substr(0, 5) + "..."
+                      + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
                 : m_prevGenHash)
         << "', "
         << "hash: '"

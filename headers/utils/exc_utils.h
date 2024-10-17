@@ -29,6 +29,7 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
+#include "utils/bignumber_float.h"
 #include <msgpack.hpp>
 
 #include <boost/algorithm/string/classification.hpp>
@@ -53,7 +54,7 @@ using namespace magic_enum::bitwise_operators;
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
             static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name = magic_enum::enum_type_name<E>();                                         \
+            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
             string_view value_name = magic_enum::enum_name(Enum);                                            \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
         }                                                                                                    \
@@ -77,23 +78,23 @@ void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
 namespace Network {
 Q_NAMESPACE
 
-static bool isStartedServer = true;
-static quint16 maxConnections = 100;
-static bool networkDebug = false;
+static bool    isStartedServer = true;
+static quint16 maxConnections  = 100;
+static bool    networkDebug    = false;
 
 enum class Protocol {
     Undefined = 0,
-    Udp = 1,
+    Udp       = 1,
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)
 
 enum class SocketServiceError {
-    Unknown = 0,
-    IncompatibleVersion = 1,
-    IncompatibleNetwork = 2,
+    Unknown                = 0,
+    IncompatibleVersion    = 1,
+    IncompatibleNetwork    = 2,
     IncompatibleIdentifier = 3,
-    DuplicateIdentifier = 4,
+    DuplicateIdentifier    = 4,
 };
 Q_ENUM_NS(SocketServiceError)
 
@@ -229,7 +230,7 @@ FORMAT_ENUM(Config::Net::TypeSend)
 namespace Errors {
 // IO
 static const int FILE_ALREADY_EXISTS = 101;
-static const int FILE_IS_NOT_OPENED = 102;
+static const int FILE_IS_NOT_OPENED  = 102;
 
 // Blocks
 // static const int BLOCK_IS_NOT_VALID = 201;
@@ -244,7 +245,7 @@ namespace Serialization {
 
 // Delimiters //
 static const int TRANSACTION_FIELD_SIZE = 4;
-static const int DEFAULT_FIELD_SIZE = 8;
+static const int DEFAULT_FIELD_SIZE     = 8;
 
 EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
 EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
@@ -272,9 +273,9 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
     }
 
     try {
-        msgpack::object_handle oh = msgpack::unpack(data.data(), data.size());
-        msgpack::object deserialized = oh.get();
-        auto t = deserialized.as<T>();
+        msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
+        msgpack::object        deserialized = oh.get();
+        auto                   t            = deserialized.as<T>();
         return t;
     } catch (std::exception &e) {
         qDebug() << e.what();
@@ -308,10 +309,11 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 } // namespace MessagePack
 
 namespace Token {
-static const std::string folder_tokens = "tokens";
-static const std::string db_tokens = "tokens";
-static const std::string tokenTableName = "tokens";
-static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
+static const auto        MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
+static const std::string folder_tokens   = "tokens";
+static const std::string db_tokens       = "tokens";
+static const std::string tokenTableName  = "tokens";
+static const std::string db_tokens_path  = fmt::format("{}/{}", folder_tokens, db_tokens);
 static const std::string tokenTableCreate =
     "CREATE TABLE IF NOT EXISTS tokens("
     "actorId       TEXT  PRIMARY KEY NOT NULL, "

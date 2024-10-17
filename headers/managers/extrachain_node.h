@@ -96,20 +96,20 @@ private:
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
-    TokenManager* m_tokenManager = nullptr;
+    TokenManager*       m_tokenManager       = nullptr;
     QTimer*             timer                = nullptr;
 
-    bool                   started             = false;
-    bool                   isClientApplication = false;
+    bool                   started               = false;
+    bool                   isClientApplication   = false;
     bool                   allowRunRestApiServer = false;
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
-    VpnFunctionClearType m_vpnClearFunc = nullptr;
+    VpnFunctionClearType   m_vpnClearFunc = nullptr;
 
 public:
     ~ExtraChainNode();
 
-    bool createNewNetwork(const std::string &login, const std::string &password);
+    bool createNewNetwork(const std::string& login, const std::string& password);
     void start();
 
     bool isClientApp() {
@@ -146,7 +146,8 @@ public:
     std::expected<Transaction, TransactionError>
     createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer);
+    std::expected<Transaction, TransactionError>
+    sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();
@@ -157,18 +158,15 @@ public:
 
     uint64_t getBlockCount() const;
 
-    void                                InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
-    VpnFunctionType                     vpnConnectorManagerFunc = nullptr;
-    CreateTokenManager *tokenManager() const;
-    bool                                isRaccoon;
+    void            InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
+    VpnFunctionType vpnConnectorManagerFunc = nullptr;
+    TokenManager*   tokenManager() const;
+    bool            isRaccoon;
 
     VPNConfigStorage vpnConfigStorage;
 
 private:
-    ExtraChainNode(
-        bool     isClientApp           = false,
-        bool     allowRunRestApiServer = false,
-        bool     isRaccoon             = false);
+    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
 
     friend class ExtraChainNodeWrapper;
 
@@ -193,7 +191,7 @@ signals:
     void InitNode();
     void NodeInitialised();
     void ready();
-    void coinResponse(ActorId receiver, BigNumber amount, ActorId plsr);
+    void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void readyInitLocalizationFiles();
     void vpnConnected();

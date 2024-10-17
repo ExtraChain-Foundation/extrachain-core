@@ -489,12 +489,12 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             db.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
         }
 
-        auto listSign = block.signatures();
-        for (const auto &sign : listSign) {
+        auto signatures = block.signatures();
+        for (const auto &[actorId, sign] : std::as_const(signatures)) {
             DBRow rowRow;
-            rowRow.insert({ "actorId", sign.actorId.toStdString() });
-            rowRow.insert({ "signature", sign.sign });
-            rowRow.insert({ "isApprove", std::to_string(sign.isApprove) });
+            rowRow.insert({ "actorId", actorId.toStdString() });
+            rowRow.insert({ "signature", sign });
+            rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
@@ -548,12 +548,12 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
                 countTransactions++;
         }
 
-        auto listSign = block.signatures();
-        for (const auto &sign : listSign) {
+        auto signatures = block.signatures();
+        for (const auto &[actorId, sign] : std::as_const(signatures)) {
             DBRow rowRow;
-            rowRow.insert({ "actorId", sign.actorId.toStdString() });
-            rowRow.insert({ "signature", sign.sign });
-            rowRow.insert({ "isApprove", std::to_string(sign.isApprove) });
+            rowRow.insert({ "actorId", actorId.toStdString() });
+            rowRow.insert({ "signature", sign });
+            rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
@@ -734,24 +734,22 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     }
 
     std::vector<DBRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
-    std::set<Approver> signatures;
+    Signatures         signatures;
 
     for (const auto &dbSign : dbSigns) {
-        auto block_sign = Approver { .actorId   = dbSign.at("actorId"),
-                                     .sign      = dbSign.at("signature"),
-                                     .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
-        signatures.insert(block_sign);
+        // .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
+        signatures[ActorId(dbSign.at("actorId"))] = dbSign.at("signature");
     }
 
     if (isGenesis) {
         std::string prevGenHash = std::move(res[0].at("prevGenHash"));
 
         std::vector<DBRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
-        GenesisDataRows dataRows;
+        GenesisDataRows    dataRows;
         for (const auto &row : rows) {
             GenesisDataInfo dRow;
             dRow.type    = DataStorage::DataRowType(QByteArray(row.at("type").c_str()).toInt());
-            dRow.state   = BigNumber(row.at("state"));
+            dRow.state   = BigNumberFloat(row.at("state"));
             auto actorId = row.at("actorId");
             auto tokenId = row.at("token");
             dataRows.insert({ { actorId, tokenId }, dRow });
@@ -778,7 +776,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
             tx.setType(TransactionType(std::stoi(tmp.at("type"))));
             tx.setSender(ActorId(tmp.at("sender")));
             tx.setReceiver(ActorId(tmp.at("receiver")));
-            tx.setAmount(BigNumber(tmp.at("amount")));
+            tx.setAmount(BigNumberFloat(tmp.at("amount")));
             tx.setDate(std::stoll(tmp.at("date")));
             tx.setData(tmp.at("data"));
             tx.setToken(ActorId(tmp.at("token")));

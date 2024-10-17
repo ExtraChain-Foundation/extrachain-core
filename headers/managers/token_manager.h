@@ -16,36 +16,37 @@ struct TokenData {
     std::string actor, owner, count, name, ticker, color, smart;
 
     QJsonDocument toJsonDocument();
-    DBRow toDBRow();
+    DBRow         toDBRow();
 };
 
 class TokenManager : public QObject {
     Q_OBJECT
 
-    ExtraChainNode &node;
+    ExtraChainNode                               *node;
     QMap<ActorId, QMap<std::string, std::string>> tokenBalance;
 
     void sendInitialTransaction(
         const std::shared_ptr<Actor<KeyPrivate>> sender,
-        ActorId receiver,
-        std::string quantity);
+        ActorId                                  receiver,
+        std::string                              quantity);
     // std::shared_ptr<Actor<KeyPrivate>> createPrivateActor();
     void initializeTokenArray();
     bool tokenExist(const std::string &nameToken);
     bool tokentTickerExist(const std::string &tickerToken);
 
 public:
-    TokenManager(ExtraChainNode &node, QObject *parent = nullptr);
+    TokenManager(ExtraChainNode *node);
     ~TokenManager() = default;
 
     bool isContract(const QString &pathFile);
 
 public slots:
-    void createToken(const std::string &tokenCount,
-                     const std::string &tokenName,
-                     const std::string &symbol,
-                     const ActorId &owner,
-                     const std::string &color);
+    void createToken(
+        const std::string &tokenCount,
+        const std::string &tokenName,
+        const std::string &symbol,
+        const ActorId     &owner,
+        const std::string &color);
     void checkIsContract(const QString &pathToFile);
 
 protected:
@@ -53,11 +54,11 @@ protected:
 
 signals:
     void verifyActor(Actor<KeyPublic> actor);
-    void sendTransactionCreateToken(const Transaction &tx);
+    void sendTransactionCreateToken(const ActorId &actorId, const Transaction &tx);
     void saveActorInPrivateProfile(
         const QByteArray &id,
-        const QString &type = "wallet",
-        const bool &rewrite = false);
+        const QString    &type    = "wallet",
+        const bool       &rewrite = false);
     void errorNameTokenExist(const QString &);
     void errorTickerTokenExist(const QString &);
     void added();

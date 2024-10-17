@@ -40,8 +40,7 @@ class EXTRACHAIN_EXPORT TransactionManager : public QObject {
 
 private:
     // to create block's from pending txs
-    QTimer blockCreationTimer;
-    QTimer proveTimer;
+    QTimer *blockTimer;
 
     // received transactions that will be packed into block
     std::set<Transaction> m_pendingTxList;
@@ -67,14 +66,11 @@ public:
     BigNumberFloat        checkPendingTxsList(const ActorId &sender);
     std::set<Transaction> getReceivedTxList() const;
     std::set<Transaction> getPendingTxs() const;
-    /**
-     * Run make_block and prove_block timers
-     */
-    void runMakeAndProveBlockTimers();
 
 public slots:
     void makeBlockAndProveTransactionsInThread();
-    void process() {};
+    void process();
+    ;
 
 signals:
     void finished();
