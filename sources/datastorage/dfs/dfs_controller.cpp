@@ -1180,7 +1180,7 @@ std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg)
             //                    + "'");
         }
         if (it->at("fileNamePrev") == msg.FileHash) {
-            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHashPrev =
+            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileNamePrev =
             // " +
             // "'"
             //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" +
