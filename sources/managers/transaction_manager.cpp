@@ -148,18 +148,18 @@ void TransactionManager::proveTransactions() {
 
         if (res == TransactionProveError::NoError) {
             qDebug() << "[TransactionManager] Transaction approved:" << tx;
-            qDebug() << "[TransactionManager] Transaction approved!";
+            // qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
             qDebug() << "[TransactionManager] Transaction not approved:" << tx;
-            qDebug() << "[TransactionManager] Transaction not approved:" << res;
+            // qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }
 
     m_receivedTxList.clear();
 }
 
-BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
+BigNumberFloat TransactionManager::isCorrectSenderBalance(const ActorId &sender) {
     BigNumberFloat res = 0;
     if (!m_pendingTxList.empty()) {
         for (const Transaction &tmp : std::as_const(m_pendingTxList)) {

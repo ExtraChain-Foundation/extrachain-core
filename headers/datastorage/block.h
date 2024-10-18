@@ -70,6 +70,7 @@ enum class BlockError {
     NotExists,
     Invalid,
     AlreadyExists,
+    AlreadyChained,
 
     CantMerge,
     MergeEqual

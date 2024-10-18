@@ -6,8 +6,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
         m_ws = new QWebSocket("ExtraChain");
         qDebug() << "[WS] Create new ws";
     } else {
-        m_ws = ws;
-        this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
+        m_ws         = ws;
+        this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->m_port = m_ws->peerPort();
         qDebug() << "[WS] New service:" << m_ip;
         connections();
@@ -38,8 +38,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         qDebug() << "[WS] Open" << url;
         connections();
         m_ws->open(url);
-        m_ip = ip; // m_ws->peerAddress().toString();
-        m_port = port; // m_ws->peerPort();
+        m_ip   = m_ws->peerAddress().toString();
+        m_port = m_ws->peerPort();
     }
 }
 
@@ -67,7 +67,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         }
 
         auto key = Utils::bytesDecode(message.toLatin1());
-        pub = KeyPublic(key.toStdString());
+        pub      = KeyPublic(key.toStdString());
         if (pub.empty()) { // or incorrect
             qFatal("Incorrect public key in socket");
         }
@@ -111,14 +111,13 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
-void WebSocketService::final()
-{
+void WebSocketService::final() {
     if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
         m_ws->flush();
 }
 
 void WebSocketService::onConnected() {
-    this->m_ip = m_ws->peerAddress().toString().replace("::ffff:", "");
+    this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->m_port = m_ws->peerPort();
     handshake();
     qDebug() << "[WS] New service:" << m_ip << port();

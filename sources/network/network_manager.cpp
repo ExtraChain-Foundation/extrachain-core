@@ -196,67 +196,27 @@ void NetworkManager::startNetwork() {
         return;
     wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
-    if (wsServer->listen(QHostAddress::Any, wsPort)) {
-        connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
-        connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
-            qDebug() << "[WS] Server error code:" << closeCode;
-        });
-        connect(wsServer, &QWebSocketServer::closed, [] {
-            qDebug() << "[WS] Server: closed";
-        });
-        connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
-            qDebug() << "[WS] Server socker error:" << socketError;
-        });
-
-        qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
-                           << wsServer->serverPort(); // << wsServer->serverName();
-        DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-                                                  .port    = static_cast<uint64_t>((int)wsPort) };
-        m_wsConnections.push_back(wsConnection);
-    } else if (!wsServer->listen(QHostAddress::Any, wsPort) /* && !node->isClientApp()*/) {
-        bool listen = false;
-        connectToNode(local->ip().toString(), Network::Protocol::WebSocket);
-
-        /*
-        while (!listen) {
-            wsPort += 1;
-            if (wsServer->listen(QHostAddress::Any, wsPort)) {
-                connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
-
-                connect(
-                    wsServer,
-                    &QWebSocketServer::serverError,
-                    [](QWebSocketProtocol::CloseCode closeCode) {
-                        qDebug() << "[WS] Server error code:" << closeCode;
-                    });
-                connect(wsServer, &QWebSocketServer::closed, [] {
-                    qDebug() << "[WS] Server: closed";
-                });
-                connect(
-                    wsServer,
-                    &QWebSocketServer::acceptError,
-                    [](QAbstractSocket::SocketError socketError) {
-                        qDebug() << "[WS] Server socker error:" << socketError;
-                    });
-
-                qDebug().noquote() << "[WS] Start listening" << wsServer->serverAddress().toString()
-                                   << wsServer->serverPort() << wsServer->serverName();
-                listen = true;
-                if (listen) {
-                    DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-                                                              .port    = static_cast<uint64_t>((int)wsPort) };
-                    send_message(wsConnection, MessageType::NewNodeConnected);
-                    m_wsConnections.push_back(wsConnection);
-
-                    //            //diconnect from all servers
-                    //            for(auto connection : m_connections) {
-                    //                connection->disconnected();
-                    //            }
-                }
-            }
-        }
-        */
+    if (!wsServer->listen(QHostAddress::Any, wsPort)) {
+        qDebug() << "[NetworkManager] Can't listen port";
+        return;
     }
+
+    connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
+    connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
+        qDebug() << "[WS] Server error code:" << closeCode;
+    });
+    connect(wsServer, &QWebSocketServer::closed, [] {
+        qDebug() << "[WS] Server: closed";
+    });
+    connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
+        qDebug() << "[WS] Server socker error:" << socketError;
+    });
+
+    qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
+                       << wsServer->serverPort(); // << wsServer->serverName();
+    DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
+                                              .port    = static_cast<uint64_t>((int)wsPort) };
+    m_wsConnections.push_back(wsConnection);
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -682,7 +642,7 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::BlockchainGenesisBlock: {
-        qDebug() << "BlockchainGenesisBlock";
+        // qDebug() << "BlockchainGenesisBlock";
         // TODO: why temp std::string?
         GenesisBlock block = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!block.isEmpty()) {

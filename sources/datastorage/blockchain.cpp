@@ -89,7 +89,7 @@ void Blockchain::sync(const BigNumber &from) {
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
     if (fromBlock < 0)
         fromBlock = 0;
-    qDebug() << "[Blockchain] Request sync from" << fromBlock;
+    // qDebug() << "[Blockchain] Request sync from" << fromBlock;
     node->network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
 }
 
@@ -140,7 +140,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         }
     }
 
-    qDebug() << "[Blockchain] Send for sync: from" << fromBlock << "to" << lastIndex;
+    // qDebug() << "[Blockchain] Send for sync: from" << fromBlock << "to" << lastIndex;
 }
 
 void Blockchain::lastSavedRequest() {
@@ -196,7 +196,7 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
         node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock);
     }
 
-    qDebug() << "Send" << block;
+    // qDebug() << "Send" << block;
 
     return true;
 }
@@ -417,23 +417,29 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     if (blockId != 0) {
-        auto lastBlock     = this->getBlockByIndex(blockId - 1);
+        auto prevBlock     = this->getBlockByIndex(blockId - 1);
+        auto nextBlock     = getBlockByIndex(blockId + 1);
         auto lastRealBlock = this->getLastRealBlock();
         auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
-        if (!block.isGenesisBlock() && !lastBlock.has_value()) {
+        if (nextBlock.has_value()) {
+            qDebug() << "[Blockchain] Already chained";
+            return std::unexpected(BlockError::AlreadyChained);
+        }
+
+        if (!block.isGenesisBlock() && !prevBlock.has_value()) {
             sync();
             return std::unexpected(BlockError::Invalid);
         }
 
-        if (!block.isGenesisBlock() && blockId > lastBlock->getIndex() + 1) {
+        if (!block.isGenesisBlock() && blockId > prevBlock->getIndex() + 1) {
             qDebug() << "[Blockchain] New block id is greater than last id, sync request";
             sync();
             return std::unexpected(BlockError::Invalid);
         }
 
         auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
-        auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : lastBlock->getHash();
+        auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : prevBlock->getHash();
         if (checkedPrevHash != expectedPrevHash) {
             qDebug() << "[Blockchain] Can't chained, sync request";
             // qDebug() << "jb" << block;
@@ -929,7 +935,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
             BigNumberFloat transactionFee    = 0; // transactionAmount / 100;
             BigNumberFloat senderNewBalance  = senderCurrentBalance - transactionAmount - transactionFee;
 
-            if (senderNewBalance < 0 /* && mainActorId == firstId */) {
+            if (senderNewBalance < 0 && targetSender != ActorId() /* && mainActorId == firstId */) {
                 return TransactionProveError::SenderBalanceBelowZero;
             }
 

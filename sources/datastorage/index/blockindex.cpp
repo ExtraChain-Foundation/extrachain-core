@@ -653,7 +653,9 @@ void BlockIndex::removeDummyBlocks() {
         }
     }
 
-    qDebug() << "[BlockIndex] Remove dummy blocks:" << removedForLogs;
+    if (!removedForLogs.empty()) {
+        qDebug() << "[BlockIndex] Remove dummy blocks:" << removedForLogs;
+    }
 }
 
 void BlockIndex::removeAll() {
