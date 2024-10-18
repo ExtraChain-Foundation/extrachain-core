@@ -28,6 +28,7 @@
 #include <QtCore/QString>
 #include <sstream>
 #include <string>
+#include <expected>
 
 #include "boost/multiprecision/cpp_int.hpp"
 #include "msgpack.hpp"
@@ -36,7 +37,7 @@
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()                                                                                   \
-        qdata = toStdString(NumeralBase::Hex);                                                               \
+        qdata    = toStdString(NumeralBase::Hex);                                                            \
         qdataDec = toStdString(NumeralBase::Dec);
 #else
     #define UPDATE_DEBUG()
@@ -52,6 +53,12 @@ const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
                                    '2', '3', '4', '5', '6', '7', '8', '9' };
 }
 
+enum class BigNumberError {
+    NoError,
+    InvalidNumber,
+    Infinity
+};
+
 /**
  * Data type for big hex numbers for addresses
  * example: ab11405c92a05c91c48
@@ -61,6 +68,7 @@ public:
     BigNumber();
     BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     BigNumber(const BigNumber &other);
+    BigNumber(BigNumber &&other) noexcept;
     BigNumber(int number);
     BigNumber(long long number);
     BigNumber(const boost::multiprecision::cpp_int &number);
@@ -75,25 +83,25 @@ private:
 #endif
 
 public:
-    BigNumber operator&(const BigNumber &);
-    BigNumber operator>>(const uint &);
-    BigNumber operator>>=(const uint &);
-    BigNumber operator+(const BigNumber &) const;
-    BigNumber operator+(long long) const;
-    BigNumber operator-(const BigNumber &) const;
-    BigNumber operator-(long long) const;
-    BigNumber operator*(const BigNumber &) const;
-    BigNumber operator*(long long) const;
-    BigNumber operator/(const BigNumber &) const;
-    BigNumber operator/(long long) const;
-    BigNumber operator%(const BigNumber &) const;
-    BigNumber operator%(long long) const;
+    BigNumber  operator&(const BigNumber &);
+    BigNumber  operator>>(const uint &);
+    BigNumber  operator>>=(const uint &);
+    BigNumber  operator+(const BigNumber &) const;
+    BigNumber  operator+(long long) const;
+    BigNumber  operator-(const BigNumber &) const;
+    BigNumber  operator-(long long) const;
+    BigNumber  operator*(const BigNumber &) const;
+    BigNumber  operator*(long long) const;
+    BigNumber  operator/(const BigNumber &) const;
+    BigNumber  operator/(long long) const;
+    BigNumber  operator%(const BigNumber &) const;
+    BigNumber  operator%(long long) const;
     BigNumber &operator=(const BigNumber &);
     BigNumber &operator=(long long);
-    BigNumber &operator++();   // pre increment
-    BigNumber operator++(int); // post increment
-    BigNumber &operator--();   // pre increment
-    BigNumber operator--(int); // post increment
+    BigNumber &operator++();    // pre increment
+    BigNumber  operator++(int); // post increment
+    BigNumber &operator--();    // pre increment
+    BigNumber  operator--(int); // post increment
     BigNumber &operator+=(const BigNumber &);
     BigNumber &operator+=(long long);
     BigNumber &operator-=(const BigNumber &);
@@ -104,17 +112,20 @@ public:
     BigNumber &operator/=(long long);
     BigNumber &operator%=(const BigNumber &);
     BigNumber &operator%=(long long);
-    BigNumber operator-() const;
+    BigNumber  operator-() const;
 
 public:
     const boost::multiprecision::cpp_int &data() const;
-    bool isEmpty() const;
-    QByteArray toByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string toStdString(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string toZeroStdString(int size) const;
-    BigNumber pow(unsigned long number);
+    bool                                  isEmpty() const;
+    QByteArray                            toByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string                           toStdString(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string                           toZeroStdString(int size) const;
+    BigNumber                             pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
+
+    static std::expected<BigNumber, BigNumberError>
+                     create(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     static BigNumber random(int n, bool zeroAllowed = true);
     static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
     static BigNumber random(BigNumber max, bool zeroAllowed = true);
@@ -152,7 +163,7 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this = BigNumber(num);
+        *this           = BigNumber(num);
     }
 };
 
@@ -160,8 +171,8 @@ inline size_t qHash(const BigNumber &key, size_t seed) {
     return qHash(key, seed);
 }
 
-QDebug operator<<(QDebug debug, const BigNumber &bigNumber);
-QDebug operator<<(QDebug debug, const boost::multiprecision::cpp_int &bigNumber);
+QDebug        operator<<(QDebug debug, const BigNumber &bigNumber);
+QDebug        operator<<(QDebug debug, const boost::multiprecision::cpp_int &bigNumber);
 std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber);
 
 #endif // BIGNUMBER_H

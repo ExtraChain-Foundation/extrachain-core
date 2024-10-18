@@ -48,7 +48,7 @@ Block::Block(
     long long               date,
     std::string           &&prevHash,
     std::string           &&hash,
-    std::set<Approver>    &&signatures,
+    Signatures            &&signatures,
     std::set<Transaction> &&transactions)
     : m_index(std::move(idx))
     , m_date(date)
@@ -94,7 +94,7 @@ void Block::calcHash() {
 }
 
 void Block::setType(BlockType value) {
-    if (value == BlockType::Genesis || value == BlockType::GenesisMerge) {
+    if (value == BlockType::Genesis) {
         qFatal("Block: try to set not data type");
     }
 
@@ -104,10 +104,6 @@ void Block::setType(BlockType value) {
 void Block::setType(const std::string &value) {
     if (value == "data") {
         m_type = BlockType::Data;
-    } else if (value == "datamerge") {
-        m_type = BlockType::DataMerge;
-        // } else if (value == "genesismerge") {
-        //     m_type = BlockType::GenesisMerge;
     } else if (value == "dummy") {
         m_type = BlockType::Dummy;
     } else {
@@ -153,9 +149,23 @@ void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     this->addSignature(actor->id().toStdString(), sign, true);
 }
 
-bool Block::verify(const Actor<KeyPublic> &actor) const {
-    bool res = actor.key().verify(getDataForSignature(), getSignature());
-    return m_signatures.empty() ? false : res;
+BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
+    if (m_signatures.empty()) {
+        return BlockSignError::EmptySignatures;
+    }
+
+    auto it = this->m_signatures.find(actor.id().toStdString());
+
+    if (it == this->m_signatures.end()) {
+        return BlockSignError::NoActorSignature;
+    }
+
+    bool res = actor.key().verify(getDataForSignature(), it->second);
+    if (!res) {
+        return BlockSignError::InvalidSignature;
+    }
+
+    return BlockSignError::NoError;
 }
 
 bool Block::equals(const Block &block) const {
@@ -185,17 +195,6 @@ Transaction Block::getTransactionByHash(std::string hash) const {
     return Transaction();
 }
 
-bool Block::contain(Block &from) const {
-    auto ourTx  = this->transactions();
-    auto fromTx = from.transactions();
-    for (const auto &i : fromTx) {
-        if (std::find(ourTx.begin(), ourTx.end(), i) == ourTx.end()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 QString Block::toString() const {
     return QString::fromStdString(this->toStdString());
 }
@@ -206,7 +205,7 @@ std::string Block::toStdString() const {
     oss << "Block { "
         << "type: " << magic_enum::enum_name(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toStdString() << ", "
+        << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev_hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
@@ -226,7 +225,8 @@ std::string Block::toStdString() const {
 }
 
 bool Block::isEmpty() const {
-    return this->getHash().empty() && this->getSignature().empty() && this->getPrevHash().empty();
+    return this->getHash().empty() && this->m_signatures.empty()
+           && (m_index == 0 || this->getPrevHash().empty());
 }
 
 BlockType Block::getType() const {
@@ -238,35 +238,28 @@ std::string Block::getTypeStr() const {
     return Utils::str_to_lower(type);
 }
 
-std::string Block::getSignature() const {
-    return m_signatures.empty() ? "" : this->m_signatures.begin()->sign;
-}
-
-const std::set<Approver> &Block::signatures() const {
+const Signatures &Block::signatures() const {
     return m_signatures;
 }
 
-const std::set<Transaction> &Block::transactions() const {
-    if (m_type == BlockType::Genesis || m_type == BlockType::GenesisMerge) {
+const Transactions &Block::transactions() const {
+    if (m_type == BlockType::Genesis) {
         qFatal("GenesisBlock: try to use transactions");
     }
 
     return m_transactions;
 }
 
-void Block::addSignature(const std::string &id, const std::string &sign, bool isApprove) {
-    if (this->m_signatures.size() <= Config::DataStorage::MAX_SIGN_AMOUNT) {
-        this->m_signatures.insert({ id, sign, isApprove });
+void Block::addSignature(const ActorId &id, const std::string &sign, bool isApprove) {
+    if (this->m_signatures.size() < Config::DataStorage::MAX_SIGN_AMOUNT
+        || this->m_signatures.find(id) != this->m_signatures.end()) {
+        this->m_signatures[id] = sign;
     }
 }
 
-void Block::addSignatures(const std::set<Approver> &approvers) {
-    for (const auto &approver : std::as_const(approvers)) {
-        if (this->m_signatures.size() > Config::DataStorage::MAX_SIGN_AMOUNT) {
-            return;
-        }
-
-        this->m_signatures.insert(approver);
+void Block::addSignatures(const Signatures &approvers) {
+    for (const auto &[key, row] : approvers) {
+        m_signatures[key] = row;
     }
 }
 

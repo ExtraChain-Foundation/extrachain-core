@@ -23,6 +23,9 @@
 #include <QtConcurrent>
 
 #include "managers/extrachain_node.h"
+#include "managers/account_controller.h"
+#include "datastorage/blockchain.h"
+#include "network/network_manager.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {
     return m_receivedTxList;
@@ -33,17 +36,9 @@ std::set<Transaction> TransactionManager::getPendingTxs() const {
 }
 
 TransactionManager::TransactionManager(ExtraChainNode *node)
-    : QObject(node)
-    , node(node) {
-    // setup timer
-    blockCreationTimer.setInterval(Config::DataStorage::BLOCK_CREATION_PERIOD);
-    connect(&blockCreationTimer, &QTimer::timeout, this,
-            &TransactionManager::makeBlockAndProveTransactionsInThread);
-
-    blockCreationTimer.start();
-    // prove timer
-    //    proveTimer.setInterval(Config::DataStorage::PROVE_TXS_INTERVAL);
-    //    connect(&proveTimer, &QTimer::timeout, this, &TransactionManager::proveTransactions);
+    : /* QObject(node)
+    ,*/
+    node(node) {
 }
 
 void TransactionManager::removeTransaction(int i) {
@@ -51,7 +46,7 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransaction(const Transaction &tx) {
-    // qDebug() << "[TransactionManager] Transaction is being added to the waiting list:" << tx;
+    // qDebug() << "[TransactionManager] Added to the waiting list:" << tx;
     m_receivedTxList.insert(tx);
 }
 
@@ -61,87 +56,85 @@ void TransactionManager::addProvedTransaction(const Transaction &tx) {
     emit addToCache(tx.getReceiver().toStdString(), tx);
 }
 
-void TransactionManager::runMakeAndProveBlockTimers() {
-    qDebug() << "[TransactionManager] Start timers";
-    blockCreationTimer.start();
-    proveTimer.start();
-}
-
 // Block making
 
 void TransactionManager::makeBlock() {
     if (node->accountController()->empty())
         return;
 
-    BlockVariant lastRealBlock = node->blockchain()->getLastRealBlock();
-    BlockVariant lastBlock     = node->blockchain()->getLastBlock();
+    auto lastRealBlock = node->blockchain()->getLastRealBlock();
+    auto lastBlock     = node->blockchain()->getLastBlock();
 
-    if (lastRealBlock.getIndex() != lastBlock.getIndex()) {
-        qDebug() << "[Blockchain] Last block:" << lastBlock.getIndex() << "| last real:" << lastRealBlock.getIndex() << "|" <<  lastRealBlock.getType();
-    } else {
-        qDebug() << "[Blockchain] Last block:" << lastRealBlock.getIndex() << "|" << lastRealBlock.getType();
+    if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
+        qDebug() << "[TransactionManager] last or real last block is not exists";
+        node->blockchain()->sync();
+        return;
+    }
+    if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
+        qDebug() << "[TransactionManager] last or real last block is empty";
+        return;
     }
 
-    auto maybeGenesisId = lastBlock.getIndex() + 1;
-    if (!lastBlock.isEmpty() && maybeGenesisId > 0 && maybeGenesisId % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0) {
-        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto   actor = node->accountController()->mainActor();
-        GenesisBlock gB    = node->blockchain()->createGenesisBlock(actor);
-        node->network()->send_message(gB, MessageType::BlockchainGenesisBlock);
+    if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
+        qDebug() << "[Blockchain] Last block:" << lastBlock->getIndex()
+                 << "| last real:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+    } else {
+        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|"
+                 << lastRealBlock->getType();
+    }
+
+    if (!node->network()->isActiveConnectionExists()) {
+        // qDebug() << "[TransactionManager] No active connections";
+
+        if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
+            node->blockchain()->removeDummyBlocks();
+        }
+        return;
+    }
+
+    auto maybeGenesisId = lastBlock->getIndex() + 1;
+    if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
+        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
+                           << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
+        const auto actor   = node->accountController()->mainActor();
+        const auto genesis = node->blockchain()->createGenesisBlock(actor);
+
+        if (genesis.has_value() && !genesis->isEmpty()) {
+            node->blockchain()->sendBlock(genesis.value());
+        }
+
         return;
     }
 
     if (m_pendingTxList.empty()) {
-        lastRealBlock = node->blockchain()->getBlockIndex().getLastRealBlockById();
-
-        if (lastRealBlock.isEmpty()) {
-            return;
-        }
-
-        if (!node->network()->isActiveConnectionExists()) {
-            // qDebug() << "[TransactionManager] Dummy: no active connections";
-            if (lastRealBlock.getIndex() != lastBlock.getIndex())
-                node->blockchain()->removeAllDummyBlocks(lastBlock);
-            return;
-        }
-
         static BigNumber prevDummy = -1;
 
-        if (prevDummy == lastBlock.getIndex() + 1)
-            return;
+        // if (prevDummy == lastBlock.getIndex() + 1) {
+        //     qDebug() << "[TransactionManager] prevDummy == lastBlock.getIndex() + 1";
+        //     return;
+        // }
 
         // creating dummy block in as ordinary block
+        // return;
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
-        dummyBlock.setPrev(lastBlock);
-        dummyBlock.addData(lastRealBlock.getIndex().toStdString());
+        dummyBlock.setPrev(lastBlock.value());
+        dummyBlock.addData(lastRealBlock->getIndex().toStdString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node->blockchain()->signBlock(dummyBlockVariant);
-        node->network()->send_message(dummyBlockVariant.getBlockConst(), MessageType::BlockchainNewBlock);
-        prevDummy = lastBlock.getIndex() + 1;
+        node->blockchain()->sendBlock(dummyBlockVariant);
+        prevDummy = lastBlock->getIndex() + 1;
         return;
     }
 
-    // remove all dummy blocks
-    node->blockchain()->removeAllDummyBlocks(lastBlock);
-
-    if (lastRealBlock.isEmpty())
-        lastRealBlock = node->blockchain()->getLastRealBlock();
     Block block;
-    block.setPrev(lastRealBlock);
+    block.setPrev(lastRealBlock.value());
     block.addTransactions(m_pendingTxList);
     this->m_pendingTxList.clear();
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
-
-    if (blockVariant.isGenesisBlock()) {
-        auto genesisBlock = blockVariant.getGenesisBlockConst();
-        node->network()->send_message(genesisBlock, MessageType::BlockchainGenesisBlock);
-    } else {
-        auto dataBlock = blockVariant.getBlockConst();
-        node->network()->send_message(dataBlock, MessageType::BlockchainNewBlock);
-    }
+    node->blockchain()->sendBlock(blockVariant);
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
@@ -155,23 +148,18 @@ void TransactionManager::proveTransactions() {
 
         if (res == TransactionProveError::NoError) {
             qDebug() << "[TransactionManager] Transaction approved:" << tx;
-            qDebug() << "[TransactionManager] Transaction approved!";
+            // qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager]" << tx;
-            qDebug() << "[TransactionManager] Transaction not approved:" << res;
-
-            // hack
-            if (res == TransactionProveError::SelfPleasure && tx.isRewardTransaction()) {
-                // node.network()->send_message(tx, MessageType::BlockchainTransaction);
-            }
+            qDebug() << "[TransactionManager] Transaction not approved:" << tx;
+            // qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }
 
     m_receivedTxList.clear();
 }
 
-BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
+BigNumberFloat TransactionManager::isCorrectSenderBalance(const ActorId &sender) {
     BigNumberFloat res = 0;
     if (!m_pendingTxList.empty()) {
         for (const Transaction &tmp : std::as_const(m_pendingTxList)) {
@@ -183,4 +171,17 @@ BigNumberFloat TransactionManager::checkPendingTxsList(const ActorId &sender) {
         }
     }
     return res;
+}
+
+void TransactionManager::process() {
+    qDebug() << "[TM]";
+    blockTimer = new QTimer(this);
+    connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
+
+    int milliseconds      = QDateTime::currentDateTime().time().msec();
+    int seconds           = QDateTime::currentDateTime().time().second();
+    int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
+    QThread::msleep(delayToEvenSecond);
+
+    blockTimer->start(Config::DataStorage::BLOCK_CREATION_PERIOD);
 }

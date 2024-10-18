@@ -23,39 +23,48 @@
 #include "datastorage/block.h"
 
 /**
- * @brief Representation of one row in genesis block data field
+ * @file genesis_block.h
+ * @brief Defines structures for genesis block
  */
 
-class EXTRACHAIN_EXPORT GenesisDataRow {
-public:
-    ActorId actorId;
-    BigNumberFloat state;
-    ActorId token;
-    DataStorage::DataRowType type;
+/**
+ * @brief Representation of rows in genesis block data field
+ */
+struct EXTRACHAIN_EXPORT GenesisDataActor {
+    ActorId actorId; /**< Unique identifier for the actor */
+    TokenId tokenId; /**< Identifier for the associated token */
 
-public:
-    GenesisDataRow() = default;
+    auto operator<=>(const GenesisDataActor &) const = default;
+    bool operator==(const GenesisDataActor &) const  = default;
 
-    GenesisDataRow(
-        const ActorId &actorId,
-        const BigNumberFloat &state,
-        const ActorId &token,
-        const DataStorage::DataRowType &type)
-        : actorId(actorId)
-        , state(state)
-        , token(token)
-        , type(type) {
-    }
-
-    // bool operator==(const GenesisDataRow &other) const {
-    //     return this->actorId == other.actorId && this->state == other.state && this->token == other.token
-    //            && this->type == other.type;
-    // }
-    auto operator<=>(const GenesisDataRow &) const = default;
-    bool operator==(const GenesisDataRow &) const  = default;
-
-    MSGPACK_DEFINE(actorId, state, token, type)
+    /**
+     * @brief MessagePack serialization definition
+     */
+    MSGPACK_DEFINE(actorId, tokenId)
 };
+
+/**
+ * @brief Information associated with genesis data
+ */
+struct EXTRACHAIN_EXPORT GenesisDataInfo {
+    BigNumberFloat           state = 0; /**< State represented as a big number float, default is 0 */
+    DataStorage::DataRowType type =
+        DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
+
+    auto operator<=>(const GenesisDataInfo &) const = default;
+    bool operator==(const GenesisDataInfo &) const  = default;
+
+    /**
+     * @brief MessagePack serialization definition
+     */
+    MSGPACK_DEFINE(state, type)
+};
+
+/**
+ * @typedef GenesisDataRows
+ * @brief A map of GenesisDataActor to GenesisDataInfo, representing rows of genesis data
+ */
+using GenesisDataRows = std::map<GenesisDataActor, GenesisDataInfo>;
 
 /**
  * @brief Genesis block it's an extended block, with has specific data field
@@ -63,46 +72,46 @@ public:
  */
 class EXTRACHAIN_EXPORT GenesisBlock : public Block {
 private:
-    std::string m_prevGenHash; // previous genesis block hashes
-    std::set<GenesisDataRow> m_dataRows;
+    std::string     m_prevGenHash; // previous genesis block hashes
+    GenesisDataRows m_dataRows;
 
 public:
     GenesisBlock();
     GenesisBlock(const GenesisBlock &block);
 
     GenesisBlock(
-        std::string &&type,
-        std::string &&data,
-        BigNumber idx,
-        long long date,
-        std::string &&prevHash,
-        std::string &&hash,
-        std::string &&prevGenHash,
-        std::set<Approver> &&signatures,
-        std::set<GenesisDataRow> &&dataRows);
+        std::string     &&type,
+        std::string     &&data,
+        BigNumber         idx,
+        long long         date,
+        std::string     &&prevHash,
+        std::string     &&hash,
+        std::string     &&prevGenHash,
+        Signatures      &&signatures,
+        GenesisDataRows &&dataRows);
 
     // Block interface
 public:
-    bool addRow(const GenesisDataRow &row);
-    int addRows(const std::set<GenesisDataRow> &rows);
-    int addRows(const std::vector<GenesisDataRow> &rows);
+    void addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataInfo &row);
+    void addRows(const GenesisDataRows &dataRows);
+
     const std::string &getDataForSignature() const override;
 
     /**
-     * @brief extract non-empty genesisDataRows from data
+     * @brief extract non-empty GenesisDataInfos from data
      * @return genesis data row list
      */
-    const std::set<GenesisDataRow> &dataRows() const;
-    std::string toStdString() const override;
+    const GenesisDataRows &dataRows() const;
+    std::string            toStdString() const override;
 
 protected:
     void calcHash() override;
 
 public:
     std::string getPrevGenHash() const;
-    void setPrevGenHash(const std::string &value);
-    void setType(BlockType value) override;
-    void setType(const std::string &value) override;
+    void        setPrevGen(const BlockVariant &block);
+    void        setType(BlockType value) override;
+    void        setType(const std::string &value) override;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {

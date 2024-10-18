@@ -19,6 +19,8 @@
 
 #include "datastorage/genesis_block.h"
 
+#include "datastorage/block_variant.h"
+
 #include "sha3.h"
 
 GenesisBlock::GenesisBlock()
@@ -33,15 +35,15 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
 }
 
 GenesisBlock::GenesisBlock(
-    std::string              &&type,
-    std::string              &&data,
-    BigNumber                  idx,
-    long long                  date,
-    std::string              &&prevHash,
-    std::string              &&hash,
-    std::string              &&prevGenHash,
-    std::set<Approver>       &&signatures,
-    std::set<GenesisDataRow> &&dataRows)
+    std::string                                 &&type,
+    std::string                                 &&data,
+    BigNumber                                     idx,
+    long long                                     date,
+    std::string                                 &&prevHash,
+    std::string                                 &&hash,
+    std::string                                 &&prevGenHash,
+    Signatures                                  &&signatures,
+    std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
     : Block(
           std::move(type),
           std::move(data),
@@ -56,39 +58,14 @@ GenesisBlock::GenesisBlock(
     setType(type);
 }
 
-bool GenesisBlock::addRow(const GenesisDataRow &row) {
-    // TODO: maybe use ordered map?
-    auto it = std::find_if(m_dataRows.begin(), m_dataRows.end(),
-                           [&row](const GenesisDataRow& existingRow) {
-                               return existingRow.actorId == row.actorId;
-                           });
-
-    if (it != m_dataRows.end()) {
-        m_dataRows.erase(it);
-    }
-
-    auto res = m_dataRows.insert(row);
-    return res.second;
+void GenesisBlock::addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataInfo &row) {
+    m_dataRows[{ actorId, tokenId }] = row;
 }
 
-int GenesisBlock::addRows(const std::set<GenesisDataRow> &rows) {
-    int count = 0;
-    for (const auto &row : std::as_const(rows)) {
-        auto res = addRow(row);
-        if (res)
-            count++;
+void GenesisBlock::addRows(const GenesisDataRows &dataRows) {
+    for (const auto &[key, row] : dataRows) {
+        m_dataRows[key] = row;
     }
-    return count;
-}
-
-int GenesisBlock::addRows(const std::vector<GenesisDataRow> &rows) {
-    int count = 0;
-    for (const auto &row : std::as_const(rows)) {
-        auto res = addRow(row);
-        if (res)
-            count++;
-    }
-    return count;
 }
 
 const std::string &GenesisBlock::getDataForSignature() const {
@@ -104,26 +81,28 @@ void GenesisBlock::calcHash() {
         sha3.add(data.c_str(), data.size());
     }
 
-    for (const GenesisDataRow &row : std::as_const(m_dataRows)) {
-        sha3.add(row.actorId.toStdString().c_str(), row.actorId.toStdString().size());
+    for (const auto &[key, row] : std::as_const(m_dataRows)) {
+        auto &[actorId, tokenId] = key;
+        sha3.add(actorId.toStdString().c_str(), actorId.toStdString().size());
         sha3.add(row.state.toStdString().c_str(), row.state.toStdString().size());
-        sha3.add(row.token.toStdString().c_str(), row.token.toStdString().size());
+        sha3.add(tokenId.toStdString().c_str(), tokenId.toStdString().size());
         sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
     this->m_hash = sha3.getHash();
 }
 
-const std::set<GenesisDataRow> &GenesisBlock::dataRows() const {
+const GenesisDataRows &GenesisBlock::dataRows() const {
     return m_dataRows;
 }
 
-void GenesisBlock::setPrevGenHash(const std::string &value) {
-    m_prevGenHash = value;
+void GenesisBlock::setPrevGen(const BlockVariant &block) {
+    m_prevGenHash = block.getHash();
+    m_index       = block.getIndex() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 void GenesisBlock::setType(BlockType value) {
-    if (value != BlockType::Genesis || value != BlockType::GenesisMerge) {
+    if (value != BlockType::Genesis) {
         qFatal("GenesisBlock: try to set not genesis type");
     }
 
@@ -133,8 +112,6 @@ void GenesisBlock::setType(BlockType value) {
 void GenesisBlock::setType(const std::string &value) {
     if (value == "genesis") {
         m_type = BlockType::Genesis;
-    } else if (value == "genesismerge") {
-        m_type = BlockType::GenesisMerge;
     } else {
         qFatal("GenesisBlock: try to set not genesis type");
     }
@@ -150,13 +127,19 @@ std::string GenesisBlock::toStdString() const {
     oss << "GenesisBlock { "
         << "type: " << magic_enum::enum_name(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toStdString() << ", "
+        << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
-        << "prev_hash: '"
+        << "prev hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
                                            + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
                                      : m_prevHash)
                + "', "
+        << "prev gen: '"
+        << (m_prevGenHash.length() > 10
+                ? m_prevGenHash.substr(0, 5) + "..."
+                      + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
+                : m_prevGenHash)
+        << "', "
         << "hash: '"
         << (m_hash.length() > 10
                 ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)

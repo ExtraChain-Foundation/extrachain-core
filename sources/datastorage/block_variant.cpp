@@ -40,6 +40,14 @@ std::string BlockVariant::getPrevHash() const {
         m_block);
 }
 
+std::string BlockVariant::getPrevGenHash() const {
+    if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
+        return genesisBlock->getPrevGenHash();
+    }
+
+    return "";
+}
+
 std::string BlockVariant::getHash() const {
     return std::visit(
         [](const auto& b) {
@@ -48,15 +56,7 @@ std::string BlockVariant::getHash() const {
         m_block);
 }
 
-std::string BlockVariant::getSignature() const {
-    return std::visit(
-        [](const auto& b) {
-            return b.getSignature();
-        },
-        m_block);
-}
-
-std::set<Approver> BlockVariant::signatures() const {
+Signatures BlockVariant::signatures() const {
     return std::visit(
         [](const auto& b) {
             return b.signatures();
@@ -74,6 +74,15 @@ std::set<Transaction> BlockVariant::transactions() const {
             return b.transactions();
         },
         m_block);
+}
+
+const GenesisDataRows& BlockVariant::dataRows() const {
+    if (const auto* genesisBlock = std::get_if<GenesisBlock>(&m_block)) {
+        return genesisBlock->dataRows();
+    }
+
+    static GenesisDataRows rows;
+    return rows;
 }
 
 QString BlockVariant::toString() const {
@@ -108,7 +117,7 @@ void BlockVariant::setPrevHash(const std::string& prevHash) {
         m_block);
 }
 
-void BlockVariant::addSignature(const std::string& id, const std::string& sign, bool isApprove) {
+void BlockVariant::addSignature(const ActorId& id, const std::string& sign, bool isApprove) {
     std::visit(
         [&id, &sign, &isApprove](auto& b) {
             b.addSignature(id, sign, isApprove);
@@ -127,7 +136,7 @@ void BlockVariant::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
 bool BlockVariant::verify(const Actor<KeyPublic>& actor) const {
     return std::visit(
         [&actor](auto& b) {
-            return b.verify(actor);
+            return b.verify(actor) == BlockSignError::NoError;
         },
         m_block);
 }
@@ -168,8 +177,12 @@ std::optional<std::reference_wrapper<GenesisBlock>> BlockVariant::getGenesisBloc
     return std::nullopt;
 }
 
-Block BlockVariant::getAny() {
-    if (isGenesisBlock())
-        return getGenesisBlock()->get();
-    return getBlock()->get();
+QDebug operator<<(QDebug debug, const BlockVariant& block) {
+    QDebugStateSaver saver(debug);
+    if (block.isGenesisBlock()) {
+        debug << block.getGenesisBlockConst().value();
+    } else {
+        debug << block.getBlockConst().value();
+    }
+    return debug;
 }

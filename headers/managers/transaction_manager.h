@@ -27,11 +27,7 @@
 #include <QThread>
 #include <QTimer>
 
-#include "datastorage/block.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/index/blockindex.h"
 #include "datastorage/transaction.h"
-#include "data_mining_manager.h"
 
 class ExtraChainNode;
 
@@ -44,8 +40,7 @@ class EXTRACHAIN_EXPORT TransactionManager : public QObject {
 
 private:
     // to create block's from pending txs
-    QTimer blockCreationTimer;
-    QTimer proveTimer;
+    QTimer *blockTimer;
 
     // received transactions that will be packed into block
     std::set<Transaction> m_pendingTxList;
@@ -59,37 +54,26 @@ public:
     TransactionManager(ExtraChainNode *node);
 
 private:
+    void addTransaction(const Transaction &tx);
+    void proveTransactions();
     void addProvedTransaction(const Transaction &tx);
+    void makeBlock();
     void removeTransaction(int i);
 
+    friend class NetworkManager;
+
 public:
-    BigNumberFloat checkPendingTxsList(const ActorId &sender);
+    BigNumberFloat        isCorrectSenderBalance(const ActorId &sender);
     std::set<Transaction> getReceivedTxList() const;
     std::set<Transaction> getPendingTxs() const;
-    /**
-     * Run make_block and prove_block timers
-     */
-    void runMakeAndProveBlockTimers();
 
 public slots:
-    /**
-     * Serialize all transactions to a serialized data.
-     * Creates a memblock, and setup data field with serialized data.
-     * Emits SendBlock signal.
-     */
-    void makeBlock();
     void makeBlockAndProveTransactionsInThread();
-
-    /**
-     * If Transaction is valid, adds it to the txList.
-     * @param tx - transaction
-     * @return 0 is transaction is successfully added
-     */
-
-    void proveTransactions();
-    void addTransaction(const Transaction &tx);
+    void process();
+    ;
 
 signals:
+    void finished();
     void addToCache(std::string actor, Transaction tx);
 };
 

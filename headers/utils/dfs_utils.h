@@ -166,13 +166,13 @@ namespace Packets {
 
     struct DirRow {
         std::string fileHash;
-        std::string fileHashPrev;
+        std::string fileNamePrev;
         std::string filePath;
         std::string fileName;
         std::string Actor;
         uint64_t    fileSize;
         uint64_t    lastModified;
-        MSGPACK_DEFINE(fileHash, fileHashPrev, filePath, fileName, Actor, fileSize, lastModified)
+        MSGPACK_DEFINE(fileHash, fileNamePrev, filePath, fileName, Actor, fileSize, lastModified)
     };
 
     struct VerifyFileMessage {
@@ -318,7 +318,7 @@ namespace Tables {
                                                     "filePath     TEXT             NOT NULL,"
                                                     "fileSize     INTEGER          NOT NULL,"
                                                     "lastModified INTEGER          NOT NULL,"
-                                                    "state        INTEGER CHECK(state IN (0, 2)) NOT NULL"
+                                                    "state        INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);

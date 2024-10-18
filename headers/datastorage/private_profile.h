@@ -30,12 +30,12 @@ public:
     const std::shared_ptr<Actor<KeyPrivate>> current() const;
     const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &actors() const;
     bool                                                   changeCurrent(const ActorId &actorId);
-    void                                                   addWalet(const Actor<KeyPrivate> &actor);
-    const std::shared_ptr<Actor<KeyPrivate>>               getActor(const ActorId &actorId) const;
-    bool                                                   loaded();
-    const std::string                                     &hash() const;
-    QJsonObject                                            toJson() const;
-    void renameWallet(const std::string &oldWalletName, const std::string &newWalletName);
+    void                                                   addWallet(const Actor<KeyPrivate> &actor);
+    bool renameWallet(const ActorId &actorId, const std::string &walletName);
+    const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
+    bool                                     loaded();
+    const std::string                       &hash() const;
+    QJsonObject                              toJson() const;
 
 private:
     PrivateProfile() = default;
@@ -48,6 +48,7 @@ private:
     ActorId                                         m_current;
     std::string                                     m_hash;
     std::vector<std::shared_ptr<Actor<KeyPrivate>>> m_actors;
+    std::map<ActorId, std::string>                  walletNames;
 };
 
 #endif // PRIVATE_PROFILE_H

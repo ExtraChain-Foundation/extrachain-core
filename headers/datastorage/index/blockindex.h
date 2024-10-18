@@ -36,16 +36,16 @@ public:
     explicit BlockIndex(const QString &folderName);
     explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
 
-    QString folderName;          // set in subclasses
-    int sectionSize;             // todo: 0 = use only one folder
+    QString   folderName;        // set in subclasses
+    int       sectionSize;       // todo: 0 = use only one folder
     BigNumber recordsLimit = -1; // -1 = no limit
 
     // current state //
-    BigNumber records = 0;
-    BigNumber firstSavedId = -1;
-    BigNumber lastSavedId = -1;
-    BigNumber realBlockRecords = 0;
-    int countTransactions = 0;
+    BigNumber records           = 0;
+    BigNumber firstSavedId      = -1;
+    BigNumber lastSavedId       = -1;
+    BigNumber realBlockRecords  = 0;
+    int       countTransactions = 0;
 
     bool m_blockCompress = false;
 
@@ -57,97 +57,93 @@ public:
      * @param block
      * @return resultCode, 0 - block is saved
      */
-    int addBlock(const BlockVariant &block);
+    std::expected<BlockVariant, BlockError> addBlock(const BlockVariant &block);
 
     /**
      * @brief Get last block (only Block, not Genesis block)
      * @return last block
      */
-    BlockVariant getLastBlock() const;
+    std::expected<BlockVariant, BlockError> getLastBlock() const;
 
     /**
      * @brief Get last real (not dummy) block
      * @return last real block
      */
-    BlockVariant getLastRealBlock() const;
+    std::expected<BlockVariant, BlockError> getLastRealBlock() const;
     /**
      * @brief Get last genesis block
      * @return last genesis block
      */
-    GenesisBlock getLastGenesisBlock() const;
-    GenesisBlock getGenesisBlockById(const BigNumber &id) const;
+    std::expected<BlockVariant, BlockError> getLastGenesisBlock(const BigNumber &from = -1) const;
+    std::expected<BlockVariant, BlockError> getGenesisBlockById(const BigNumber &id) const;
 
     /**
      * @brief Gets block by in in file index (only Block, not Genesis block)
      * @param id
      * @return block, if is found, otherwise - empty block
      */
-    BlockVariant getBlockById(const BigNumber &id) const;
+    std::expected<BlockVariant, BlockError> getBlockById(const BigNumber &id) const;
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
-    BlockVariant getBlockByPosition(const BigNumber &position) const;
-    BlockVariant getBlockByHash(const QByteArray &hash) const;
-    BlockVariant getBlockByData(const QByteArray &data) const;
+    std::expected<BlockVariant, BlockError> getBlockByPosition(const BigNumber &position) const;
+    std::expected<BlockVariant, BlockError> getBlockByHash(const QByteArray &hash) const;
+    std::expected<BlockVariant, BlockError> getBlockByData(const QByteArray &data) const;
 
-    BlockVariant getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
-    BlockVariant getLastRealBlockById();
+    std::expected<BlockVariant, BlockError>
+    getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
 
     std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const ActorId &token) const;
     std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data, const ActorId &token) const;
     std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray>
-    getLastTxByReceiver(const BigNumber &id, const ActorId &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByReceiver(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
     getLastTxBySenderOrReceiver(const BigNumber &id, const ActorId &token) const;
     std::pair<Transaction, QByteArray>
     getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray>
-    getLastTxByApprover(const BigNumber &id, const ActorId &token) const;
+    std::pair<Transaction, QByteArray> getLastTxByApprover(const BigNumber &id, const ActorId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
-        BigNumber from = -1,
-        int count = 10,
-        const ActorId &token = ActorId()) const;
+        BigNumber        from  = -1,
+        int              count = 10,
+        const ActorId   &token = ActorId()) const;
 
-    void removeAll();
+    void      removeAll();
     BigNumber getLastSavedId() const;
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     BigNumber getCountRealBlocks() const;
-    int getCountTransactionsInBlocks() const;
-    int removeById(const BigNumber &id);
-    int removeById(const BlockVariant &block);
-    void removeDummyBlocks(const BigNumber &id);
-    QString buildFilePath(const BigNumber &id) const;
-    BigNumberFloat calculateCirculativeBalance() const;
-    BigNumberFloat calculateCirculativeBalanceBlock(const Block &block) const;
-    BigNumberFloat calculateCirculativeBalanceLastGenesisBlock() const;
+    int       getCountTransactionsInBlocks() const;
+    int       removeById(const BigNumber &id);
+    int       removeById(const BlockVariant &block);
+    void      removeDummyBlocks();
+    QString   buildFilePath(const BigNumber &id) const;
 
     void calculationCountBlock();
 
 private:
     std::pair<Transaction, QByteArray>
     getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const ActorId &token) const;
-    std::set<Transaction> getTxsByParamInRow(const BigNumber &id,
-                                             SearchEnum::TxParam param,
-                                             BigNumber from = -1,
-                                             int count = 10,
-                                             ActorId token = ActorId()) const;
+    std::set<Transaction> getTxsByParamInRow(
+        const BigNumber    &id,
+        SearchEnum::TxParam param,
+        BigNumber           from  = -1,
+        int                 count = 10,
+        ActorId             token = ActorId()) const;
 
-    int add(const BigNumber &id, const BlockVariant &newBlock);
-    bool hasRecordLimit() const;
-    bool recordLimitIsReached() const;
-    QString getFolderPath() const;
-    QString getFolderName() const;
-    BigNumber calcSection(BigNumber id) const;
-    std::optional<BlockVariant> getByIdUnsafe(const BigNumber &id) const;
-    std::optional<BlockVariant> getById(const BigNumber &id) const;
-    BigNumber loadFirstId();
-    BigNumber loadFileFromSection(
-        std::function<QString(const QStringList &folders)> getFolder,
-        std::function<QString(const QStringList &files)> getFile);
+    std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
+    bool                                    hasRecordLimit() const;
+    bool                                    recordLimitIsReached() const;
+    QString                                 getFolderPath() const;
+    QString                                 getFolderName() const;
+    BigNumber                               calcSection(BigNumber id) const;
+    std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
+    std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
+    BigNumber                               loadFirstId();
+    BigNumber                               loadFileFromSection(
+                                      std::function<QString(const QStringList &folders)> getFolder,
+                                      std::function<QString(const QStringList &files)>   getFile);
 
     BigNumber loadLastId();
 };

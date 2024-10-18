@@ -56,6 +56,12 @@ BigNumber::BigNumber(const BigNumber &other) {
     UPDATE_DEBUG()
 }
 
+BigNumber::BigNumber(BigNumber &&other) noexcept {
+    this->m_data = std::move(other.m_data);
+    UPDATE_DEBUG()
+    // other.m_data = boost::multiprecision::cpp_int(0);
+}
+
 BigNumber::BigNumber(const cpp_int &number) {
     this->m_data = number;
     UPDATE_DEBUG()
@@ -274,6 +280,34 @@ BigNumber BigNumber::pow(unsigned long number) {
 BigNumber BigNumber::abs() const {
     auto res = boost::multiprecision::abs(m_data);
     return BigNumber(res);
+}
+
+std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bigNumber, NumeralBase base) {
+    if (bigNumber == "inf") {
+        return std::unexpected(BigNumberError::Infinity);
+    }
+
+    try {
+        BigNumber bn;
+        if (bigNumber.empty()) {
+            bn.m_data = cpp_int(0);
+        } else {
+            if (base == NumeralBase::Dec) {
+                std::string trimmed = bigNumber;
+                trimmed.erase(0, trimmed.find_first_not_of('0'));
+                bn.m_data = cpp_int(trimmed);
+            } else {
+                std::stringstream ss;
+                ss << std::hex << bigNumber;
+                ss >> bn.m_data;
+            }
+        }
+        return bn;
+    } catch (std::exception &) {
+        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
+        assert(false);
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
 }
 
 BigNumber BigNumber::random(int n, bool zeroAllowed) {

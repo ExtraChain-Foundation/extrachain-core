@@ -84,7 +84,7 @@ bool DBConnector::open() {
     int rc = sqlite3_open(m_file.c_str(), &db);
     if (rc) {
         qDebug() << "[DBConnector]" << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
-        qFatal("Can't open DB");
+        // qFatal("Can't open DB");
         return false;
     } else {
         // m_file = name;

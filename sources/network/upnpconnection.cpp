@@ -42,11 +42,9 @@ UPNPConnection::UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObj
 }
 
 UPNPConnection::~UPNPConnection() {
-    qInfo() << "UPNPConnection::~UPNPConnection start";
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
     timer->deleteLater();
-    qInfo() << "UPNPConnection::~UPNPConnection end";
 }
 
 void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text) {

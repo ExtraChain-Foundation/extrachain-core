@@ -29,6 +29,7 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
+#include "utils/bignumber_float.h"
 #include <msgpack.hpp>
 
 #include <boost/algorithm/string/classification.hpp>
@@ -53,7 +54,7 @@ using namespace magic_enum::bitwise_operators;
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
             static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name = magic_enum::enum_type_name<E>();                                         \
+            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
             string_view value_name = magic_enum::enum_name(Enum);                                            \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
         }                                                                                                    \
@@ -77,23 +78,23 @@ void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
 namespace Network {
 Q_NAMESPACE
 
-static bool isStartedServer = true;
-static quint16 maxConnections = 100;
-static bool networkDebug = false;
+static bool    isStartedServer = true;
+static quint16 maxConnections  = 100;
+static bool    networkDebug    = false;
 
 enum class Protocol {
     Undefined = 0,
-    Udp = 1,
+    Udp       = 1,
     WebSocket = 2
 };
 Q_ENUM_NS(Protocol)
 
 enum class SocketServiceError {
-    Unknown = 0,
-    IncompatibleVersion = 1,
-    IncompatibleNetwork = 2,
+    Unknown                = 0,
+    IncompatibleVersion    = 1,
+    IncompatibleNetwork    = 2,
     IncompatibleIdentifier = 3,
-    DuplicateIdentifier = 4,
+    DuplicateIdentifier    = 4,
 };
 Q_ENUM_NS(SocketServiceError)
 
@@ -229,22 +230,22 @@ FORMAT_ENUM(Config::Net::TypeSend)
 namespace Errors {
 // IO
 static const int FILE_ALREADY_EXISTS = 101;
-static const int FILE_IS_NOT_OPENED = 102;
+static const int FILE_IS_NOT_OPENED  = 102;
 
 // Blocks
-static const int BLOCK_IS_NOT_VALID = 201;
-static const int BLOCKS_CANT_MERGE = 202;
-static const int BLOCKS_ARE_EQUAL = 203;
+// static const int BLOCK_IS_NOT_VALID = 201;
+// static const int BLOCKS_CANT_MERGE = 202;
+// static const int BLOCKS_ARE_EQUAL = 203;
 
 // Mem and Block index
-static const int NO_BLOCKS = 401;
+// static const int NO_BLOCKS = 401;
 } // namespace Errors
 
 namespace Serialization {
 
 // Delimiters //
 static const int TRANSACTION_FIELD_SIZE = 4;
-static const int DEFAULT_FIELD_SIZE = 8;
+static const int DEFAULT_FIELD_SIZE     = 8;
 
 EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
 EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
@@ -272,9 +273,9 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
     }
 
     try {
-        msgpack::object_handle oh = msgpack::unpack(data.data(), data.size());
-        msgpack::object deserialized = oh.get();
-        auto t = deserialized.as<T>();
+        msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
+        msgpack::object        deserialized = oh.get();
+        auto                   t            = deserialized.as<T>();
         return t;
     } catch (std::exception &e) {
         qDebug() << e.what();
@@ -308,26 +309,29 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 } // namespace MessagePack
 
 namespace Token {
-static const std::string folder_tokens = "tokens";
-static const std::string db_tokens = "tokens";
-static const std::string tokenTableName = "tokens";
-static const std::string db_tokens_path = fmt::format("{}/{}", folder_tokens, db_tokens);
-static const std::string tokenTableCreate =  "CREATE TABLE IF NOT EXISTS tokens("
-    "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-    "name          TEXT   NOT NULL, "
-    "symbol        TEXT NOT NULL, "
-    "count_coins   TEXT  NOT NULL, "
+static const auto        MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
+static const std::string folder_tokens   = "tokens";
+static const std::string db_tokens       = "tokens";
+static const std::string tokenTableName  = "tokens";
+static const std::string db_tokens_path  = fmt::format("{}/{}", folder_tokens, db_tokens);
+static const std::string tokenTableCreate =
+    "CREATE TABLE IF NOT EXISTS tokens("
+    "actorId       TEXT  PRIMARY KEY NOT NULL, "
+    "name          TEXT  NOT NULL, "
+    "ticker        TEXT  NOT NULL, "
+    "count         TEXT  NOT NULL, "
     "owner         TEXT  NOT NULL, "
     "color         TEXT  NOT NULL, "
-    "url           TEXT  NOT NULL);";
+    "smart           TEXT  NOT NULL);";
 namespace Fields {
+    static const std::string actorId = "actorId";
     static const std::string name = "name";
-    static const std::string symbol = "symbol";
+    static const std::string ticker = "ticker";
     static const std::string count = "count";
     static const std::string owner = "owner";
     static const std::string color = "color";
-    static const std::string url = "url";
-    static const std::vector<std::string> fields = { name, symbol, count, owner, color, url };
+    static const std::string smart = "smart";
+    static const std::vector<std::string> fields = { actorId, name, ticker, count, owner, color, smart };
 }
 }
 
@@ -374,7 +378,7 @@ static const std::wstring filePrefix = L"file:///";
 static const std::wstring filePrefix = L"file://";
 #endif
 
-template<typename E>
+template <typename E>
 std::string enumFullName(E value) {
     return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
 }
@@ -393,17 +397,19 @@ std::string intToStdString(const int &number, const int &size);
 int qByteArrayToInt(const QByteArray &number);
 typedef std::vector<std::string> MerkleDataBlocks;
 
-EXTRACHAIN_EXPORT void rootMerkleHash(std::vector<std::string> &listHashes,
-                                      std::vector<MerkleDataBlocks> &branchesTree, const bool isHahsing,
-                                      std::string &result);
+EXTRACHAIN_EXPORT void rootMerkleHash(
+    std::vector<std::string> &listHashes,
+    std::vector<MerkleDataBlocks> &branchesTree,
+    const bool isHahsing,
+    std::string &result);
 EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
-EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
-                                                                  const bool isHahsing);
+EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks>
+splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
 EXTRACHAIN_EXPORT void hashingElements(std::vector<std::string> &vector);
 EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
-EXTRACHAIN_EXPORT std::string calcHashForFile(const std::filesystem::path &fileName,
-                                              HashEncode encode = HashEncode::Sha3_512);
+EXTRACHAIN_EXPORT std::string
+calcHashForFile(const std::filesystem::path &fileName, HashEncode encode = HashEncode::Sha3_512);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
 std::string byteToHexString(const std::string &data);
@@ -414,12 +420,18 @@ std::string bytesDecodeStdString(const std::string &data, HashEncode encode = Ha
 QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
-EXTRACHAIN_EXPORT bool encryptFile(const QString &originalName, const QString &encryptName,
-                                   const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT bool decryptFile(const QString &encryptName, const QString &decryptName,
-                                   const QByteArray &key, int blockSize = 60007);
-EXTRACHAIN_EXPORT QByteArray decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key,
-                                                      int blockSize = 60007);
+EXTRACHAIN_EXPORT bool encryptFile(
+    const QString &originalName,
+    const QString &encryptName,
+    const QByteArray &key,
+    int blockSize = 60007);
+EXTRACHAIN_EXPORT bool decryptFile(
+    const QString &encryptName,
+    const QString &decryptName,
+    const QByteArray &key,
+    int blockSize = 60007);
+EXTRACHAIN_EXPORT QByteArray
+decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 QString fileMimeSuffix(const QString &filePath);
 
@@ -457,7 +469,6 @@ static const int DATA_OFFSET = 512;
 
 enum DataRowType {
     Universal,
-    Staking
 };
 } // namespace DataStorage
 MSGPACK_ADD_ENUM(DataStorage::DataRowType)

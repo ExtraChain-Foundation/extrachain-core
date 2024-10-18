@@ -52,7 +52,7 @@ std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::strin
         db.select(fmt::format("SELECT * FROM {} WHERE lastModified > {}", TableName, lastModified));
     for (auto &row : actrDirData) {
         DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
-                                .fileHashPrev = row["fileHashPrev"],
+                                .fileNamePrev = row["fileNamePrev"],
                                 .filePath = row["filePath"],
                                 .fileName = row["fileName"],
                                 .Actor = actorId,
@@ -78,7 +78,7 @@ DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, co
 
     auto &row = rows[0];
     DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
-                            .fileHashPrev = row["fileHashPrev"],
+                            .fileNamePrev = row["fileNamePrev"],
                             .filePath = row["filePath"],
                             .fileName = row["fileName"],
                             .fileSize = std::stoull(row["fileSize"]),
@@ -101,11 +101,15 @@ bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
             //Uncommited row below and find out why hash is empty.
             //qFatal("Oh no why. Filehash is empty.");
         }
-        auto row = DBRow { { "fileHash", dirRow.fileHash },
-                           { "fileHashPrev", dirRow.fileHashPrev },
-                           { "filePath", dirRow.filePath },
-                           { "fileSize", std::to_string(dirRow.fileSize) },
-                           { "lastModified", std::to_string(dirRow.lastModified) } };
+        auto row = DBRow {
+            { "fileName", dirRow.fileName },
+            { "fileHash", dirRow.fileHash },
+            { "fileNamePrev", dirRow.fileNamePrev },
+            { "filePath", dirRow.filePath },
+            { "fileSize", std::to_string(dirRow.fileSize) },
+            { "lastModified", std::to_string(dirRow.lastModified) },
+            { "state", std::to_string(std::to_underlying(DFS::Basic::FileState::Unloaded)) }
+        };
         actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, row);
     }
 

@@ -27,7 +27,7 @@
 
 enum class TransactionType {
     Transaction = 0,
-    Reward = 1
+    Reward      = 1
 };
 MSGPACK_ADD_ENUM(TransactionType)
 FORMAT_ENUM(TransactionType)
@@ -46,17 +46,20 @@ FORMAT_ENUM(TransactionError)
 enum class TransactionProveError {
     NoError,
     Unknown,
-    AmountZero, // amount == 0
-    AmountLessZero, // amount less 0
+    AmountZero,              // amount == 0
+    AmountLessZero,          // amount less 0
     IdenticalSenderReceiver, // sender == receiver
-    EmptyBlockchain, // no real block
-    SenderNotExists, // sender is not exist
-    ReceiverNotExists, // receiver is not exist
-    ZeroProducer, // producer 0
-    ProducerVerify, // bad signature in fee tx
-    SenderBalanceBelowZero, // sender's balance will be < 0
+    EmptyBlockchain,         // no real block
+    SenderNotExists,         // sender is not exist
+    ReceiverNotExists,       // receiver is not exist
+    ZeroProducer,            // producer 0
+    ProducerVerify,          // bad signature in fee tx
+    SenderBalanceBelowZero,  // sender's balance will be < 0
     SelfPleasure,
-    RewardWrongToken
+    MissingSignature,
+    InvalidSignature,
+    RewardInvalidToken,
+    InvalidTokenCount
 };
 FORMAT_ENUM(TransactionProveError)
 
@@ -65,15 +68,15 @@ class EXTRACHAIN_EXPORT Transaction {
     ActorId receiver;
 
 protected:
-    BigNumberFloat amount; // coin amount
-    long long date;
-    std::string data;    // additional payload field
-    ActorId token;       // token contract address
-    BigNumber prevBlock; // last block id at the moment of tx creation
-    std::string hash;    // hash from all fields
-    ActorId approver;    // address of the transaction approver.
-    ActorId producer;
-    std::string signature;
+    BigNumberFloat  amount; // coin amount
+    long long       date;
+    std::string     data;      // additional payload field
+    ActorId         token;     // token contract address
+    BigNumber       prevBlock; // last block id at the moment of tx creation
+    std::string     hash;      // hash from all fields
+    ActorId         approver;  // address of the transaction approver.
+    ActorId         producer;
+    std::string     signature;
     TransactionType m_type = TransactionType::Transaction;
 
     /**
@@ -88,11 +91,11 @@ public:
 
     // Construct transaction
     Transaction(
-        const ActorId &sender,
-        const ActorId &receiver,
+        const ActorId        &sender,
+        const ActorId        &receiver,
         const BigNumberFloat &amount,
-        const ActorId &token = ActorId(),
-        const std::string &data = std::string());
+        const ActorId        &token = ActorId(),
+        const std::string    &data  = std::string());
 
     Transaction(const Transaction &other);
 
@@ -108,36 +111,37 @@ public:
     void setApprover(const ActorId &value);
     void setHash(const std::string &value);
 
-    ActorId getSender() const;
-    ActorId getReceiver() const;
+    ActorId        getSender() const;
+    ActorId        getReceiver() const;
     BigNumberFloat getAmount() const;
-    std::string getAmountDec() const;
-    BigNumber getPrevBlock() const;
-    std::string getData() const;
-    std::string getHash() const;
-    ActorId getToken() const;
-    ActorId getApprover() const;
-    std::string getSignature() const;
-    ActorId getProducer() const;
+    std::string    getAmountDec() const;
+    BigNumber      getPrevBlock() const;
+    std::string    getData() const;
+    std::string    getHash() const;
+    ActorId        getToken() const;
+    ActorId        getApprover() const;
+    std::string    getSignature() const;
+    ActorId        getProducer() const;
 
     virtual bool isEmpty() const;
     virtual bool isBurn() const;
-    auto operator<=>(const Transaction &) const = default;
-    bool operator==(const Transaction &transaction) const;
-    void operator=(const Transaction &transaction);
+    bool         isSigned() const;
+    auto         operator<=>(const Transaction &) const = default;
+    bool         operator==(const Transaction &transaction) const;
+    void         operator=(const Transaction &transaction);
 
-    std::string toStdString() const;
-    QString toString() const;
-    long long getDate() const;
-    void setDate(long long value);
-    void setToken(const ActorId &value);
-    void setData(const std::string &value);
-    void setAmount(const BigNumberFloat &value);
-    void setSender(const ActorId &value);
-    void setReceiver(const ActorId &value);
-    bool isRewardTransaction() const;
+    std::string     toStdString() const;
+    QString         toString() const;
+    long long       getDate() const;
+    void            setDate(long long value);
+    void            setToken(const ActorId &value);
+    void            setData(const std::string &value);
+    void            setAmount(const BigNumberFloat &value);
+    void            setSender(const ActorId &value);
+    void            setReceiver(const ActorId &value);
+    bool            isRewardTransaction() const;
     TransactionType type() const;
-    virtual void setType(TransactionType newType);
+    virtual void    setType(TransactionType newType);
 
     MSGPACK_DEFINE(
         sender,

@@ -1030,7 +1030,7 @@ void DfsController::loadBytesLimit() {
     } else {
         m_bytesLimit = DFSB::minDfsLimit;
     }
-    qDebug() << "Limit dfs is " << m_bytesLimit;
+    qDebug() << "[Dfs] Limit is" << m_bytesLimit;
     dirsFile.close();
 }
 
@@ -1179,8 +1179,8 @@ std::string DfsController::deleteFragment(const DFSP::DeleteSegmentMessage &msg)
             //                    it->at("fileHash")
             //                    + "'");
         }
-        if (it->at("fileHashPrev") == msg.FileHash) {
-            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHashPrev =
+        if (it->at("fileNamePrev") == msg.FileHash) {
+            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileNamePrev =
             // " +
             // "'"
             //                    + newFileHash + "' " + "WHERE " + "fileHash = " + "'" +

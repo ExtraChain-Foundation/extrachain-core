@@ -92,3 +92,5 @@ build*/
 target/
 Cargo.lock
 CMakeSettings.json
+html
+Doxyfile
