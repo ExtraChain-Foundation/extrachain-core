@@ -80,6 +80,9 @@ void Block::calcHash() {
     SHA3        sha3(SHA3::Bits::Bits512);
     std::string index = m_index.toStdString(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
+    auto type = std::to_string(std::to_underlying(m_type));
+    sha3.add(type.c_str(), type.size());
+    sha3.add(m_prevHash.c_str(), m_prevHash.size());
 
     for (const auto &data : m_dataService) {
         sha3.add(data.c_str(), data.size());
