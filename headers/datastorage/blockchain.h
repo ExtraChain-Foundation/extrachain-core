@@ -73,6 +73,7 @@ public:
 
     void sync(const BigNumber &from = BigNumber());
     void syncResponse(const BigNumber fromBlock, const std::string &messageId);
+    void lastSavedRequest();
 
 private:
     std::expected<BlockVariant, BlockError> getBlockByData(const QByteArray &data);
@@ -91,11 +92,6 @@ private:
     bool                        signCheckAdd(BlockVariant &block);
     QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
-    const int       COUNT_APPROVER_BLOCK = 1;
-    const int       COUNT_CHECKER_BLOCK  = 2;
-    const int       COUNT_UNFROZE_FEE    = 3;
-    const BigNumber StakingCoef          = 5;
-
 public:
     static BigNumber lastGenesisIdFor(const BigNumber &id);
     static bool      isGenesisId(const BigNumber &id);
@@ -112,8 +108,7 @@ public:
         BigNumber        from  = -1,
         int              count = 10,
         ActorId          token = ActorId());
-    // BigNumber getSupply(const QByteArray &idToken);
-    // BigNumber getFullSupply(const QByteArray &idToken);
+
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
@@ -222,12 +217,6 @@ public:
      * @brief remove all blocks
      */
     void removeAll();
-
-    /**
-     * @brief true - file mode, false - memory mode
-     * @param memory
-     */
-    void setMode(bool fileMode);
 
     /**
      * @brief Return's reference to blockIndex

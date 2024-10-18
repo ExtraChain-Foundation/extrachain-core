@@ -13,6 +13,16 @@ enum class MessageType {
     ActorCount = 3,
     ActorAll = 4,
 
+    BlockchainGenesisBlock = 30,
+    BlockchainNewBlock = 31,
+    BlockchainTransaction = 32,
+    BlockchainCopyScript = 33,
+    BlockchainDataMiningRewardTransaction = 34,
+    BlockchainCoinReward = 35,
+    BlockchainRequestBlock = 36,
+    BlockchainSync = 37,
+    BlockchainLastSaved = 38,
+
     DfsDirData = 50,
     DfsLastModified = 51,
     DfsAddFile = 52,
@@ -29,15 +39,6 @@ enum class MessageType {
     // DfsState = 63,
     RequestBlockCount = 64,
     ResponseBlockCount = 65,
-
-    BlockchainGenesisBlock = 80,
-    BlockchainNewBlock = 81,
-    BlockchainTransaction = 82,
-    BlockchainCopyScript = 83,
-    BlockchainDataMiningRewardTransaction = 84,
-    BlockchainCoinReward = 85,
-    BlockchainRequestBlock = 86,
-    BlockchainSync = 87,
 
     FragmentDataInfo = 90,
     FragmentsDataListInfo = 91,
@@ -58,7 +59,6 @@ enum class MessageType {
     VPNDisconnect = 1003,
     VPNUpdateConnection = 1004,
     Unknown = 404
-
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)
@@ -109,8 +109,7 @@ inline MessageBody make_message(const std::string &data, MessageType type, Messa
     return message;
 }
 
-enum class VPNType
-{
+enum class VPNType {
     CLIENT,
     SERVER,
     PROXY
@@ -118,9 +117,8 @@ enum class VPNType
 MSGPACK_ADD_ENUM(VPNType)
 FORMAT_ENUM(VPNType)
 
-struct VPNMessage
-{
-    VPNType     vpnType;
+struct VPNMessage {
+    VPNType vpnType;
     int resultChainIndex;
     std::set<int> lockedChainIndex;
     std::string countryEndpoint;

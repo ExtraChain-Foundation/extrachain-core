@@ -63,7 +63,7 @@ private:
     friend class NetworkManager;
 
 public:
-    BigNumberFloat        checkPendingTxsList(const ActorId &sender);
+    BigNumberFloat        isCorrectSenderBalance(const ActorId &sender);
     std::set<Transaction> getReceivedTxList() const;
     std::set<Transaction> getPendingTxs() const;
 

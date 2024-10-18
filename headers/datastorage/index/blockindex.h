@@ -36,16 +36,16 @@ public:
     explicit BlockIndex(const QString &folderName);
     explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
 
-    QString folderName;          // set in subclasses
-    int sectionSize;             // todo: 0 = use only one folder
+    QString   folderName;        // set in subclasses
+    int       sectionSize;       // todo: 0 = use only one folder
     BigNumber recordsLimit = -1; // -1 = no limit
 
     // current state //
-    BigNumber records = 0;
-    BigNumber firstSavedId = -1;
-    BigNumber lastSavedId = -1;
-    BigNumber realBlockRecords = 0;
-    int countTransactions = 0;
+    BigNumber records           = 0;
+    BigNumber firstSavedId      = -1;
+    BigNumber lastSavedId       = -1;
+    BigNumber realBlockRecords  = 0;
+    int       countTransactions = 0;
 
     bool m_blockCompress = false;
 
@@ -74,7 +74,7 @@ public:
      * @brief Get last genesis block
      * @return last genesis block
      */
-    std::expected<BlockVariant, BlockError> getLastGenesisBlock() const;
+    std::expected<BlockVariant, BlockError> getLastGenesisBlock(const BigNumber &from = -1) const;
     std::expected<BlockVariant, BlockError> getGenesisBlockById(const BigNumber &id) const;
 
     /**
@@ -105,20 +105,20 @@ public:
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
-        BigNumber from = -1,
-        int count = 10,
-        const ActorId &token = ActorId()) const;
+        BigNumber        from  = -1,
+        int              count = 10,
+        const ActorId   &token = ActorId()) const;
 
-    void removeAll();
+    void      removeAll();
     BigNumber getLastSavedId() const;
     BigNumber getFirstSavedId() const;
     BigNumber getRecords() const;
     BigNumber getCountRealBlocks() const;
-    int getCountTransactionsInBlocks() const;
-    int removeById(const BigNumber &id);
-    int removeById(const BlockVariant &block);
-    void removeDummyBlocks();
-    QString buildFilePath(const BigNumber &id) const;
+    int       getCountTransactionsInBlocks() const;
+    int       removeById(const BigNumber &id);
+    int       removeById(const BlockVariant &block);
+    void      removeDummyBlocks();
+    QString   buildFilePath(const BigNumber &id) const;
 
     void calculationCountBlock();
 
@@ -126,24 +126,24 @@ private:
     std::pair<Transaction, QByteArray>
     getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const ActorId &token) const;
     std::set<Transaction> getTxsByParamInRow(
-        const BigNumber &id,
+        const BigNumber    &id,
         SearchEnum::TxParam param,
-        BigNumber from = -1,
-        int count = 10,
-        ActorId token = ActorId()) const;
+        BigNumber           from  = -1,
+        int                 count = 10,
+        ActorId             token = ActorId()) const;
 
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
-    bool hasRecordLimit() const;
-    bool recordLimitIsReached() const;
-    QString getFolderPath() const;
-    QString getFolderName() const;
-    BigNumber calcSection(BigNumber id) const;
+    bool                                    hasRecordLimit() const;
+    bool                                    recordLimitIsReached() const;
+    QString                                 getFolderPath() const;
+    QString                                 getFolderName() const;
+    BigNumber                               calcSection(BigNumber id) const;
     std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
-    BigNumber loadFirstId();
-    BigNumber loadFileFromSection(
-        std::function<QString(const QStringList &folders)> getFolder,
-        std::function<QString(const QStringList &files)> getFile);
+    BigNumber                               loadFirstId();
+    BigNumber                               loadFileFromSection(
+                                      std::function<QString(const QStringList &folders)> getFolder,
+                                      std::function<QString(const QStringList &files)>   getFile);
 
     BigNumber loadLastId();
 };

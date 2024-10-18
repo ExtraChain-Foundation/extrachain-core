@@ -92,8 +92,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastRealBlock() const {
     return std::unexpected(BlockError::NotExists);
 }
 
-std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock() const {
-    BigNumber id = Blockchain::lastGenesisIdFor(this->lastSavedId);
+std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const BigNumber &from) const {
+    BigNumber id = Blockchain::lastGenesisIdFor(from >= 0 ? from : this->lastSavedId);
 
     while (id >= getFirstSavedId()) {
         auto block = this->getGenesisBlockById(id);
@@ -437,11 +437,16 @@ void BlockIndex::calculationCountBlock() {
 
 std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     QString path = buildFilePath(id);
-    QFile   file(path);
 
+    QFile file(path);
     if (file.exists()) {
-        // TODO: check if block?
-        return std::unexpected(BlockError::AlreadyExists);
+        auto block = getBlockById(id);
+
+        if (block.has_value() && !block->isEmpty()) {
+            return std::unexpected(BlockError::AlreadyExists);
+        }
+
+        file.remove();
     }
 
     if (recordLimitIsReached()) {

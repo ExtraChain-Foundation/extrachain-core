@@ -143,6 +143,10 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
     qDebug() << "[Blockchain] Send for sync: from" << fromBlock << "to" << lastIndex;
 }
 
+void Blockchain::lastSavedRequest() {
+    // node->network()->send_message(0, MessageType::BlockchainLastSaved, MessageStatus::Request);
+}
+
 std::pair<Transaction, QByteArray> Blockchain::getTxBySender(const BigNumber &id, const ActorId &token) {
     return blockIndex.getLastTxBySender(id, token);
 }
@@ -299,8 +303,8 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (existed->getType() == BlockType::Data) {
-        qDebug() << "re" << received;
-        qDebug() << "ex" << existed.value();
+        // qDebug() << "re" << received;
+        // qDebug() << "ex" << existed.value();
     }
 
     if (existed->isEmpty() || received.isEmpty()) {
@@ -415,10 +419,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     if (blockId != 0) {
         auto lastBlock     = this->getBlockByIndex(blockId - 1);
         auto lastRealBlock = this->getLastRealBlock();
-        auto lastGenesis   = blockIndex.getLastGenesisBlock();
+        auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
         if (!block.isGenesisBlock() && !lastBlock.has_value()) {
-            // sync();
+            sync();
             return std::unexpected(BlockError::Invalid);
         }
 
@@ -433,8 +437,12 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         if (checkedPrevHash != expectedPrevHash) {
             qDebug() << "[Blockchain] Can't chained, sync request";
             // qDebug() << "jb" << block;
-            // qDebug() << "lb" << lastBlock.value();
-            sync(lastBlock->getIndex()); // TODO: request only chel who sended block?
+            // if (lastBlock.has_value())
+            //     qDebug() << "lb" << lastBlock.value();
+            // if (lastGenesis.has_value())
+            //     qDebug() << "lg" << lastGenesis.value();
+            // if (block.getType() != BlockType::Dummy)
+            sync(blockId - 1); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }
     }
@@ -477,7 +485,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     qDebug() << "[Blockchain] Block" << blockId << "is added |" << blockType;
-    // getSmContractMembers(newBlock);
+    getSmContractMembers(newBlock);
 
     if (blockId > 0 && blockId % DFS::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
@@ -725,14 +733,16 @@ void Blockchain::getSmContractMembers(const BlockVariant &block) const {
 }
 
 BigNumber Blockchain::getBlockCount() {
-    qDebug() << "BLOCKCHAIN: getBlockCount() count - " << this->blockIndex.getLastSavedId();
-    // return this->blockIndex.getRecords(); ?
+    qDebug() << "[Blockchain] Count:" << this->blockIndex.getLastSavedId();
     return this->blockIndex.getLastSavedId();
 }
 
 void Blockchain::addBlockNetwork(const BlockVariant &block) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
-        qDebug() << "!!!!!!!!!!!";
+        // qDebug() << "!!!!!!!!!!!";
+    }
+    if (block.getType() == BlockType::Data) {
+        // qDebug() << "???????";
     }
 
     auto lastBlock = this->getLastBlock();
@@ -913,7 +923,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
         if (targetSender != firstId) {
             BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx.getToken());
-            senderCurrentBalance += node->transactionManager()->checkPendingTxsList(targetSender);
+            senderCurrentBalance += node->transactionManager()->isCorrectSenderBalance(targetSender);
 
             BigNumberFloat transactionAmount = tx.getAmount();
             BigNumberFloat transactionFee    = 0; // transactionAmount / 100;
