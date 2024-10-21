@@ -144,7 +144,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 
 void TransactionManager::proveTransactions() {
     for (const Transaction &tx : std::as_const(m_receivedTxList)) {
-        TransactionProveError res = node->blockchain()->proveTransaction(tx);
+        TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
             qDebug() << "[TransactionManager] Transaction approved:" << tx;
@@ -157,20 +157,6 @@ void TransactionManager::proveTransactions() {
     }
 
     m_receivedTxList.clear();
-}
-
-BigNumberFloat TransactionManager::isCorrectSenderBalance(const ActorId &sender) {
-    BigNumberFloat res = 0;
-    if (!m_pendingTxList.empty()) {
-        for (const Transaction &tmp : std::as_const(m_pendingTxList)) {
-            if (tmp.getSender() == sender) {
-                res -= tmp.getAmount();
-            } else if (tmp.getReceiver() == sender) {
-                res += tmp.getAmount();
-            }
-        }
-    }
-    return res;
 }
 
 void TransactionManager::process() {

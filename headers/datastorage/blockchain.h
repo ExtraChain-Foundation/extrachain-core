@@ -277,7 +277,7 @@ public:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    TransactionProveError proveTransaction(const Transaction &tx);
+    TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
     void addBlockNetwork(const BlockVariant &block, const std::string &messageId);

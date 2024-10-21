@@ -810,7 +810,8 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
 }
 
 // Actors //
-TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
+TransactionProveError
+Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> transactions) {
     // qDebug() << "[Blockchain] Transaction prove started:" << tx;
 
     ActorId        targetSender   = tx.getSender();
@@ -943,7 +944,16 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
         if (targetSender != firstId) {
             BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, tx.getToken());
-            senderCurrentBalance += node->transactionManager()->isCorrectSenderBalance(targetSender);
+
+            BigNumberFloat res = 0;
+            for (const Transaction &tx : std::as_const(transactions)) {
+                if (tx.getSender() == targetSender) {
+                    res -= tx.getAmount();
+                } else if (tx.getReceiver() == targetSender) {
+                    res += tx.getAmount();
+                }
+            }
+            senderCurrentBalance += res;
 
             BigNumberFloat transactionAmount = tx.getAmount();
             BigNumberFloat transactionFee    = 0; // transactionAmount / 100;
