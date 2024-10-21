@@ -66,15 +66,6 @@ using namespace magic_enum::bitwise_operators;
         return debug;                                                                                        \
     }
 
-namespace fmt {
-template <typename... Args>
-void println(fmt::format_string<Args...> &&fmt_str, Args &&...args) {
-    fmt::print(
-        "{}\n",
-        fmt::format(std::forward<fmt::format_string<Args...>>(fmt_str), std::forward<Args>(args)...));
-}
-}
-
 namespace Network {
 Q_NAMESPACE
 

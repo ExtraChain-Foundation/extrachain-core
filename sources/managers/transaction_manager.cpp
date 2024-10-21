@@ -45,7 +45,7 @@ void TransactionManager::removeTransaction(int i) {
     // this->m_pendingTxList.erase(m_pendingTxList.begin() + i);
 }
 
-void TransactionManager::addTransaction(const Transaction &tx) {
+void TransactionManager::addTransactionNetwork(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Added to the waiting list:" << tx;
     m_receivedTxList.insert(tx);
 }
@@ -63,7 +63,7 @@ void TransactionManager::makeBlock() {
         return;
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
-    auto lastBlock     = node->blockchain()->getLastBlock();
+    auto lastBlock = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
@@ -96,7 +96,7 @@ void TransactionManager::makeBlock() {
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
                            << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto actor   = node->accountController()->mainActor();
+        const auto actor = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
@@ -174,12 +174,13 @@ BigNumberFloat TransactionManager::isCorrectSenderBalance(const ActorId &sender)
 }
 
 void TransactionManager::process() {
-    qDebug() << "[TM]";
+    connect(this, &TransactionManager::addTransaction, this, &TransactionManager::addTransactionNetwork);
+
     blockTimer = new QTimer(this);
     connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
 
-    int milliseconds      = QDateTime::currentDateTime().time().msec();
-    int seconds           = QDateTime::currentDateTime().time().second();
+    int milliseconds = QDateTime::currentDateTime().time().msec();
+    int seconds = QDateTime::currentDateTime().time().second();
     int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
     QThread::msleep(delayToEvenSecond);
 

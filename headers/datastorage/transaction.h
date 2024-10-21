@@ -26,8 +26,9 @@
 #include "utils/exc_utils.h"
 
 enum class TransactionType {
-    Transaction = 0,
-    Reward      = 1
+    Regular      = 0,
+    InitContract = 1,
+    Reward       = 2
 };
 MSGPACK_ADD_ENUM(TransactionType)
 FORMAT_ENUM(TransactionType)
@@ -77,7 +78,7 @@ protected:
     ActorId         approver;  // address of the transaction approver.
     ActorId         producer;
     std::string     signature;
-    TransactionType m_type = TransactionType::Transaction;
+    TransactionType m_type = TransactionType::Regular;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.

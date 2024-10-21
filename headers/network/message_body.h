@@ -22,6 +22,7 @@ enum class MessageType {
     BlockchainRequestBlock = 36,
     BlockchainSync = 37,
     BlockchainLastSaved = 38,
+    BlockchainAnarchy = 39,
 
     DfsDirData = 50,
     DfsLastModified = 51,

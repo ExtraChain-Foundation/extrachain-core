@@ -647,7 +647,7 @@ void NetworkManager::messageReceived(
         GenesisBlock block = MessagePack::deserialize<GenesisBlock>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node->blockchain()->addBlockFromNetwork(blockVariant);
+            node->blockchain()->addBlockFromNetwork(blockVariant, messageId);
         } else {
             qDebug() << "false genesis block";
         }
@@ -659,7 +659,7 @@ void NetworkManager::messageReceived(
         Block block = MessagePack::deserialize<Block>(serialized);
         if (!block.isEmpty()) {
             auto blockVariant = BlockVariant(block);
-            node->blockchain()->addBlockFromNetwork(blockVariant);
+            node->blockchain()->addBlockFromNetwork(blockVariant, messageId);
         }
         break;
     }
@@ -693,7 +693,12 @@ void NetworkManager::messageReceived(
 
     case MessageType::BlockchainSync: {
         auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
-        node->blockchain()->syncResponse(fromBlock, messageId);
+        node->blockchain()->syncResponseFromNetwork(fromBlock, messageId);
+        break;
+    }
+
+    case MessageType::BlockchainAnarchy: {
+        qDebug() << "! BlockchainAnarchy !";
         break;
     }
 

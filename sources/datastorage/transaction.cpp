@@ -20,53 +20,53 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction() {
-    this->sender = ActorId();
-    this->receiver = ActorId();
-    this->token = ActorId();
-    this->approver = ActorId();
-    this->producer = ActorId();
-    this->amount = BigNumberFloat(0);
-    this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = std::string();
+    this->sender    = ActorId();
+    this->receiver  = ActorId();
+    this->token     = ActorId();
+    this->approver  = ActorId();
+    this->producer  = ActorId();
+    this->amount    = BigNumberFloat(0);
+    this->date      = QDateTime::currentMSecsSinceEpoch();
+    this->data      = std::string();
     this->prevBlock = BigNumber(0);
-    this->hash = "";
+    this->hash      = "";
     this->signature = std::string();
-    this->m_type = TransactionType::Transaction;
+    this->m_type    = TransactionType::Regular;
     calcHash();
 }
 
 Transaction::Transaction(
-    const ActorId &sender,
-    const ActorId &receiver,
+    const ActorId        &sender,
+    const ActorId        &receiver,
     const BigNumberFloat &amount,
-    const ActorId &token,
-    const std::string &data) {
-    this->sender = sender;
-    this->receiver = receiver;
-    this->amount = amount;
-    this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = data;
+    const ActorId        &token,
+    const std::string    &data) {
+    this->sender    = sender;
+    this->receiver  = receiver;
+    this->amount    = amount;
+    this->date      = QDateTime::currentMSecsSinceEpoch();
+    this->data      = data;
     this->prevBlock = BigNumber(0);
-    this->hash = "";
+    this->hash      = "";
     this->signature = std::string();
-    this->m_type = TransactionType::Transaction;
-    this->token = token;
+    this->m_type    = TransactionType::Regular;
+    this->token     = token;
     calcHash();
 }
 
 Transaction::Transaction(const Transaction &other) {
-    this->sender = other.sender;
-    this->receiver = other.receiver;
-    this->amount = other.amount;
-    this->date = other.date;
-    this->data = other.data;
-    this->token = other.token;
+    this->sender    = other.sender;
+    this->receiver  = other.receiver;
+    this->amount    = other.amount;
+    this->date      = other.date;
+    this->data      = other.data;
+    this->token     = other.token;
     this->prevBlock = other.prevBlock;
-    this->hash = other.hash;
-    this->approver = other.approver;
+    this->hash      = other.hash;
+    this->approver  = other.approver;
     this->signature = other.signature;
-    this->producer = other.producer;
-    this->m_type = other.m_type;
+    this->producer  = other.producer;
+    this->m_type    = other.m_type;
     calcHash();
 }
 
@@ -236,18 +236,18 @@ bool Transaction::operator==(const Transaction &transaction) const {
 }
 
 void Transaction::operator=(const Transaction &other) {
-    this->sender = other.sender;
-    this->receiver = other.receiver;
-    this->amount = other.amount;
-    this->date = other.date;
-    this->data = other.data;
-    this->token = other.token;
+    this->sender    = other.sender;
+    this->receiver  = other.receiver;
+    this->amount    = other.amount;
+    this->date      = other.date;
+    this->data      = other.data;
+    this->token     = other.token;
     this->prevBlock = other.prevBlock;
-    this->hash = other.hash;
-    this->approver = other.approver;
+    this->hash      = other.hash;
+    this->approver  = other.approver;
     this->signature = other.signature;
-    this->producer = other.producer;
-    this->m_type = other.m_type;
+    this->producer  = other.producer;
+    this->m_type    = other.m_type;
 }
 
 std::string Transaction::toStdString() const {
@@ -255,7 +255,7 @@ std::string Transaction::toStdString() const {
 }
 
 QString Transaction::toString() const {
-    auto hashQt = QString::fromStdString(hash);
+    auto hashQt  = QString::fromStdString(hash);
     auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
     return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: "
            + receiver.toByteArray() + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "

@@ -225,7 +225,7 @@ std::string Block::toStdString() const {
 }
 
 bool Block::isEmpty() const {
-    return this->getHash().empty() && this->m_signatures.empty()
+    return m_index < 0 && this->getHash().empty() && this->m_signatures.empty()
            && (m_index == 0 || this->getPrevHash().empty());
 }
 

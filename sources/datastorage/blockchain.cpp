@@ -266,7 +266,8 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
             auto sender   = transaction.getSender();
             auto receiver = transaction.getReceiver();
             auto tokenId  = transaction.getToken();
-            if (sender == ActorId() || tokenId != TokenId() && transaction.getData() != "InitContract")
+            if (sender == ActorId()
+                || tokenId != TokenId() && transaction.type() == TransactionType::InitContract)
                 lastDataRows[{ sender, tokenId }].state -= transaction.getAmount();
             lastDataRows[{ receiver, tokenId }].state += transaction.getAmount();
         }
@@ -491,7 +492,6 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     qDebug() << "[Blockchain] Block" << blockId << "is added |" << blockType;
-    getSmContractMembers(newBlock);
 
     if (blockId > 0 && blockId % DFS::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
@@ -726,24 +726,12 @@ void Blockchain::showBlockchain() const {
     // } while (!currentBlock.isEmpty());
 }
 
-void Blockchain::getSmContractMembers(const BlockVariant &block) const {
-    if (block.isGenesisBlock())
-        return;
-    auto txList = block.transactions();
-    for (const Transaction &tx : txList) {
-        if (tx.getData() == "InitContract") {
-            node->actorIndex()->getActor(tx.getSender());
-            node->actorIndex()->getActor(tx.getReceiver());
-        }
-    }
-}
-
 BigNumber Blockchain::getBlockCount() {
     qDebug() << "[Blockchain] Count:" << this->blockIndex.getLastSavedId();
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant &block) {
+void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &messageId) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
         // qDebug() << "!!!!!!!!!!!";
     }
@@ -762,8 +750,25 @@ void Blockchain::addBlockNetwork(const BlockVariant &block) {
 
     auto res = addBlock(block);
 
-    if (!res.has_value() /*&& res.error() == BlockError::Invalid*/) {
-        return;
+    if (!res.has_value()) {
+        switch (res.error()) {
+        case BlockError::AlreadyChained: {
+            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
+                syncResponse(block.getIndex(), messageId);
+            } else {
+                node->network()->send_message(
+                    "",
+                    MessageType::BlockchainAnarchy,
+                    MessageStatus::Response,
+                    messageId,
+                    Config::Net::TypeSend::Focused);
+            }
+
+            return;
+        }
+        default:
+            break;
+        }
     }
 
     // if (res->getType() != BlockType::Dummy) {
@@ -772,14 +777,23 @@ void Blockchain::addBlockNetwork(const BlockVariant &block) {
     // sendBlockByNumber(block.getIndex());
 
     // notifications for clients
-    auto transactions = block.transactions(); // updateLastTransactionList
+    if (res->getType() != BlockType::Data) {
+        return;
+    }
 
-    const auto accounts = node->accountController()->accountsIds();
-
+    auto       transactions = block.transactions();
+    const auto accounts     = node->accountController()->accountsIds();
     for (const auto &transaction : transactions) {
+        // vefify
+
+        if (transaction.type() == TransactionType::InitContract) {
+            node->actorIndex()->getActor(transaction.getSender());
+            // TODO: subscribe dfs for waiting token json?
+        }
+
         for (const auto &accountId : accounts) {
             if (transaction.getSender() == accountId || transaction.getApprover() == accountId) {
-                emit updateSelf();
+                emit updateSelf(block.getIndex());
             }
         }
     }
@@ -918,7 +932,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
         // provedTx.sign(node->accountController()->currentWallet());
         return TransactionProveError::NoError;
     } else {
-        if (tx.getData() == "InitContract") {
+        if (tx.type() == TransactionType::InitContract) {
             auto count = tx.getAmount();
             if (count < 0 || count >= Token::MAX_TOKEN_COUNT) {
                 return TransactionProveError::InvalidTokenCount;
@@ -955,6 +969,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction &tx) {
 
 void Blockchain::process() {
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
+    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
 }
 
 // Other //

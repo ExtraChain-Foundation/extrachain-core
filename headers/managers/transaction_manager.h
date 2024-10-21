@@ -54,7 +54,6 @@ public:
     TransactionManager(ExtraChainNode *node);
 
 private:
-    void addTransaction(const Transaction &tx);
     void proveTransactions();
     void addProvedTransaction(const Transaction &tx);
     void makeBlock();
@@ -63,18 +62,19 @@ private:
     friend class NetworkManager;
 
 public:
-    BigNumberFloat        isCorrectSenderBalance(const ActorId &sender);
+    BigNumberFloat isCorrectSenderBalance(const ActorId &sender);
     std::set<Transaction> getReceivedTxList() const;
     std::set<Transaction> getPendingTxs() const;
 
 public slots:
     void makeBlockAndProveTransactionsInThread();
+    void addTransactionNetwork(const Transaction &tx);
     void process();
-    ;
 
 signals:
     void finished();
     void addToCache(std::string actor, Transaction tx);
+    void addTransaction(const Transaction &tx);
 };
 
 #endif // TRANSACTION_MANAGER_H

@@ -153,7 +153,7 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
         if (!firstBlock.has_value())
             return false;
 
-        m_blockchain->addBlockFromNetwork(firstBlock.value());
+        m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
     }
 
     return true;
