@@ -258,43 +258,43 @@ BlockIndex::getLastTxByParam(const std::string &id, SearchEnum::TxParam param, c
         auto txs = lastBlock->transactions();
 
         for (const Transaction &tx : txs) {
-            if (tx.getToken() != tokenActor)
+            if (tx.token() != tokenActor)
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
-                if (tx.getSender().toStdString() == id || tx.getReceiver().toStdString() == id)
+                if (tx.sender().toStdString() == id || tx.receiver().toStdString() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSender: {
-                if (tx.getSender().toStdString() == id)
+                if (tx.sender().toStdString() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (tx.getReceiver().toStdString() == id)
+                if (tx.receiver().toStdString() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if (tx.getSender().toStdString() == id || tx.getReceiver().toStdString() == id)
+                if (tx.sender().toStdString() == id || tx.receiver().toStdString() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (tx.getApprover().toStdString() == id)
+                if (tx.approver().toStdString() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (tx.getHash() == id)
+                if (tx.hash() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
             case SearchEnum::TxParam::Data: {
                 if (lastBlock->getType() == BlockType::Genesis)
                     return { Transaction(), "-1" };
-                if (tx.getData() == id)
+                if (tx.data() == id)
                     return { tx, lastBlockId.toByteArray() };
                 break;
             }
@@ -341,41 +341,41 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
         auto txs = lastBlock->transactions();
 
         for (const Transaction &tx : txs) {
-            if (tx.getToken() != token)
+            if (tx.token() != token)
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSender: {
-                if (BigNumber(tx.getSender().toStdString()) == id && tx.getToken() == token) {
+                if (BigNumber(tx.sender().toStdString()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (BigNumber(tx.getReceiver().toStdString()) == id && tx.getToken() == token) {
+                if (BigNumber(tx.receiver().toStdString()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if ((BigNumber(tx.getSender().toStdString()) == id
-                     || BigNumber(tx.getReceiver().toStdString()) == id)
-                    && tx.getToken() == token) {
+                if ((BigNumber(tx.sender().toStdString()) == id
+                     || BigNumber(tx.receiver().toStdString()) == id)
+                    && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (BigNumber(tx.getApprover().toStdString()) == id && tx.getToken() == token) {
+                if (BigNumber(tx.approver().toStdString()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::Hash: {
-                if (BigNumber(tx.getHash()) == id && tx.getToken() == token) {
+                if (BigNumber(tx.hash()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -536,17 +536,17 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         for (const auto &tmp : std::as_const(rows)) {
             DBRow rowRow;
             rowRow.insert({ "type", std::to_string(std::to_underlying(tmp.type())) });
-            rowRow.insert({ "sender", tmp.getSender().toStdString() });
-            rowRow.insert({ "receiver", tmp.getReceiver().toStdString() });
-            rowRow.insert({ "amount", tmp.getAmount().toStdString() });
-            rowRow.insert({ "date", QByteArray::number(tmp.getDate()).toStdString() });
-            rowRow.insert({ "token", tmp.getToken().toStdString() });
-            rowRow.insert({ "data", tmp.getData() });
-            rowRow.insert({ "prevBlock", tmp.getPrevBlock().toStdString() });
-            rowRow.insert({ "hash", tmp.getHash() });
-            rowRow.insert({ "approver", tmp.getApprover().toStdString() });
-            rowRow.insert({ "signature", tmp.getSignature() });
-            rowRow.insert({ "producer", tmp.getProducer().toStdString() });
+            rowRow.insert({ "sender", tmp.sender().toStdString() });
+            rowRow.insert({ "receiver", tmp.receiver().toStdString() });
+            rowRow.insert({ "amount", tmp.amount().toStdString() });
+            rowRow.insert({ "date", QByteArray::number(tmp.date()).toStdString() });
+            rowRow.insert({ "token", tmp.token().toStdString() });
+            rowRow.insert({ "data", tmp.data() });
+            rowRow.insert({ "prevBlock", tmp.prevBlock().toStdString() });
+            rowRow.insert({ "hash", tmp.hash() });
+            rowRow.insert({ "approver", tmp.approver().toStdString() });
+            rowRow.insert({ "signature", tmp.signature() });
+            rowRow.insert({ "producer", tmp.producer().toStdString() });
 
             bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
             if (txInserted)

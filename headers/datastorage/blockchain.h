@@ -72,7 +72,6 @@ public:
     std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
 
     void sync(const BigNumber &from = BigNumber());
-    void syncResponse(const BigNumber fromBlock, const std::string &messageId);
     void lastSavedRequest();
 
 private:
@@ -249,7 +248,7 @@ public:
     BigNumberFloat getUserBalance(
         ActorId         userId,
         TokenId         tokenId = TokenId(),
-        TransactionType txType  = TransactionType::Transaction) const;
+        TransactionType txType  = TransactionType::Regular) const;
 
     /**
      * @brief Show blockchain
@@ -262,8 +261,9 @@ signals:
     void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
-    void updateSelf();
-    void addBlockFromNetwork(const BlockVariant &block);
+    void updateSelf(BigNumber blockId);
+    void addBlockFromNetwork(const BlockVariant &block, const std::string &messageId);
+    void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
 
     /**
      * @brief possibleMiningChange
@@ -277,10 +277,11 @@ public:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    TransactionProveError proveTransaction(const Transaction &tx);
+    TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block);
+    void addBlockNetwork(const BlockVariant &block, const std::string &messageId);
+    void syncResponse(const BigNumber fromBlock, const std::string &messageId);
     void process();
 };
 

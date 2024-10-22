@@ -22,23 +22,21 @@ struct TokenData {
 class TokenManager : public QObject {
     Q_OBJECT
 
-    ExtraChainNode                               *node;
-    QMap<ActorId, QMap<std::string, std::string>> tokenBalance;
+    ExtraChainNode *node;
 
-    void sendInitialTransaction(
-        const std::shared_ptr<Actor<KeyPrivate>> sender,
-        ActorId                                  receiver,
-        std::string                              quantity);
+    void sendInitialTransaction(const ActorId &owner, const TokenId &token, const BigNumberFloat &amount);
     // std::shared_ptr<Actor<KeyPrivate>> createPrivateActor();
     void initializeTokenArray();
-    bool tokenExist(const std::string &nameToken);
-    bool tokentTickerExist(const std::string &tickerToken);
+    bool tokenExist(const std::string &nameToken, const std::string &tickerToken);
 
 public:
     TokenManager(ExtraChainNode *node);
     ~TokenManager() = default;
 
     bool isContract(const QString &pathFile);
+
+    static bool isValidName(const std::string &name);
+    static bool isValidTicker(const std::string &ticker);
 
 public slots:
     void createToken(
@@ -61,7 +59,7 @@ signals:
         const bool       &rewrite = false);
     void errorNameTokenExist(const QString &);
     void errorTickerTokenExist(const QString &);
-    void added();
+    void added(const ActorId &owner, const TokenId &token);
     void sendToken(const ActorId &actor, const QString &pathToJson);
 };
 

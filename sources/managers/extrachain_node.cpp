@@ -153,7 +153,7 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
         if (!firstBlock.has_value())
             return false;
 
-        m_blockchain->addBlockFromNetwork(firstBlock.value());
+        m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
     }
 
     return true;
@@ -198,7 +198,7 @@ NetworkManager* ExtraChainNode::network() {
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(Transaction tx) {
-    if (tx.getAmount() == 0) {
+    if (tx.amount() <= 0) {
         qWarning() << "Can not create tx without amount";
         return std::unexpected(TransactionError::ZeroAmount);
     }
@@ -230,7 +230,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     tx.setPrevBlock(lastRealBlock->getIndex());
 
     // 2) check coin availability
-    if (blockchain()->getUserBalance(actor->id(), tx.getToken()) < tx.getAmount()) {
+    if (blockchain()->getUserBalance(actor->id(), tx.token()) < tx.amount()) {
         qWarning() << fmt::format(
             "Can not create tx:[{}]. There is not enough coins/tokens in wallet",
             tx.toStdString());
@@ -239,7 +239,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     // 3) sign transaction
     tx.sign(actor);
-    qDebug() << "[Transaction] Send" << tx.getAmountDec() << "to" << tx.getReceiver();
+    qDebug() << "[Transaction] Send" << tx.amount().toStdString(NumeralBase::Dec) << "to" << tx.receiver();
 
     return tx;
 }
@@ -341,7 +341,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
                             .arg(tx.toString(), QString(actor->id().toByteArray()));
 
             tx.sign(actor);
-            qDebug() << "[Transaction] Send tx" << tx.getAmountDec() << "to" << tx.getReceiver();
+            qDebug() << "[Transaction] Send tx" << tx.amount().toStdString(NumeralBase::Dec) << "to"
+                     << tx.receiver();
             auto createdTx = this->createTransaction(tx);
             return createdTx;
         }

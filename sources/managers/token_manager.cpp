@@ -41,17 +41,42 @@ bool TokenManager::isContract(const QString &pathFile) {
     return result;
 }
 
-void TokenManager::sendInitialTransaction(
-    const std::shared_ptr<Actor<KeyPrivate>> sender,
-    ActorId                                  receiver,
-    std::string                              quantity) {
-    Transaction tx(sender->id(), receiver, BigNumberFloat(quantity, NumeralBase::Dec));
-    tx.setData("InitContract");
-    tx.setToken(sender->id());
-    // tx.sign(sender);
+bool TokenManager::isValidName(const std::string &name) {
+    if (name.size() < 3 || name.size() > 20) {
+        return false;
+    }
 
-    emit sendTransactionCreateToken(sender->id(), tx);
-    emit added();
+    return std::all_of(name.begin(), name.end(), [](unsigned char c) {
+        return std::isalnum(c) || c == ' ' || c == '-' || c == '_';
+    });
+}
+
+bool TokenManager::isValidTicker(const std::string &ticker) {
+    if (ticker.size() < 2 || ticker.size() > 5) {
+        return false;
+    }
+
+    if (!std::isalpha(ticker[0])) {
+        return false;
+    }
+
+    return std::all_of(ticker.begin(), ticker.end(), [](unsigned char c) {
+        return std::isupper(c) || std::isdigit(c);
+    });
+}
+
+void TokenManager::sendInitialTransaction(
+    const ActorId        &owner,
+    const TokenId        &token,
+    const BigNumberFloat &amount) {
+    Transaction tx;
+    tx.setSender(owner);
+    tx.setReceiver(owner);
+    tx.setAmount(amount);
+    tx.setToken(token);
+    tx.setType(TransactionType::InitContract);
+    emit sendTransactionCreateToken(owner, tx);
+    emit added(owner, token);
 }
 
 void TokenManager::initializeTokenArray() {
@@ -69,43 +94,24 @@ void TokenManager::initializeTokenArray() {
     //             qDebug() << "[TokenManager] Error when open file " << file.fileName() << " list size !=7";
     //             return;
     //         }
-
-    //         tokenBalance[deserializedDataList.at(6)] = { { deserializedDataList.at(4),
-    //                                                        deserializedDataList.at(5) } };
-
     //         file.close();
     //     }
     // }
 }
 
-bool TokenManager::tokenExist(const std::string &nameToken) {
+bool TokenManager::tokenExist(const std::string &nameToken, const std::string &tickerToken) {
     DBConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
 
     if (isDbOpen) {
         return false;
     }
-    if (db.count(Token::tokenTableName) == 0) {
-        qDebug() << "[TokenManager] Name: count is zero.";
-        return false;
-    }
 
-    auto countRow = db.count(Token::tokenTableName, fmt::format("name='{}'", nameToken));
+    auto countRow = db.count(
+        Token::tokenTableName,
+        fmt::format("UPPER(name)='{}' OR UPPER(ticker)='{}'", nameToken, tickerToken));
     qDebug() << "[TokenManager] Name: count row:" << countRow;
     return countRow > 0;
-}
-
-bool TokenManager::tokentTickerExist(const std::string &tickerToken) {
-    DBConnector db(Token::db_tokens_path);
-    bool        isDbOpen = db.open();
-
-    if (isDbOpen) {
-        auto countRow = db.count(Token::tokenTableName, fmt::format("ticker='{}'", tickerToken));
-        qDebug() << "[TokenManager] Ticker: count row:" << countRow;
-        return countRow > 0;
-    }
-
-    return false;
 }
 
 void TokenManager::createToken(
@@ -114,6 +120,10 @@ void TokenManager::createToken(
     const std::string &ticker,
     const ActorId     &owner,
     const std::string &color) {
+    if (!node->network()->isActiveConnectionExists()) {
+        qDebug() << "[TokenManager] No connections";
+    }
+
     auto countBn = BigNumberFloat::create(count, NumeralBase::Dec);
     if (!countBn.has_value()) {
         emit errorNameTokenExist("count");
@@ -123,46 +133,38 @@ void TokenManager::createToken(
     if (countBn.value() < 0 || countBn.value() >= Token::MAX_TOKEN_COUNT) {
         qDebug() << "[TokenManager] Error create token. Count:" << count << "| name:" << name
                  << "| ticker:" << ticker << "| rull address:" << owner << "| color:" << color;
-        emit errorNameTokenExist("count");
         return;
     }
 
     qDebug() << "[TokenManager] Create token. Count:" << count << "| name:" << name << "| ticker:" << ticker
              << "| rull address:" << owner << "| color:" << color;
 
-    if (!node->network()->isActiveConnectionExists()) {
-        qDebug() << "[TokenManager] No connections";
-    }
-
-    auto upperTokenName = QString::fromStdString(name).toUpper();
-
-    if (tokenExist(name) || upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN") {
-        qDebug() << "token name exist";
-        emit errorNameTokenExist(QString::fromStdString(name));
+    if (!isValidName(name) || !isValidTicker(ticker)) {
+        qDebug() << "[TokenManager] Incorrecnt name. Name:" << name << "| ticker:" << ticker;
+        emit errorNameTokenExist("name");
         return;
     }
 
-    auto tickerSymbol = QString::fromStdString(ticker).toUpper();
-    if (tokentTickerExist(ticker) || tickerSymbol == "ROCC" || tickerSymbol == "EXC") {
-        qDebug() << "token ticker exist";
-        emit errorTickerTokenExist(QString::fromStdString(ticker));
+    auto upperTokenName = Utils::str_to_upper(name);
+    auto tickerSymbol   = Utils::str_to_upper(ticker);
+    if (upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN" || tickerSymbol == "ROCC"
+        || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
+        qDebug() << "[TokenManager] Name or ticker exists";
+        emit errorNameTokenExist("exists");
         return;
     }
 
-    tokenBalance[owner] = { { name, count } };
-    auto actor          = node->accountController()->createService();
-
-    QString actorId = QString(actor.id().toString());
-
+    auto    actor        = node->accountController()->createService();
+    QString actorId      = QString(actor.id().toString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
-    TokenData tokenData;
-    tokenData.actor  = actor.id().toStdString();
-    tokenData.name   = name;
-    tokenData.color  = color;
-    tokenData.owner  = actorId.toStdString();
-    tokenData.ticker = ticker;
-    tokenData.count  = count;
+    auto tokenData = TokenData { .actor  = actor.id().toStdString(),
+                                 .owner  = actorId.toStdString(),
+                                 .count  = count,
+                                 .name   = name,
+                                 .ticker = ticker,
+                                 .color  = color,
+                                 .smart  = "" };
 
     DBConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
@@ -186,9 +188,7 @@ void TokenManager::createToken(
                  << " not open.";
     }
 
-    // add to dfs
-
-    sendInitialTransaction(std::make_shared<Actor<KeyPrivate>>(actor), ActorId(owner), count);
+    sendInitialTransaction(owner, owner, BigNumberFloat(count, NumeralBase::Dec));
 }
 
 void TokenManager::checkIsContract(const QString &pathToFile) {
@@ -200,8 +200,10 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
 
         QJsonDocument jsonDoc = QJsonDocument::fromJson(fileData);
         if (jsonDoc.isObject()) {
-            QJsonObject jsonObj  = jsonDoc.object();
-            bool checkTokenExist = tokenExist(jsonObj[Token::Fields::name.c_str()].toString().toStdString());
+            QJsonObject jsonObj         = jsonDoc.object();
+            auto        name            = jsonObj[Token::Fields::name.c_str()].toString().toStdString();
+            auto        ticker          = jsonObj[Token::Fields::ticker.c_str()].toString().toStdString();
+            bool        checkTokenExist = tokenExist(name, ticker);
 
             if (!checkJsonObjectHasTokenFields(jsonObj) || checkTokenExist)
                 return;

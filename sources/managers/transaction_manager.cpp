@@ -45,7 +45,7 @@ void TransactionManager::removeTransaction(int i) {
     // this->m_pendingTxList.erase(m_pendingTxList.begin() + i);
 }
 
-void TransactionManager::addTransaction(const Transaction &tx) {
+void TransactionManager::addTransactionNetwork(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Added to the waiting list:" << tx;
     m_receivedTxList.insert(tx);
 }
@@ -53,7 +53,7 @@ void TransactionManager::addTransaction(const Transaction &tx) {
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
-    emit addToCache(tx.getReceiver().toStdString(), tx);
+    emit addToCache(tx.receiver().toStdString(), tx);
 }
 
 // Block making
@@ -63,7 +63,7 @@ void TransactionManager::makeBlock() {
         return;
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
-    auto lastBlock     = node->blockchain()->getLastBlock();
+    auto lastBlock = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
@@ -96,7 +96,7 @@ void TransactionManager::makeBlock() {
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
                            << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto actor   = node->accountController()->mainActor();
+        const auto actor = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
@@ -144,7 +144,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
 
 void TransactionManager::proveTransactions() {
     for (const Transaction &tx : std::as_const(m_receivedTxList)) {
-        TransactionProveError res = node->blockchain()->proveTransaction(tx);
+        TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
             qDebug() << "[TransactionManager] Transaction approved:" << tx;
@@ -159,27 +159,14 @@ void TransactionManager::proveTransactions() {
     m_receivedTxList.clear();
 }
 
-BigNumberFloat TransactionManager::isCorrectSenderBalance(const ActorId &sender) {
-    BigNumberFloat res = 0;
-    if (!m_pendingTxList.empty()) {
-        for (const Transaction &tmp : std::as_const(m_pendingTxList)) {
-            if (tmp.getSender() == sender) {
-                res -= tmp.getAmount();
-            } else if (tmp.getReceiver() == sender) {
-                res += tmp.getAmount();
-            }
-        }
-    }
-    return res;
-}
-
 void TransactionManager::process() {
-    qDebug() << "[TM]";
+    connect(this, &TransactionManager::addTransaction, this, &TransactionManager::addTransactionNetwork);
+
     blockTimer = new QTimer(this);
     connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
 
-    int milliseconds      = QDateTime::currentDateTime().time().msec();
-    int seconds           = QDateTime::currentDateTime().time().second();
+    int milliseconds = QDateTime::currentDateTime().time().msec();
+    int seconds = QDateTime::currentDateTime().time().second();
     int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
     QThread::msleep(delayToEvenSecond);
 

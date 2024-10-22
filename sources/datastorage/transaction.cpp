@@ -20,58 +20,76 @@
 #include "datastorage/transaction.h"
 
 Transaction::Transaction() {
-    this->sender = ActorId();
-    this->receiver = ActorId();
-    this->token = ActorId();
-    this->approver = ActorId();
-    this->producer = ActorId();
-    this->amount = BigNumberFloat(0);
-    this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = std::string();
-    this->prevBlock = BigNumber(0);
-    this->hash = "";
-    this->signature = std::string();
-    this->m_type = TransactionType::Transaction;
+    this->m_sender    = ActorId();
+    this->m_receiver  = ActorId();
+    this->m_token     = ActorId();
+    this->m_approver  = ActorId();
+    this->m_producer  = ActorId();
+    this->m_amount    = BigNumberFloat(0);
+    this->m_date      = QDateTime::currentMSecsSinceEpoch();
+    this->m_data      = std::string();
+    this->m_prevBlock = BigNumber(0);
+    this->m_hash      = "";
+    this->m_signature = std::string();
+    this->m_type      = TransactionType::Regular;
     calcHash();
 }
 
 Transaction::Transaction(
-    const ActorId &sender,
-    const ActorId &receiver,
+    const ActorId        &sender,
+    const ActorId        &receiver,
     const BigNumberFloat &amount,
-    const ActorId &token,
-    const std::string &data) {
-    this->sender = sender;
-    this->receiver = receiver;
-    this->amount = amount;
-    this->date = QDateTime::currentMSecsSinceEpoch();
-    this->data = data;
-    this->prevBlock = BigNumber(0);
-    this->hash = "";
-    this->signature = std::string();
-    this->m_type = TransactionType::Transaction;
-    this->token = token;
+    const ActorId        &token,
+    const std::string    &data) {
+    this->m_sender    = sender;
+    this->m_receiver  = receiver;
+    this->m_amount    = amount;
+    this->m_date      = QDateTime::currentMSecsSinceEpoch();
+    this->m_data      = data;
+    this->m_prevBlock = BigNumber(0);
+    this->m_hash      = "";
+    this->m_signature = std::string();
+    this->m_type      = TransactionType::Regular;
+    this->m_token     = token;
     calcHash();
 }
 
 Transaction::Transaction(const Transaction &other) {
-    this->sender = other.sender;
-    this->receiver = other.receiver;
-    this->amount = other.amount;
-    this->date = other.date;
-    this->data = other.data;
-    this->token = other.token;
-    this->prevBlock = other.prevBlock;
-    this->hash = other.hash;
-    this->approver = other.approver;
-    this->signature = other.signature;
-    this->producer = other.producer;
-    this->m_type = other.m_type;
+    this->m_sender    = other.m_sender;
+    this->m_receiver  = other.m_receiver;
+    this->m_amount    = other.m_amount;
+    this->m_date      = other.m_date;
+    this->m_data      = other.m_data;
+    this->m_token     = other.m_token;
+    this->m_prevBlock = other.m_prevBlock;
+    this->m_hash      = other.m_hash;
+    this->m_approver  = other.m_approver;
+    this->m_signature = other.m_signature;
+    this->m_producer  = other.m_producer;
+    this->m_type      = other.m_type;
     calcHash();
 }
 
+Transaction::Transaction(Transaction &&other) noexcept {
+    m_sender    = std::move(other.m_sender);
+    m_receiver  = std::move(other.m_receiver);
+    m_amount    = std::move(other.m_amount);
+    m_date      = std::move(other.m_date);
+    m_data      = std::move(other.m_data);
+    m_token     = std::move(other.m_token);
+    m_prevBlock = std::move(other.m_prevBlock);
+    m_hash      = std::move(other.m_hash);
+    m_approver  = std::move(other.m_approver);
+    m_signature = std::move(other.m_signature);
+    m_producer  = std::move(other.m_producer);
+    m_type      = std::move(other.m_type);
+    calcHash();
+
+    other.m_hash = "";
+}
+
 void Transaction::setReceiver(const ActorId &value) {
-    receiver = value;
+    m_receiver = value;
 }
 
 bool Transaction::isRewardTransaction() const {
@@ -79,57 +97,57 @@ bool Transaction::isRewardTransaction() const {
 }
 
 void Transaction::setProducer(const ActorId &value) {
-    producer = value;
+    m_producer = value;
 }
 
 void Transaction::setSignature(const std::string &value) {
-    signature = value;
+    m_signature = value;
 }
 
 void Transaction::setApprover(const ActorId &value) {
-    approver = value;
+    m_approver = value;
 }
 
 void Transaction::setHash(const std::string &value) {
-    hash = value;
+    m_hash = value;
 }
 
 void Transaction::setSender(const ActorId &value) {
-    sender = value;
+    m_sender = value;
 }
 
-ActorId Transaction::getProducer() const {
-    return producer;
+ActorId Transaction::producer() const {
+    return m_producer;
 }
 
 void Transaction::setAmount(const BigNumberFloat &value) {
-    amount = value;
+    m_amount = value;
 }
 
 void Transaction::setData(const std::string &value) {
-    data = value;
+    m_data = value;
 }
 
 void Transaction::setToken(const ActorId &value) {
-    token = value;
+    m_token = value;
 }
 
-long long Transaction::getDate() const {
-    return date;
+long long Transaction::date() const {
+    return m_date;
 }
 
 void Transaction::setDate(long long value) {
-    date = value;
+    m_date = value;
 }
 
 void Transaction::calcHash() {
-    auto hashData = sender.toStdString() + receiver.toStdString() + amount.toStdString(NumeralBase::Hex)
-                    + data + std::to_string(date) + token.toStdString() + prevBlock.toStdString()
-                    + approver.toStdString() + producer.toStdString();
+    auto hashData = m_sender.toStdString() + m_receiver.toStdString() + m_amount.toStdString(NumeralBase::Hex)
+                    + m_data + std::to_string(m_date) + m_token.toStdString() + m_prevBlock.toStdString()
+                    + m_approver.toStdString() + m_producer.toStdString();
 
     std::string resultHash = Utils::calcHash(hashData);
     if (!resultHash.empty()) {
-        this->hash = resultHash;
+        this->m_hash = resultHash;
     }
 }
 
@@ -142,93 +160,89 @@ void Transaction::setType(TransactionType newType) {
 }
 
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    this->approver = actor->id();
+    this->m_approver = actor->id();
     calcHash();
-    this->signature = actor->key().sign(hash);
+    this->m_signature = actor->key().sign(m_hash);
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return signature.empty() ? false : actor.key().verify(hash, getSignature());
+    return m_signature.empty() ? false : actor.key().verify(m_hash, signature());
 }
 
 void Transaction::setPrevBlock(const BigNumber &value) {
-    this->prevBlock = value;
+    this->m_prevBlock = value;
 
     calcHash();
 }
 
-ActorId Transaction::getSender() const {
-    return this->sender;
+ActorId Transaction::sender() const {
+    return this->m_sender;
 }
 
-ActorId Transaction::getReceiver() const {
-    return this->receiver;
+ActorId Transaction::receiver() const {
+    return this->m_receiver;
 }
 
-BigNumberFloat Transaction::getAmount() const {
-    return this->amount;
+BigNumberFloat Transaction::amount() const {
+    return this->m_amount;
 }
 
-std::string Transaction::getAmountDec() const {
-    return this->amount.toStdString(NumeralBase::Dec);
+BigNumber Transaction::prevBlock() const {
+    return this->m_prevBlock;
 }
 
-BigNumber Transaction::getPrevBlock() const {
-    return this->prevBlock;
+std::string Transaction::hash() const {
+    return this->m_hash;
 }
 
-std::string Transaction::getHash() const {
-    return this->hash;
+ActorId Transaction::token() const {
+    return this->m_token;
 }
 
-ActorId Transaction::getToken() const {
-    return this->token;
+ActorId Transaction::approver() const {
+    return this->m_approver;
 }
 
-ActorId Transaction::getApprover() const {
-    return this->approver;
+std::string Transaction::data() const {
+    return this->m_data;
 }
 
-std::string Transaction::getData() const {
-    return this->data;
-}
-
-std::string Transaction::getSignature() const {
-    return this->signature;
+std::string Transaction::signature() const {
+    return this->m_signature;
 }
 
 bool Transaction::isEmpty() const {
-    return sender.isZero() && receiver.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty()
-           && approver.isZero() && hash.empty();
+    return m_sender.isZero() && m_receiver.isZero() && m_amount.isEmpty() && m_data.empty()
+           && m_prevBlock.isEmpty() && m_approver.isZero() && m_hash.empty();
 }
 
 bool Transaction::isBurn() const {
-    return sender.isZero() && amount.isEmpty() && data.empty() && prevBlock.isEmpty() && approver.isZero()
-           && hash.empty();
+    return m_sender.isZero() && m_amount.isEmpty() && m_data.empty() && m_prevBlock.isEmpty()
+           && m_approver.isZero() && m_hash.empty();
 }
 
 bool Transaction::isSigned() const {
-    return !this->approver.isZero() && !this->signature.empty();
+    return !this->m_approver.isZero() && !this->m_signature.empty();
 }
 
 bool Transaction::operator==(const Transaction &transaction) const {
-    if (this->sender != transaction.getSender())
+    if (this->m_sender != transaction.sender())
         return false;
-    if (this->receiver != transaction.getReceiver())
+    if (this->m_receiver != transaction.receiver())
         return false;
-    if (this->amount != transaction.getAmount())
+    if (this->m_amount != transaction.amount())
         return false;
-    if (this->date != transaction.getDate())
+    if (this->m_date != transaction.date())
         return false;
-    if (this->data != transaction.getData())
+    if (this->m_data != transaction.data())
         return false;
-    if (this->token != transaction.getToken())
+    if (this->m_token != transaction.token())
         return false;
     //    if (this->hash != transaction.getHash())
     //        return false;
     //    if (this->approver != transaction.getApprover())
     //        return false;
-    if (this->prevBlock != transaction.getPrevBlock())
+    if (this->m_prevBlock != transaction.prevBlock())
         return false;
     //    if (this->signature != transaction.getSignature())
     //        return false;
@@ -236,18 +250,40 @@ bool Transaction::operator==(const Transaction &transaction) const {
 }
 
 void Transaction::operator=(const Transaction &other) {
-    this->sender = other.sender;
-    this->receiver = other.receiver;
-    this->amount = other.amount;
-    this->date = other.date;
-    this->data = other.data;
-    this->token = other.token;
-    this->prevBlock = other.prevBlock;
-    this->hash = other.hash;
-    this->approver = other.approver;
-    this->signature = other.signature;
-    this->producer = other.producer;
-    this->m_type = other.m_type;
+    this->m_sender    = other.m_sender;
+    this->m_receiver  = other.m_receiver;
+    this->m_amount    = other.m_amount;
+    this->m_date      = other.m_date;
+    this->m_data      = other.m_data;
+    this->m_token     = other.m_token;
+    this->m_prevBlock = other.m_prevBlock;
+    this->m_hash      = other.m_hash;
+    this->m_approver  = other.m_approver;
+    this->m_signature = other.m_signature;
+    this->m_producer  = other.m_producer;
+    this->m_type      = other.m_type;
+}
+
+Transaction &Transaction::operator=(Transaction &&other) noexcept {
+    if (this != &other) {
+        m_sender    = std::move(other.m_sender);
+        m_receiver  = std::move(other.m_receiver);
+        m_amount    = std::move(other.m_amount);
+        m_date      = std::move(other.m_date);
+        m_data      = std::move(other.m_data);
+        m_token     = std::move(other.m_token);
+        m_prevBlock = std::move(other.m_prevBlock);
+        m_hash      = std::move(other.m_hash);
+        m_approver  = std::move(other.m_approver);
+        m_signature = std::move(other.m_signature);
+        m_producer  = std::move(other.m_producer);
+        m_type      = std::move(other.m_type);
+        calcHash();
+
+        other.m_hash = {};
+    }
+
+    return *this;
 }
 
 std::string Transaction::toStdString() const {
@@ -255,14 +291,14 @@ std::string Transaction::toStdString() const {
 }
 
 QString Transaction::toString() const {
-    auto hashQt = QString::fromStdString(hash);
+    auto hashQt  = QString::fromStdString(m_hash);
     auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
-    return "Transaction { type: " + typeStr + ", sender: " + sender.toByteArray() + ", receiver: "
-           + receiver.toByteArray() + ", amount: " + amount.toByteArray(NumeralBase::Dec) + ", date: "
-           + QDateTime::fromMSecsSinceEpoch(date).toString() + ", data: '" + QString::fromStdString(data)
-           + "', token: " + token.toByteArray() + ", prevBlock: " + prevBlock.toByteArray() + ", hash: '"
-           + hashQt.left(5) + ".." + hashQt.right(5) + "', approver: " + approver.toByteArray()
-           + ", digitalSignature: '" + QString::fromStdString(signature) + "' }";
+    return "Transaction { type: " + typeStr + ", sender: " + m_sender.toByteArray() + ", receiver: "
+           + m_receiver.toByteArray() + ", amount: " + m_amount.toByteArray(NumeralBase::Dec) + ", date: "
+           + QDateTime::fromMSecsSinceEpoch(m_date).toString() + ", data: '" + QString::fromStdString(m_data)
+           + "', token: " + m_token.toByteArray() + ", prevBlock: " + m_prevBlock.toByteArray() + ", hash: '"
+           + hashQt.left(5) + ".." + hashQt.right(5) + "', approver: " + m_approver.toByteArray()
+           + ", digitalSignature: '" + QString::fromStdString(m_signature) + "' }";
 }
 
 QDebug operator<<(QDebug debug, const Transaction &tx) {

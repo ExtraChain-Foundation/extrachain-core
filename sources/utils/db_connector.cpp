@@ -306,6 +306,7 @@ qint64 DBConnector::count(const std::string &table, const std::string &where) {
     if (!where.empty())
         query += fmt::format(" WHERE {}", where);
 
+    // TODO: check if not error
     auto res = select(query);
     if (res.empty())
         return 0;
