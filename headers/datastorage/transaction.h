@@ -65,20 +65,19 @@ enum class TransactionProveError {
 FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
-    ActorId sender;
-    ActorId receiver;
-
-protected:
-    BigNumberFloat  amount; // coin amount
-    long long       date;
-    std::string     data;      // additional payload field
-    ActorId         token;     // token contract address
-    BigNumber       prevBlock; // last block id at the moment of tx creation
-    std::string     hash;      // hash from all fields
-    ActorId         approver;  // address of the transaction approver.
-    ActorId         producer;
-    std::string     signature;
-    TransactionType m_type = TransactionType::Regular;
+private:
+    ActorId         m_sender;                          // sender address
+    ActorId         m_receiver;                        // receiver address
+    BigNumberFloat  m_amount;                          // coin amount
+    long long       m_date;                            // transaction date
+    std::string     m_data;                            // additional payload field
+    ActorId         m_token;                           // token contract address
+    BigNumber       m_prevBlock;                       // last block id at the moment of tx creation
+    std::string     m_hash;                            // hash from all fields
+    ActorId         m_approver;                        // address of the transaction approver.
+    std::string     m_signature;                       // digital signature
+    ActorId         m_producer;                        // producer address
+    TransactionType m_type = TransactionType::Regular; // transaction type
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -100,6 +99,8 @@ public:
 
     Transaction(const Transaction &other);
 
+    Transaction(Transaction &&other) noexcept;
+
     // digital signature
     void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     bool verify(const Actor<KeyPublic> &actor) const;
@@ -112,17 +113,17 @@ public:
     void setApprover(const ActorId &value);
     void setHash(const std::string &value);
 
-    ActorId        getSender() const;
-    ActorId        getReceiver() const;
-    BigNumberFloat getAmount() const;
-    std::string    getAmountDec() const;
-    BigNumber      getPrevBlock() const;
-    std::string    getData() const;
-    std::string    getHash() const;
-    ActorId        getToken() const;
-    ActorId        getApprover() const;
-    std::string    getSignature() const;
-    ActorId        getProducer() const;
+    ActorId        sender() const;
+    ActorId        receiver() const;
+    BigNumberFloat amount() const;
+    BigNumber      prevBlock() const;
+    long long      date() const;
+    std::string    data() const;
+    std::string    hash() const;
+    ActorId        token() const;
+    ActorId        approver() const;
+    std::string    signature() const;
+    ActorId        producer() const;
 
     virtual bool isEmpty() const;
     virtual bool isBurn() const;
@@ -130,10 +131,10 @@ public:
     auto         operator<=>(const Transaction &) const = default;
     bool         operator==(const Transaction &transaction) const;
     void         operator=(const Transaction &transaction);
+    Transaction &operator=(Transaction &&other) noexcept;
 
     std::string     toStdString() const;
     QString         toString() const;
-    long long       getDate() const;
     void            setDate(long long value);
     void            setToken(const ActorId &value);
     void            setData(const std::string &value);
@@ -145,17 +146,17 @@ public:
     virtual void    setType(TransactionType newType);
 
     MSGPACK_DEFINE(
-        sender,
-        receiver,
-        amount,
-        date,
-        data,
-        token,
-        prevBlock,
-        hash,
-        approver,
-        producer,
-        signature,
+        m_sender,
+        m_receiver,
+        m_amount,
+        m_date,
+        m_data,
+        m_token,
+        m_prevBlock,
+        m_hash,
+        m_approver,
+        m_producer,
+        m_signature,
         m_type)
 };
 

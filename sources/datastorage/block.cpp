@@ -86,7 +86,7 @@ void Block::calcHash() {
     }
 
     for (const auto &tx : std::as_const(m_transactions)) {
-        auto txHash = tx.getHash();
+        auto txHash = tx.hash();
         sha3.add(txHash.c_str(), txHash.size());
     }
 
@@ -190,7 +190,7 @@ void Block::addDatas(const std::vector<std::string> &datas) {
 
 Transaction Block::getTransactionByHash(std::string hash) const {
     for (const auto &tx : m_transactions)
-        if (tx.getHash() == hash)
+        if (tx.hash() == hash)
             return tx;
     return Transaction();
 }

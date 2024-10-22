@@ -53,7 +53,7 @@ void TransactionManager::addTransactionNetwork(const Transaction &tx) {
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
-    emit addToCache(tx.getReceiver().toStdString(), tx);
+    emit addToCache(tx.receiver().toStdString(), tx);
 }
 
 // Block making

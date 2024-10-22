@@ -40,9 +40,9 @@
  */
 
 enum class ActorType {
-    User = 0,
+    User       = 0,
     DAppMaster = 1,
-    Service = 2
+    Service    = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
 FORMAT_ENUM(ActorType)
@@ -56,6 +56,17 @@ public:
     ActorId(const std::string &actorId) {
         m_id = actorId;
         normalize();
+    }
+
+    ActorId(const ActorId &other) {
+        m_id = other.m_id;
+        // normalize();
+    }
+
+    ActorId(ActorId &&other) noexcept {
+        m_id = std::move(other.m_id);
+        // normalize();
+        other.m_id = "00000000000000000000";
     }
 
     QByteArray toByteArray() const {
@@ -90,6 +101,16 @@ public:
     ActorId &operator=(const std::string &actorId) {
         this->m_id = actorId;
         normalize();
+        return *this;
+    }
+
+    ActorId &operator=(ActorId &&other) noexcept {
+        if (this != &other) {
+            m_id = std::move(other.m_id);
+            normalize();
+            other.m_id = "00000000000000000000";
+        }
+
         return *this;
     }
 
@@ -134,27 +155,28 @@ using TokenId = ActorId;
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
-    static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-                  "Type is not supported. Only Keys are supported");
+    static_assert(
+        (std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
+        "Type is not supported. Only Keys are supported");
 
 private:
-    ActorId m_id;
-    T m_key;
+    ActorId   m_id;
+    T         m_key;
     ActorType m_type = ActorType::User;
 
 public:
-    Actor() = default;
+    Actor()  = default;
     ~Actor() = default;
 
     Actor(const Actor<T> &copyActor) {
-        m_id = copyActor.id();
-        m_key = copyActor.key();
+        m_id   = copyActor.id();
+        m_key  = copyActor.key();
         m_type = ActorType(copyActor.type());
     }
 
     Actor &operator=(const Actor<T> &copyActor) {
-        m_id = copyActor.id();
-        m_key = copyActor.key();
+        m_id   = copyActor.id();
+        m_key  = copyActor.key();
         m_type = copyActor.type();
         return *this;
     }
@@ -165,13 +187,14 @@ public:
      * @param id
      */
     void create(ActorType type) {
-        static_assert(std::is_same<T, KeyPrivate>::value,
-                      "Сannot be created with a public key. Only private is supported");
+        static_assert(
+            std::is_same<T, KeyPrivate>::value,
+            "Сannot be created with a public key. Only private is supported");
 
         this->m_type = type;
         this->m_key.generate();
-        auto publicKey = this->m_key.publicKey();
-        std::string hash = Utils::calcHash(publicKey, Utils::HashEncode::Sha3_512);
+        auto        publicKey = this->m_key.publicKey();
+        std::string hash      = Utils::calcHash(publicKey, Utils::HashEncode::Sha3_512);
 
         if (hash.size() >= 20)
             m_id = hash.substr(0, 20);
@@ -235,13 +258,14 @@ public:
     std::string toStdString() const {
         std::ostringstream oss;
 
-        oss << "Actor { id:" << m_id << ", type: " << magic_enum::enum_name(m_type) << ", key: " << m_key << " }";
+        oss << "Actor { id:" << m_id << ", type: " << magic_enum::enum_name(m_type) << ", key: " << m_key
+            << " }";
 
         return oss.str();
     }
 
     QByteArray toJson() const {
-        auto array = toJsonArray();
+        auto       array  = toJsonArray();
         QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
         return result;
     }
@@ -252,7 +276,7 @@ public:
         }
 
         QJsonArray array;
-        auto pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
+        auto       pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
@@ -269,7 +293,7 @@ public:
         }
 
         Actor<T> actor;
-        auto array = QJsonDocument::fromJson(serialized).array();
+        auto     array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
         auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
