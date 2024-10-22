@@ -33,7 +33,7 @@ endif()
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system thread)
+find_package(Boost REQUIRED COMPONENTS system thread mp11 describe json)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -184,7 +184,9 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only
-    magic_enum::magic_enum Boost::boost Boost::system Boost::thread unofficial::hash-library) # extrachainc
+    magic_enum::magic_enum unofficial::hash-library
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json)
+# extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)
 
