@@ -38,7 +38,7 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
-#include "cpp-base64/base64.h"
+#include "cpp-base64/base64.cpp"
 #include "enc/enc_tools.h"
 #include "managers/data_mining_manager.h"
 #include "sha3.h"

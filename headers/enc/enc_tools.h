@@ -2,10 +2,9 @@
 #define ENC_TOOLS_H
 
 #include <string>
-#include <vector>
 
-#include "cpp-base64/base64.h"
 #include <utils/exc_utils.h>
+
 namespace SecretKey {
 EXTRACHAIN_EXPORT std::string keygen();
 EXTRACHAIN_EXPORT std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
