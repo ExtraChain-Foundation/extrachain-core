@@ -52,6 +52,8 @@ class VPNConnectorManager;
 class TokenManager;
 struct VPNMessage;
 class ExtraChainNode;
+enum class MessageType;
+enum class MessageStatus;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
@@ -78,12 +80,6 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
 public:
-    typedef std::function<bool(
-        VPNMessage&         networkInput,
-        ActorId&            senderId,
-        VPNFunctionType     funcType,
-        VPNFunctionsResult& output)>
-                                  VpnFunctionType;
     typedef std::function<void()> VpnFunctionClearType;
 
 private:
@@ -158,8 +154,7 @@ public:
 
     uint64_t getBlockCount() const;
 
-    void            InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFun);
-    VpnFunctionType vpnConnectorManagerFunc = nullptr;
+    void            InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager*   tokenManager() const;
     bool            isRaccoon;
 
@@ -196,6 +191,13 @@ signals:
     void readyInitLocalizationFiles();
     void vpnConnected();
     void vpnDisconnect();
+    void vpnWorker(
+        const VPNMessage    networkInput,
+        const MessageType   type,
+        const MessageStatus status,
+        const std::string   messageId,
+        const ActorId       senderId,
+        const std::string   identifier);
 
 private slots:
     void getAllActorsTimerCall();
