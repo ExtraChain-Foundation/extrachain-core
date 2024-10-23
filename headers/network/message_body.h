@@ -130,8 +130,6 @@ struct VPNMessage {
     std::string publicKeyFile;
     std::string uuid;
     std::vector<std::string> allIPsToSet;
-    std::string              handshakeIdentifier;
-    int                      handshakeCounter;
 
     MSGPACK_DEFINE(vpnType, resultChainIndex, lockedChainIndex, countryEndpoint, proxyCounter, networkIdentifiersToIgnore, localIP, publicIP, publicKeyFile, uuid, allIPsToSet)
 };
