@@ -32,8 +32,8 @@ KeyPrivate::KeyPrivate(const PrivateKey &secret_key, const PublicKey &public_key
 }
 
 KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
-    m_secretKey = ByteArray(secret_key).toBytes();
-    m_publicKey = ByteArray(public_key).toBytes();
+    m_secretKey = ByteArray(secret_key).toArray<64>();
+    m_publicKey = ByteArray(public_key).toArray<32>();
 }
 
 KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {

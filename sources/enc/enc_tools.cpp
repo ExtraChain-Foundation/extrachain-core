@@ -8,7 +8,7 @@ KeyBytes Cryptography::keygen() {
     return sk;
 }
 
-KeyPass Cryptography::getKeyFromPass(const std::string &pass, const Salt &salt) {
+KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt &salt) {
     if (pass.empty()) {
         qFatal("[SecretKey::getKeyFromPass] pass is empty. salt: %s", salt.data());
     }
@@ -38,13 +38,6 @@ KeyPass Cryptography::getKeyFromPass(const std::string &pass, const Salt &salt) 
     return key;
 }
 
-PrivateKey Cryptography::deriveKey(const KeyPass &key) {
-    PrivateKey derived_key;
-    crypto_secretbox_keygen(derived_key.data());
-    crypto_kdf_derive_from_key(derived_key.data(), derived_key.size(), 0, "encrypt", key.data());
-    return derived_key;
-}
-
 Signature Cryptography::sign(const Bytes &data, const PrivateKey &secret_key) {
     if (data.empty() || secret_key.empty()) {
         qFatal(
@@ -70,7 +63,7 @@ bool Cryptography::verify(const Bytes &data, const PublicKey &public_key, const 
     return res == 0;
 }
 
-Bytes Cryptography::encrypt(const Bytes &data, const PrivateKey &secret_key) {
+Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
     if (data.empty() || secret_key.empty()) {
         qFatal(
             "[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s",
@@ -87,18 +80,16 @@ Bytes Cryptography::encrypt(const Bytes &data, const PrivateKey &secret_key) {
     int r =
         crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data());
 
-    if (r == 0) {
-        encrypted.insert(encrypted.begin(), nonce.begin(), nonce.end());
+    if (r != 0) {
+        qDebug() << "[SecretKey::encrypt] Encryption failed";
+        return Bytes();
     }
 
-    if (encrypted.empty())
-        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << data.data()
-                 << "| secret:" << secret_key.data();
-
+    encrypted.insert(encrypted.begin(), nonce.begin(), nonce.end());
     return encrypted;
 }
 
-Bytes Cryptography::decrypt(const Bytes &encrypted_data, const PrivateKey &secret_key) {
+Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_key) {
     if (encrypted_data.empty() || secret_key.empty()) {
         qFatal(
             "[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s",
@@ -116,10 +107,11 @@ Bytes Cryptography::decrypt(const Bytes &encrypted_data, const PrivateKey &secre
 
     const Bytes encrypted_message(encrypted_data.begin() + crypto_secretbox_NONCEBYTES, encrypted_data.end());
 
-    if (encrypted_data.size() < crypto_secretbox_MACBYTES)
-        qFatal("[SecretKey::decrypt] Incorrect msg: %s", encrypted_data.data());
+    if (encrypted_message.size() < crypto_secretbox_MACBYTES) {
+        qFatal("[SecretKey::decrypt] Incorrect msg size");
+    }
 
-    Bytes decrypted_message(encrypted_data.size() - crypto_secretbox_MACBYTES);
+    Bytes decrypted_message(encrypted_message.size() - crypto_secretbox_MACBYTES);
 
     int r = crypto_secretbox_open_easy(
         decrypted_message.data(),
@@ -128,36 +120,31 @@ Bytes Cryptography::decrypt(const Bytes &encrypted_data, const PrivateKey &secre
         nonce.data(),
         secret_key.data());
 
-    if (r != 0 || decrypted_message.empty())
-        qDebug() << "[SecretKey::decrypt] res is empty. data:" << decrypted_message.data()
-                 << "| secret:" << secret_key.data();
+    if (r != 0) {
+        qDebug() << "[SecretKey::decrypt] Decryption failed";
+        return Bytes();
+    }
 
     return decrypted_message;
 }
 
-Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
-    return encrypt(data, deriveKey(secret_key));
-}
-
-Bytes Cryptography::decrypt(const Bytes &data, const KeyPass &secret_key) {
-    return decrypt(data, deriveKey(secret_key));
-}
-
 std::string Cryptography::encrypt(const std::string &data, const KeyPass &secret_key) {
-    return ByteArray(encrypt(ByteArray(data).toBytes(), deriveKey(secret_key))).toString();
+    auto res = encrypt(ByteArray(data).toBytes(), secret_key);
+    return ByteArray(res).toString();
 }
 
 std::string Cryptography::decrypt(const std::string &data, const KeyPass &secret_key) {
-    return ByteArray(decrypt(ByteArray(data).toBytes(), deriveKey(secret_key))).toString();
+    auto res = decrypt(ByteArray(data).toBytes(), secret_key);
+    return ByteArray(res).toString();
 }
 
 Bytes Cryptography::encryptWithPassword(const Bytes &data, const std::string &password) {
-    auto key = getKeyFromPass(password);
+    auto key = getKeyPassFromPassword(password);
     return encrypt(data, key);
 }
 
 Bytes Cryptography::decryptWithPassword(const Bytes &data, const std::string &password) {
-    auto key = getKeyFromPass(password);
+    auto key = getKeyPassFromPassword(password);
     return decrypt(data, key);
 }
 

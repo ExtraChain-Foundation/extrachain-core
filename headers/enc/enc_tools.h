@@ -19,17 +19,14 @@ using Curve25519Key = std::array<uint8_t, crypto_scalarmult_curve25519_BYTES>;
 namespace Cryptography {
 EXTRACHAIN_EXPORT KeyBytes keygen();
 
-EXTRACHAIN_EXPORT KeyPass getKeyFromPass(const std::string &pass, const Salt &salt = {});
-
-PrivateKey deriveKey(const KeyPass &key);
+EXTRACHAIN_EXPORT KeyPass getKeyPassFromPassword(const std::string &pass, const Salt &salt = {});
 
 EXTRACHAIN_EXPORT Signature sign(const Bytes &data, const PrivateKey &secret_key);
 EXTRACHAIN_EXPORT bool verify(const Bytes &data, const PublicKey &public_key, const Signature &signature);
 
-EXTRACHAIN_EXPORT Bytes encrypt(const Bytes &data, const PrivateKey &secret_key);
-EXTRACHAIN_EXPORT Bytes decrypt(const Bytes &data, const PrivateKey &secret_key);
 EXTRACHAIN_EXPORT Bytes encrypt(const Bytes &data, const KeyPass &secret_key);
 EXTRACHAIN_EXPORT Bytes decrypt(const Bytes &data, const KeyPass &secret_key);
+
 EXTRACHAIN_EXPORT std::string encrypt(const std::string &data, const KeyPass &secret_key);
 EXTRACHAIN_EXPORT std::string decrypt(const std::string &data, const KeyPass &secret_key);
 

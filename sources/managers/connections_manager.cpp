@@ -144,7 +144,7 @@ std::string ConnectionsManager::hashConnection(const DFS::Packets::Connection &c
 
 DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
-    auto key = Cryptography::getKeyFromPass(hash);
+    auto key = Cryptography::getKeyPassFromPassword(hash);
 
     std::string ecryptedAddress = Cryptography::encrypt(connection.address, key);
     std::string encryptedPort = Cryptography::encrypt(connection.port, key);
@@ -158,9 +158,8 @@ DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &conne
     return row;
 }
 
-DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity)
-{
-    auto key = Cryptography::getKeyFromPass(hash);
+DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity) {
+    auto key = Cryptography::getKeyPassFromPassword(hash);
 
     std::string timeactivity = Cryptography::encrypt(std::to_string(activity.timeactivity), key);
     std::string active = Cryptography::encrypt(std::to_string(activity.active), key);
@@ -176,7 +175,7 @@ DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity 
 
 Connection ConnectionsManager::decryptConnection(const DBRow &row) {
     Connection connection;
-    auto key = Cryptography::getKeyFromPass(row.at(hash_connection));
+    auto key = Cryptography::getKeyPassFromPassword(row.at(hash_connection));
 
     connection.port = Cryptography::decrypt(row.at(port_connection), key);
     connection.address = Cryptography::decrypt(row.at(address_connection), key);
@@ -187,7 +186,7 @@ Connection ConnectionsManager::decryptConnection(const DBRow &row) {
 std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DBRow &row)
 {
     Activity activity;
-    auto key = Cryptography::getKeyFromPass(row.at(hash_connection));
+    auto key = Cryptography::getKeyPassFromPassword(row.at(hash_connection));
 
     activity.timeactivity = std::stoull(Cryptography::decrypt(row.at(time_act), key));
     activity.active = Cryptography::decrypt(row.at(active_connection), key) == "1"? true: false;

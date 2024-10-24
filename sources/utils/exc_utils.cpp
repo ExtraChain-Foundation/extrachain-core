@@ -294,10 +294,11 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
-    auto rkey = Cryptography::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!orig.atEnd()) {
         QByteArray part = orig.read(blockSize);
-        QByteArray encrypted = QByteArray::fromStdString(Cryptography::encrypt(part.toStdString(), rkey));
+        QByteArray encrypted =
+            ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         encrypt.write(encrypted);
         // qDebug() << "encrypted" << part.size() << encrypted.size();
     }
@@ -324,10 +325,11 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
-    auto rkey = Cryptography::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = QByteArray::fromStdString(Cryptography::decrypt(part.toStdString(), rkey));
+        QByteArray decrypted =
+            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         decrypt.write(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
@@ -352,11 +354,12 @@ QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QBy
     }
 
     QByteArray result;
-    auto rkey = Cryptography::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
 
     while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = QByteArray::fromStdString(Cryptography::decrypt(part.toStdString(), rkey));
+        QByteArray decrypted =
+            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         result.append(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }

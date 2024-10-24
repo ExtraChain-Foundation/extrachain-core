@@ -28,7 +28,7 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
 }
 
 KeyPublic::KeyPublic(const std::string &publicKey) {
-    m_publicKey = ByteArray(keyPublic.publicKey()).toArray<32>();
+    m_publicKey = ByteArray(publicKey).toArray<32>();
 }
 
 std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const {
