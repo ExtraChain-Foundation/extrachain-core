@@ -288,7 +288,6 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     GenesisBlock genesis;
     genesis.setIndex(0);
     // genesis.addRows(dataRows);
-    genesis.addRow(ActorId(), ActorId(), GenesisDataInfo(0, DataStorage::DataRowType::Universal));
     genesis.addData(actor->id().toStdString());
     genesis.sign(actor);
     return BlockVariant(genesis);

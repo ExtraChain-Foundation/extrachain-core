@@ -13,10 +13,31 @@ class Transaction;
 static const uint size_of_data_list = 7;
 
 struct TokenData {
-    std::string actor, owner, count, name, ticker, color, smart;
+    std::string token, owner, count, name, ticker, color, smart;
+
+    bool operator==(const TokenData& other) const {
+        return token == other.token &&
+               owner == other.owner &&
+               count == other.count &&
+               name == other.name &&
+               ticker == other.ticker &&
+               color == other.color &&
+               smart == other.smart;
+    }
+
+           // Overload the inequality operator
+    bool operator!=(const TokenData& other) const {
+        return !(*this == other);
+    }
 
     QJsonDocument toJsonDocument();
     DBRow         toDBRow();
+};
+
+enum class CreateTokenError {
+    InvalidAmount,
+    InvalidName,
+    ExistToken
 };
 
 class TokenManager : public QObject {
@@ -39,7 +60,7 @@ public:
     static bool isValidTicker(const std::string &ticker);
 
 public slots:
-    void createToken(
+    std::expected<TokenData, CreateTokenError> createToken(
         const std::string &tokenCount,
         const std::string &tokenName,
         const std::string &symbol,

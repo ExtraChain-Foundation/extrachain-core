@@ -114,7 +114,7 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
     return countRow > 0;
 }
 
-void TokenManager::createToken(
+std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     const std::string &count,
     const std::string &name,
     const std::string &ticker,
@@ -127,38 +127,38 @@ void TokenManager::createToken(
     auto countBn = BigNumberFloat::create(count, NumeralBase::Dec);
     if (!countBn.has_value()) {
         emit errorNameTokenExist("count");
-        return;
+        return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
     if (countBn.value() < 0 || countBn.value() >= Token::MAX_TOKEN_COUNT) {
         qDebug() << "[TokenManager] Error create token. Count:" << count << "| name:" << name
                  << "| ticker:" << ticker << "| rull address:" << owner << "| color:" << color;
-        return;
+        return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
     qDebug() << "[TokenManager] Create token. Count:" << count << "| name:" << name << "| ticker:" << ticker
              << "| rull address:" << owner << "| color:" << color;
 
     if (!isValidName(name) || !isValidTicker(ticker)) {
+        qDebug() << "[TokenManager] Incorrecnt name:" << isValidName(name) << isValidTicker(ticker);
         qDebug() << "[TokenManager] Incorrecnt name. Name:" << name << "| ticker:" << ticker;
         emit errorNameTokenExist("name");
-        return;
+        return std::unexpected(CreateTokenError::InvalidName);
     }
 
     auto upperTokenName = Utils::str_to_upper(name);
     auto tickerSymbol   = Utils::str_to_upper(ticker);
-    if (upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN" || tickerSymbol == "ROCC"
-        || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
+    if (upperTokenName == "EXTRACOIN" || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
         qDebug() << "[TokenManager] Name or ticker exists";
         emit errorNameTokenExist("exists");
-        return;
+        return std::unexpected(CreateTokenError::ExistToken);
     }
 
     auto    actor        = node->accountController()->createService();
     QString actorId      = QString(actor.id().toString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
-    auto tokenData = TokenData { .actor  = actor.id().toStdString(),
+    auto tokenData = TokenData { .token  = actor.id().toStdString(),
                                  .owner  = actorId.toStdString(),
                                  .count  = count,
                                  .name   = name,
@@ -189,6 +189,7 @@ void TokenManager::createToken(
     }
 
     sendInitialTransaction(owner, owner, BigNumberFloat(count, NumeralBase::Dec));
+    return tokenData;
 }
 
 void TokenManager::checkIsContract(const QString &pathToFile) {
@@ -253,7 +254,7 @@ QJsonDocument TokenData::toJsonDocument() {
 
 DBRow TokenData::toDBRow() {
     DBRow dbRow;
-    dbRow.insert({ "actor", actor });
+    dbRow.insert({ "actorId", token });
     dbRow.insert({ "name", name });
     dbRow.insert({ "ticker", ticker });
     dbRow.insert({ "count", count });

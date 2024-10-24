@@ -313,7 +313,7 @@ static const std::string tokenTableCreate =
     "count         TEXT  NOT NULL, "
     "owner         TEXT  NOT NULL, "
     "color         TEXT  NOT NULL, "
-    "smart           TEXT  NOT NULL);";
+    "smart         TEXT  NOT NULL);";
 namespace Fields {
     static const std::string actorId = "actorId";
     static const std::string name = "name";
