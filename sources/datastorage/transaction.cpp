@@ -162,11 +162,18 @@ void Transaction::setType(TransactionType newType) {
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     this->m_approver = actor->id();
     calcHash();
-    this->m_signature = actor->key().sign(m_hash);
+    auto sign         = actor->key().sign(m_hash);
+    this->m_signature = ByteArray(sign).toBase64();
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return m_signature.empty() ? false : actor.key().verify(m_hash, signature());
+    if (m_signature.empty()) {
+        return false;
+    }
+
+    auto sign_decoded = ByteArray::fromBase64(m_signature).toArray<crypto_sign_BYTES>();
+    auto verify       = actor.key().verify(m_hash, sign_decoded);
+    return verify;
 }
 
 void Transaction::setPrevBlock(const BigNumber &value) {

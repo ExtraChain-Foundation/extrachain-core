@@ -140,7 +140,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 MessageBody message   =
                     make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
                 auto        serialized = message.serialize();
-                auto        sign       = mainActor->key().sign(serialized);
+                auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                 this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
             });
 }
@@ -832,7 +832,7 @@ void NetworkManager::messageReceived(
         if (node->isRaccoon && node->vpnConnectorManagerFunc) {
             auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
             if (status == MessageStatus::Response) {
-                qInfo() << "Achieved VPNHandshake(Response)" << magic_enum::enum_name(inputMsg.vpnType)
+                qInfo() << "Achieved VPNHandshake(Response)" << Utils::enumFullName(inputMsg.vpnType)
                         << messageId;
                 if (inputMsg.vpnType == VPNType::SERVER || inputMsg.vpnType == VPNType::PROXY) {
                     qInfo() << "Response 1";
@@ -860,7 +860,7 @@ void NetworkManager::messageReceived(
                             mainActor->id(),
                             "");
                         auto serialized = message.serialize();
-                        auto sign       = mainActor->key().sign(serialized);
+                        auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                         this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
 
                         qInfo() << "SENDED VPN CONNECTION REQUEST";
@@ -903,7 +903,7 @@ void NetworkManager::messageReceived(
                     }
                 }
             } else if (status == MessageStatus::Request) {
-                qInfo() << "Achieved VPNHandshake(Request)" << magic_enum::enum_name(inputMsg.vpnType)
+                qInfo() << "Achieved VPNHandshake(Request)" << Utils::enumFullName(inputMsg.vpnType)
                         << messageId;
                 // achieved request connection from client -> If node can be setup as VPN server than send
                 // response.
@@ -1162,7 +1162,7 @@ void NetworkManager::messageReceived(
                                     mainActor->id(),
                                     "");
                                 auto serialized = message.serialize();
-                                auto sign       = mainActor->key().sign(serialized);
+                                auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                                 this->sendMessage(
                                     serialized + sign,
                                     Config::Net::TypeSend::Focused,
@@ -1241,7 +1241,7 @@ void NetworkManager::messageReceived(
                                                 mainActor->id(),
                                                 "");
                                             auto serialized = message.serialize();
-                                            auto sign       = mainActor->key().sign(serialized);
+                                            auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
 
                                             node->network()->sendMessage(
                                                 serialized + sign,
@@ -1397,7 +1397,7 @@ void NetworkManager::messageReceived(
                                 mainActor->id(),
                                 "");
                             auto serialized = message.serialize();
-                            auto sign       = mainActor->key().sign(serialized);
+                            auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                             this->sendMessage(
                                 serialized + sign,
                                 Config::Net::TypeSend::Focused,
@@ -1436,7 +1436,7 @@ void NetworkManager::messageReceived(
                         mainActor->id(),
                         "");
                     auto serialized = message.serialize();
-                    auto sign       = mainActor->key().sign(serialized);
+                    auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
 
                     auto newIdentifier = foundCurrentIdentifier(res->second.nextIP, res->second.nextPort);
                     qInfo() << "Port and IP" << res->second.nextIP << res->second.nextPort << newIdentifier;
@@ -1593,7 +1593,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            key.publicKey() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
+            ByteArray(key.publicKey()).toString() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }

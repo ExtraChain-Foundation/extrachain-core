@@ -49,80 +49,20 @@ FORMAT_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
-    ActorId() {
-        m_id = "00000000000000000000";
-    };
+    ActorId();
+    ActorId(const std::string &actorId);
+    ActorId(const ActorId &other);
+    ActorId(ActorId &&other) noexcept;
 
-    ActorId(const std::string &actorId) {
-        m_id = actorId;
-        normalize();
-    }
+    QByteArray         toByteArray() const;
+    QString            toString() const;
+    const std::string &toStdString() const;
+    bool               isZero() const;
 
-    ActorId(const ActorId &other) {
-        m_id = other.m_id;
-        // normalize();
-    }
-
-    ActorId(ActorId &&other) noexcept {
-        m_id = std::move(other.m_id);
-        // normalize();
-        other.m_id = "00000000000000000000";
-    }
-
-    QByteArray toByteArray() const {
-        return QByteArray::fromStdString(m_id);
-    }
-
-    QString toString() const {
-        return QString::fromStdString(m_id);
-    }
-
-    const std::string &toStdString() const {
-        return m_id;
-    }
-
-    [[deprecated("Use isZero() instead.")]]
-    bool isEmpty() const {
-        return isZero();
-    }
-
-    bool isZero() const {
-        return m_id == "00000000000000000000" || m_id == "";
-    }
-
-    auto operator<=>(const ActorId &) const = default;
-
-    ActorId &operator=(const ActorId &actorId) {
-        this->m_id = actorId.m_id;
-        normalize();
-        return *this;
-    }
-
-    ActorId &operator=(const std::string &actorId) {
-        this->m_id = actorId;
-        normalize();
-        return *this;
-    }
-
-    ActorId &operator=(ActorId &&other) noexcept {
-        if (this != &other) {
-            m_id = std::move(other.m_id);
-            normalize();
-            other.m_id = "00000000000000000000";
-        }
-
-        return *this;
-    }
-
-    friend QDebug operator<<(QDebug d, const ActorId &actorId) {
-        d.noquote().nospace() << actorId.toByteArray();
-        return d;
-    }
-
-    friend std::ostream &operator<<(std::ostream &os, const ActorId &actorId) {
-        os << actorId.toStdString();
-        return os;
-    }
+    auto     operator<=>(const ActorId &) const = default;
+    ActorId &operator=(const ActorId &actorId);
+    ActorId &operator=(const std::string &actorId);
+    ActorId &operator=(ActorId &&other) noexcept;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
@@ -150,6 +90,8 @@ private:
 
     std::string m_id;
 };
+
+MAKE_CUSTOM_MAGICAL(ActorId)
 
 using TokenId = ActorId;
 
@@ -194,7 +136,7 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto        publicKey = this->m_key.publicKey();
-        std::string hash      = Utils::calcHash(publicKey, Utils::HashEncode::Sha3_512);
+        std::string hash      = Utils::calcHash(ByteArray(publicKey).toString(), Utils::HashEncode::Sha3_512);
 
         if (hash.size() >= 20)
             m_id = hash.substr(0, 20);
@@ -239,13 +181,13 @@ public:
         m_id = id;
     }
 
-    void setSecretKey(const std::string &secretKey, const std::string &publicKey) {
+    void setSecretKey(const PrivateKey &secretKey, const PublicKey &publicKey) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(isPrivate);
         m_key = KeyPrivate(secretKey, publicKey);
     }
 
-    void setPublicKey(const std::string &key) {
+    void setPublicKey(const PublicKey &key) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(!isPrivate);
         m_key = KeyPublic(key);
@@ -258,7 +200,7 @@ public:
     std::string toStdString() const {
         std::ostringstream oss;
 
-        oss << "Actor { id:" << m_id << ", type: " << magic_enum::enum_name(m_type) << ", key: " << m_key
+        oss << "Actor { id:" << m_id << ", type: " << Utils::enumFullName(m_type) << ", key: " << m_key
             << " }";
 
         return oss.str();
@@ -276,11 +218,12 @@ public:
         }
 
         QJsonArray array;
-        auto       pub = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.publicKey())));
+        QString    pub = QString::fromStdString(Utils::bytesEncodeVec(m_key.publicKey()));
+
         array << m_id.toString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto secret = QString(Utils::bytesEncode(QByteArray::fromStdString(m_key.secretKey())));
+            QString secret = QString::fromStdString(Utils::bytesEncodeVec(m_key.secretKey()));
             array << secret;
         }
 
@@ -299,28 +242,21 @@ public:
         auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.setPublicKey(pub.toStdString());
+            actor.setPublicKey(ByteArray(pub).toArray<32>());
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             auto sec = Utils::bytesDecode(array[3].toString().toLatin1());
-            actor.setSecretKey(sec.toStdString(), pub.toStdString());
+            actor.setSecretKey(ByteArray(sec).toArray<64>(), ByteArray(pub).toArray<32>());
         }
 
         return actor;
     }
 
-    friend QDebug operator<<(QDebug d, const Actor<T> &actor) {
-        QDebugStateSaver saver(d);
-        d << actor.toStdString();
-        return d;
-    }
-
-    friend std::ostream &operator<<(std::ostream &os, const Actor<T> &actor) {
-        os << actor.toStdString();
-        return os;
-    }
-
     MSGPACK_DEFINE(m_id, m_type, m_key)
+    BOOST_DESCRIBE_CLASS(Actor, (), (), (), (m_id, m_type, m_key))
 };
+
+MAKE_MAGICAL(Actor<KeyPrivate>)
+MAKE_MAGICAL(Actor<KeyPublic>)
 
 #endif // ACTOR_H

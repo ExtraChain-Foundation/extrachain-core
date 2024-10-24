@@ -145,7 +145,7 @@ const std::string &Block::getDataForSignature() const {
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calcHash();
-    std::string sign = actor->key().sign(getDataForSignature());
+    std::string sign = Utils::bytesEncodeVec(actor->key().sign(getDataForSignature()));
     this->addSignature(actor->id().toStdString(), sign, true);
 }
 
@@ -160,7 +160,10 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::NoActorSignature;
     }
 
-    bool res = actor.key().verify(getDataForSignature(), it->second);
+    auto signStr = it->second;
+    auto sign    = Utils::bytesDecodeVec<crypto_sign_BYTES>(signStr);
+    bool res     = actor.key().verify(getDataForSignature(), sign);
+
     if (!res) {
         return BlockSignError::InvalidSignature;
     }
@@ -203,7 +206,7 @@ std::string Block::toStdString() const {
     std::ostringstream oss;
 
     oss << "Block { "
-        << "type: " << magic_enum::enum_name(m_type) << ", "
+        << "type: " << Utils::enumFullName(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
         << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "

@@ -26,9 +26,14 @@
 
 #include <fstream>
 
-KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
+KeyPrivate::KeyPrivate(const PrivateKey &secret_key, const PublicKey &public_key) {
     m_secretKey = secret_key;
     m_publicKey = public_key;
+}
+
+KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
+    m_secretKey = ByteArray(secret_key).toBytes();
+    m_publicKey = ByteArray(public_key).toBytes();
 }
 
 KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
@@ -37,95 +42,100 @@ KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
 }
 
 void KeyPrivate::generate() {
-    auto keys = SecretKey::createAsymmetricPair();
-    m_secretKey = keys.first;
-    m_publicKey = keys.second;
+    auto [secretKey, publicKey] = Cryptography::createAsymmetricPair();
+    m_secretKey                 = secretKey;
+    m_publicKey                 = publicKey;
 }
 
-std::string KeyPrivate::encrypt(const std::string &data, const std::string &receiverPublicKey,
-                                const std::string &nonce) const {
-    return SecretKey::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
+Bytes KeyPrivate::encrypt(const Bytes &data, const PublicKey &receiverPublicKey, const Nonce &nonce) const {
+    return Cryptography::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
 }
 
-std::string KeyPrivate::decrypt(const std::string &data, const std::string &senderPublicKey,
-                                const std::string &nonce) const {
-    return SecretKey::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
+Bytes KeyPrivate::decrypt(const Bytes &data, const PublicKey &senderPublicKey, const Nonce &nonce) const {
+    return Cryptography::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
 }
 
-std::string KeyPrivate::encryptSelf(const std::string &data) const {
-    std::string pnonce = m_secretKey.substr(0, crypto_box_NONCEBYTES);
-    return this->encrypt(data, this->m_publicKey, pnonce);
+Bytes KeyPrivate::encryptSelf(const Bytes &data) const {
+    Nonce nonce;
+    std::copy_n(
+        m_secretKey.begin(),
+        std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()),
+        nonce.begin());
+
+    return this->encrypt(data, this->m_publicKey, nonce);
 }
 
-std::string KeyPrivate::decryptSelf(const std::string &data) const {
-    std::string pnonce = m_secretKey.substr(0, crypto_box_NONCEBYTES);
-    return this->decrypt(data, this->m_publicKey, pnonce);
+Bytes KeyPrivate::decryptSelf(const Bytes &data) const {
+    Nonce nonce;
+    std::copy_n(
+        m_secretKey.begin(),
+        std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()),
+        nonce.begin());
+
+    return this->decrypt(data, this->m_publicKey, nonce);
 }
 
-void KeyPrivate::encryptFile(const std::filesystem::path &file,
-                             const std::filesystem::path &resultFile) const {
-    std::ifstream sfile(file.string(), std::ios::binary);
-    std::ofstream efile(resultFile.string(), std::ios::binary | std::ios::app);
-    if (sfile && efile) {
-        std::string buf;
-        while (sfile.readsome(buf.data(), DFSB::encSectionSize)) {
-            std::string wstring = encryptSelf(buf);
-            wstring = Tools::typeToStdStringBytes<int>(wstring.size()) + wstring;
-            efile << wstring;
-        }
-        return;
+void KeyPrivate::encryptFile(const std::filesystem::path &input, const std::filesystem::path &output) const {
+    std::ifstream in(input, std::ios::binary);
+    std::ofstream out(output, std::ios::binary);
+
+    if (!in || !out) {
+        qFatal("[encryptFile] Cannot open files");
     }
-    qDebug() << "file encryption error";
-}
 
-void KeyPrivate::decryptFile(const std::filesystem::path &file,
-                             const std::filesystem::path &resultFile) const {
-    std::ifstream efile(file.string(), std::ios::binary);
-    std::ofstream sfile(resultFile.string(), std::ios::binary | std::ios::app);
-    if (efile && sfile) {
-        std::string buf;
-        std::string sizebuf;
-        int size;
-        while (efile.readsome(sizebuf.data(), sizeof(int))) {
-            size = Tools::stdStringBytesToType<int>(sizebuf);
-            efile.readsome(buf.data(), size);
-            std::string wstring = decryptSelf(buf);
-            sfile << wstring;
-        }
-        return;
+    Bytes buffer(DFSB::encSectionSize);
+    while (in.read(reinterpret_cast<char *>(buffer.data()), buffer.size())) {
+        Bytes    encrypted = encryptSelf({ buffer.begin(), buffer.begin() + in.gcount() });
+        uint32_t size      = encrypted.size();
+
+        out.write(reinterpret_cast<char *>(&size), sizeof(size));
+        out.write(reinterpret_cast<char *>(encrypted.data()), size);
     }
-    qDebug() << "file decryption error";
 }
 
-std::string KeyPrivate::sign(const std::string &data) const {
-    return SecretKey::sign(data, m_secretKey);
+void KeyPrivate::decryptFile(const std::filesystem::path &input, const std::filesystem::path &output) const {
+    std::ifstream in(input, std::ios::binary);
+    std::ofstream out(output, std::ios::binary);
+
+    if (!in || !out) {
+        qFatal("[decryptFile] Cannot open files");
+    }
+
+    uint32_t size;
+    while (in.read(reinterpret_cast<char *>(&size), sizeof(size))) {
+        Bytes encrypted(size);
+
+        if (in.read(reinterpret_cast<char *>(encrypted.data()), size)) {
+            Bytes decrypted = decryptSelf(encrypted);
+            out.write(reinterpret_cast<char *>(decrypted.data()), decrypted.size());
+        }
+    }
 }
 
-bool KeyPrivate::verify(const std::string &data, const std::string &signature) const {
-    return SecretKey::verify(data, m_publicKey, signature);
+Signature KeyPrivate::sign(const Bytes &data) const {
+    return Cryptography::sign(data, m_secretKey);
 }
 
-const std::string &KeyPrivate::secretKey() const {
+bool KeyPrivate::verify(const Bytes &data, const Signature &signature) const {
+    return Cryptography::verify(data, m_publicKey, signature);
+}
+
+Signature KeyPrivate::sign(const std::string &data) const {
+    return Cryptography::sign(ByteArray(data).toBytes(), m_secretKey);
+}
+
+bool KeyPrivate::verify(const std::string &data, const Signature &signature) const {
+    return Cryptography::verify(ByteArray(data).toBytes(), m_publicKey, signature);
+}
+
+const PrivateKey &KeyPrivate::secretKey() const {
     return m_secretKey;
 }
 
-const std::string &KeyPrivate::publicKey() const {
+const PublicKey &KeyPrivate::publicKey() const {
     return m_publicKey;
 }
 
 bool KeyPrivate::empty() const {
     return m_secretKey.empty() && m_publicKey.empty();
-}
-
-QDebug operator<<(QDebug debug, const KeyPrivate &key) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str())
-                              << ", public: " << Utils::bytesEncode(key.publicKey().c_str()) << " }";
-    return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const KeyPrivate &key) {
-    os << "KeyPrivate { secret: " << Utils::bytesEncode(key.secretKey().c_str()).toStdString()
-       << ", public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
-    return os;
 }

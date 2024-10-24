@@ -144,11 +144,11 @@ std::string ConnectionsManager::hashConnection(const DFS::Packets::Connection &c
 
 DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
-    std::string key = SecretKey::getKeyFromPass(hash);
+    auto key = Cryptography::getKeyFromPass(hash);
 
-    std::string ecryptedAddress = SecretKey::encrypt(connection.address, key);
-    std::string encryptedPort = SecretKey::encrypt(connection.port, key);
-    std::string encryptedActive = SecretKey::encrypt(std::to_string(connection.active), key);
+    std::string ecryptedAddress = Cryptography::encrypt(connection.address, key);
+    std::string encryptedPort = Cryptography::encrypt(connection.port, key);
+    std::string encryptedActive = Cryptography::encrypt(std::to_string(connection.active), key);
 
     DBRow row { { hash_connection, hash },
                 { port_connection, encryptedPort },
@@ -160,11 +160,11 @@ DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &conne
 
 DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity)
 {
-    std::string key = SecretKey::getKeyFromPass(hash);
+    auto key = Cryptography::getKeyFromPass(hash);
 
-    std::string timeactivity = SecretKey::encrypt(std::to_string(activity.timeactivity), key);
-    std::string active = SecretKey::encrypt(std::to_string(activity.active), key);
-    std::string score = SecretKey::encrypt(std::to_string(activity.score), key);
+    std::string timeactivity = Cryptography::encrypt(std::to_string(activity.timeactivity), key);
+    std::string active = Cryptography::encrypt(std::to_string(activity.active), key);
+    std::string score = Cryptography::encrypt(std::to_string(activity.score), key);
 
     DBRow row { { hash_connection, hash },
               { active_connection, active },
@@ -176,23 +176,23 @@ DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity 
 
 Connection ConnectionsManager::decryptConnection(const DBRow &row) {
     Connection connection;
-    std::string key = SecretKey::getKeyFromPass(row.at(hash_connection));
+    auto key = Cryptography::getKeyFromPass(row.at(hash_connection));
 
-    connection.port = SecretKey::decrypt(row.at(port_connection), key);
-    connection.address = SecretKey::decrypt(row.at(address_connection), key);
-    connection.active = std::stoi(SecretKey::decrypt(row.at(active_connection), key));
+    connection.port = Cryptography::decrypt(row.at(port_connection), key);
+    connection.address = Cryptography::decrypt(row.at(address_connection), key);
+    connection.active = std::stoi(Cryptography::decrypt(row.at(active_connection), key));
     return connection;
 }
 
 std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DBRow &row)
 {
     Activity activity;
-    std::string key = SecretKey::getKeyFromPass(row.at(hash_connection));
+    auto key = Cryptography::getKeyFromPass(row.at(hash_connection));
 
-    activity.timeactivity = std::stoull(SecretKey::decrypt(row.at(time_act), key));
-    activity.active = SecretKey::decrypt(row.at(active_connection), key) == "1"? true: false;
-    activity.score = std::stoi(SecretKey::decrypt(row.at(score_act), key));
-    return std::make_pair(key, activity);
+    activity.timeactivity = std::stoull(Cryptography::decrypt(row.at(time_act), key));
+    activity.active = Cryptography::decrypt(row.at(active_connection), key) == "1"? true: false;
+    activity.score = std::stoi(Cryptography::decrypt(row.at(score_act), key));
+    return std::make_pair(ByteArray(key).toString(), activity);
 }
 
 void ConnectionsManager::addConnection(const DFS::Packets::Connection &connection) {

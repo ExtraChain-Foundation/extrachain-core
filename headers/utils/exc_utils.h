@@ -29,6 +29,7 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
+#include "cpp-base64/base64.h"
 #include "utils/bignumber_float.h"
 #include <msgpack.hpp>
 
@@ -43,6 +44,7 @@
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
 
+#include "utils/exc_magic.h"
 #include <magic_enum.hpp>
 #include <magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
@@ -65,6 +67,137 @@ using namespace magic_enum::bitwise_operators;
                                   << "::" << magic_enum::enum_name(value);                                   \
         return debug;                                                                                        \
     }
+
+class ByteArray {
+public:
+    template <size_t N>
+    ByteArray(const std::array<uint8_t, N> &arr)
+        : m_data(arr.begin(), arr.end()) {
+    }
+
+    ByteArray(const std::vector<uint8_t> &vec)
+        : m_data(vec) {
+    }
+
+    ByteArray(const std::string &str)
+        : m_data(
+              reinterpret_cast<const uint8_t *>(str.data()),
+              reinterpret_cast<const uint8_t *>(str.data()) + str.size()) {
+    }
+
+    ByteArray(const char *data, size_t length)
+        : m_data(reinterpret_cast<const uint8_t *>(data), reinterpret_cast<const uint8_t *>(data) + length) {
+    }
+
+    ByteArray(const char *data)
+        : ByteArray(data, std::strlen(data)) {
+    }
+
+    ByteArray(const QByteArray &qba)
+        : m_data(
+              reinterpret_cast<const uint8_t *>(qba.data()),
+              reinterpret_cast<const uint8_t *>(qba.data()) + qba.size()) {
+    }
+
+    ByteArray(const QString &qstr)
+        : ByteArray(qstr.toUtf8()) {
+    }
+
+    template <size_t N>
+    std::array<uint8_t, N> toArray() const {
+        std::array<uint8_t, N> result {};
+        std::copy_n(m_data.begin(), std::min(N, m_data.size()), result.begin());
+        return result;
+    }
+
+    std::vector<uint8_t> toBytes() const {
+        return m_data;
+    }
+
+    std::vector<uint8_t> toVector() const {
+        return m_data;
+    }
+
+    std::string toString() const {
+        return std::string(reinterpret_cast<const char *>(m_data.data()), m_data.size());
+    }
+
+    QByteArray toQByteArray() const {
+        return QByteArray(reinterpret_cast<const char *>(m_data.data()), m_data.size());
+    }
+
+    QString toQString() const {
+        return QString::fromUtf8(toQByteArray());
+    }
+
+    size_t size() const {
+        return m_data.size();
+    }
+    bool empty() const {
+        return m_data.empty();
+    }
+    const uint8_t *data() const {
+        return m_data.data();
+    }
+    uint8_t *data() {
+        return m_data.data();
+    }
+
+    auto begin() {
+        return m_data.begin();
+    }
+    auto end() {
+        return m_data.end();
+    }
+    auto begin() const {
+        return m_data.begin();
+    }
+    auto end() const {
+        return m_data.end();
+    }
+
+    uint8_t &operator[](size_t i) {
+        return m_data[i];
+    }
+    const uint8_t &operator[](size_t i) const {
+        return m_data[i];
+    }
+
+    bool operator==(const ByteArray &other) const {
+        return m_data == other.m_data;
+    }
+
+    ByteArray operator+(const ByteArray &other) const {
+        std::vector<uint8_t> result = m_data;
+        result.insert(result.end(), other.m_data.begin(), other.m_data.end());
+        return ByteArray(result);
+    }
+
+    static ByteArray fromBase64(const std::string &encoded) {
+        return ByteArray(base64_decode(encoded));
+    }
+
+    static ByteArray fromBase64(const QString &encoded) {
+        return fromBase64(encoded.toStdString());
+    }
+
+    std::string toBase64() const {
+        return base64_encode(toString());
+    }
+
+    QString toBase64QString() const {
+        return QString::fromStdString(toBase64());
+    }
+
+    ByteArray slice(size_t start, size_t length) const {
+        return ByteArray(std::vector<uint8_t>(
+            m_data.begin() + start,
+            m_data.begin() + std::min(start + length, m_data.size())));
+    }
+
+private:
+    std::vector<uint8_t> m_data;
+};
 
 namespace Network {
 Q_NAMESPACE
@@ -299,6 +432,32 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 }
 } // namespace MessagePack
 
+namespace Json {
+template <typename T>
+boost::json::value serializeValue(const T &t) {
+    auto json = json_convert::to_json(t);
+    return json;
+}
+
+template <typename T>
+std::string serialize(const T &t) {
+    auto json     = serializeValue(t);
+    auto json_str = boost::json::serialize(json);
+    return json_str;
+}
+
+template <typename T>
+std::expected<T, std::string> deserialize(const std::string &json_str) {
+    try {
+        auto parsed   = boost::json::parse(json_str);
+        auto restored = json_convert::from_json<T>(parsed);
+        return restored;
+    } catch (const std::exception &e) {
+        return std::unexpected(e.what());
+    }
+}
+} // namespace Json
+
 namespace Token {
 static const auto        MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
 static const std::string folder_tokens   = "tokens";
@@ -315,20 +474,20 @@ static const std::string tokenTableCreate =
     "color         TEXT  NOT NULL, "
     "smart           TEXT  NOT NULL);";
 namespace Fields {
-    static const std::string actorId = "actorId";
-    static const std::string name = "name";
-    static const std::string ticker = "ticker";
-    static const std::string count = "count";
-    static const std::string owner = "owner";
-    static const std::string color = "color";
-    static const std::string smart = "smart";
-    static const std::vector<std::string> fields = { actorId, name, ticker, count, owner, color, smart };
+    static const std::string              actorId = "actorId";
+    static const std::string              name    = "name";
+    static const std::string              ticker  = "ticker";
+    static const std::string              count   = "count";
+    static const std::string              owner   = "owner";
+    static const std::string              color   = "color";
+    static const std::string              smart   = "smart";
+    static const std::vector<std::string> fields  = { actorId, name, ticker, count, owner, color, smart };
 }
 }
 
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
-const static int ReconnectInterval = 5000;
+const static int              ReconnectInterval = 5000;
 
 static uint64_t currentDateSecs() {
     using namespace std::chrono;
@@ -349,12 +508,12 @@ bool vector_contains(const std::vector<T> &vec, const T &element) {
 
 EXTRACHAIN_EXPORT QString extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
-EXTRACHAIN_EXPORT QString boostVersion();
-EXTRACHAIN_EXPORT QString boostAsioVersion();
+EXTRACHAIN_EXPORT QString     boostVersion();
+EXTRACHAIN_EXPORT QString     boostAsioVersion();
 
 enum PrintDebug {
     Off = 0,
-    On = 1
+    On  = 1
 };
 
 enum class HashEncode {
@@ -408,8 +567,22 @@ std::string hexStringToByte(const std::string &data);
 
 std::string bytesEncodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
 std::string bytesDecodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
-QByteArray bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
-QByteArray bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+QByteArray  bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+QByteArray  bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
+
+template <typename Container>
+std::string bytesEncodeVec(const Container &data, HashEncode encode = HashEncode::Base64) {
+    return base64_encode(std::string(reinterpret_cast<const char *>(data.data()), data.size()));
+}
+
+template <size_t N>
+std::array<uint8_t, N> bytesDecodeVec(const std::string &data, HashEncode encode = HashEncode::Base64) {
+    auto decoded = base64_decode(data);
+
+    std::array<uint8_t, N> result {};
+    std::copy_n(decoded.data(), std::min(N, decoded.size()), result.begin());
+    return result;
+}
 
 EXTRACHAIN_EXPORT bool encryptFile(
     const QString &originalName,

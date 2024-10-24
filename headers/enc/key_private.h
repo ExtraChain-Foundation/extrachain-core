@@ -25,13 +25,16 @@
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
+#include "utils/exc_magic.h"
 
 #include <filesystem>
 
+#include "enc/enc_tools.h"
+
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
-    std::string m_secretKey;
-    std::string m_publicKey;
+    PrivateKey m_secretKey;
+    PublicKey  m_publicKey;
 
 public:
     /**
@@ -42,35 +45,38 @@ public:
      * @brief Existing keys
      * @param keyPair - [prKey:pubKey]
      */
-    KeyPrivate(const std::string &secret_key, const std::string &public_key);
+    explicit KeyPrivate(const PrivateKey &secret_key, const PublicKey &public_key);
+    explicit KeyPrivate(const std::string &secret_key, const std::string &public_key);
     KeyPrivate(const KeyPrivate &keyPrivate);
     ~KeyPrivate() = default;
 
 public:
     void generate();
 
-    std::string encrypt(const std::string &data, const std::string &receiverPublicKey,
-                        const std::string &nonce = "") const;
-    std::string decrypt(const std::string &data, const std::string &senderPublicKey,
-                        const std::string &nonce = "") const;
-    std::string encryptSelf(const std::string &data) const;
-    std::string decryptSelf(const std::string &data) const;
+    Bytes encrypt(const Bytes &data, const PublicKey &receiverPublicKey, const Nonce &nonce = {}) const;
+    Bytes decrypt(const Bytes &data, const PublicKey &senderPublicKey, const Nonce &nonce = {}) const;
+    Bytes encryptSelf(const Bytes &data) const;
+    Bytes decryptSelf(const Bytes &data) const;
 
     void encryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
     void decryptFile(const std::filesystem::path &file, const std::filesystem::path &resultFile) const;
 
-    std::string sign(const std::string &data) const;
-    bool verify(const std::string &data, const std::string &signature) const;
+    Signature sign(const Bytes &data) const;
+    bool      verify(const Bytes &data, const Signature &signature) const;
 
-    const std::string &secretKey() const;
-    const std::string &publicKey() const;
+    // deprecated
+    Signature sign(const std::string &data) const;
+    bool      verify(const std::string &data, const Signature &signature) const;
+
+    const PrivateKey &secretKey() const;
+    const PublicKey  &publicKey() const;
 
     bool empty() const;
 
     MSGPACK_DEFINE(m_secretKey, m_publicKey)
+    BOOST_DESCRIBE_CLASS(KeyPrivate, (), (), (), (m_secretKey, m_publicKey))
 };
 
-QDebug operator<<(QDebug debug, const KeyPrivate &key);
-std::ostream &operator<<(std::ostream &os, const KeyPrivate &key);
+MAKE_MAGICAL(KeyPrivate)
 
 #endif // KEY_PRIVATE_H

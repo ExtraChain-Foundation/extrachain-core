@@ -141,7 +141,7 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::handshake() {
-    auto key = Utils::bytesEncode(QByteArray::fromStdString(priv.publicKey()));
+    auto key = ByteArray(priv.publicKey()).toBase64QString();
     m_ws->sendTextMessage(key);
 }
 

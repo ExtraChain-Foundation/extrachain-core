@@ -1,239 +1,266 @@
 #include "enc/enc_tools.h"
 
-#include "cpp-base64/base64.h"
-#include <sodium.h>
-
-using std::string, std::vector;
-
-string SecretKey::keygen() {
-    vector<unsigned char> sk(crypto_secretbox_KEYBYTES);
+KeyBytes Cryptography::keygen() {
+    KeyBytes sk;
     crypto_secretbox_keygen(sk.data());
-    string skey = std::string(sk.begin(), sk.end());
+    // string skey = std::string(sk.begin(), sk.end());
     // skey.erase(--skey.end());
-    return skey;
+    return sk;
 }
 
-string SecretKey::getKeyFromPass(const string &pass, const string &salt) {
+KeyPass Cryptography::getKeyFromPass(const std::string &pass, const Salt &salt) {
     if (pass.empty()) {
-        qFatal("[SecretKey::getKeyFromPass] pass is empty. pass: %s", pass.data());
+        qFatal("[SecretKey::getKeyFromPass] pass is empty. salt: %s", salt.data());
     }
 
-    vector<unsigned char> vsalt(crypto_pwhash_SALTBYTES);
-    if (salt.empty() || salt.size() < crypto_pwhash_SALTBYTES) {
+    Salt vsalt;
+    if (salt.empty()) {
         std::fill(vsalt.begin(), vsalt.end(), '0');
     } else {
-        vsalt = vector<unsigned char>(salt.begin(), salt.end());
+        vsalt = salt;
     }
-    vector<unsigned char> key(crypto_box_SEEDBYTES);
-    int rst1 = crypto_pwhash(key.data(), key.size(), pass.data(), pass.size(), vsalt.data(),
-                             crypto_pwhash_OPSLIMIT_INTERACTIVE, crypto_pwhash_MEMLIMIT_INTERACTIVE,
-                             crypto_pwhash_ALG_DEFAULT);
+
+    KeyPass key;
+    int     rst1 = crypto_pwhash(
+        key.data(),
+        key.size(),
+        pass.data(),
+        pass.size(),
+        vsalt.data(),
+        crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        crypto_pwhash_ALG_DEFAULT);
     if (rst1 != 0) {
         qFatal("Incorrect getKeyFromPass");
     }
-    string skey = std::string(key.begin(), key.end());
+    // string skey = std::string(key.begin(), key.end());
     // skey.erase(--skey.end());
-    return skey;
+    return key;
 }
 
-std::string SecretKey::sign(const std::string &data, const std::string &secret_key) {
+PrivateKey Cryptography::deriveKey(const KeyPass &key) {
+    PrivateKey derived_key;
+    crypto_secretbox_keygen(derived_key.data());
+    crypto_kdf_derive_from_key(derived_key.data(), derived_key.size(), 0, "encrypt", key.data());
+    return derived_key;
+}
+
+Signature Cryptography::sign(const Bytes &data, const PrivateKey &secret_key) {
     if (data.empty() || secret_key.empty()) {
-        qFatal("[SecretKey::sign] data or secret is empty. data: %s, secret: %s", data.data(),
-               secret_key.data());
+        qFatal(
+            "[SecretKey::sign] data or secret is empty. data: %s, secret: %s",
+            data.data(),
+            secret_key.data());
     }
 
-    std::vector<unsigned char> sk(secret_key.begin(), secret_key.end());
-    std::vector<unsigned char> vmsg(data.begin(), data.end());
-    std::vector<unsigned char> vsig(crypto_sign_BYTES);
-    crypto_sign_detached(vsig.data(), NULL, vmsg.data(), vmsg.size(), sk.data());
-    std::string sig = std::string(vsig.begin(), vsig.end());
-    return base64_encode(sig);
+    Signature sig;
+    crypto_sign_detached(sig.data(), NULL, data.data(), data.size(), secret_key.data());
+    return sig;
 }
 
-bool SecretKey::verify(const std::string &data, const std::string &public_key, const std::string &signature) {
+bool Cryptography::verify(const Bytes &data, const PublicKey &public_key, const Signature &signature) {
     if (data.empty() || public_key.empty() || signature.empty()) {
-        qCritical().noquote().nospace() << "[SecretKey::verify] data or secret is empty. data: '" << data << "', public: '" << public_key << "', signature: '" << signature << "'";
+        qCritical().noquote().nospace()
+            << "[SecretKey::verify] data or secret is empty. data: '" << data << "', public: '"
+            << public_key.data() << "', signature: '" << signature.data() << "'";
         return false;
     }
 
-    std::string sig = base64_decode(signature);
-    std::vector<unsigned char> pk(public_key.begin(), public_key.end());
-    std::vector<unsigned char> vmsg(data.begin(), data.end());
-    std::vector<unsigned char> vsig(sig.begin(), sig.end());
-    int res = crypto_sign_verify_detached(vsig.data(), vmsg.data(), vmsg.size(), pk.data());
+    int res = crypto_sign_verify_detached(signature.data(), data.data(), data.size(), public_key.data());
     return res == 0;
 }
 
-string SecretKey::encrypt(const string &data, const string &secret_key) {
+Bytes Cryptography::encrypt(const Bytes &data, const PrivateKey &secret_key) {
     if (data.empty() || secret_key.empty()) {
-        qFatal("[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s", data.data(),
-               secret_key.data());
+        qFatal(
+            "[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s",
+            data.data(),
+            secret_key.data());
     }
 
-    unsigned long long enc_size = crypto_secretbox_MACBYTES + data.length();
-    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
+    unsigned long long enc_size = crypto_secretbox_MACBYTES + data.size();
+    Bytes              encrypted(enc_size);
 
-    vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(data.begin(), data.end());
-    vector<unsigned char> nonce;
-    nonce.resize(crypto_secretbox_NONCEBYTES);
+    Nonce nonce;
     randombytes_buf(nonce.data(), nonce.size());
-    int r = crypto_secretbox_easy(enc_msg.data(), dec_msg.data(), dec_msg.size(), nonce.data(), sk.data());
-    string res;
-    if (r == 0) {
-        enc_msg.insert(enc_msg.begin(), nonce.begin(), nonce.end());
-        res = std::string(enc_msg.begin(), enc_msg.end());
-    }
-
-    if (res.empty())
-        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << data.data()
-                 << "| secret:" << secret_key.data();
-    return res;
-}
-
-string SecretKey::decrypt(const string &data, const string &secret_key) {
-    if (data.empty() || secret_key.empty()) {
-        qFatal("[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s", data.data(),
-               secret_key.data());
-    }
-
-    string sdata = data;
-
-    string s_nonce = sdata.substr(0, crypto_secretbox_NONCEBYTES);
-    sdata.erase(0, crypto_secretbox_NONCEBYTES);
-
-    if (sdata.size() < crypto_secretbox_MACBYTES)
-        qFatal("[SecretKey::decrypt] Incorrect msg: %s", data.data());
-
-    vector<unsigned char> nonce(s_nonce.begin(), s_nonce.end());
-    vector<unsigned char> sk(secret_key.begin(), secret_key.end());
-    vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> dec_msg(enc_msg.size() - crypto_secretbox_MACBYTES);
 
     int r =
-        crypto_secretbox_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), nonce.data(), sk.data());
-    string res;
+        crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data());
+
     if (r == 0) {
-        res = string(dec_msg.begin(), dec_msg.end());
+        encrypted.insert(encrypted.begin(), nonce.begin(), nonce.end());
     }
 
-    if (res.empty())
-        qDebug() << "[SecretKey::decrypt] res is empty. data:" << data.data()
+    if (encrypted.empty())
+        qDebug() << "[SecretKey::encrypt] res is empty. msg:" << data.data()
                  << "| secret:" << secret_key.data();
-    return res;
+
+    return encrypted;
 }
 
-string SecretKey::encryptWithPassword(const string &data, const string &password) {
-    string key = getKeyFromPass(password);
+Bytes Cryptography::decrypt(const Bytes &encrypted_data, const PrivateKey &secret_key) {
+    if (encrypted_data.empty() || secret_key.empty()) {
+        qFatal(
+            "[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s",
+            encrypted_data.data(),
+            secret_key.data());
+    }
+
+    const size_t minimum_size = crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES;
+    if (encrypted_data.size() < minimum_size) {
+        qFatal("[SecretKey::decrypt] Encrypted data too short");
+    }
+
+    Nonce nonce;
+    std::copy_n(encrypted_data.begin(), crypto_secretbox_NONCEBYTES, nonce.begin());
+
+    const Bytes encrypted_message(encrypted_data.begin() + crypto_secretbox_NONCEBYTES, encrypted_data.end());
+
+    if (encrypted_data.size() < crypto_secretbox_MACBYTES)
+        qFatal("[SecretKey::decrypt] Incorrect msg: %s", encrypted_data.data());
+
+    Bytes decrypted_message(encrypted_data.size() - crypto_secretbox_MACBYTES);
+
+    int r = crypto_secretbox_open_easy(
+        decrypted_message.data(),
+        encrypted_message.data(),
+        encrypted_message.size(),
+        nonce.data(),
+        secret_key.data());
+
+    if (r != 0 || decrypted_message.empty())
+        qDebug() << "[SecretKey::decrypt] res is empty. data:" << decrypted_message.data()
+                 << "| secret:" << secret_key.data();
+
+    return decrypted_message;
+}
+
+Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
+    return encrypt(data, deriveKey(secret_key));
+}
+
+Bytes Cryptography::decrypt(const Bytes &data, const KeyPass &secret_key) {
+    return decrypt(data, deriveKey(secret_key));
+}
+
+std::string Cryptography::encrypt(const std::string &data, const KeyPass &secret_key) {
+    return ByteArray(encrypt(ByteArray(data).toBytes(), deriveKey(secret_key))).toString();
+}
+
+std::string Cryptography::decrypt(const std::string &data, const KeyPass &secret_key) {
+    return ByteArray(decrypt(ByteArray(data).toBytes(), deriveKey(secret_key))).toString();
+}
+
+Bytes Cryptography::encryptWithPassword(const Bytes &data, const std::string &password) {
+    auto key = getKeyFromPass(password);
     return encrypt(data, key);
 }
 
-string SecretKey::decryptWithPassword(const string &data, const string &password) {
-    string key = getKeyFromPass(password);
+Bytes Cryptography::decryptWithPassword(const Bytes &data, const std::string &password) {
+    auto key = getKeyFromPass(password);
     return decrypt(data, key);
 }
 
-std::pair<std::string, std::string> SecretKey::createAsymmetricPair() {
-    std::vector<uint8_t> sk(crypto_sign_SECRETKEYBYTES);
-    std::vector<uint8_t> pk(crypto_sign_PUBLICKEYBYTES);
+std::pair<PrivateKey, PublicKey> Cryptography::createAsymmetricPair() {
+    PrivateKey sk;
+    PublicKey  pk;
     crypto_sign_keypair(pk.data(), sk.data());
-    std::string m_secretKey = std::string(sk.begin(), sk.end());
-    std::string m_publicKey = std::string(pk.begin(), pk.end());
-    return { m_secretKey, m_publicKey };
+    return { sk, pk };
 }
 
-std::string SecretKey::encryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                         const std::string &public_key, const std::string &nonce) {
-    if (data.empty() || secret_key.empty() || public_key.empty())
-        qFatal("[SecretKey::encryptAsymmetric] data, secret or public is empty");
-
-    unsigned long long enc_size = crypto_box_MACBYTES + data.length();
-    vector<unsigned char> pkr(public_key.begin(), public_key.end());
-    vector<unsigned char> sks(secret_key.begin(), secret_key.end());
-
-    vector<unsigned char> xsks(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xsks.data(), sks.data());
-
-    vector<unsigned char> xpkr(crypto_scalarmult_curve25519_BYTES);
-    int conv_res = crypto_sign_ed25519_pk_to_curve25519(xpkr.data(), pkr.data());
-    Q_UNUSED(conv_res)
-
-    vector<unsigned char> enc_msg(enc_size);
-    vector<unsigned char> dec_msg(data.begin(), data.end());
-    vector<unsigned char> vnonce;
-    vnonce.resize(crypto_box_NONCEBYTES);
-
-    if (nonce.size() == crypto_box_NONCEBYTES) {
-        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    } else {
-        randombytes_buf(vnonce.data(), vnonce.size());
+Bytes Cryptography::encryptAsymmetric(
+    const Bytes      &data,
+    const PrivateKey &secret_key,
+    const PublicKey  &public_key,
+    const Nonce      &nonce) {
+    if (data.empty()) {
+        qFatal("[SecretKey::encryptAsymmetric] data is empty");
     }
 
-    int r =
-        crypto_box_easy(enc_msg.data(), dec_msg.data(), data.size(), vnonce.data(), xpkr.data(), xsks.data());
+    Curve25519Key x_secret_key;
+    Curve25519Key x_public_key;
 
-    string res;
-    if (r == 0) {
-        if (nonce.size() != crypto_box_NONCEBYTES) {
-            enc_msg.insert(enc_msg.begin(), vnonce.begin(), vnonce.end());
+    int res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), secret_key.data());
+    int res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), public_key.data());
+
+    // Подготовка nonce
+    Nonce working_nonce;
+    if (nonce.size() == crypto_box_NONCEBYTES) {
+        working_nonce = nonce;
+    } else {
+        randombytes_buf(working_nonce.data(), working_nonce.size());
+    }
+
+    Bytes encrypted_message(crypto_box_MACBYTES + data.size());
+
+    if (crypto_box_easy(
+            encrypted_message.data(),
+            data.data(),
+            data.size(),
+            working_nonce.data(),
+            x_public_key.data(),
+            x_secret_key.data())
+        != 0) {
+        qDebug() << "[SecretKey::encryptAsymmetric] Encryption failed";
+        return Bytes {};
+    }
+
+    if (nonce.size() != crypto_box_NONCEBYTES) {
+        Bytes result(working_nonce.size() + encrypted_message.size());
+        std::copy(working_nonce.begin(), working_nonce.end(), result.begin());
+        std::copy(encrypted_message.begin(), encrypted_message.end(), result.begin() + working_nonce.size());
+        return result;
+    }
+
+    return encrypted_message;
+}
+
+Bytes Cryptography::decryptAsymmetric(
+    const Bytes      &encrypted_data,
+    const PrivateKey &secret_key,
+    const PublicKey  &public_key,
+    const Nonce      &provided_nonce) {
+    if (encrypted_data.empty()) {
+        qFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
+    }
+
+    Nonce working_nonce;
+    Bytes encrypted_message;
+
+    if (provided_nonce.size() == crypto_box_NONCEBYTES) {
+        working_nonce     = provided_nonce;
+        encrypted_message = encrypted_data;
+    } else {
+        if (encrypted_data.size() < crypto_box_NONCEBYTES) {
+            qFatal("[SecretKey::decryptAsymmetric] Data too short to contain nonce");
         }
-        res = std::string(enc_msg.begin(), enc_msg.end());
+        std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, working_nonce.begin());
+        encrypted_message = Bytes(encrypted_data.begin() + crypto_box_NONCEBYTES, encrypted_data.end());
     }
 
-    if (res.empty())
-        qDebug() << "[SecretKey::encryptAsymmetric] res is empty. msg:" << data.data()
-                 << "| secret:" << secret_key.data() << "| public:" << public_key.data()
-                 << "| nonce:" << nonce.data();
-    return res;
-}
-
-std::string SecretKey::decryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                         const std::string &public_key, const std::string &nonce) {
-    if (data.empty() || secret_key.empty() || public_key.empty())
-        qFatal("[SecretKey::decryptAsymmetric] data, secret or public is empty");
-
-    string sdata = data;
-    vector<unsigned char> vnonce;
-
-    if (nonce.size() == crypto_box_NONCEBYTES) {
-        vnonce = vector<unsigned char>(nonce.begin(), nonce.end());
-    } else {
-        string s_nonce = sdata.substr(0, crypto_box_NONCEBYTES);
-        sdata.erase(0, crypto_box_NONCEBYTES);
-        vnonce = vector<unsigned char>(s_nonce.begin(), s_nonce.end());
+    if (encrypted_message.size() < crypto_box_MACBYTES) {
+        qFatal("[SecretKey::decryptAsymmetric] Encrypted message too short");
     }
 
-    if (sdata.size() < crypto_secretbox_MACBYTES) {
-        qCritical() << "Critical: [SecretKey::decryptAsymmetric] Incorrect msg" << sdata.size()
-                    << crypto_secretbox_MACBYTES;
-        return "";
-        qFatal("[SecretKey::decryptAsymmetric] Incorrect msg");
+    Curve25519Key x_secret_key;
+    Curve25519Key x_public_key;
+
+    int res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), secret_key.data());
+    int res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), public_key.data());
+
+    Bytes decrypted_message(encrypted_message.size() - crypto_box_MACBYTES);
+
+    if (crypto_box_open_easy(
+            decrypted_message.data(),
+            encrypted_message.data(),
+            encrypted_message.size(),
+            working_nonce.data(),
+            x_public_key.data(),
+            x_secret_key.data())
+        != 0) {
+        qDebug() << "[SecretKey::decryptAsymmetric] Decryption failed";
+        return Bytes {};
     }
 
-    vector<unsigned char> skr(secret_key.begin(), secret_key.end());
-    vector<unsigned char> pks(public_key.begin(), public_key.end());
-
-    vector<unsigned char> xskr(crypto_scalarmult_curve25519_BYTES);
-    crypto_sign_ed25519_sk_to_curve25519(xskr.data(), skr.data());
-
-    vector<unsigned char> xpks(crypto_scalarmult_curve25519_BYTES);
-    int res_ed_to_curve = crypto_sign_ed25519_pk_to_curve25519(xpks.data(), pks.data());
-    (void)res_ed_to_curve; // unused
-
-    vector<unsigned char> enc_msg(sdata.begin(), sdata.end());
-    vector<unsigned char> dec_msg(enc_msg.size() - crypto_box_MACBYTES);
-
-    int r = crypto_box_open_easy(dec_msg.data(), enc_msg.data(), enc_msg.size(), vnonce.data(), xpks.data(),
-                                 xskr.data());
-    string res;
-    if (r == 0) {
-        res = string(dec_msg.begin(), dec_msg.end());
-    }
-
-    if (res.empty())
-        qDebug() << "[KeyPrivate::encrypt] res is empty." /*msg:" << data.data()*/
-                 << "| secret:" << secret_key.data() << "| public:" << public_key.data()
-                 << "| nonce:" << nonce.data();
-
-    return res;
+    return decrypted_message;
 }

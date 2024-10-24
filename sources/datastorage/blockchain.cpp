@@ -912,7 +912,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
             // return TransactionProveError::ZeroProducer;
         }
 
-        if (!producerActor.key().verify(tx.hash(), tx.signature())) {
+        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<64>())) {
             // return TransactionProveError::ProducerVerify;
         }
 
