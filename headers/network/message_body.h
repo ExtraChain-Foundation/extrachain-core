@@ -55,12 +55,12 @@ enum class MessageType {
     ShareConnections = 113,
     Accrual = 120,
 
-    Unknown = 404,
+    VPNHandshake = 241,
+    VPNConnection = 242,
+    VPNDisconnect = 243,
+    VPNUpdateConnection = 244,
 
-    VPNHandshake = 1001,
-    VPNConnection = 1002,
-    VPNDisconnect = 1003,
-    VPNUpdateConnection = 1004,
+    Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)
 FORMAT_ENUM(MessageType)
