@@ -155,7 +155,7 @@ private:
     std::shared_ptr<QNetworkAddressEntry>  local;
     QWebSocketServer*      wsServer = nullptr;
     QList<SocketService*>  m_connections;
-    std::map<NetworkReconnect, QString> m_reconnectionsToIdentifier;
+    SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
@@ -306,7 +306,7 @@ public:
     }
 
     void                    requestWSNodeList(std::string message_id);
-    std::map<NetworkReconnect, QString>& reconnections();
+    SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
     

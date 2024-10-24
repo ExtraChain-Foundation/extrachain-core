@@ -6,24 +6,6 @@
 class ActorId;
 enum class VPNType;
 
-enum class VPNFunctionType {
-    SET_CLIENT,
-    SET_SERVER,
-    SET_PROXY,
-    CHECK_SERVER,
-    CHECK_PROXY,
-    GET_PUBLIC_IP,
-    IS_CONNECTED,
-    DISCONNECT,
-    GET_LOCKED_CHAIN_INDEXES,
-    CHECK_VPN_HANDSHAKE_ACCESS
-};
-
-struct VPNFunctionsResult {
-    std::string   str;
-    std::set<int> blockedChainIndexes;
-};
-
 struct VPNConfigStorage {
     struct VPNHandhakeCache {
         std::string              uuid;

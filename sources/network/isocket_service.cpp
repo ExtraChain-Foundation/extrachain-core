@@ -70,7 +70,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     if (version != EXTRACHAIN_VERSION) {
-        qDebug() << "[Socket] Close, because version incompatible";
+        qDebug() << "[Socket] Close, because version incompatible" << EXTRACHAIN_VERSION;
         emit error(Network::SocketServiceError::IncompatibleVersion, version);
         closeSocket();
     }
