@@ -275,8 +275,8 @@ std::string ExtraChainNode::exportUser() {
     array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
-    auto data = SecretKey::encryptWithPassword(json, hash);
-    return data;
+    auto data = Cryptography::encryptWithPassword(ByteArray(json).toBytes(), hash);
+    return ByteArray(data).toString();
 }
 
 bool ExtraChainNode::importUser(
@@ -285,22 +285,21 @@ bool ExtraChainNode::importUser(
     const std::string& password) {
     auto hash = Utils::calcHash(login + password);
 
-    auto json = SecretKey::decryptWithPassword(data, hash);
-    if (hash.empty() || json.empty()) {
+    auto json = ByteArray(Cryptography::decryptWithPassword(ByteArray(data).toBytes(), hash)).toQByteArray();
+    if (hash.empty() || json.isEmpty()) {
         return false;
     }
 
-    auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
+    auto array = QJsonDocument::fromJson(json).array();
     if (array.count() != 3) {
         return false;
     }
 
-    auto extrachainVersion = array[0].toString();
-    auto date              = array[1].toInteger();
-    auto profile           = array[2].toObject();
-    auto profileBytes      = QJsonDocument(profile).toJson(QJsonDocument::Compact);
-    auto profileBytesEncrypted =
-        QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
+    auto extrachainVersion     = array[0].toString();
+    auto date                  = array[1].toInteger();
+    auto profile               = array[2].toObject();
+    auto profileBytes          = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto profileBytesEncrypted = Cryptography::encryptWithPassword(ByteArray(profileBytes).toBytes(), hash);
 
     Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
@@ -309,7 +308,7 @@ bool ExtraChainNode::importUser(
 
     QFile file(privateProfile);
     file.open(QFile::WriteOnly);
-    file.write(profileBytesEncrypted);
+    file.write(ByteArray(profileBytesEncrypted).toQByteArray());
     file.close();
 
     m_accountController->addToProfileList(profile["main"].toString().toStdString());
@@ -609,5 +608,5 @@ void ExtraChainNode::logout() {
 }
 
 void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
-    m_vpnClearFunc          = vpnClearFunc;
+    m_vpnClearFunc = vpnClearFunc;
 }
