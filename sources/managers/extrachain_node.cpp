@@ -608,7 +608,6 @@ void ExtraChainNode::logout() {
     std::exit(0);
 }
 
-void ExtraChainNode::InitVPN(VpnFunctionType vpnFunc, VpnFunctionClearType vpnClearFunc) {
-    vpnConnectorManagerFunc = vpnFunc;
+void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
     m_vpnClearFunc          = vpnClearFunc;
 }
