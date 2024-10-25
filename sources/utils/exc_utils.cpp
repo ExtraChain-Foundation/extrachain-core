@@ -517,30 +517,6 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
     return res;
 }
 
-QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
-    switch (encode) {
-    case HashEncode::Base64:
-        return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
-    case HashEncode::Hex:
-        return data.toHex();
-    case HashEncode::Sha3_512:
-        return QByteArray();
-    }
-    return QByteArray();
-}
-
-QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
-    switch (encode) {
-    case HashEncode::Base64:
-        return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
-    case HashEncode::Hex:
-        return QByteArray::fromHex(data);
-    case HashEncode::Sha3_512:
-        return QByteArray();
-    }
-    return QByteArray();
-}
-
 QString Utils::detectCompiler() {
 #ifdef __clang__
     #if __clang_major__ < 11

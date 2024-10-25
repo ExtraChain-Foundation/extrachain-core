@@ -129,7 +129,8 @@ namespace detail {
             return std::to_string(value);
         } else if constexpr (is_uint8_array<T>::value) {
             std::string raw(reinterpret_cast<const char*>(value.data()), value.size());
-            return base64_encode(raw);
+            auto is_empty = std::ranges::all_of(raw, [&value](const auto& x) { return x == '\0'; });
+            return '"' + (is_empty ? "empty" : base64_encode(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
             if constexpr (is_associative_container<T>::value) {
                 std::string result = "{ ";

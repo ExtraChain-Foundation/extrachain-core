@@ -64,32 +64,31 @@ private:
 
 public:
     explicit Blockchain(ExtraChainNode *node);
-    std::expected<BlockVariant, BlockError> getBlockByHash(const QByteArray &hash);
+    std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash);
     ~Blockchain();
 
     std::expected<BlockVariant, BlockError>
     getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
-    std::pair<Transaction, QByteArray> getTxByHash(const QByteArray &hash, const ActorId &token = ActorId());
+    std::pair<Transaction, BigNumber> getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
     void sync(const BigNumber &from = BigNumber());
     void lastSavedRequest();
 
 private:
-    std::expected<BlockVariant, BlockError> getBlockByData(const QByteArray &data);
+    std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
 
-    std::pair<Transaction, QByteArray> getTxBySender(const BigNumber &id, const ActorId &token = ActorId());
-    std::pair<Transaction, QByteArray> getTxByReceiver(const BigNumber &id, const ActorId &token = ActorId());
-    std::pair<Transaction, QByteArray>
-    getTxBySenderOrReceiver(const BigNumber &id, const ActorId &token = ActorId());
-    std::pair<Transaction, QByteArray>
-    getTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token = ActorId());
-    std::pair<Transaction, QByteArray> getTxByApprover(const BigNumber &id, const ActorId &token = ActorId());
-    std::pair<Transaction, QByteArray> getTxByUser(const BigNumber &id, const ActorId &token = ActorId());
+    std::pair<Transaction, BigNumber> getTxBySender(const ActorId &id, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTxByReceiver(const ActorId &id, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber>
+    getTxBySenderOrReceiver(const ActorId &id, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber>
+    getTxBySenderOrReceiverAndToken(const ActorId &id, const ActorId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTxByApprover(const ActorId &id, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
     // genesis blocks //
     QByteArray                  findRecordsInBlock(const BlockVariant &block);
     bool                        signCheckAdd(BlockVariant &block);
-    QMap<QByteArray, BigNumber> getInvestmentsStaking(const ActorId &wallet, const ActorId &token);
 
 public:
     static BigNumber lastGenesisIdFor(const BigNumber &id);
@@ -155,7 +154,7 @@ public:
      * @param type of param
      * @return last blockchain block
      */
-    std::expected<BlockVariant, BlockError> getBlock(SearchEnum::BlockParam type, const QByteArray &value);
+    std::expected<BlockVariant, BlockError> getBlock(SearchEnum::BlockParam type, const std::string &value);
 
     /**
      * Gets the transaction from blockchain by *value* of a certain *type*
@@ -163,8 +162,8 @@ public:
      * @param type of param
      * @return transaction
      */
-    std::pair<Transaction, QByteArray>
-    getTransaction(SearchEnum::TxParam type, const QByteArray &value, const ActorId &token = ActorId());
+    std::pair<Transaction, BigNumber>
+    getTransaction(SearchEnum::TxParam type, const std::string &value, const ActorId &token = ActorId());
 
 private:
     /**

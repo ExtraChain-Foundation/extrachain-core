@@ -28,7 +28,7 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
 }
 
 KeyPublic::KeyPublic(const std::string &publicKey) {
-    m_publicKey = ByteArray(publicKey).toArray<32>();
+    m_publicKey = ByteArray(publicKey).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
 std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const {
@@ -49,5 +49,5 @@ const PublicKey &KeyPublic::publicKey() const {
 }
 
 bool KeyPublic::empty() const {
-    return m_publicKey.empty();
+    return Utils::isAllEmpty(m_publicKey);
 }

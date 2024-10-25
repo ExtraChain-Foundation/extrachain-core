@@ -23,6 +23,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <ranges>
+#include <algorithm>
 
 #include <QFile>
 #include <QObject>
@@ -232,6 +234,8 @@ Q_ENUM_NS(SocketServiceError)
     QByteArray identifier = file.readAll();
     file.close();
     return identifier;
+
+    QByteArray("").toBase64();
 }
 } // namespace Network
 
@@ -534,31 +538,31 @@ std::string enumFullName(E value) {
 }
 
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
-EXTRACHAIN_EXPORT qint64 diskFreeMemory();
-EXTRACHAIN_EXPORT qint64 diskTotalMemory();
+EXTRACHAIN_EXPORT qint64  diskFreeMemory();
+EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 
 EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
 EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
-bool is_hex_string(const std::string &str);
-bool is_hex_string_lower(const std::string &str);
+bool                          is_hex_string(const std::string &str);
+bool                          is_hex_string_lower(const std::string &str);
 
-QByteArray intToByteArray(const int &number, const int &size);
-std::string intToStdString(const int &number, const int &size);
-int qByteArrayToInt(const QByteArray &number);
+QByteArray                       intToByteArray(const int &number, const int &size);
+std::string                      intToStdString(const int &number, const int &size);
+int                              qByteArrayToInt(const QByteArray &number);
 typedef std::vector<std::string> MerkleDataBlocks;
 
 EXTRACHAIN_EXPORT void rootMerkleHash(
-    std::vector<std::string> &listHashes,
+    std::vector<std::string>      &listHashes,
     std::vector<MerkleDataBlocks> &branchesTree,
-    const bool isHahsing,
-    std::string &result);
+    const bool                     isHahsing,
+    std::string                   &result);
 EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
-EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks>
-splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
-EXTRACHAIN_EXPORT void hashingElements(std::vector<std::string> &vector);
+EXTRACHAIN_EXPORT             std::vector<MerkleDataBlocks>
+                              splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
+EXTRACHAIN_EXPORT void        hashingElements(std::vector<std::string> &vector);
 EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
 EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
-EXTRACHAIN_EXPORT std::string
+EXTRACHAIN_EXPORT             std::string
 calcHashForFile(const std::filesystem::path &fileName, HashEncode encode = HashEncode::Sha3_512);
 
 std::string byteToHexString(std::vector<unsigned char> &data);
@@ -567,8 +571,6 @@ std::string hexStringToByte(const std::string &data);
 
 std::string bytesEncodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
 std::string bytesDecodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
-QByteArray  bytesEncode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
-QByteArray  bytesDecode(const QByteArray &data, HashEncode encode = HashEncode::Base64);
 
 template <typename Container>
 std::string bytesEncodeVec(const Container &data, HashEncode encode = HashEncode::Base64) {
@@ -584,18 +586,58 @@ std::array<uint8_t, N> bytesDecodeVec(const std::string &data, HashEncode encode
     return result;
 }
 
+template <typename T>
+concept Container = std::ranges::range<T>;
+
+/**
+ * @brief Checks if all elements in a container equal the given value
+ *
+ * @tparam C Container type that satisfies the Container concept
+ * @param container The container to check
+ * @param value The value to compare against
+ * @return true if all elements equal the given value
+ * @return false otherwise
+ *
+ * @note This function is constexpr and can be evaluated at compile-time
+ * @see isAllZeros for a specialized version checking for zeros
+ */
+template <Container C>
+constexpr bool isAllValue(const C &container, const std::ranges::range_value_t<C> &value) {
+    return std::ranges::all_of(container, [&value](const auto &x) {
+        return x == value;
+    });
+}
+
+/**
+ * @brief Specialized function to check if all elements in a container are zero
+ *
+ * @tparam C Container type that satisfies the Container concept
+ * @param container The container to check
+ * @return true if all elements are zero
+ * @return false otherwise
+ *
+ * @requires The container's value type must be arithmetic (integer or floating-point)
+ * @note This function is constexpr and can be evaluated at compile-time
+ * @see isAllValue for a more general version that can check against any value
+ */
+template <Container C>
+    requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
+constexpr bool isAllEmpty(const C &container) {
+    return isAllValue(container, std::ranges::range_value_t<C> { '\0' });
+}
+
 EXTRACHAIN_EXPORT bool encryptFile(
-    const QString &originalName,
-    const QString &encryptName,
+    const QString    &originalName,
+    const QString    &encryptName,
     const QByteArray &key,
-    int blockSize = 60007);
+    int               blockSize = 60007);
 EXTRACHAIN_EXPORT bool decryptFile(
-    const QString &encryptName,
-    const QString &decryptName,
+    const QString    &encryptName,
+    const QString    &decryptName,
     const QByteArray &key,
-    int blockSize = 60007);
+    int               blockSize = 60007);
 EXTRACHAIN_EXPORT QByteArray
-decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize = 60007);
+        decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize = 60007);
 QString fileMimeType(const QString &filePath);
 QString fileMimeSuffix(const QString &filePath);
 
@@ -608,11 +650,11 @@ int compare(const QByteArray &one, const QByteArray &two);
  */
 EXTRACHAIN_EXPORT void wipeDataFiles();
 
-EXTRACHAIN_EXPORT QString detectCompiler();
+EXTRACHAIN_EXPORT QString              detectCompiler();
 EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
 EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
-EXTRACHAIN_EXPORT bool isValidIp(const QString &ip);
-EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
+EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
+EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
 } // namespace Utils
 
 namespace DataStorage {
@@ -620,11 +662,11 @@ namespace DataStorage {
 static const QString BLOCKCHAIN = "blockchain";
 
 // Temporary folder
-static const QString TMP_FOLDER = "tmp";
+static const QString TMP_FOLDER        = "tmp";
 static const QString TMP_GENESIS_BLOCK = "tmp/genesis_block";
 
 // Folder with blocks
-static const QString BLOCKCHAIN_INDEX = "blockchain/index";
+static const QString BLOCKCHAIN_INDEX        = "blockchain/index";
 static const QString ACTOR_INDEX_FOLDER_NAME = "actors";
 static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
 
@@ -643,18 +685,18 @@ static const std::string EXTRACHAIN_TOKEN = "";
 
 namespace KeyStore {
 // To store user private/public keys
-static const std::string folder = "keystore";
-static const std::string format = ".profile";
+static const std::string folder   = "keystore";
+static const std::string format   = ".profile";
 static const std::string profiles = "profiles";
-static const std::string encrypt = "encrypt";
+static const std::string encrypt  = "encrypt";
 
 // TODO: remove
 static const QString KEY_TYPE = ".key";
-QString makeKeyFileName(QString name);
+QString              makeKeyFileName(QString name);
 }
 
 namespace Scripts {
-static const std::string folder = "scripts";
+static const std::string folder        = "scripts";
 static const std::string wasmExtention = ".wasm";
 }
 
@@ -747,15 +789,15 @@ struct EXTRACHAIN_EXPORT Notification {
         NewEvent,
         NewFollower
     };
-    long long time;
+    long long  time;
     NotifyType type;
     QByteArray data = "";
 };
 
 QDebug operator<<(QDebug d, const Notification &n);
 
-#define TIMER_START(name) \
-    QElapsedTimer name;   \
+#define TIMER_START(name)                                                                                    \
+    QElapsedTimer name;                                                                                      \
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
 

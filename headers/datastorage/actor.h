@@ -239,14 +239,14 @@ public:
         auto     array = QJsonDocument::fromJson(serialized).array();
         actor.setId(array[0].toString().toStdString());
         actor.setType(ActorType(array[1].toInt()));
-        auto pub = Utils::bytesDecode(array[2].toString().toLatin1());
+        auto pub = ByteArray::fromBase64(array[2].toString()).toArray<32>();
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.setPublicKey(ByteArray(pub).toArray<32>());
+            actor.setPublicKey(pub);
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto sec = Utils::bytesDecode(array[3].toString().toLatin1());
-            actor.setSecretKey(ByteArray(sec).toArray<64>(), ByteArray(pub).toArray<32>());
+            auto sec = ByteArray::fromBase64(array[3].toString()).toArray<64>();
+            actor.setSecretKey(sec, pub);
         }
 
         return actor;

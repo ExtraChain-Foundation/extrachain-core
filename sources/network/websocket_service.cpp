@@ -66,14 +66,15 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             return;
         }
 
-        auto key = Utils::bytesDecode(message.toLatin1());
-        pub      = KeyPublic(key.toStdString());
+        pub = KeyPublic(ByteArray::fromBase64(message).toArray<32>());
         if (pub.empty()) { // or incorrect
             qFatal("Incorrect public key in socket");
         }
 
-        auto firstMessage = Utils::bytesEncode(prepareSendMessage(generateFirstMessage()));
-        m_ws->sendTextMessage(firstMessage);
+        auto firstMessage = generateFirstMessage();
+        auto prepared     = prepareSendMessage(firstMessage);
+        auto decoded      = ByteArray(prepared).toBase64QString();
+        m_ws->sendTextMessage(decoded);
         return;
     }
 
@@ -81,7 +82,9 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         return;
 
     qDebug() << "[WS] First message:" << message;
-    checkFirstMessage(prepareReceiveMessage(Utils::bytesDecode(message.toLatin1())));
+    auto decoded  = ByteArray::fromBase64(message).toQByteArray();
+    auto prepared = prepareReceiveMessage(decoded);
+    checkFirstMessage(prepared);
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {

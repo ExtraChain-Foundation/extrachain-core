@@ -31,7 +31,7 @@
 
 class EXTRACHAIN_EXPORT KeyPublic {
 private:
-    PublicKey m_publicKey;
+    PublicKey m_publicKey = PublicKey();
 
 public:
     explicit KeyPublic() = default;

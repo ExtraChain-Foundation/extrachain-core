@@ -137,5 +137,5 @@ const PublicKey &KeyPrivate::publicKey() const {
 }
 
 bool KeyPrivate::empty() const {
-    return m_secretKey.empty() && m_publicKey.empty();
+    return Utils::isAllEmpty(m_secretKey) || Utils::isAllEmpty(m_publicKey);
 }

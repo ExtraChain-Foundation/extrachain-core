@@ -33,8 +33,8 @@
 
 class EXTRACHAIN_EXPORT KeyPrivate {
 private:
-    PrivateKey m_secretKey;
-    PublicKey  m_publicKey;
+    PrivateKey m_secretKey = PrivateKey();
+    PublicKey  m_publicKey = PublicKey();
 
 public:
     /**
@@ -53,8 +53,8 @@ public:
 public:
     void generate();
 
-    Bytes encrypt(const Bytes &data, const PublicKey &receiverPublicKey, const Nonce &nonce = {}) const;
-    Bytes decrypt(const Bytes &data, const PublicKey &senderPublicKey, const Nonce &nonce = {}) const;
+    Bytes encrypt(const Bytes &data, const PublicKey &receiverPublicKey, const Nonce &nonce = Nonce()) const;
+    Bytes decrypt(const Bytes &data, const PublicKey &senderPublicKey, const Nonce &nonce = Nonce()) const;
     Bytes encryptSelf(const Bytes &data) const;
     Bytes decryptSelf(const Bytes &data) const;
 

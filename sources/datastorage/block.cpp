@@ -145,8 +145,8 @@ const std::string &Block::getDataForSignature() const {
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calcHash();
-    std::string sign = Utils::bytesEncodeVec(actor->key().sign(getDataForSignature()));
-    this->addSignature(actor->id().toStdString(), sign, true);
+    auto sign = actor->key().sign(getDataForSignature());
+    this->addSignature(actor->id(), sign, true);
 }
 
 BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
@@ -160,10 +160,7 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::NoActorSignature;
     }
 
-    auto signStr = it->second;
-    auto sign    = Utils::bytesDecodeVec<crypto_sign_BYTES>(signStr);
-    bool res     = actor.key().verify(getDataForSignature(), sign);
-
+    bool res     = actor.key().verify(getDataForSignature(), it->second);
     if (!res) {
         return BlockSignError::InvalidSignature;
     }
@@ -253,7 +250,7 @@ const Transactions &Block::transactions() const {
     return m_transactions;
 }
 
-void Block::addSignature(const ActorId &id, const std::string &sign, bool isApprove) {
+void Block::addSignature(const ActorId &id, const Signature &sign, bool isApprove) {
     if (this->m_signatures.size() < Config::DataStorage::MAX_SIGN_AMOUNT
         || this->m_signatures.find(id) != this->m_signatures.end()) {
         this->m_signatures[id] = sign;

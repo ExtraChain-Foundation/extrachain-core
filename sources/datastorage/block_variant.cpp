@@ -117,7 +117,7 @@ void BlockVariant::setPrevHash(const std::string& prevHash) {
         m_block);
 }
 
-void BlockVariant::addSignature(const ActorId& id, const std::string& sign, bool isApprove) {
+void BlockVariant::addSignature(const ActorId& id, const Signature& sign, bool isApprove) {
     std::visit(
         [&id, &sign, &isApprove](auto& b) {
             b.addSignature(id, sign, isApprove);

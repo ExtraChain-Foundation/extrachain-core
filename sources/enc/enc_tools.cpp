@@ -9,12 +9,8 @@ KeyBytes Cryptography::keygen() {
 }
 
 KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt &salt) {
-    if (pass.empty()) {
-        qFatal("[SecretKey::getKeyFromPass] pass is empty. salt: %s", salt.data());
-    }
-
     Salt vsalt;
-    if (salt.empty()) {
+    if (Utils::isAllEmpty(salt)) {
         std::fill(vsalt.begin(), vsalt.end(), '0');
     } else {
         vsalt = salt;
@@ -39,7 +35,7 @@ KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt
 }
 
 Signature Cryptography::sign(const Bytes &data, const PrivateKey &secret_key) {
-    if (data.empty() || secret_key.empty()) {
+    if (data.empty() || Utils::isAllEmpty(secret_key)) {
         qFatal(
             "[SecretKey::sign] data or secret is empty. data: %s, secret: %s",
             data.data(),
@@ -52,7 +48,7 @@ Signature Cryptography::sign(const Bytes &data, const PrivateKey &secret_key) {
 }
 
 bool Cryptography::verify(const Bytes &data, const PublicKey &public_key, const Signature &signature) {
-    if (data.empty() || public_key.empty() || signature.empty()) {
+    if (data.empty() || Utils::isAllEmpty(public_key) || Utils::isAllEmpty(signature)) {
         qCritical().noquote().nospace()
             << "[SecretKey::verify] data or secret is empty. data: '" << data << "', public: '"
             << public_key.data() << "', signature: '" << signature.data() << "'";
@@ -64,7 +60,7 @@ bool Cryptography::verify(const Bytes &data, const PublicKey &public_key, const 
 }
 
 Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
-    if (data.empty() || secret_key.empty()) {
+    if (data.empty() || Utils::isAllEmpty(secret_key)) {
         qFatal(
             "[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s",
             data.data(),
@@ -90,7 +86,7 @@ Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
 }
 
 Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_key) {
-    if (encrypted_data.empty() || secret_key.empty()) {
+    if (encrypted_data.empty() || Utils::isAllEmpty(secret_key)) {
         qFatal(
             "[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s",
             encrypted_data.data(),
@@ -172,7 +168,8 @@ Bytes Cryptography::encryptAsymmetric(
 
     // Подготовка nonce
     Nonce working_nonce;
-    if (nonce.size() == crypto_box_NONCEBYTES) {
+    bool isNonceEmpty = Utils::isAllEmpty(nonce);
+    if (!isNonceEmpty) {
         working_nonce = nonce;
     } else {
         randombytes_buf(working_nonce.data(), working_nonce.size());
@@ -180,19 +177,19 @@ Bytes Cryptography::encryptAsymmetric(
 
     Bytes encrypted_message(crypto_box_MACBYTES + data.size());
 
-    if (crypto_box_easy(
-            encrypted_message.data(),
-            data.data(),
-            data.size(),
-            working_nonce.data(),
-            x_public_key.data(),
-            x_secret_key.data())
-        != 0) {
+    int res = crypto_box_easy(
+        encrypted_message.data(),
+        data.data(),
+        data.size(),
+        working_nonce.data(),
+        x_public_key.data(),
+        x_secret_key.data());
+    if (res != 0) {
         qDebug() << "[SecretKey::encryptAsymmetric] Encryption failed";
         return Bytes {};
     }
 
-    if (nonce.size() != crypto_box_NONCEBYTES) {
+    if (isNonceEmpty) {
         Bytes result(working_nonce.size() + encrypted_message.size());
         std::copy(working_nonce.begin(), working_nonce.end(), result.begin());
         std::copy(encrypted_message.begin(), encrypted_message.end(), result.begin() + working_nonce.size());
@@ -206,16 +203,17 @@ Bytes Cryptography::decryptAsymmetric(
     const Bytes      &encrypted_data,
     const PrivateKey &secret_key,
     const PublicKey  &public_key,
-    const Nonce      &provided_nonce) {
+    const Nonce      &nonce) {
     if (encrypted_data.empty()) {
         qFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
     }
 
     Nonce working_nonce;
     Bytes encrypted_message;
+    bool isNonceEmpty = Utils::isAllEmpty(nonce);
 
-    if (provided_nonce.size() == crypto_box_NONCEBYTES) {
-        working_nonce     = provided_nonce;
+    if (!isNonceEmpty) {
+        working_nonce     = nonce;
         encrypted_message = encrypted_data;
     } else {
         if (encrypted_data.size() < crypto_box_NONCEBYTES) {
@@ -237,14 +235,14 @@ Bytes Cryptography::decryptAsymmetric(
 
     Bytes decrypted_message(encrypted_message.size() - crypto_box_MACBYTES);
 
-    if (crypto_box_open_easy(
-            decrypted_message.data(),
-            encrypted_message.data(),
-            encrypted_message.size(),
-            working_nonce.data(),
-            x_public_key.data(),
-            x_secret_key.data())
-        != 0) {
+    int res = crypto_box_open_easy(
+        decrypted_message.data(),
+        encrypted_message.data(),
+        encrypted_message.size(),
+        working_nonce.data(),
+        x_public_key.data(),
+        x_secret_key.data());
+    if (res != 0) {
         qDebug() << "[SecretKey::decryptAsymmetric] Decryption failed";
         return Bytes {};
     }
