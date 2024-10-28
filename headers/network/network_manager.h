@@ -164,6 +164,7 @@ private:
     std::vector<DFSP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
+    std::set<ActorId>                            customPool;
 
     std::string m_networkHashForVPN;
 
@@ -309,13 +310,17 @@ public:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
-    
+
+    void subscribeCustom(const ActorId& actorId);
+    void unsubscribeCustom(const ActorId& actorId);
+
 signals:
     void newSocketActivated();
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
     void messageCountReceived(BigNumber count);
+    void customMessageReceived(ActorId owner, std::string data);
 
     friend class DfsNetworkManager;
 };

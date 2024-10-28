@@ -56,6 +56,14 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
+void NetworkManager::subscribeCustom(const ActorId &actorId) {
+    this->customPool.insert(actorId);
+}
+
+void NetworkManager::unsubscribeCustom(const ActorId &actorId) {
+    this->customPool.erase(actorId);
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -473,6 +481,24 @@ void NetworkManager::messageReceived(
 
     // try {
     switch (type) {
+    case MessageType::Custom: {
+        const auto custom     = MessagePack::deserialize<CustomMessage>(serialized);
+        const bool isContains = customPool.contains(custom.owner);
+
+        if (isContains) {
+            emit customMessageReceived(custom.owner, custom.data);
+        } else {
+            node->network()->send_message(
+                custom,
+                MessageType::Custom,
+                MessageStatus::NoStatus,
+                messageId,
+                Config::Net::TypeSend::Except);
+        }
+
+        break;
+    }
+
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
             qInfo() << "Achieved ShareConnections(Request)" << messageId;

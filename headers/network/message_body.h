@@ -92,6 +92,11 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
+struct CustomMessage {
+    ActorId owner;
+    std::string data;
+};
+
 inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
                                 const ActorId &sender, std::string to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
