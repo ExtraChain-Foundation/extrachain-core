@@ -95,6 +95,8 @@ struct SocketIdentifier {
 struct CustomMessage {
     ActorId owner;
     std::string data;
+
+    MSGPACK_DEFINE(owner, data)
 };
 
 inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
