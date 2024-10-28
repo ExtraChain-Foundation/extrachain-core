@@ -146,7 +146,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 MessageBody message   =
                     make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
                 auto        serialized = message.serialize();
-                auto        sign       = mainActor->key().sign(serialized);
+                auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                 this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
             });
 }
@@ -960,7 +960,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            key.publicKey() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
+            ByteArray(key.publicKey()).toString() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }

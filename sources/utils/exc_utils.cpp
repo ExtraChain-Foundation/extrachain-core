@@ -38,7 +38,7 @@
 // #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
-#include "cpp-base64/base64.h"
+#include "cpp-base64/base64.cpp"
 #include "enc/enc_tools.h"
 #include "managers/data_mining_manager.h"
 #include "sha3.h"
@@ -294,10 +294,11 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
     }
-    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!orig.atEnd()) {
         QByteArray part = orig.read(blockSize);
-        QByteArray encrypted = QByteArray::fromStdString(SecretKey::encrypt(part.toStdString(), rkey));
+        QByteArray encrypted =
+            ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         encrypt.write(encrypted);
         // qDebug() << "encrypted" << part.size() << encrypted.size();
     }
@@ -324,10 +325,11 @@ bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, 
         qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
         return false;
     }
-    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = QByteArray::fromStdString(SecretKey::decrypt(part.toStdString(), rkey));
+        QByteArray decrypted =
+            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         decrypt.write(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
@@ -352,11 +354,12 @@ QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QBy
     }
 
     QByteArray result;
-    std::string rkey = SecretKey::getKeyFromPass(key.toStdString());
+    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
 
     while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted = QByteArray::fromStdString(SecretKey::decrypt(part.toStdString(), rkey));
+        QByteArray decrypted =
+            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         result.append(decrypted);
         qDebug() << "decrypted" << part.size() << decrypted.size();
     }
@@ -512,30 +515,6 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
         break;
     }
     return res;
-}
-
-QByteArray Utils::bytesEncode(const QByteArray &data, HashEncode encode) {
-    switch (encode) {
-    case HashEncode::Base64:
-        return data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
-    case HashEncode::Hex:
-        return data.toHex();
-    case HashEncode::Sha3_512:
-        return QByteArray();
-    }
-    return QByteArray();
-}
-
-QByteArray Utils::bytesDecode(const QByteArray &data, HashEncode encode) {
-    switch (encode) {
-    case HashEncode::Base64:
-        return QByteArray::fromBase64(data, QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
-    case HashEncode::Hex:
-        return QByteArray::fromHex(data);
-    case HashEncode::Sha3_512:
-        return QByteArray();
-    }
-    return QByteArray();
 }
 
 QString Utils::detectCompiler() {

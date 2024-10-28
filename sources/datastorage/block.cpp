@@ -145,8 +145,8 @@ const std::string &Block::getDataForSignature() const {
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calcHash();
-    std::string sign = actor->key().sign(getDataForSignature());
-    this->addSignature(actor->id().toStdString(), sign, true);
+    auto sign = actor->key().sign(getDataForSignature());
+    this->addSignature(actor->id(), sign, true);
 }
 
 BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
@@ -160,7 +160,7 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::NoActorSignature;
     }
 
-    bool res = actor.key().verify(getDataForSignature(), it->second);
+    bool res     = actor.key().verify(getDataForSignature(), it->second);
     if (!res) {
         return BlockSignError::InvalidSignature;
     }
@@ -203,7 +203,7 @@ std::string Block::toStdString() const {
     std::ostringstream oss;
 
     oss << "Block { "
-        << "type: " << magic_enum::enum_name(m_type) << ", "
+        << "type: " << Utils::enumFullName(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
         << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
@@ -250,7 +250,7 @@ const Transactions &Block::transactions() const {
     return m_transactions;
 }
 
-void Block::addSignature(const ActorId &id, const std::string &sign, bool isApprove) {
+void Block::addSignature(const ActorId &id, const Signature &sign, bool isApprove) {
     if (this->m_signatures.size() < Config::DataStorage::MAX_SIGN_AMOUNT
         || this->m_signatures.find(id) != this->m_signatures.end()) {
         this->m_signatures[id] = sign;

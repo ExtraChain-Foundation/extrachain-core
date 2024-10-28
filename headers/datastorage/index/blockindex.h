@@ -86,21 +86,21 @@ public:
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
     std::expected<BlockVariant, BlockError> getBlockByPosition(const BigNumber &position) const;
-    std::expected<BlockVariant, BlockError> getBlockByHash(const QByteArray &hash) const;
-    std::expected<BlockVariant, BlockError> getBlockByData(const QByteArray &data) const;
+    std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash) const;
+    std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data) const;
 
     std::expected<BlockVariant, BlockError>
     getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
 
-    std::pair<Transaction, QByteArray> getLastTxByHash(const QByteArray &hash, const ActorId &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByData(const std::string &data, const ActorId &token) const;
-    std::pair<Transaction, QByteArray> getLastTxBySender(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByReceiver(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray>
-    getLastTxBySenderOrReceiver(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray>
-    getLastTxBySenderOrReceiverAndToken(const BigNumber &id, const ActorId &token) const;
-    std::pair<Transaction, QByteArray> getLastTxByApprover(const BigNumber &id, const ActorId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxByHash(const std::string &hash, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxByData(const std::string &data, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxBySender(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxByReceiver(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>
+    getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>
+    getLastTxBySenderOrReceiverAndToken(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxByApprover(const ActorId &id, const TokenId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
@@ -123,8 +123,7 @@ public:
     void calculationCountBlock();
 
 private:
-    std::pair<Transaction, QByteArray>
-    getLastTxByParam(const std::string &id, SearchEnum::TxParam param, const ActorId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const ActorId &token) const;
     std::set<Transaction> getTxsByParamInRow(
         const BigNumber    &id,
         SearchEnum::TxParam param,

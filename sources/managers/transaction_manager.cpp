@@ -63,7 +63,7 @@ void TransactionManager::makeBlock() {
         return;
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
-    auto lastBlock = node->blockchain()->getLastBlock();
+    auto lastBlock     = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         qDebug() << "[TransactionManager] last or real last block is not exists";
@@ -96,7 +96,7 @@ void TransactionManager::makeBlock() {
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
                            << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
-        const auto actor = node->accountController()->mainActor();
+        const auto actor   = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
@@ -151,7 +151,7 @@ void TransactionManager::proveTransactions() {
             // qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager] Transaction not approved:" << tx;
+            qDebug() << "[TransactionManager] Transaction not approved:" << res << tx;
             // qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }
@@ -165,8 +165,8 @@ void TransactionManager::process() {
     blockTimer = new QTimer(this);
     connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
 
-    int milliseconds = QDateTime::currentDateTime().time().msec();
-    int seconds = QDateTime::currentDateTime().time().second();
+    int milliseconds      = QDateTime::currentDateTime().time().msec();
+    int seconds           = QDateTime::currentDateTime().time().second();
     int delayToEvenSecond = (seconds % 2 == 0) ? (2000 - milliseconds) : (1000 - milliseconds);
     QThread::msleep(delayToEvenSecond);
 

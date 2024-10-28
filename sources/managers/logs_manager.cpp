@@ -161,9 +161,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     QString thId = QString::number(reinterpret_cast<quintptr>(QThread::currentThreadId()));
 
     if (LogsManager::currentThread == thId)
-        thId = "";
+        thId = "[main] ";
     else
-        thId = "t" + thId + ": ";
+        thId = "[" + thId + "] ";
 
     const QString logStr =
         currentDateTime.toString("hh:mm:ss.zzz ") +
@@ -171,9 +171,9 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
         +"["
         + (fileNameQrc.length() ? fileNameQrc
                                 : fileNameStd + (fileNameStd == "global" ? "" : ":" + QString::number(line)))
-        + "] "
+        + "] " +
 #endif
-        + thId + message;
+        thId + message;
 
     if (LogsManager::toConsole) {
 #ifdef LOG_FILENAME

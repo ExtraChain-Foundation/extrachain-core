@@ -66,21 +66,22 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
     if (makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
-        connect(m_thread, &QThread::started, node, &ExtraChainNode::InitNodeSlot);
+        connect(m_thread, &QThread::started, node, &ExtraChainNode::process);
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
         connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
         m_thread->start();
     } else
-        node->InitNodeSlot();
+        node->process();
 }
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, bool isRaccoonCheck)
     : isClientApplication(isClientApp)
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
+    QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
-void ExtraChainNode::InitNodeSlot() {
+void ExtraChainNode::process() {
     static bool singleton = false;
     if (!singleton)
         singleton = true;
@@ -130,8 +131,8 @@ ExtraChainNode::~ExtraChainNode() {
 
 void ExtraChainNode::cleanUp() {
     m_networkManager->deleteLater();
-    m_blockchain->deleteLater();
-    m_transactionManager->deleteLater();
+    // m_blockchain->deleteLater();
+    // m_transactionManager->deleteLater();
     m_dfs->deleteLater();
 }
 
@@ -199,41 +200,34 @@ NetworkManager* ExtraChainNode::network() {
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(Transaction tx) {
     if (tx.amount() <= 0) {
-        qWarning() << "Can not create tx without amount";
+        qWarning() << "Can not create tx without amount" << tx;
         return std::unexpected(TransactionError::ZeroAmount);
     }
 
     if (tx.isEmpty() && !tx.isBurn()) {
-        qWarning() << fmt::format("Can not create tx:[{}]. Transaction is empty", tx.toStdString());
+        qWarning() << fmt::format("Can not create: {}. Transaction is empty", tx);
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
     auto actor = m_accountController->currentWallet();
     if (actor->empty()) {
-        qWarning() << fmt::format("Can not create tx:[{}]. There no current user", tx.toStdString());
+        qWarning() << fmt::format("Can not create: {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    qWarning() << fmt::format(
-        "Attempting to create tx:[{}] from user [{}]",
-        tx.toStdString(),
-        actor->id().toStdString());
+    qWarning() << fmt::format("Attempting to create: {}  from user [{}]", tx, actor->id().toStdString());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->getLastRealBlock();
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-        qWarning() << fmt::format(
-            "Can not create tx:[{}]. There is no last block in blockchain",
-            tx.toStdString());
+        qWarning() << fmt::format("Can not create: {}. There is no last block in blockchain", tx);
         return std::unexpected(TransactionError::NoLastBlock);
     }
     tx.setPrevBlock(lastRealBlock->getIndex());
 
     // 2) check coin availability
     if (blockchain()->getUserBalance(actor->id(), tx.token()) < tx.amount()) {
-        qWarning() << fmt::format(
-            "Can not create tx:[{}]. There is not enough coins/tokens in wallet",
-            tx.toStdString());
+        qWarning() << fmt::format("Can not create: {}. There is not enough coins/tokens in wallet", tx);
         return std::unexpected(TransactionError::InsufficientFunds);
     }
 
@@ -257,7 +251,7 @@ ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, Actor
     tx.setToken(token);
 
     if (actor->empty()) {
-        qWarning() << fmt::format("Can not create tx. There no current user", tx.toStdString());
+        qWarning() << fmt::format("Can not create {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -275,8 +269,8 @@ std::string ExtraChainNode::exportUser() {
     array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
-    auto data = SecretKey::encryptWithPassword(json, hash);
-    return data;
+    auto data = Cryptography::encryptWithPassword(ByteArray(json).toBytes(), hash);
+    return ByteArray(data).toString();
 }
 
 bool ExtraChainNode::importUser(
@@ -285,22 +279,21 @@ bool ExtraChainNode::importUser(
     const std::string& password) {
     auto hash = Utils::calcHash(login + password);
 
-    auto json = SecretKey::decryptWithPassword(data, hash);
-    if (hash.empty() || json.empty()) {
+    auto json = ByteArray(Cryptography::decryptWithPassword(ByteArray(data).toBytes(), hash)).toQByteArray();
+    if (hash.empty() || json.isEmpty()) {
         return false;
     }
 
-    auto array = QJsonDocument::fromJson(QByteArray::fromStdString(json)).array();
+    auto array = QJsonDocument::fromJson(json).array();
     if (array.count() != 3) {
         return false;
     }
 
-    auto extrachainVersion = array[0].toString();
-    auto date              = array[1].toInteger();
-    auto profile           = array[2].toObject();
-    auto profileBytes      = QJsonDocument(profile).toJson(QJsonDocument::Compact);
-    auto profileBytesEncrypted =
-        QByteArray::fromStdString(SecretKey::encryptWithPassword(profileBytes.toStdString(), hash));
+    auto extrachainVersion     = array[0].toString();
+    auto date                  = array[1].toInteger();
+    auto profile               = array[2].toObject();
+    auto profileBytes          = QJsonDocument(profile).toJson(QJsonDocument::Compact);
+    auto profileBytesEncrypted = Cryptography::encryptWithPassword(ByteArray(profileBytes).toBytes(), hash);
 
     Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
@@ -309,7 +302,7 @@ bool ExtraChainNode::importUser(
 
     QFile file(privateProfile);
     file.open(QFile::WriteOnly);
-    file.write(profileBytesEncrypted);
+    file.write(ByteArray(profileBytesEncrypted).toQByteArray());
     file.close();
 
     m_accountController->addToProfileList(profile["main"].toString().toStdString());
@@ -337,8 +330,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             Transaction tx(actor->id(), receiver, amount);
             tx.setToken(token);
 
-            qDebug() << QString("Attempting to create tx: [%1] from user [%2]")
-                            .arg(tx.toString(), QString(actor->id().toByteArray()));
+            qDebug() << fmt::format("Attempting to create: {} from user {}", tx, actor->id());
 
             tx.sign(actor);
             qDebug() << "[Transaction] Send tx" << tx.amount().toStdString(NumeralBase::Dec) << "to"
@@ -609,5 +601,5 @@ void ExtraChainNode::logout() {
 }
 
 void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
-    m_vpnClearFunc          = vpnClearFunc;
+    m_vpnClearFunc = vpnClearFunc;
 }

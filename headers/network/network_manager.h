@@ -276,7 +276,7 @@ public:
         MessageBody message   =
             make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
         auto        serialized = message.serialize();
-        auto        sign       = mainActor->key().sign(serialized);
+        auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];

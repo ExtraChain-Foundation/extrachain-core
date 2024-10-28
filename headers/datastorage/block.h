@@ -86,7 +86,7 @@ enum class BlockSignError {
 FORMAT_ENUM(BlockSignError)
 
 class BlockVariant;
-using Signatures   = std::map<ActorId, std::string>;
+using Signatures   = std::map<ActorId, Signature>;
 using Transactions = std::set<Transaction>;
 
 class EXTRACHAIN_EXPORT Block {
@@ -168,7 +168,7 @@ public:
     const Signatures            &signatures() const;
     const Transactions          &transactions() const;
 
-    void addSignature(const ActorId &id, const std::string &sign, bool isApprove);
+    void addSignature(const ActorId &id, const Signature &sign, bool isApprove);
     void addSignatures(const Signatures &approvers);
     void clearSignatures();
 
