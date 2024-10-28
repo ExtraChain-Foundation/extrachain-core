@@ -57,11 +57,11 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
 }
 
 void NetworkManager::subscribeCustom(const ActorId &actorId) {
-    this->customPool.insert(actorId);
+    this->m_customPool.insert(actorId);
 }
 
 void NetworkManager::unsubscribeCustom(const ActorId &actorId) {
-    this->customPool.erase(actorId);
+    this->m_customPool.erase(actorId);
 }
 
 NetworkManager::NetworkManager(ExtraChainNode *node)
@@ -459,11 +459,14 @@ void NetworkManager::messageReceived(
     std::string   messId     = mb.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
-    if (m_messages.find(messageId) != m_messages.end()) {
-        return;
+    if (status == MessageStatus::Request) {
+        m_messages[messageId] = identifier;
     }
 
-    m_messages[messageId] = identifier;
+    if (m_receivedMessageId.find(messageId) != m_receivedMessageId.end()) {
+        return;
+    }
+    m_receivedMessageId.insert(messageId);
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
@@ -485,17 +488,13 @@ void NetworkManager::messageReceived(
     switch (type) {
     case MessageType::Custom: {
         const auto custom     = MessagePack::deserialize<CustomMessage>(serialized);
-        const bool isContains = customPool.contains(custom.owner);
+        const bool isContains = m_customPool.contains(custom.owner);
 
         if (isContains) {
             emit customMessageReceived(custom.owner, custom.data);
         } else {
-            node->network()->send_message(
-                custom,
-                MessageType::Custom,
-                status,
-                messageId,
-                Config::Net::TypeSend::Except);
+            node->network()
+                ->send_message(custom, MessageType::Custom, status, messageId, Config::Net::TypeSend::Except);
         }
 
         break;
@@ -988,7 +987,8 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            ByteArray(key.publicKey()).toString() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
+            ByteArray(key.publicKey()).toString()
+                + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }
@@ -1058,14 +1058,12 @@ std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
         });
 }
 
-QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
-{
+QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     QString res;
     auto    m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it) {
-        if (it->first.ip == ip && it->first.port == port)
-        {
+        if (it->first.ip == ip && it->first.port == port) {
             res = it->second;
             break;
         }
@@ -1073,8 +1071,9 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
     return res;
 }
 
-void NetworkManager::sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                            const std::string &receiver_identifier)
-{
+void NetworkManager::sendNetworkMessageSlot(
+    const std::string    &serialized_message,
+    Config::Net::TypeSend type_send,
+    const std::string    &receiver_identifier) {
     sendMessage(serialized_message, type_send, receiver_identifier);
 }
