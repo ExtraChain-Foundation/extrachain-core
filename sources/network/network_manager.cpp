@@ -459,9 +459,11 @@ void NetworkManager::messageReceived(
     std::string   messId     = mb.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
-    if (status == MessageStatus::Request) {
-        m_messages[messageId] = identifier;
+    if (m_messages.find(messageId) != m_messages.end()) {
+        return;
     }
+
+    m_messages[messageId] = identifier;
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
@@ -491,7 +493,7 @@ void NetworkManager::messageReceived(
             node->network()->send_message(
                 custom,
                 MessageType::Custom,
-                MessageStatus::NoStatus,
+                status,
                 messageId,
                 Config::Net::TypeSend::Except);
         }
