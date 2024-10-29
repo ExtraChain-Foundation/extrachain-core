@@ -819,13 +819,31 @@ void NetworkManager::messageReceived(
         break;
     }
 
+<<<<<<< HEAD
     case MessageType::VPNHandshake:
     case MessageType::VPNConnection:
     case MessageType::VPNDisconnect:
     case MessageType::VPNUpdateConnection: {
+=======
+    case MessageType::Accrual: {
+        /*
+        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        qDebug() << "Begin accrual for actor " << actor.id().toString();
+        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
+        ActorId(Token::ROCC_TOKEN)); tx.setDate(QDateTime::currentMSecsSinceEpoch());
+        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
+        node->transactionManager()->addTransaction(tx);
+        node->network()->send_message(tx, MessageType::BlockchainTransaction);
+        */
+        break;
+    }
+
+    // TODO: custom, how to know it's user network message or VPN ?
+    case MessageType::Custom: {
+>>>>>>> 08b2897f (init changes)
         if (node->isRaccoon) {
             auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
-            emit node->vpnWorker(inputMsg, type, status, messageId, mb.sender_id, identifier);
+            emit node->vpnWorker(inputMsg, status, messageId, mb.sender_id, identifier);
         }
         break;
     }

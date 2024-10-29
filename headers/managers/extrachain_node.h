@@ -194,7 +194,6 @@ signals:
     void vpnDisconnect();
     void vpnWorker(
         const VPNMessage    networkInput,
-        const MessageType   type,
         const MessageStatus status,
         const std::string   messageId,
         const ActorId       senderId,
