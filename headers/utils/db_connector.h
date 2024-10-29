@@ -61,7 +61,7 @@ FORMAT_ENUM(DBConnectorType)
 // TODO: while select, open check in query, std::vector<DBColumn>
 
 class EXTRACHAIN_EXPORT DBConnector {
-private:
+protected:
     std::string m_file;
     bool m_open = false;
     sqlite3 *db = nullptr;
