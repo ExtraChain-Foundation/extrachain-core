@@ -30,7 +30,7 @@ Transaction::Transaction() {
     this->m_data      = std::string();
     this->m_prevBlock = BigNumber(0);
     this->m_hash      = "";
-    this->m_signature = std::string();
+    this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
     calcHash();
 }
@@ -48,7 +48,7 @@ Transaction::Transaction(
     this->m_data      = data;
     this->m_prevBlock = BigNumber(0);
     this->m_hash      = "";
-    this->m_signature = std::string();
+    this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
     this->m_token     = token;
     calcHash();
@@ -100,7 +100,7 @@ void Transaction::setProducer(const ActorId &value) {
     m_producer = value;
 }
 
-void Transaction::setSignature(const std::string &value) {
+void Transaction::setSignature(const Signature &value) {
     m_signature = value;
 }
 
@@ -166,7 +166,12 @@ void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    return m_signature.empty() ? false : actor.key().verify(m_hash, signature());
+    if (Utils::isAllEmpty(m_signature)) {
+        return false;
+    }
+
+    auto verify = actor.key().verify(m_hash, m_signature);
+    return verify;
 }
 
 void Transaction::setPrevBlock(const BigNumber &value) {
@@ -207,7 +212,7 @@ std::string Transaction::data() const {
     return this->m_data;
 }
 
-std::string Transaction::signature() const {
+Signature Transaction::signature() const {
     return this->m_signature;
 }
 
@@ -284,25 +289,4 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
     }
 
     return *this;
-}
-
-std::string Transaction::toStdString() const {
-    return toString().toStdString();
-}
-
-QString Transaction::toString() const {
-    auto hashQt  = QString::fromStdString(m_hash);
-    auto typeStr = QString::fromStdString(Utils::enumFullName(m_type));
-    return "Transaction { type: " + typeStr + ", sender: " + m_sender.toByteArray() + ", receiver: "
-           + m_receiver.toByteArray() + ", amount: " + m_amount.toByteArray(NumeralBase::Dec) + ", date: "
-           + QDateTime::fromMSecsSinceEpoch(m_date).toString() + ", data: '" + QString::fromStdString(m_data)
-           + "', token: " + m_token.toByteArray() + ", prevBlock: " + m_prevBlock.toByteArray() + ", hash: '"
-           + hashQt.left(5) + ".." + hashQt.right(5) + "', approver: " + m_approver.toByteArray()
-           + ", digitalSignature: '" + QString::fromStdString(m_signature) + "' }";
-}
-
-QDebug operator<<(QDebug debug, const Transaction &tx) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << tx.toString();
-    return debug;
 }

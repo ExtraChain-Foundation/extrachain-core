@@ -2,26 +2,48 @@
 #define ENC_TOOLS_H
 
 #include <string>
-#include <vector>
 
-#include "cpp-base64/base64.h"
 #include <utils/exc_utils.h>
-namespace SecretKey {
-EXTRACHAIN_EXPORT std::string keygen();
-EXTRACHAIN_EXPORT std::string getKeyFromPass(const std::string &pass, const std::string &salt = "");
-EXTRACHAIN_EXPORT std::string sign(const std::string &data, const std::string &secret_key);
-EXTRACHAIN_EXPORT bool verify(const std::string &data, const std::string &public_key,
-                              const std::string &signature);
-EXTRACHAIN_EXPORT std::string encrypt(const std::string &data, const std::string &secret_key);
-EXTRACHAIN_EXPORT std::string decrypt(const std::string &data, const std::string &secret_key);
-EXTRACHAIN_EXPORT std::string encryptWithPassword(const std::string &data, const std::string &password);
-EXTRACHAIN_EXPORT std::string decryptWithPassword(const std::string &data, const std::string &password);
+#include <sodium.h>
 
-EXTRACHAIN_EXPORT std::pair<std::string, std::string> createAsymmetricPair();
-EXTRACHAIN_EXPORT std::string encryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                                const std::string &public_key, const std::string &nonce = "");
-EXTRACHAIN_EXPORT std::string decryptAsymmetric(const std::string &data, const std::string &secret_key,
-                                                const std::string &public_key, const std::string &nonce = "");
+using Bytes         = std::vector<uint8_t>;
+using PrivateKey    = std::array<uint8_t, crypto_sign_SECRETKEYBYTES>;
+using PublicKey     = std::array<uint8_t, crypto_sign_PUBLICKEYBYTES>;
+using Signature     = std::array<uint8_t, crypto_sign_BYTES>;
+using Nonce         = std::array<uint8_t, crypto_box_NONCEBYTES>;
+using Salt          = std::array<uint8_t, crypto_pwhash_SALTBYTES>;
+using KeyBytes      = std::array<uint8_t, crypto_secretbox_KEYBYTES>;
+using KeyPass       = std::array<uint8_t, crypto_box_SEEDBYTES>;
+using Curve25519Key = std::array<uint8_t, crypto_scalarmult_curve25519_BYTES>;
+
+namespace Cryptography {
+EXTRACHAIN_EXPORT KeyBytes keygen();
+
+EXTRACHAIN_EXPORT KeyPass getKeyPassFromPassword(const std::string &pass, const Salt &salt = Salt());
+
+EXTRACHAIN_EXPORT Signature sign(const Bytes &data, const PrivateKey &secret_key);
+EXTRACHAIN_EXPORT bool verify(const Bytes &data, const PublicKey &public_key, const Signature &signature);
+
+EXTRACHAIN_EXPORT Bytes encrypt(const Bytes &data, const KeyPass &secret_key);
+EXTRACHAIN_EXPORT Bytes decrypt(const Bytes &data, const KeyPass &secret_key);
+
+EXTRACHAIN_EXPORT std::string encrypt(const std::string &data, const KeyPass &secret_key);
+EXTRACHAIN_EXPORT std::string decrypt(const std::string &data, const KeyPass &secret_key);
+
+EXTRACHAIN_EXPORT Bytes encryptWithPassword(const Bytes &data, const std::string &password);
+EXTRACHAIN_EXPORT Bytes decryptWithPassword(const Bytes &data, const std::string &password);
+
+EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> createAsymmetricPair();
+EXTRACHAIN_EXPORT Bytes                            encryptAsymmetric(
+                               const Bytes      &data,
+                               const PrivateKey &secret_key,
+                               const PublicKey  &public_key,
+                               const Nonce      &nonce = Nonce());
+EXTRACHAIN_EXPORT Bytes decryptAsymmetric(
+    const Bytes      &data,
+    const PrivateKey &secret_key,
+    const PublicKey  &public_key,
+    const Nonce      &nonce = Nonce());
 }
 
 #endif // ENC_TOOLS_H

@@ -26,7 +26,7 @@
 
 class ThreadPool {
 private:
-    ThreadPool() = default;
+    ThreadPool()  = default;
     ~ThreadPool() = default;
 
 public:
@@ -47,16 +47,20 @@ public:
             // qDebug() << "[ThreadPool] Remove thread" << thread << "for" << worker <<
             // threads.removeAll(thread)
             //          << "to" << threads.length();
-            worker->deleteLater();
-            thread->deleteLater();
+            if (worker)
+                worker->deleteLater();
+            if (thread)
+                thread->deleteLater();
         });
 
         if (isFirst) {
             qDebug() << "[ThreadPool] Connected with qApp";
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                // qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
-                // for (auto i = threads.size() - 1; i != 0; i--)
-                //     threads[i]->quit();
+                qDebug() << "[ThreadPool] Remove all threads" << threads.length() << threads;
+                for (QThread *thread : threads) {
+                    thread->quit();
+                    thread->wait();
+                }
                 threads.clear();
             });
 
@@ -79,7 +83,7 @@ public:
     }
 
 private:
-    static bool isFirst;
+    static bool             isFirst;
     static QList<QThread *> threads;
 };
 

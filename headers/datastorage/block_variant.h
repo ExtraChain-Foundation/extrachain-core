@@ -37,7 +37,7 @@ public:
     void setType(BlockType type);
     void setPrevHash(const std::string& prevHash);
 
-    void addSignature(const ActorId& id, const std::string& sign, bool isApprove);
+    void addSignature(const ActorId& id, const Signature &sign, bool isApprove);
     void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     bool verify(const Actor<KeyPublic>& actor) const;
 

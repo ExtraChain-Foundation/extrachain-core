@@ -184,6 +184,7 @@ private:
 
 signals:
     void InitNode();
+    void finished();
     void NodeInitialised();
     void ready();
     void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
@@ -208,6 +209,6 @@ public slots:
 
     void calculateBlockCount();
     void cleanUp();
-    void InitNodeSlot();
+    void process();
 };
 #endif // EXTRACHAIN_NODE_H

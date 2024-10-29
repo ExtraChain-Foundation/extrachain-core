@@ -18,10 +18,8 @@
  */
 
 #include "enc/key_public.h"
-#include "enc/enc_tools.h"
-#include "utils/exc_utils.h"
 
-KeyPublic::KeyPublic(const std::string &publicKey) {
+KeyPublic::KeyPublic(const PublicKey &publicKey) {
     m_publicKey = publicKey;
 }
 
@@ -29,30 +27,27 @@ KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
     m_publicKey = keyPublic.publicKey();
 }
 
-std::string KeyPublic::encrypt(const std::string &data, const std::string &senderPrivateKey) const {
-    return SecretKey::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
+KeyPublic::KeyPublic(const std::string &publicKey) {
+    m_publicKey = ByteArray(publicKey).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
-bool KeyPublic::verify(const std::string &data, const std::string &signature) const {
-    return SecretKey::verify(data, m_publicKey, signature);
+std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const {
+    auto res = Cryptography::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
+    return std::string(res.begin(), res.end());
 }
 
-const std::string &KeyPublic::publicKey() const {
+bool KeyPublic::verify(const Bytes &data, const Signature &signature) const {
+    return Cryptography::verify(data, m_publicKey, signature);
+}
+
+bool KeyPublic::verify(const std::string &data, const Signature &signature) const {
+    return Cryptography::verify(ByteArray(data).toBytes(), m_publicKey, signature);
+}
+
+const PublicKey &KeyPublic::publicKey() const {
     return m_publicKey;
 }
 
 bool KeyPublic::empty() const {
-    return m_publicKey.empty();
-}
-
-QDebug operator<<(QDebug debug, const KeyPublic &key) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << "KeyPublic { public: "
-                              << Utils::bytesEncode(QByteArray::fromStdString(key.publicKey())) << " }";
-    return debug;
-}
-
-std::ostream &operator<<(std::ostream &os, const KeyPublic &key) {
-    os << "KeyPublic { public: " << Utils::bytesEncode(key.publicKey().c_str()).toStdString() << " }";
-    return os;
+    return Utils::isAllEmpty(m_publicKey);
 }

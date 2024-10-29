@@ -26,27 +26,35 @@
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
+#include "utils/exc_magic.h"
+#include "enc/enc_tools.h"
 
 class EXTRACHAIN_EXPORT KeyPublic {
 private:
-    std::string m_publicKey;
+    PublicKey m_publicKey = PublicKey();
 
 public:
     explicit KeyPublic() = default;
+    explicit KeyPublic(const PublicKey &publicKey);
     explicit KeyPublic(const std::string &publicKey);
-    explicit KeyPublic(const KeyPublic &keyPublic);
+    KeyPublic(const KeyPublic &keyPublic);
     ~KeyPublic() = default;
 
-    std::string encrypt(const std::string &data, const std::string &senderPrivateKey) const;
-    bool verify(const std::string &data, const std::string &signature) const;
+    KeyPublic &operator=(const KeyPublic &other) = default;
 
-    const std::string &publicKey() const;
+    std::string encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const;
+
+    bool verify(const Bytes &data, const Signature &signature) const;
+    bool verify(const std::string &data, const Signature &signature) const;
+
+    const PublicKey &publicKey() const;
+
     bool empty() const;
 
     MSGPACK_DEFINE(m_publicKey)
+    BOOST_DESCRIBE_CLASS(KeyPublic, (), (), (), (m_publicKey))
 };
 
-QDebug operator<<(QDebug debug, const KeyPublic &key);
-std::ostream &operator<<(std::ostream &os, const KeyPublic &key);
+MAKE_MAGICAL(KeyPublic)
 
 #endif // KEY_PUBLIC_H

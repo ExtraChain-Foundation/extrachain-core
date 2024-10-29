@@ -52,18 +52,22 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     if (json.isEmpty()) {
         qDebug() << QString("[Socket] First message:%1").arg(message);
+        closeSocket();
         qFatal("[Socket] Can't check first message");
+        return false;
     }
 
-    auto version = json["version"].toString();
-    m_identifier = json["identifier"].toString();
-    m_sendType = SendType(json["sendType"].toInt());
-    ActorId jsonFirstId = ActorId(json["firstId"].toString().toStdString());
+    auto version               = json["version"].toString();
+    m_identifier               = json["identifier"].toString();
+    m_sendType                 = SendType(json["sendType"].toInt());
+    ActorId jsonFirstId        = ActorId(json["firstId"].toString().toStdString());
     ActorId currentFirstId     = node->actorIndex()->firstId();
-    bool isFirstIdsContains = currentFirstId == jsonFirstId;
-    bool somethingEmpty = jsonFirstId.isZero() || currentFirstId.isZero();
+    bool    isFirstIdsContains = currentFirstId == jsonFirstId;
+    bool    somethingEmpty     = jsonFirstId.isZero() || currentFirstId.isZero();
 
-    qDebug() << QString("[Socket] First message:%1 | Current first:%2").arg(json.toJson()).arg(currentFirstId.toString());
+    qDebug() << QString("[Socket] First message:%1 | Current first:%2")
+                    .arg(json.toJson())
+                    .arg(currentFirstId.toString());
 
     if (currentFirstId.isZero() && !jsonFirstId.isZero()) { // TODO: remove hack
         node->actorIndex()->setFirstId(jsonFirstId);
@@ -88,7 +92,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
         return false;
     }
 
-    bool flag = false;
+    bool  flag        = false;
     auto &connections = node->network()->connections();
     std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
@@ -115,9 +119,9 @@ void SocketService::closeSocket() {
 QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
     json["firstId"]    = node->actorIndex()->firstId().toString();
-    json["version"] = EXTRACHAIN_VERSION;
+    json["version"]    = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
-    json["sendType"] = QString::number(int(m_sendType));
+    json["sendType"]   = QString::number(int(m_sendType));
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;
@@ -127,7 +131,7 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
     if (pub.empty())
         qFatal("Socket encrypt error");
 
-    auto result = QByteArray::fromStdString(priv.encrypt(message.toStdString(), pub.publicKey()));
+    auto result = ByteArray(priv.encrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
     m_bytesOutgoing += result.length();
     return result;
 }
@@ -136,7 +140,7 @@ QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (pub.empty())
         qFatal("Socket decrypt error");
 
-    auto result = QByteArray::fromStdString(priv.decrypt(message.toStdString(), pub.publicKey()));
+    auto result = ByteArray(priv.decrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();

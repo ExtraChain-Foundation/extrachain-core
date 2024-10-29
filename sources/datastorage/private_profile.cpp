@@ -126,8 +126,10 @@ QJsonObject PrivateProfile::toJson() const {
 }
 
 void PrivateProfile::save() {
-    auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact);
-    auto data = QByteArray::fromStdString(SecretKey::encryptWithPassword(jsonBytes.toStdString(), m_hash));
+    auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
+    auto encrypted = Cryptography::encryptWithPassword(Bytes(jsonBytes.begin(), jsonBytes.end()), m_hash);
+    auto data      = QByteArray(reinterpret_cast<const char *>(encrypted.data()), encrypted.size());
+
     // qDebug() << "Save data:" << data;
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
@@ -139,23 +141,24 @@ void PrivateProfile::save() {
 void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
-    auto data = file.readAll().toStdString();
-    auto jsonBytes = QByteArray::fromStdString(SecretKey::decryptWithPassword(data, m_hash));
+    auto data        = file.readAll().toStdString();
+    auto jsonBytes   = Cryptography::decryptWithPassword(Bytes(data.begin(), data.end()), m_hash);
+    auto jsonBytesQt = QByteArray(reinterpret_cast<const char *>(jsonBytes.data()), jsonBytes.size());
 
-    auto json = QJsonDocument::fromJson(jsonBytes).object();
-    m_main = json["main"].toString().toStdString();
-    const auto actors = json["actors"].toArray();
+    auto json              = QJsonDocument::fromJson(jsonBytesQt).object();
+    m_main                 = json["main"].toString().toStdString();
+    const auto actors      = json["actors"].toArray();
     const auto walletNames = json["walletNames"].toObject();
 
     for (const auto &actor : actors) {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
-        auto a = Actor<KeyPrivate>::fromJson(json);
+        auto a    = Actor<KeyPrivate>::fromJson(json);
         m_actors.push_back(std::make_shared<Actor<KeyPrivate>>(a));
     }
 
     for (auto it = walletNames.begin(); it != walletNames.end(); ++it) {
         auto actorId = it.key().toStdString();
-        auto name = it.value().toString().toStdString();
+        auto name    = it.value().toString().toStdString();
         this->walletNames.insert({ ActorId(actorId), name });
     }
 }
