@@ -548,7 +548,6 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
-    QDir().mkpath(QString::fromStdString(Scripts::folder));
     QDir().mkpath(QString::fromStdString(Token::folder_tokens));
 
     if (!QFile(".settings").exists())

@@ -381,18 +381,10 @@ void DfsController::addListFiles(const QStringList &files) {
     const auto     actor = node->accountController()->mainActor();
     ThreadAddFiles addFilesThread(this, actor, files);
     connect(&addFilesThread, &ThreadAddFiles::added, this,
-            [&](DFSP::AddFileMessage msg, std::string filePath, std::string scriptPath) {
+            [&](DFSP::AddFileMessage msg, std::string filePath) {
                 insertToFiles(msg);
                 emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
                 emit resultAddFile("", QString::fromStdString(filePath));
-                if (!scriptPath.empty()) {
-                    //                    Transaction transaction;
-                    //                    transaction.setData(MessagePack::serialize(
-                    //                        TransactionData { .hash = transaction.getHash(), .path =
-                    //                        msg.FileHash }));
-                    //                    node.network()->send_message(transaction,
-                    //                    MessageType::BlockchainTransaction);
-                }
             });
 
     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
@@ -927,9 +919,6 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
 
         if (lastFragment) {
             emit uploaded(msg.Actor, msg.FileName);
-            if (std::filesystem::exists(Scripts::folder + "/" + msg.FileName)) {
-                node->network()->send_message(fragment, MessageType::BlockchainCopyScript);
-            }
         } else {
             emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         }
@@ -1408,12 +1397,6 @@ void ThreadAddFiles::addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, con
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
 
-    //    const bool isScript = filePath.extension() == Scripts::wasmExtention;
-    //    std::string scriptPath = "";
-    //    if (isScript) {
-    //        scriptPath = Scripts::folder + "/" + fileName;
-    //        std::filesystem::copy(filePath, scriptPath);
-    //    };
     emit added(msg, filePath.string());
 }
 

@@ -16,7 +16,6 @@ enum class MessageType {
     BlockchainGenesisBlock = 30,
     BlockchainNewBlock = 31,
     BlockchainTransaction = 32,
-    BlockchainCopyScript = 33,
     BlockchainDataMiningRewardTransaction = 34,
     BlockchainCoinReward = 35,
     BlockchainRequestBlock = 36,
