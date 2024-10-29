@@ -56,6 +56,14 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
+void NetworkManager::subscribeCustom(const ActorId &actorId) {
+    this->m_customPool.insert(actorId);
+}
+
+void NetworkManager::unsubscribeCustom(const ActorId &actorId) {
+    this->m_customPool.erase(actorId);
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -455,6 +463,11 @@ void NetworkManager::messageReceived(
         m_messages[messageId] = identifier;
     }
 
+    if (m_receivedMessageId.find(messageId) != m_receivedMessageId.end()) {
+        return;
+    }
+    m_receivedMessageId.insert(messageId);
+
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
@@ -473,6 +486,20 @@ void NetworkManager::messageReceived(
 
     // try {
     switch (type) {
+    case MessageType::Custom: {
+        const auto custom     = MessagePack::deserialize<CustomMessage>(serialized);
+        const bool isContains = m_customPool.contains(custom.owner);
+
+        if (isContains) {
+            emit customMessageReceived(custom.owner, custom.data);
+        } else {
+            node->network()
+                ->send_message(custom, MessageType::Custom, status, messageId, Config::Net::TypeSend::Except);
+        }
+
+        break;
+    }
+
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
             qInfo() << "Achieved ShareConnections(Request)" << messageId;
@@ -960,7 +987,8 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            ByteArray(key.publicKey()).toString() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
+            ByteArray(key.publicKey()).toString()
+                + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }
@@ -1030,14 +1058,12 @@ std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
         });
 }
 
-QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
-{
+QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     QString res;
     auto    m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it) {
-        if (it->first.ip == ip && it->first.port == port)
-        {
+        if (it->first.ip == ip && it->first.port == port) {
             res = it->second;
             break;
         }
@@ -1045,8 +1071,9 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
     return res;
 }
 
-void NetworkManager::sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                            const std::string &receiver_identifier)
-{
+void NetworkManager::sendNetworkMessageSlot(
+    const std::string    &serialized_message,
+    Config::Net::TypeSend type_send,
+    const std::string    &receiver_identifier) {
     sendMessage(serialized_message, type_send, receiver_identifier);
 }

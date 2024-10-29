@@ -80,7 +80,7 @@ public:
     // Method for getting the total number of received bytes data for a specific connection
     qint64 totalBytesReceivedFromConnection(const std::string& ip);
 
-    //Method for gettint pair of sent and recieved bytes from all connections
+    // Method for gettint pair of sent and recieved bytes from all connections
     std::pair<uint64_t, uint64_t> totalBytes();
 };
 
@@ -164,6 +164,8 @@ private:
     std::vector<DFSP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
+    std::set<std::string>                        m_receivedMessageId;
+    std::set<ActorId>                            m_customPool;
 
     std::string m_networkHashForVPN;
 
@@ -301,6 +303,7 @@ public:
         }
         #endif
 
+        m_receivedMessageId.insert(message.message_id);
         this->sendMessage(serialized + sign, typeSend, receiver_identifier, type, status);
 
         return message.message_id;
@@ -310,13 +313,17 @@ public:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
-    
+
+    void subscribeCustom(const ActorId& actorId);
+    void unsubscribeCustom(const ActorId& actorId);
+
 signals:
     void newSocketActivated();
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
     void messageCountReceived(BigNumber count);
+    void customMessageReceived(ActorId owner, std::string data);
 
     friend class DfsNetworkManager;
 };
