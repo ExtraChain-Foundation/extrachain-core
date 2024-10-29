@@ -58,7 +58,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
 #    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/reward_transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/threds/inserter_files.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
@@ -89,17 +88,15 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm3_cpp.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/test_prog.wasm.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/wasm3/wasm_rust_test.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
@@ -113,7 +110,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
 #    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/threds/inserter_files.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp

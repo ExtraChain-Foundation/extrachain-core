@@ -695,11 +695,6 @@ static const QString KEY_TYPE = ".key";
 QString              makeKeyFileName(QString name);
 }
 
-namespace Scripts {
-static const std::string folder        = "scripts";
-static const std::string wasmExtention = ".wasm";
-}
-
 namespace SearchEnum {
 enum class BlockParam {
     Id = 0,
