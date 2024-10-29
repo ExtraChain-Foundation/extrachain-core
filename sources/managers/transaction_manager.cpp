@@ -147,11 +147,11 @@ void TransactionManager::proveTransactions() {
         TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
-            qDebug() << "[TransactionManager] Transaction approved:" << tx;
+            qDebug() << "[TransactionManager] Transaction approved:" << tx << tx.amount().toStdString(NumeralBase::Dec);
             // qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager] Transaction not approved:" << res << tx;
+            qDebug() << "[TransactionManager] Transaction not approved:" << tx << res;
             // qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }

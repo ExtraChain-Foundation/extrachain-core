@@ -844,7 +844,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
                     }
                 }
             }
-
+            qDebug() << "[Sender]" << targetSender << "[Receiver]" << targetReceiver << "[AccountId]" << accountId;
             return TransactionProveError::SelfPleasure;
         }
     }

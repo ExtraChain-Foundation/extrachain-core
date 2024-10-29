@@ -478,14 +478,14 @@ static const std::string tokenTableCreate =
     "color         TEXT  NOT NULL, "
     "smart         TEXT  NOT NULL);";
 namespace Fields {
-    static const std::string              actorId = "actorId";
-    static const std::string              name    = "name";
-    static const std::string              ticker  = "ticker";
-    static const std::string              count   = "count";
-    static const std::string              owner   = "owner";
-    static const std::string              color   = "color";
-    static const std::string              smart   = "smart";
-    static const std::vector<std::string> fields  = { actorId, name, ticker, count, owner, color, smart };
+    static const std::string actorId = "actorId";
+    static const std::string name = "name";
+    static const std::string ticker = "ticker";
+    static const std::string count = "count";
+    static const std::string owner = "owner";
+    static const std::string color = "color";
+    static const std::string smart = "smart";
+    static const std::vector<std::string> fields = { name, ticker, count, owner, color, smart };
 }
 }
 

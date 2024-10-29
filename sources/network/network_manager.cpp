@@ -729,7 +729,7 @@ void NetworkManager::messageReceived(
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node->dataMiningManager()->sendCoinsReward(requestReward);
+            // node->dataMiningManager()->sendCoinsReward(requestReward);
             break;
         }
         case MessageStatus::Response: {
@@ -825,15 +825,19 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::Accrual: {
-        /*
+        qDebug() << "jsndcjsdncjndsjcndsjc";
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         qDebug() << "Begin accrual for actor " << actor.id().toString();
-        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
-        ActorId(Token::ROCC_TOKEN)); tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node->transactionManager()->addTransaction(tx);
-        node->network()->send_message(tx, MessageType::BlockchainTransaction);
-        */
+        emit accrual(actor.id());
+        // emit node->startAccrual(actor.id());
+        // if(node->isRaccoon) {
+        //     // Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
+        //     //                ActorId());
+        //     // tx.setDate(QDateTime::currentMSecsSinceEpoch());
+        //     // tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
+        //     // node->transactionManager()->addTransaction(tx);
+        //     // node->network()->send_message(tx, MessageType::BlockchainTransaction);
+        // }
         break;
     }
 

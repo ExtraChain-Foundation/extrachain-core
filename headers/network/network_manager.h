@@ -195,6 +195,7 @@ signals:
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
     void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
                             const std::string &receiver_identifier);
+    void accrual(const ActorId& actorId);
 
 protected:
     void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);

@@ -70,7 +70,7 @@ void TokenManager::sendInitialTransaction(
     const TokenId        &token,
     const BigNumberFloat &amount) {
     Transaction tx;
-    tx.setSender(owner);
+    tx.setSender(ActorId());
     tx.setReceiver(owner);
     tx.setAmount(amount);
     tx.setToken(token);
@@ -232,7 +232,9 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
 bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
     for (const std::string &field : Token::Fields::fields) {
         if (!jsonObj.contains(field.c_str())) {
+
             qWarning() << "JSON contract doesn't has this field:" << field;
+            qFatal() << jsonObj;
             return false;
         }
     }
