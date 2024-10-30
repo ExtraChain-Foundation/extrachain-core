@@ -49,9 +49,6 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(
     bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
-    // connect(node, &ExtraChainNode::startAccrual, this, [&](const ActorId& actorId) {
-    //     qDebug() << "[ExtraChainNodeWrapper]" << "begin accrual.";
-    // });
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -115,7 +112,6 @@ void ExtraChainNode::process() {
 
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    connect(m_networkManager, &NetworkManager::accrual, this, &ExtraChainNode::startAccrual);
     timer->start(30000);
 
     connectSignals();

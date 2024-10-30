@@ -72,9 +72,6 @@ public:
 
     ExtraChainNode* node;
 
-signals:
-    void accrual(const ActorId&);
-
 private:
     QThread* m_thread = nullptr;
 };
