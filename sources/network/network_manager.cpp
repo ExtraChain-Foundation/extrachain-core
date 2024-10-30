@@ -539,7 +539,10 @@ void NetworkManager::messageReceived(
     }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        node->actorIndex()->handleNewActor(actor);
+        auto result = node->actorIndex()->handleNewActor(actor);
+        if(result == Errors::FILE_NOT_EXISTS) {
+            emit accrual(actor.id());
+        }
         break;
     }
     case MessageType::Actor: {
@@ -824,22 +827,22 @@ void NetworkManager::messageReceived(
         break;
     }
 
-    case MessageType::Accrual: {
-        qDebug() << "jsndcjsdncjndsjcndsjc";
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        qDebug() << "Begin accrual for actor " << actor.id().toString();
-        emit accrual(actor.id());
-        // emit node->startAccrual(actor.id());
-        // if(node->isRaccoon) {
-        //     // Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
-        //     //                ActorId());
-        //     // tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        //     // tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        //     // node->transactionManager()->addTransaction(tx);
-        //     // node->network()->send_message(tx, MessageType::BlockchainTransaction);
-        // }
-        break;
-    }
+    // case MessageType::Accrual: {
+    //     qDebug() << "jsndcjsdncjndsjcndsjc";
+    //     auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+    //     qDebug() << "Begin accrual for actor " << actor.id().toString();
+    //     emit accrual(actor.id());
+    //     // emit node->startAccrual(actor.id());
+    //     // if(node->isRaccoon) {
+    //     //     // Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
+    //     //     //                ActorId());
+    //     //     // tx.setDate(QDateTime::currentMSecsSinceEpoch());
+    //     //     // tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
+    //     //     // node->transactionManager()->addTransaction(tx);
+    //     //     // node->network()->send_message(tx, MessageType::BlockchainTransaction);
+    //     // }
+    //     break;
+    // }
 
     case MessageType::VPNHandshake:
     case MessageType::VPNConnection:

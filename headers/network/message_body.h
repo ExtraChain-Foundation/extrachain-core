@@ -53,7 +53,6 @@ enum class MessageType {
     RequestListNodes = 112,
 
     ShareConnections = 113,
-    Accrual = 120,
 
     VPNHandshake = 241,
     VPNConnection = 242,

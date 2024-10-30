@@ -357,8 +357,10 @@ FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
+static const int FILE_NOT_EXISTS = 0;
 static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED  = 102;
+static const int UNDEFINED  = 103;
 
 // Blocks
 // static const int BLOCK_IS_NOT_VALID = 201;
