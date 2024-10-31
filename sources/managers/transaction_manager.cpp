@@ -107,7 +107,7 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
-        static BigNumber prevDummy = -1;
+        static BigNumber prevDummy = BigNumber(-1);
 
         // if (prevDummy == lastBlock.getIndex() + 1) {
         //     qDebug() << "[TransactionManager] prevDummy == lastBlock.getIndex() + 1";

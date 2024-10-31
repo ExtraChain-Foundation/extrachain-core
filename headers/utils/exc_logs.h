@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef EXC_LOGS_H
 #define EXC_LOGS_H
 
@@ -12,7 +31,6 @@
 #include <fstream>
 #include <filesystem>
 #include <sstream>
-#include <csignal>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -303,11 +321,12 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 } // namespace detail
 
 // Logging macros
-#define eDebug(...)    detail::println_impl(LogLevel::Debug, std::source_location::current(), __VA_ARGS__)
-#define eInfo(...)     detail::println_impl(LogLevel::Info, std::source_location::current(), __VA_ARGS__)
-#define eWarning(...)  detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
-#define eCritical(...) detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
-#define eFatal(...)    detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
-#define eLog(...)      eDebug(__VA_ARGS__)
+#define eDebug(...)   ::detail::println_impl(LogLevel::Debug, std::source_location::current(), __VA_ARGS__)
+#define eInfo(...)    ::detail::println_impl(LogLevel::Info, std::source_location::current(), __VA_ARGS__)
+#define eWarning(...) ::detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
+#define eCritical(...)                                                                                       \
+    ::detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
+#define eFatal(...) ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
+#define eLog(...)   eDebug(__VA_ARGS__)
 
 #endif // EXC_LOGS_H

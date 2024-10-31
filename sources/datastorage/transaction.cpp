@@ -132,11 +132,11 @@ void Transaction::setToken(const ActorId &value) {
     m_token = value;
 }
 
-long long Transaction::date() const {
+std::uint64_t Transaction::date() const {
     return m_date;
 }
 
-void Transaction::setDate(long long value) {
+void Transaction::setDate(uint64_t value) {
     m_date = value;
 }
 

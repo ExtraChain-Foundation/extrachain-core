@@ -680,14 +680,6 @@ void NetworkManager::messageReceived(
         break;
     }
 
-    case MessageType::BlockchainCopyScript: {
-        auto        msg      = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
-        std::string fromPath = DFS::Basic::fsActrRoot + "/" + msg.Actor + "/" + msg.FileName;
-        std::string toPath   = Scripts::folder + "/" + msg.FileName;
-        std::filesystem::copy_file(fromPath, toPath);
-        break;
-    }
-
     case MessageType::BlockchainRequestBlock: {
         qDebug() << "BlockchainRequestBlock";
         std::pair<BlockType, BigNumber> requestData =

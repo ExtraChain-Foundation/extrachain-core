@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #ifndef EXC_MAGIC_HPP
 #define EXC_MAGIC_HPP
 
@@ -13,8 +32,12 @@
 #include <vector>
 #include <array>
 
+#include "utils/exc_logs.h"
 #include "magic_enum.hpp"
 #include "cpp-base64/base64.h"
+
+template <>
+struct fmt::formatter<boost::json::value> : fmt::ostream_formatter { };
 
 namespace magic {
 // Forward declarations
@@ -129,7 +152,9 @@ namespace detail {
             return std::to_string(value);
         } else if constexpr (is_uint8_array<T>::value) {
             std::string raw(reinterpret_cast<const char*>(value.data()), value.size());
-            auto is_empty = std::ranges::all_of(raw, [&value](const auto& x) { return x == '\0'; });
+            auto        is_empty = std::ranges::all_of(raw, [&value](const auto& x) {
+                return x == '\0';
+            });
             return '"' + (is_empty ? "empty" : base64_encode(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
             if constexpr (is_associative_container<T>::value) {
@@ -250,7 +275,8 @@ namespace detail {
             boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
                 [&](auto D) {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        result[D.name] = to_json(magic::invoke_member(obj, D.pointer));
+                        result[magic::detail::clean_field_name(D.name)] =
+                            to_json(magic::invoke_member(obj, D.pointer));
                     }
                 });
             return result;
@@ -263,16 +289,17 @@ namespace detail {
 
     template <typename T>
     T from_json_impl(const boost::json::value& json) {
+        // eInfo("JSON: {} {} {}", typeid(T).name(), json, std::string(magic_enum::enum_name(json.kind())));
         if constexpr (std::is_arithmetic_v<T>) {
             if constexpr (std::is_integral_v<T>) {
-                return static_cast<T>(json.as_int64());
-            } else {
-                return static_cast<T>(json.as_double());
+                return json.is_uint64() ? json.as_uint64() : json.as_int64();
             }
+            return json.as_double();
         } else if constexpr (std::is_same_v<T, std::string>) {
-            return json.as_string().c_str();
+            return json.is_null() ? "" : json.as_string().c_str();
         } else if constexpr (std::is_enum_v<T>) {
-            return static_cast<T>(json.as_int64());
+            return static_cast<T>(
+                json.is_string() ? std::stoll(std::string(json.as_string())) : json.as_int64());
         } else if constexpr (magic::is_uint8_array<T>::value) {
             return array_uint8_from_json<std::tuple_size_v<T>>(json);
         } else if constexpr (magic::is_container<T>::value) {
@@ -307,9 +334,10 @@ namespace detail {
             boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
                 [&](auto D) {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        auto it = obj.find(D.name);
+                        auto it = obj.find(magic::detail::clean_field_name(D.name));
                         if (it != obj.end()) {
-                            using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
+                            using MemberType = std::remove_reference_t<decltype(result.*D.pointer)>;
+                            // eInfo("JSON: Parsing for {}", D.name);
                             result.*D.pointer = from_json<MemberType>(it->value());
                         }
                     }
@@ -341,7 +369,7 @@ T from_json(const boost::json::value& json) {
         return os << magic::magic(obj);                                                                      \
     }                                                                                                        \
     inline QDebug operator<<(QDebug debug, const ClassName& obj) {                                           \
-        return debug.nospace() << magic::magic(obj).c_str();                                                 \
+        return debug << magic::magic(obj).c_str();                                                           \
     }                                                                                                        \
     template <>                                                                                              \
     struct fmt::formatter<ClassName> : fmt::ostream_formatter { };

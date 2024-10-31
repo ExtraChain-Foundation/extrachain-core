@@ -32,6 +32,7 @@
 
 #include "boost/multiprecision/cpp_int.hpp"
 #include "msgpack.hpp"
+#include "utils/exc_magic.h"
 
 #include "extrachain_global.h"
 
@@ -66,16 +67,16 @@ enum class BigNumberError {
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
-    BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
+    explicit BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     BigNumber(const BigNumber &other);
     BigNumber(BigNumber &&other) noexcept;
-    BigNumber(int number);
-    BigNumber(long long number);
-    BigNumber(const boost::multiprecision::cpp_int &number);
+    explicit BigNumber(int number);
+    explicit BigNumber(long long number);
+    explicit BigNumber(const boost::multiprecision::cpp_int &number);
     ~BigNumber() = default;
 
 private:
-    boost::multiprecision::cpp_int m_data;
+    boost::multiprecision::cpp_int m_data = 0;
 
 #ifdef QT_DEBUG
     std::string qdata;
@@ -171,8 +172,6 @@ inline size_t qHash(const BigNumber &key, size_t seed) {
     return qHash(key, seed);
 }
 
-QDebug        operator<<(QDebug debug, const BigNumber &bigNumber);
-QDebug        operator<<(QDebug debug, const boost::multiprecision::cpp_int &bigNumber);
-std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber);
+MAKE_CUSTOM_MAGICAL(BigNumber)
 
 #endif // BIGNUMBER_H

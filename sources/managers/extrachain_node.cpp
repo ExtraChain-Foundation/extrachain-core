@@ -440,7 +440,7 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
     size_t connection = m_connectionsManager->getActiveConnection().size();
     resiveCounts.push_back(count);
     if (m_connectionsManager->getActiveConnection().size() == resiveCounts.size()) {
-        BigNumber sum = 0;
+        BigNumber sum = BigNumber(0);
         for (const BigNumber& number : resiveCounts) {
             sum += number;
         }
@@ -548,7 +548,6 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
     QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
-    QDir().mkpath(QString::fromStdString(Scripts::folder));
     QDir().mkpath(QString::fromStdString(Token::folder_tokens));
 
     if (!QFile(".settings").exists())

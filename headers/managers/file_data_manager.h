@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QObject>
-#include <iostream>
 #include <vector>
 
 class QJsonDocument;
@@ -10,7 +9,7 @@ class QJsonArray;
 
 static const char *name_file = "name_file";
 static const char *path_file = "path_file";
-static const char *status = "status";
+static const char *status    = "status";
 
 enum FileStatus {
     None,
@@ -22,7 +21,7 @@ enum FileStatus {
 struct FileData {
     std::string nameFile = "";
     std::string pathFile = "";
-    FileStatus status = FileStatus::None;
+    FileStatus  status   = FileStatus::None;
 };
 
 class FileDataManager : public QObject {
@@ -30,13 +29,13 @@ class FileDataManager : public QObject {
 public:
     FileDataManager(QObject *parent = nullptr);
     QJsonDocument getFileTree(std::string actorId = "", const bool &shouldUpdateList = false);
-    bool updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus);
-    QJsonObject getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList = false);
+    bool          updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus);
+    QJsonObject   getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList = false);
     QJsonDocument getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList = false);
-    void setActorId(const std::string &actorId);
-    void updateAllTree();
+    void          setActorId(const std::string &actorId);
+    void          updateAllTree();
 
-    const std::map<std::string, std::vector<FileData> > &getCachedData() const;
+    const std::map<std::string, std::vector<FileData>> &getCachedData() const;
 
 signals:
     void structuraChanged(FileData fileStruct);
@@ -46,7 +45,7 @@ protected:
     std::vector<FileData> updateFileList(const std::string &actorId);
 
 private:
-    std::vector<FileData> files;
+    std::vector<FileData>                        files;
     std::map<std::string, std::vector<FileData>> cachedData;
-    std::string savedActorId;
+    std::string                                  savedActorId;
 };

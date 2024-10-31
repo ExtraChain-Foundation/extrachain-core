@@ -87,8 +87,8 @@ private:
     std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
     // genesis blocks //
-    QByteArray                  findRecordsInBlock(const BlockVariant &block);
-    bool                        signCheckAdd(BlockVariant &block);
+    QByteArray findRecordsInBlock(const BlockVariant &block);
+    bool       signCheckAdd(BlockVariant &block);
 
 public:
     static BigNumber lastGenesisIdFor(const BigNumber &id);
@@ -103,7 +103,7 @@ public:
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
-        BigNumber        from  = -1,
+        BigNumber        from  = BigNumber(-1),
         int              count = 10,
         ActorId          token = ActorId());
 
