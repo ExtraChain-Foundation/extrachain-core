@@ -134,7 +134,7 @@ BigNumberFloat &BigNumberFloat::operator++() {
 BigNumberFloat BigNumberFloat::operator++(int) {
     ++m_data;
     UPDATE_DEBUG()
-    return m_data;
+    return BigNumberFloat(m_data);
 }
 
 BigNumberFloat &BigNumberFloat::operator--() {
@@ -146,7 +146,7 @@ BigNumberFloat &BigNumberFloat::operator--() {
 BigNumberFloat BigNumberFloat::operator--(int) {
     --m_data;
     UPDATE_DEBUG()
-    return m_data;
+    return BigNumberFloat(m_data);
 }
 
 BigNumberFloat &BigNumberFloat::operator+=(const BigNumberFloat &bigNumberFloat) {
@@ -228,12 +228,12 @@ std::string BigNumberFloat::toStdString(NumeralBase numSystem) const {
 
         return str;
     } else if (numSystem == NumeralBase::Hex) {
-        std::string str = toStdString(NumeralBase::Dec);
-        size_t dot_pos = str.find('.');
+        std::string str     = toStdString(NumeralBase::Dec);
+        size_t      dot_pos = str.find('.');
         if (dot_pos == std::string::npos)
             return BigNumber(str, NumeralBase::Dec).toStdString(NumeralBase::Hex);
 
-        std::string integer_part = str.substr(0, dot_pos);
+        std::string integer_part    = str.substr(0, dot_pos);
         std::string fractional_part = str.substr(dot_pos + 1);
 
         size_t sizeBefore = fractional_part.size();
@@ -359,19 +359,12 @@ BigNumberFloat BigNumberFloat::fromHex(const std::string &number) {
         NumeralBase::Dec);
 }
 
-QDebug operator<<(QDebug debug, const BigNumberFloat &bigNumberFloat) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << bigNumberFloat.toByteArray();
-    return debug;
+namespace magic {
+std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
+    return value.toStdString();
 }
 
-QDebug operator<<(QDebug debug, const cpp_dec_float_exc &bigNumberFloat) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << BigNumberFloat(bigNumberFloat).toByteArray();
-    return debug;
+BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
+    return BigNumberFloat(value);
 }
-
-std::ostream &operator<<(std::ostream &os, const BigNumberFloat &bigNumberFloat) {
-    os << bigNumberFloat.toStdString();
-    return os;
-}
+} // namespace magic

@@ -440,7 +440,7 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
     size_t connection = m_connectionsManager->getActiveConnection().size();
     resiveCounts.push_back(count);
     if (m_connectionsManager->getActiveConnection().size() == resiveCounts.size()) {
-        BigNumber sum = 0;
+        BigNumber sum = BigNumber(0);
         for (const BigNumber& number : resiveCounts) {
             sum += number;
         }

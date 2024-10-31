@@ -155,7 +155,7 @@ BigNumber &BigNumber::operator++() {
 BigNumber BigNumber::operator++(int) {
     ++m_data;
     UPDATE_DEBUG()
-    return m_data;
+    return BigNumber(m_data);
 }
 
 BigNumber &BigNumber::operator--() {
@@ -167,7 +167,7 @@ BigNumber &BigNumber::operator--() {
 BigNumber BigNumber::operator--(int) {
     --m_data;
     UPDATE_DEBUG()
-    return m_data;
+    return BigNumber(m_data);
 }
 
 BigNumber &BigNumber::operator+=(const BigNumber &bigNumber) {
@@ -360,19 +360,12 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
     return t;
 }
 
-QDebug operator<<(QDebug debug, const BigNumber &bigNumber) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << bigNumber.toByteArray();
-    return debug;
+namespace magic {
+std::string custom_magic<BigNumber>::read(const BigNumber &value) {
+    return value.toStdString();
 }
 
-QDebug operator<<(QDebug debug, const cpp_int &bigNumber) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << BigNumber(bigNumber).toByteArray();
-    return debug;
+BigNumber custom_magic<BigNumber>::write(const std::string &value) {
+    return BigNumber(value);
 }
-
-std::ostream &operator<<(std::ostream &os, const BigNumber &bigNumber) {
-    os << bigNumber.toStdString();
-    return os;
-}
+} // namespace magic

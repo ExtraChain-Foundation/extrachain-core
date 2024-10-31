@@ -69,13 +69,13 @@ private:
     ActorId         m_sender;                          // sender address
     ActorId         m_receiver;                        // receiver address
     BigNumberFloat  m_amount;                          // coin amount
-    long long       m_date = 0;                        // transaction date
+    std::uint64_t   m_date = 0;                        // transaction date
     std::string     m_data;                            // additional payload field
     ActorId         m_token;                           // token contract address
     BigNumber       m_prevBlock;                       // last block id at the moment of tx creation
     std::string     m_hash;                            // hash from all fields
     ActorId         m_approver;                        // address of the transaction approver.
-    Signature       m_signature = Signature();                       // digital signature
+    Signature       m_signature = Signature();         // digital signature
     ActorId         m_producer;                        // producer address
     TransactionType m_type = TransactionType::Regular; // transaction type
 
@@ -117,7 +117,7 @@ public:
     ActorId        receiver() const;
     BigNumberFloat amount() const;
     BigNumber      prevBlock() const;
-    long long      date() const;
+    std::uint64_t  date() const;
     std::string    data() const;
     std::string    hash() const;
     ActorId        token() const;
@@ -133,7 +133,7 @@ public:
     void         operator=(const Transaction &transaction);
     Transaction &operator=(Transaction &&other) noexcept;
 
-    void            setDate(long long value);
+    void            setDate(std::uint64_t value);
     void            setToken(const ActorId &value);
     void            setData(const std::string &value);
     void            setAmount(const BigNumberFloat &value);

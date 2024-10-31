@@ -38,7 +38,7 @@ GenesisBlock::GenesisBlock(
     std::string                                 &&type,
     std::string                                 &&data,
     BigNumber                                     idx,
-    long long                                     date,
+    std::uint64_t                                 date,
     std::string                                 &&prevHash,
     std::string                                 &&hash,
     std::string                                 &&prevGenHash,

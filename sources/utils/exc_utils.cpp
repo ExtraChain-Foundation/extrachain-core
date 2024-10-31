@@ -75,7 +75,7 @@ std::string Utils::calcHash(const std::string &data, HashEncode encode) {
 // SERIALIZATION //
 
 std::vector<std::string> Utils::split(const std::string &s, char c) {
-    auto end = s.cend();
+    auto end   = s.cend();
     auto start = end;
 
     std::vector<std::string> v;
@@ -106,6 +106,11 @@ int Utils::compare(const QByteArray &one, const QByteArray &two) {
         return static_cast<int>(one == two);
     } else
         return two.size() - one.size();
+}
+
+template <>
+std::expected<std::string, Utils::ParseError> Utils::fromString<std::string>(const std::string &str) {
+    return str;
 }
 
 std::string Utils::str_to_lower(const std::string &str) {
@@ -166,7 +171,7 @@ std::string Utils::intToStdString(const int &number, const int &size) {
 
 int Utils::qByteArrayToInt(const QByteArray &number) {
     QByteArray num = "";
-    int i = 0;
+    int        i   = 0;
     //    bool flag = false;
     while (i < number.size()) {
         if (number[i] == '0')
@@ -181,12 +186,15 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     int res = num.toInt();
     return res;
 }
-void Utils::rootMerkleHash(std::vector<std::string> &listHashes, std::vector<MerkleDataBlocks> &branchesTree,
-                           const bool isHahsing, std::string &result) {
+void Utils::rootMerkleHash(
+    std::vector<std::string>      &listHashes,
+    std::vector<MerkleDataBlocks> &branchesTree,
+    const bool                     isHahsing,
+    std::string                   &result) {
     if (listHashes.empty()) {
         qFatal("Root merkle hash: list is empty");
     };
-    const auto splittedList = splitListIntoPair(listHashes, isHahsing);
+    const auto       splittedList = splitListIntoPair(listHashes, isHahsing);
     MerkleDataBlocks merkleBlocks;
 
     for (int index = 0; index < splittedList.size(); index++) {
@@ -208,16 +216,16 @@ void Utils::rootMerkleHash(std::vector<std::string> &listHashes, std::vector<Mer
 }
 
 std::string Utils::rootMerkleHash(std::string &data) {
-    std::string result;
+    std::string                   result;
     std::vector<MerkleDataBlocks> branches;
-    std::vector<std::string> dataList;
+    std::vector<std::string>      dataList;
     dataList.push_back(data);
     rootMerkleHash(dataList, branches, true, result);
     return result;
 }
 
-std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::string> &vector,
-                                                              const bool isHahsing) {
+std::vector<Utils::MerkleDataBlocks>
+Utils::splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing) {
     std::vector<MerkleDataBlocks> result;
 
     if (vector.empty())
@@ -226,12 +234,12 @@ std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::s
     if (isHahsing)
         hashingElements(vector);
 
-    int position = 0;
-    int step = 2;
-    const int sizeVector = vector.size();
-    bool isLastPair = sizeVector <= 2;
+    int        position     = 0;
+    int        step         = 2;
+    const int  sizeVector   = vector.size();
+    bool       isLastPair   = sizeVector <= 2;
     const bool isPairVector = (sizeVector % 2 == 0) ? true : false;
-    const int next = 1;
+    const int  next         = 1;
 
     while (position < sizeVector) {
         std::vector<std::string> pair;
@@ -282,14 +290,17 @@ std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEn
     return "";
 }
 
-bool Utils::encryptFile(const QString &originalName, const QString &encryptName, const QByteArray &key,
-                        int blockSize) {
+bool Utils::encryptFile(
+    const QString    &originalName,
+    const QString    &encryptName,
+    const QByteArray &key,
+    int               blockSize) {
     QFile orig(originalName);
     if (!orig.exists())
         return false;
     QFile encrypt(encryptName);
-    bool origOpen = orig.open(QFile::ReadOnly);
-    bool encryptOpen = encrypt.open(QFile::WriteOnly);
+    bool  origOpen    = orig.open(QFile::ReadOnly);
+    bool  encryptOpen = encrypt.open(QFile::WriteOnly);
     if (!origOpen || !encryptOpen) {
         qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
         return false;
@@ -310,8 +321,11 @@ bool Utils::encryptFile(const QString &originalName, const QString &encryptName,
     return QFile::exists(encryptName);
 }
 
-bool Utils::decryptFile(const QString &encryptName, const QString &decryptName, const QByteArray &key,
-                        int blockSize) //
+bool Utils::decryptFile(
+    const QString    &encryptName,
+    const QString    &decryptName,
+    const QByteArray &key,
+    int               blockSize) //
 {
     blockSize = (blockSize / 8 + 1) * 8;
     QFile encrypt(encryptName);
@@ -354,7 +368,7 @@ QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QBy
     }
 
     QByteArray result;
-    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
+    auto       rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
 
     while (!encrypt.atEnd()) {
         QByteArray part = encrypt.read(blockSize);
@@ -369,18 +383,18 @@ QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QBy
 
 QString Utils::fileMimeType(const QString &filePath) {
     QMimeDatabase db;
-    QMimeType type = db.mimeTypeForFile(filePath);
+    QMimeType     type = db.mimeTypeForFile(filePath);
     return type.name();
 }
 
 QString Utils::fileMimeSuffix(const QString &filePath) {
     QMimeDatabase db;
-    QMimeType type = db.mimeTypeForFile(filePath);
+    QMimeType     type = db.mimeTypeForFile(filePath);
     return type.preferredSuffix();
 }
 
 std::string Serialization::serialize(const std::vector<std::string> &list) {
-    std::string res;
+    std::string              res;
     std::vector<std::string> reslist;
     for (int i = 0; i < list.size(); i++) {
         reslist.push_back(Utils::bytesEncodeStdString(list.at(i)));
@@ -464,7 +478,7 @@ QDebug operator<<(QDebug d, const Notification &n) {
 }
 
 std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
-    size_t psize = data.size() * 2 + 1;
+    size_t            psize = data.size() * 2 + 1;
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
     std::string s(p.begin(), p.end());
@@ -481,8 +495,8 @@ std::string Utils::hexStringToByte(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);
     const char *end;
-    size_t size;
-    int r = sodium_hex2bin(p.data(), p.size(), data.c_str(), data.length(), NULL, &size, &end);
+    size_t      size;
+    int         r = sodium_hex2bin(p.data(), p.size(), data.c_str(), data.length(), NULL, &size, &end);
     std::string res;
     if (r == 0) {
         res = std::string(p.begin(), p.end());
@@ -566,8 +580,8 @@ QString Utils::detectCompiler() {
 }
 
 QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
-    const auto allInterfaces = QNetworkInterface::allInterfaces();
-    const QHostAddress &localhost = QHostAddress(QHostAddress::LocalHost);
+    const auto          allInterfaces = QNetworkInterface::allInterfaces();
+    const QHostAddress &localhost     = QHostAddress(QHostAddress::LocalHost);
     QList<QHostAddress> localIpNotConnect;
 
     for (const QNetworkInterface &networkInterface : allInterfaces) {
@@ -590,9 +604,9 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
         for (const QNetworkAddressEntry &entry : entries) {
             const auto flags = networkInterface.flags();
 
-            bool isLoopBack = flags.testFlag(QNetworkInterface::IsLoopBack);
+            bool isLoopBack     = flags.testFlag(QNetworkInterface::IsLoopBack);
             bool isPointToPoint = flags.testFlag(QNetworkInterface::IsPointToPoint);
-            bool isRunning = flags.testFlag(QNetworkInterface::IsRunning);
+            bool isRunning      = flags.testFlag(QNetworkInterface::IsRunning);
             if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
@@ -626,8 +640,8 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
 
 QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol) {
     QString fixedName = fileName.simplified();
-    fixedName = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
-    fixedName = fixedName.replace("\\", replaceSymbol);
+    fixedName         = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
+    fixedName         = fixedName.replace("\\", replaceSymbol);
     return fixedName;
 }
 
@@ -674,4 +688,38 @@ std::string Utils::platformDelimeter() {
 #else
     return std::string(1, std::filesystem::path::preferred_separator);
 #endif
+}
+
+boost::json::value Utils::stringToJsonValue(const std::string &value, const std::type_info &target_type) {
+    if (value.empty()) {
+        return boost::json::value();
+    }
+
+    std::string type_name = boost::core::demangle(target_type.name());
+
+    if (type_name.find("string") != std::string::npos) {
+        return boost::json::value(std::string(value));
+    }
+
+    try {
+        if (type_name.find("int") != std::string::npos || type_name.find("long") != std::string::npos) {
+            if (type_name[0] == 'u') {
+                return std::stoull(value);
+            } else {
+                if (value[0] == '-')
+                    return std::stoll(value);
+            }
+        }
+
+        if (type_name.find("float") != std::string::npos || type_name.find("double") != std::string::npos) {
+            return std::stod(value);
+        }
+    } catch (...) {
+    }
+
+    if (value == "true" || value == "false") {
+        return value == "true";
+    }
+
+    return boost::json::value(std::string(value));
 }
