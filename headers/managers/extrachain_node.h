@@ -199,7 +199,6 @@ signals:
         const std::string   messageId,
         const ActorId       senderId,
         const std::string   identifier);
-    void startAccrual(const ActorId& actorId);
 
 private slots:
     void getAllActorsTimerCall();
