@@ -50,18 +50,18 @@ using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::c
 class EXTRACHAIN_EXPORT BigNumberFloat {
 public:
     BigNumberFloat();
-    BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
+    explicit BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
     BigNumberFloat(const BigNumberFloat &other);
     BigNumberFloat(BigNumberFloat &&other) noexcept;
     explicit BigNumberFloat(const BigNumber &other);
-    BigNumberFloat(int number);
-    BigNumberFloat(long long number);
-    BigNumberFloat(uint64_t number);
-    BigNumberFloat(const cpp_dec_float_exc &number);
+    explicit BigNumberFloat(int number);
+    explicit BigNumberFloat(long long number);
+    explicit BigNumberFloat(uint64_t number);
+    explicit BigNumberFloat(const cpp_dec_float_exc &number);
     ~BigNumberFloat() = default;
 
 private:
-    cpp_dec_float_exc m_data;
+    cpp_dec_float_exc m_data = 0;
 
 #ifdef QT_DEBUG
     std::string qdata;
@@ -151,8 +151,6 @@ inline size_t qHash(const BigNumberFloat &key, size_t seed) {
     return qHash(key, seed);
 }
 
-QDebug        operator<<(QDebug debug, const BigNumberFloat &BigNumberFloat);
-QDebug        operator<<(QDebug debug, const cpp_dec_float_exc &BigNumberFloat);
-std::ostream &operator<<(std::ostream &os, const BigNumberFloat &BigNumberFloat);
+MAKE_CUSTOM_MAGICAL(BigNumberFloat)
 
 #endif // BIGNUMBER_FLOAT_H

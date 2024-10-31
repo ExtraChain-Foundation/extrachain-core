@@ -321,11 +321,12 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 } // namespace detail
 
 // Logging macros
-#define eDebug(...)    detail::println_impl(LogLevel::Debug, std::source_location::current(), __VA_ARGS__)
-#define eInfo(...)     detail::println_impl(LogLevel::Info, std::source_location::current(), __VA_ARGS__)
-#define eWarning(...)  detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
-#define eCritical(...) detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
-#define eFatal(...)    detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
-#define eLog(...)      eDebug(__VA_ARGS__)
+#define eDebug(...)   ::detail::println_impl(LogLevel::Debug, std::source_location::current(), __VA_ARGS__)
+#define eInfo(...)    ::detail::println_impl(LogLevel::Info, std::source_location::current(), __VA_ARGS__)
+#define eWarning(...) ::detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
+#define eCritical(...)                                                                                       \
+    ::detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
+#define eFatal(...) ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
+#define eLog(...)   eDebug(__VA_ARGS__)
 
 #endif // EXC_LOGS_H

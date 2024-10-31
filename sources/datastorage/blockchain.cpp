@@ -235,9 +235,9 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     }
 
     GenesisBlock genesis;
-    auto lastBlock = getLastBlock();
-    auto lastRealBlock = getLastRealBlock();
-    auto lastGenesisBlock = blockIndex.getLastGenesisBlock();
+    auto         lastBlock        = getLastBlock();
+    auto         lastRealBlock    = getLastRealBlock();
+    auto         lastGenesisBlock = blockIndex.getLastGenesisBlock();
 
     if (!lastGenesisBlock.has_value())
         return std::unexpected(BlockError::NoGenesis);
@@ -263,9 +263,9 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
 
         auto transactions = block->transactions();
         for (auto &transaction : transactions) {
-            auto sender = transaction.sender();
+            auto sender   = transaction.sender();
             auto receiver = transaction.receiver();
-            auto tokenId = transaction.token();
+            auto tokenId  = transaction.token();
             if (sender == ActorId()
                 || tokenId != TokenId() && transaction.type() == TransactionType::InitContract)
                 lastDataRows[{ sender, tokenId }].state -= transaction.amount();
@@ -286,9 +286,12 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     }
 
     GenesisBlock genesis;
-    genesis.setIndex(0);
+    genesis.setIndex(BigNumber(0));
     // genesis.addRows(dataRows);
-    genesis.addRow(ActorId(), ActorId(), GenesisDataInfo(0, DataStorage::DataRowType::Universal));
+    genesis.addRow(
+        ActorId(),
+        ActorId(),
+        GenesisDataInfo(BigNumberFloat(0), DataStorage::DataRowType::Universal));
     genesis.addData(actor->id().toStdString());
     genesis.sign(actor);
     return BlockVariant(genesis);
@@ -418,10 +421,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     if (blockId != 0) {
-        auto prevBlock = this->getBlockByIndex(blockId - 1);
-        auto nextBlock = getBlockByIndex(blockId + 1);
+        auto prevBlock     = this->getBlockByIndex(blockId - 1);
+        auto nextBlock     = getBlockByIndex(blockId + 1);
         auto lastRealBlock = this->getLastRealBlock();
-        auto lastGenesis = blockIndex.getLastGenesisBlock(blockId - 1);
+        auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
         if (nextBlock.has_value()) {
             qDebug() << "[Blockchain] Already chained";
@@ -439,7 +442,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             return std::unexpected(BlockError::Invalid);
         }
 
-        auto checkedPrevHash = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
+        auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
         auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : prevBlock->getHash();
         if (checkedPrevHash != expectedPrevHash) {
             qDebug() << "[Blockchain] Can't chained, sync request";
@@ -471,7 +474,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         signBlock(newBlock);
     }
 
-    const auto res = blockIndex.addBlock(newBlock);
+    const auto res       = blockIndex.addBlock(newBlock);
     const auto blockType = newBlock.getType();
 
     if (!res.has_value()) {
@@ -541,14 +544,14 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlocks(const Block &blo
         return std::unexpected(BlockError::CantMerge);
     }
 
-    const auto &dataServiceA = blockA.dataService();
-    const auto &dataServiceB = blockB.dataService();
+    const auto &dataServiceA  = blockA.dataService();
+    const auto &dataServiceB  = blockB.dataService();
     const auto &transactionsA = blockA.transactions();
     const auto &transactionsB = blockB.transactions();
-    const auto &signaturesA = blockA.signatures();
-    const auto &signaturesB = blockB.signatures();
+    const auto &signaturesA   = blockA.signatures();
+    const auto &signaturesB   = blockB.signatures();
 
-    bool isDataServiceEqual = dataServiceA == dataServiceB;
+    bool isDataServiceEqual  = dataServiceA == dataServiceB;
     bool isTransactionsEqual = transactionsA == transactionsB;
 
     // Case 1 - equal payload
@@ -599,13 +602,13 @@ Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &b
 
     const auto &dataServiceA = blockA.dataService();
     const auto &dataServiceB = blockB.dataService();
-    const auto &dataRowsA = blockA.dataRows();
-    const auto &dataRowsB = blockB.dataRows();
-    const auto &signaturesA = blockA.signatures();
-    const auto &signaturesB = blockB.signatures();
+    const auto &dataRowsA    = blockA.dataRows();
+    const auto &dataRowsB    = blockB.dataRows();
+    const auto &signaturesA  = blockA.signatures();
+    const auto &signaturesB  = blockB.signatures();
 
     bool isDataServiceEqual = dataServiceA == dataServiceB;
-    bool isDataRowsEqual = dataRowsA == dataRowsB;
+    bool isDataRowsEqual    = dataRowsA == dataRowsB;
 
     // Case 1 - equal payload
     if (isDataServiceEqual && isDataRowsEqual) {
@@ -674,8 +677,8 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
         }
 
         if (currentBlock->isGenesisBlock()) {
-            auto genesis = blockIndex.getGenesisBlockById(i);
-            const auto rows = genesis->dataRows();
+            auto       genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows    = genesis->dataRows();
 
             for (const auto &[key, row] : rows) {
                 if (key.actorId == userId && key.tokenId == tokenId)
@@ -783,8 +786,8 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
         return;
     }
 
-    auto transactions = block.transactions();
-    const auto accounts = node->accountController()->accountsIds();
+    auto       transactions = block.transactions();
+    const auto accounts     = node->accountController()->accountsIds();
     for (const auto &transaction : transactions) {
         // vefify
 
@@ -816,10 +819,10 @@ TransactionProveError
 Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> transactions) {
     // qDebug() << "[Blockchain] Transaction prove started:" << tx;
 
-    ActorId targetSender = tx.sender();
-    ActorId targetReceiver = tx.receiver();
-    const ActorId &mainActorId = node->accountController()->mainActor()->id();
-    const ActorId &firstId = node->actorIndex()->firstId();
+    ActorId        targetSender   = tx.sender();
+    ActorId        targetReceiver = tx.receiver();
+    const ActorId &mainActorId    = node->accountController()->mainActor()->id();
+    const ActorId &firstId        = node->actorIndex()->firstId();
 
     const auto accounts = node->accountController()->accountsIds();
     for (const auto &accountId : accounts) {
@@ -831,7 +834,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
                 auto approverId = tx.approver();
                 if (targetSender == ActorId() && !approverId.isZero()) {
                     auto approver = node->actorIndex()->getActor(approverId);
-                    bool res = tx.verify(approver);
+                    bool res      = tx.verify(approver);
                     if (res) {
                         if (tx.token() != ActorId()) {
                             return TransactionProveError::RewardInvalidToken;
@@ -945,10 +948,10 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
         }
 
         if (targetSender != firstId) {
-            TokenId token = tx.token();
+            TokenId        token                = tx.token();
             BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, token);
 
-            BigNumberFloat res = 0;
+            BigNumberFloat res;
             for (const Transaction &tx : std::as_const(transactions)) {
                 if (tx.sender() == targetSender && tx.token() == token) {
                     res -= tx.amount();
@@ -959,7 +962,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
             senderCurrentBalance += res;
 
             BigNumberFloat transactionAmount = tx.amount();
-            BigNumberFloat transactionFee = 0; // transactionAmount / 100;
+            BigNumberFloat transactionFee; // transactionAmount / 100;
             BigNumberFloat senderNewBalance = senderCurrentBalance - transactionAmount - transactionFee;
 
             if (senderNewBalance < 0 && targetSender != ActorId() /* && mainActorId == firstId */) {

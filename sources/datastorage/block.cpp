@@ -45,7 +45,7 @@ Block::Block(
     std::string           &&type,
     std::string           &&data,
     BigNumber               idx,
-    long long               date,
+    std::uint64_t           date,
     std::string           &&prevHash,
     std::string           &&hash,
     Signatures            &&signatures,
@@ -160,7 +160,7 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::NoActorSignature;
     }
 
-    bool res     = actor.key().verify(getDataForSignature(), it->second);
+    bool res = actor.key().verify(getDataForSignature(), it->second);
     if (!res) {
         return BlockSignError::InvalidSignature;
     }
@@ -308,11 +308,11 @@ bool Block::isApprover(const ActorId &actorId) const {
     return false;
 }
 
-long long Block::getDate() const {
+std::uint64_t Block::getDate() const {
     return m_date;
 }
 
-void Block::setDate(long long value) {
+void Block::setDate(std::uint64_t value) {
     m_date = value;
 }
 

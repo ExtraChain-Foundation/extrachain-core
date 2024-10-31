@@ -34,6 +34,7 @@
 #include "cpp-base64/base64.h"
 #include "utils/bignumber_float.h"
 #include <msgpack.hpp>
+#include "utils/exc_logs.h"
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -234,8 +235,6 @@ Q_ENUM_NS(SocketServiceError)
     QByteArray identifier = file.readAll();
     file.close();
     return identifier;
-
-    QByteArray("").toBase64();
 }
 } // namespace Network
 
@@ -457,6 +456,7 @@ std::expected<T, std::string> deserialize(const std::string &json_str) {
         auto restored = json_convert::from_json<T>(parsed);
         return restored;
     } catch (const std::exception &e) {
+        qDebug() << "Json deserialize error:" << e.what();
         return std::unexpected(e.what());
     }
 }
@@ -526,6 +526,15 @@ enum class HashEncode {
     Hex,
 };
 
+enum class ParseError {
+    Invalid,
+    EmptyString,
+    InvalidFormat,
+    OutOfRange,
+    EnumConversionError,
+    FieldNotFound
+};
+
 #ifdef Q_OS_WIN
 static const std::wstring filePrefix = L"file:///";
 #else
@@ -540,6 +549,46 @@ std::string enumFullName(E value) {
 EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
 EXTRACHAIN_EXPORT qint64  diskFreeMemory();
 EXTRACHAIN_EXPORT qint64  diskTotalMemory();
+
+template <typename T>
+std::string toString(const T &value) {
+    if constexpr (std::is_enum_v<T>) {
+        return std::to_string(std::to_underlying(value));
+    } else {
+        return fmt::format("{}", value);
+    }
+}
+
+template <typename T>
+std::expected<T, ParseError> fromString(const std::string &str) {
+    if (str.empty()) {
+        return std::unexpected(ParseError::EmptyString);
+    }
+
+    try {
+        if constexpr (std::is_enum_v<T>) {
+            try {
+                return static_cast<T>(std::stoi(str));
+            } catch (...) {
+                return std::unexpected(ParseError::EnumConversionError);
+            }
+        } else {
+            T                  value;
+            std::istringstream iss(str);
+            iss >> value;
+            if (iss.fail()) {
+                return std::unexpected(ParseError::InvalidFormat);
+            }
+            return value;
+        }
+    } catch (const std::out_of_range &) {
+        return std::unexpected(ParseError::OutOfRange);
+    } catch (...) {
+        return std::unexpected(ParseError::Invalid);
+    }
+}
+
+boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
 EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
 EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
@@ -784,9 +833,9 @@ struct EXTRACHAIN_EXPORT Notification {
         NewEvent,
         NewFollower
     };
-    long long  time;
-    NotifyType type;
-    QByteArray data = "";
+    std::uint64_t time;
+    NotifyType    type;
+    QByteArray    data = "";
 };
 
 QDebug operator<<(QDebug d, const Notification &n);

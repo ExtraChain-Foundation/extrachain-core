@@ -47,7 +47,7 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
  * @brief Information associated with genesis data
  */
 struct EXTRACHAIN_EXPORT GenesisDataInfo {
-    BigNumberFloat           state = 0; /**< State represented as a big number float, default is 0 */
+    BigNumberFloat state = BigNumberFloat(0); /**< State represented as a big number float, default is 0 */
     DataStorage::DataRowType type =
         DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
 
@@ -83,7 +83,7 @@ public:
         std::string     &&type,
         std::string     &&data,
         BigNumber         idx,
-        long long         date,
+        std::uint64_t     date,
         std::string     &&prevHash,
         std::string     &&hash,
         std::string     &&prevGenHash,
@@ -141,7 +141,7 @@ public:
             m_prevGenHash,
             m_dataRows)
             .msgpack_unpack(msgpack_o);
-        m_index = index_str;
+        m_index = BigNumber(index_str);
     }
 };
 

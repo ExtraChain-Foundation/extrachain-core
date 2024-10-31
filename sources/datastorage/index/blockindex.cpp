@@ -153,9 +153,9 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByData(const std::st
 }
 
 std::expected<BlockVariant, BlockError>
-BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const {
+BlockIndex::getBlockByParam(const std::string &id, SearchEnum::BlockParam param) const {
     if (param == SearchEnum::BlockParam::Id) {
-        return getBlockById(id);
+        return getBlockById(BigNumber(id));
     }
 
     BigNumber lastBlockId = getLastSavedId();
@@ -171,12 +171,12 @@ BlockIndex::getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) c
 
         switch (param) {
         case SearchEnum::BlockParam::Data: {
-            if (lastBlock->dataService().contains(id.toStdString()))
+            if (lastBlock->dataService().contains(id))
                 return lastBlock;
             break;
         }
         case SearchEnum::BlockParam::Hash: {
-            if (lastBlock->getHash() == id.toStdString())
+            if (lastBlock->getHash() == id)
                 return lastBlock;
             break;
         }
@@ -733,8 +733,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
         return std::unexpected(BlockError::NotExists);
     }
 
-    BigNumber blockId = BigNumber(res[0].at("id"));
-    long long date    = std::stoll(res[0].at("date"));
+    BigNumber     blockId = BigNumber(res[0].at("id"));
+    std::uint64_t date    = std::stoll(res[0].at("date"));
 
     if (id != blockId) {
         return std::unexpected(BlockError::Invalid);
@@ -745,7 +745,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
 
     for (const auto &dbSign : dbSigns) {
         // .isApprove = boost::lexical_cast<bool>(dbSign.at("isApprove")) };
-        signatures[ActorId(dbSign.at("actorId"))] = ByteArray::fromBase64(dbSign.at("signature")).toArray<crypto_sign_BYTES>();
+        signatures[ActorId(dbSign.at("actorId"))] =
+            ByteArray::fromBase64(dbSign.at("signature")).toArray<crypto_sign_BYTES>();
     }
 
     if (isGenesis) {

@@ -94,7 +94,7 @@ protected:
     BlockType             m_type;                  // simple block, or genesis block (or other)
     std::set<std::string> m_dataService;           // payload (serialized transaction's, or other)
     BigNumber             m_index = BigNumber(-1); // block id
-    long long             m_date;
+    std::uint64_t         m_date;
     std::string           m_prevHash;     // previous block hash
     std::string           m_hash;         // this block hash (from all previous fields)
     Signatures            m_signatures;   // digital signature
@@ -115,7 +115,7 @@ public:
         std::string           &&type,
         std::string           &&data,
         BigNumber               idx,
-        long long               date,
+        std::uint64_t           date,
         std::string           &&prevHash,
         std::string           &&hash,
         Signatures            &&signatures,
@@ -160,7 +160,7 @@ public:
     BlockType                    getType() const;
     std::string                  getTypeStr() const;
     BigNumber                    getIndex() const;
-    long long                    getDate() const;
+    std::uint64_t                getDate() const;
     const std::set<std::string> &dataService() const;
     std::string                  getDataMessagePack() const;
     std::string                  getHash() const;
@@ -173,7 +173,7 @@ public:
     void clearSignatures();
 
     void         setIndex(const BigNumber &index);
-    void         setDate(long long value);
+    void         setDate(std::uint64_t value);
     void         setDataServiceFromMessagePack(const std::string &value);
     Block        operator=(const Block &block);
     virtual void setType(BlockType value);
@@ -212,7 +212,7 @@ public:
             m_signatures,
             m_transactions)
             .msgpack_unpack(msgpack_o);
-        m_index = index_str;
+        m_index = BigNumber(index_str);
     }
 };
 

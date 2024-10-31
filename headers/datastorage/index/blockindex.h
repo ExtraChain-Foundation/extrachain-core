@@ -36,15 +36,15 @@ public:
     explicit BlockIndex(const QString &folderName);
     explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
 
-    QString   folderName;        // set in subclasses
-    int       sectionSize;       // todo: 0 = use only one folder
-    BigNumber recordsLimit = -1; // -1 = no limit
+    QString   folderName;                   // set in subclasses
+    int       sectionSize;                  // todo: 0 = use only one folder
+    BigNumber recordsLimit = BigNumber(-1); // -1 = no limit
 
     // current state //
-    BigNumber records           = 0;
-    BigNumber firstSavedId      = -1;
-    BigNumber lastSavedId       = -1;
-    BigNumber realBlockRecords  = 0;
+    BigNumber records           = BigNumber(0);
+    BigNumber firstSavedId      = BigNumber(-1);
+    BigNumber lastSavedId       = BigNumber(-1);
+    BigNumber realBlockRecords  = BigNumber(0);
     int       countTransactions = 0;
 
     bool m_blockCompress = false;
@@ -74,7 +74,7 @@ public:
      * @brief Get last genesis block
      * @return last genesis block
      */
-    std::expected<BlockVariant, BlockError> getLastGenesisBlock(const BigNumber &from = -1) const;
+    std::expected<BlockVariant, BlockError> getLastGenesisBlock(const BigNumber &from = BigNumber(-1)) const;
     std::expected<BlockVariant, BlockError> getGenesisBlockById(const BigNumber &id) const;
 
     /**
@@ -90,7 +90,7 @@ public:
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data) const;
 
     std::expected<BlockVariant, BlockError>
-    getBlockByParam(const BigNumber &id, SearchEnum::BlockParam param) const;
+    getBlockByParam(const std::string &id, SearchEnum::BlockParam param) const;
 
     std::pair<Transaction, BigNumber> getLastTxByHash(const std::string &hash, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxByData(const std::string &data, const TokenId &token) const;
@@ -105,7 +105,7 @@ public:
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(
         const BigNumber &id,
-        BigNumber        from  = -1,
+        BigNumber        from  = BigNumber(-1),
         int              count = 10,
         const ActorId   &token = ActorId()) const;
 
@@ -123,11 +123,12 @@ public:
     void calculationCountBlock();
 
 private:
-    std::pair<Transaction, BigNumber> getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const ActorId &token) const;
+    std::pair<Transaction, BigNumber>
+    getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const ActorId &token) const;
     std::set<Transaction> getTxsByParamInRow(
         const BigNumber    &id,
         SearchEnum::TxParam param,
-        BigNumber           from  = -1,
+        BigNumber           from  = BigNumber(-1),
         int                 count = 10,
         ActorId             token = ActorId()) const;
 
