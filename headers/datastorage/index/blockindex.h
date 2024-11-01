@@ -124,7 +124,7 @@ public:
 
 private:
     std::pair<Transaction, BigNumber>
-    getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const ActorId &token) const;
+    getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const TokenId &tokenId) const;
     std::set<Transaction> getTxsByParamInRow(
         const BigNumber    &id,
         SearchEnum::TxParam param,

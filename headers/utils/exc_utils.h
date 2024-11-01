@@ -34,7 +34,6 @@
 #include "cpp-base64/base64.h"
 #include "utils/bignumber_float.h"
 #include <msgpack.hpp>
-#include "utils/exc_logs.h"
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -55,12 +54,12 @@ using namespace magic_enum::bitwise_operators;
 
 #define FORMAT_ENUM(E)                                                                                       \
     template <>                                                                                              \
-    struct fmt::formatter<E> : formatter<string_view> {                                                      \
+    struct fmt::formatter<E> : formatter<std::string_view> {                                                 \
         template <typename FormatContext>                                                                    \
         auto format(E Enum, FormatContext &ctx) const {                                                      \
             static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
-            string_view value_name = magic_enum::enum_name(Enum);                                            \
+            std::string_view enum_name  = magic_enum::enum_type_name<E>();                                   \
+            std::string_view value_name = magic_enum::enum_name(Enum);                                       \
             return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
         }                                                                                                    \
     };                                                                                                       \

@@ -186,7 +186,7 @@ std::vector<ActorId> AccountController::profilesList() {
     std::vector<ActorId> profiles;
 
     for (auto actorId : profilesJson) {
-        profiles.push_back(actorId.toString().toStdString());
+        profiles.push_back(ActorId(actorId.toString().toStdString()));
     }
 
     return profiles;
@@ -194,7 +194,7 @@ std::vector<ActorId> AccountController::profilesList() {
 
 void AccountController::addToProfileList(const ActorId &actorId) {
     auto profiles = profilesList();
-    profiles.push_back(actorId.toStdString());
+    profiles.push_back(actorId);
     QJsonArray array;
     for (auto &actorId : profiles) {
         array.push_back(actorId.toString());

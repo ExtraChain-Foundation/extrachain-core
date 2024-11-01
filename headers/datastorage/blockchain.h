@@ -163,7 +163,7 @@ public:
      * @return transaction
      */
     std::pair<Transaction, BigNumber>
-    getTransaction(SearchEnum::TxParam type, const std::string &value, const ActorId &token = ActorId());
+    getTransaction(SearchEnum::TxParam type, const std::string &value, const TokenId &token = TokenId());
 
 private:
     /**

@@ -16,28 +16,28 @@ public:
     ~HistoricalChain();
 
 public:
-    bool apply(DFSP::EditSegmentMessage msg);
-    bool remove(DFSP::EditSegmentMessage msg);
-    bool revert(DFSP::EditSegmentMessage msg);
-    bool update(DFSP::EditSegmentMessage msg, const int& num);
+    bool                     apply(DFSP::EditSegmentMessage msg);
+    bool                     remove(DFSP::EditSegmentMessage msg);
+    bool                     revert(DFSP::EditSegmentMessage msg);
+    bool                     update(DFSP::EditSegmentMessage msg, const int& num);
     DFSP::EditSegmentMessage getEditSegmentMessage(const int& num);
     DFSP::EditSegmentMessage getLastEditSegmentMessage();
 
-    DFSP::EditSegmentMessage makeEditSegmentMessage(const DFSP::SegmentMessage& msg,
-                                                    const DFSP::SegmentMessageType& smType);
-    DFSP::EditSegmentMessage makeEditSegmentMessage(const DFSP::DeleteSegmentMessage& msg,
-                                                    const DFSP::SegmentMessageType& smType);
+    DFSP::EditSegmentMessage
+    makeEditSegmentMessage(const DFSP::SegmentMessage& msg, const DFSP::SegmentMessageType& smType);
+    DFSP::EditSegmentMessage
+    makeEditSegmentMessage(const DFSP::DeleteSegmentMessage& msg, const DFSP::SegmentMessageType& smType);
 
-    bool initLocal(const std::string& actor, const std::string& fileName, const std::string& fileHash);
-    bool remove(const std::string& actor, const std::string& fileHash);
+    bool initLocal(const ActorId& actor, const std::string& fileName, const std::string& fileHash);
+    bool remove(const ActorId& actor, const std::string& fileHash);
     bool rename(const std::string& fileHash, const std::string& newFileHash);
 
 private:
-    DBRow makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
-    DBRow getLastRow();
-    DBRow getNextRow(const int& currentNum);
-    DBRow getRow(const int& num);
-    DBRow getRow(const std::string& data);
+    DBRow                    makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
+    DBRow                    getLastRow();
+    DBRow                    getNextRow(const int& currentNum);
+    DBRow                    getRow(const int& num);
+    DBRow                    getRow(const std::string& data);
     DFSP::EditSegmentMessage segmentMessageFromDBRow(const DBRow& dbRow);
 };
 

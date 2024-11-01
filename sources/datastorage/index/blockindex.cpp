@@ -231,10 +231,11 @@ std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(
     return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const ActorId &token) const {
-    BigNumber records    = getRecords();
-    ActorId   tokenActor = token.toStdString();
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(
+    const std::string  &data,
+    SearchEnum::TxParam param,
+    const TokenId      &tokenId) const {
+    BigNumber records = getRecords();
 
     if (records == 0) {
         qDebug() << "[BlockIndex] There no tx's in block index";
@@ -258,7 +259,7 @@ BlockIndex::getLastTxByParam(const std::string &data, SearchEnum::TxParam param,
         auto txs = lastBlock->transactions();
 
         for (const Transaction &tx : txs) {
-            if (tx.token() != tokenActor)
+            if (tx.token() != tokenId)
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
@@ -760,7 +761,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
             dRow.state   = BigNumberFloat(row.at("state"));
             auto actorId = row.at("actorId");
             auto tokenId = row.at("token");
-            dataRows.insert({ { actorId, tokenId }, dRow });
+            dataRows.insert({ { ActorId(actorId), TokenId(tokenId) }, dRow });
         }
 
         auto block = GenesisBlock(

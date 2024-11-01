@@ -16,55 +16,52 @@ std::string DFS::Tables::ActorDirFile::getLastName(DBConnector &db) {
     if (!db.isOpen()) {
         qFatal("DB not opened");
     }
-    auto result = db.select(DFS::Tables::filesTableLast);
-    auto prevRowOpt = result.empty() ? std::optional<DBRow> {} : result[0];
+    auto        result       = db.select(DFS::Tables::filesTableLast);
+    auto        prevRowOpt   = result.empty() ? std::optional<DBRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileName") : "";
     return lastFileName;
 }
 
-DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const std::string &actorId) {
+DBConnector DFS::Tables::ActorDirFile::actorDbConnector(const ActorId &actorId) {
     DBConnector db(actorDbPath(actorId).string());
     db.open();
     return db;
 }
 
-std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const std::string &actorId) {
-    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter()
-        + DFSB::fsMapName;
+std::filesystem::path DFS::Tables::ActorDirFile::actorDbPath(const ActorId &actorId) {
+    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString()
+                       + Utils::platformDelimeter() + DFSB::fsMapName;
     return path;
 }
 
-std::filesystem::path DFS::Tables::ActorDirFile::storjDbPath(const std::string &actorId,
-                                                             const std::string &storjName) {
-    std::string path =
-        DFSB::fsActrRoot + Utils::platformDelimeter() + actorId + Utils::platformDelimeter() + storjName;
+std::filesystem::path
+DFS::Tables::ActorDirFile::storjDbPath(const ActorId &actorId, const std::string &storjName) {
+    std::string path = DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString()
+                       + Utils::platformDelimeter() + storjName;
     return path;
 }
 
-std::vector<DFSP::DirRow> DFS::Tables::ActorDirFile::getDirRows(const std::string &actorId,
-                                                                uint64_t lastModified) {
+std::vector<DFS::DirRow>
+DFS::Tables::ActorDirFile::getDirRows(const ActorId &actorId, uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         return {};
     }
-    std::vector<DFSP::DirRow> dirRows;
-    auto actrDirData =
+    std::vector<DFS::DirRow> dirRows;
+    auto                     actrDirData =
         db.select(fmt::format("SELECT * FROM {} WHERE lastModified > {}", TableName, lastModified));
     for (auto &row : actrDirData) {
-        DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
-                                .fileNamePrev = row["fileNamePrev"],
-                                .filePath = row["filePath"],
-                                .fileName = row["fileName"],
-                                .Actor = actorId,
-                                .fileSize = std::stoull(row["fileSize"]),
-                                .lastModified = std::stoull(row["lastModified"]) };
-        dirRows.push_back(dirRow);
+        auto dirRow = Utils::fromDbRow<DFS::DirRow>(row);
+        if (dirRow.has_value()) {
+            dirRows.push_back(dirRow.value());
+        }
     }
 
     return dirRows;
 }
 
-DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, const std::string &fileName) {
+// TODO: expected?
+DFS::DirRow DFS::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &fileName) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -76,40 +73,27 @@ DFSP::DirRow DFS::Tables::ActorDirFile::getDirRow(const std::string &actorId, co
         return {};
     }
 
-    auto &row = rows[0];
-    DFSP::DirRow dirRow = { .fileHash = row["fileHash"],
-                            .fileNamePrev = row["fileNamePrev"],
-                            .filePath = row["filePath"],
-                            .fileName = row["fileName"],
-                            .fileSize = std::stoull(row["fileSize"]),
-                            .lastModified = std::stoull(row["lastModified"]) };
+    auto &row    = rows[0];
+    auto  dirRow = Utils::fromDbRow<DFS::DirRow>(row);
 
-    return dirRow;
+    return dirRow.value();
 }
 
-bool DFS::Tables::ActorDirFile::addDirRows(const std::string &actorId,
-                                           const std::vector<Packets::DirRow> &dirRows) {
+bool DFS::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::vector<DirRow> &dirRows) {
     std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath = DFSB::fsActrRoot + pathDelim + actorId + pathDelim + DFSB::fsMapName;
+    std::string actrDirFilePath =
+        DFSB::fsActrRoot + pathDelim + actorId.toStdString() + pathDelim + DFSB::fsMapName;
     DBConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         return false;
     }
 
     for (auto &dirRow : dirRows) {
-        if (dirRow.fileHash.empty()) {
-            //Uncommited row below and find out why hash is empty.
-            //qFatal("Oh no why. Filehash is empty.");
+        if (dirRow.hash.empty()) {
+            // Uncommited row below and find out why hash is empty.
+            // qFatal("Oh no why. Filehash is empty.");
         }
-        auto row = DBRow {
-            { "fileName", dirRow.fileName },
-            { "fileHash", dirRow.fileHash },
-            { "fileNamePrev", dirRow.fileNamePrev },
-            { "filePath", dirRow.filePath },
-            { "fileSize", std::to_string(dirRow.fileSize) },
-            { "lastModified", std::to_string(dirRow.lastModified) },
-            { "state", std::to_string(std::to_underlying(DFS::Basic::FileState::Unloaded)) }
-        };
+        auto row = Utils::toDbRow(dirRow);
         actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, row);
     }
 
@@ -133,15 +117,14 @@ std::filesystem::path DFS::Path::convertPathToPlatform(const std::filesystem::pa
 
 std::filesystem::path DFS::Path::filePath(const ActorId &actorId, const std::string &fileName) {
     return DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString() + Utils::platformDelimeter()
-        + fileName;
+           + fileName;
 }
 
 std::filesystem::path DFS::Path::actorPath(const ActorId &actorId) {
-    return DFSB::fsActrRoot +  Utils::platformDelimeter() + actorId.toStdString();
+    return DFSB::fsActrRoot + Utils::platformDelimeter() + actorId.toStdString();
 }
 
-
-int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId) {
+int DFS::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
@@ -158,8 +141,8 @@ int DFS::Tables::ActorDirFile::totalFileSize(const std::string &actorId) {
     return std::stoi(row["SUM(fileSize)"]);
 }
 
-uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &actorId,
-                                                         const std::string &storjName) {
+uint64_t
+DFS::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const std::string &storjName) {
     DBConnector db(storjDbPath(actorId, storjName).string());
     db.open();
     if (!db.isOpen()) {
@@ -172,8 +155,8 @@ uint64_t DFS::Tables::ActorDirFile::dataAmountStoredSize(const std::string &acto
         return 0;
     }
 
-    auto rows = db.select(fmt::format("SELECT SUM(size) from {}", DFSF::TableNameFragments));
-    auto &row = rows[0];
+    auto  rows = db.select(fmt::format("SELECT SUM(size) from {}", DFSF::TableNameFragments));
+    auto &row  = rows[0];
 
     return std::stoull(row["SUM(size)"]);
 }

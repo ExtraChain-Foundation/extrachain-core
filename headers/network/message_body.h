@@ -7,56 +7,55 @@
 #include "utils/exc_utils.h"
 
 enum class MessageType {
-    Custom = 0,
-    NewActor = 1,
-    Actor = 2,
+    Custom     = 0,
+    NewActor   = 1,
+    Actor      = 2,
     ActorCount = 3,
-    ActorAll = 4,
+    ActorAll   = 4,
 
     BlockchainGenesisBlock = 30,
-    BlockchainNewBlock = 31,
-    BlockchainTransaction = 32,
-    BlockchainDataMiningRewardTransaction = 34,
-    BlockchainCoinReward = 35,
+    BlockchainNewBlock     = 31,
+    BlockchainTransaction  = 32,
+    BlockchainCoinReward   = 35,
     BlockchainRequestBlock = 36,
-    BlockchainSync = 37,
-    BlockchainLastSaved = 38,
-    BlockchainAnarchy = 39,
+    BlockchainSync         = 37,
+    BlockchainLastSaved    = 38,
+    BlockchainAnarchy      = 39,
 
-    DfsDirData = 50,
-    DfsLastModified = 51,
-    DfsAddFile = 52,
-    DfsRequestFile = 53,
+    DfsDirData            = 50,
+    DfsLastModified       = 51,
+    DfsAddFile            = 52,
+    DfsRequestFile        = 53,
     DfsRequestFileSegment = 54,
-    DfsRemoveFile = 55,
-    DfsEditSegment = 56,
-    DfsAddSegment = 57,
-    DfsDeleteSegment = 58,
-    DfsSendingFileDone = 59,
-    DfsVerifyList = 60,
-    RequestDfsSize = 61,
-    ResponseDfsSize = 62,
+    DfsRemoveFile         = 55,
+    DfsEditSegment        = 56,
+    DfsAddSegment         = 57,
+    DfsDeleteSegment      = 58,
+    DfsSendingFileDone    = 59,
+    DfsVerifyList         = 60,
+    RequestDfsSize        = 61,
+    ResponseDfsSize       = 62,
     // DfsState = 63,
-    RequestBlockCount = 64,
+    RequestBlockCount  = 64,
     ResponseBlockCount = 65,
 
-    FragmentDataInfo = 90,
+    FragmentDataInfo      = 90,
     FragmentsDataListInfo = 91,
 
-    NewListConnections = 100,
-    GetListConnections = 101,
+    NewListConnections    = 100,
+    GetListConnections    = 101,
     ProcessNewConnections = 102,
 
-    NewNodeConnected = 110,
+    NewNodeConnected     = 110,
     SpreadNodeConnection = 111,
-    RequestListNodes = 112,
+    RequestListNodes     = 112,
 
     ShareConnections = 113,
-    Accrual = 120,
+    Accrual          = 120,
 
-    VPNHandshake = 241,
-    VPNConnection = 242,
-    VPNDisconnect = 243,
+    VPNHandshake        = 241,
+    VPNConnection       = 242,
+    VPNDisconnect       = 243,
     VPNUpdateConnection = 244,
 
     Unknown = 250
@@ -73,11 +72,11 @@ MSGPACK_ADD_ENUM(MessageStatus)
 FORMAT_ENUM(MessageStatus)
 
 struct MessageBody {
-    MessageType message_type;
+    MessageType   message_type;
     MessageStatus status;
-    std::string message_id;
-    ActorId sender_id;
-    std::string data;
+    std::string   message_id;
+    ActorId       sender_id;
+    std::string   data;
 
     std::string serialize() const {
         return MessagePack::serialize(*this);
@@ -91,21 +90,26 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
-inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
-                                const ActorId &sender, std::string to_message_id) {
+inline MessageBody make_message(
+    const std::string &data,
+    MessageType        type,
+    MessageStatus      status,
+    const ActorId     &sender,
+    std::string        to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         qFatal("make message error: incorrect message id size");
     }
 
-    std::string randomId = Utils::calcHash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                           + std::to_string(QRandomGenerator::global()->bounded(100000)))
+    std::string randomId = Utils::calcHash(
+                               std::to_string(QDateTime::currentSecsSinceEpoch())
+                               + std::to_string(QRandomGenerator::global()->bounded(100000)))
                                .substr(0, 15); // temp
 
     MessageBody message = { .message_type = type,
-                            .status = status,
-                            .message_id = !to_message_id.empty() ? to_message_id : randomId,
-                            .sender_id = sender.toStdString(),
-                            .data = data };
+                            .status       = status,
+                            .message_id   = !to_message_id.empty() ? to_message_id : randomId,
+                            .sender_id    = sender,
+                            .data         = data };
 
     return message;
 }
@@ -119,19 +123,30 @@ MSGPACK_ADD_ENUM(VPNType)
 FORMAT_ENUM(VPNType)
 
 struct VPNMessage {
-    VPNType vpnType;
-    int resultChainIndex;
-    std::set<int> lockedChainIndex;
-    std::string countryEndpoint;
-    int proxyCounter;
-    std::set<std::string> networkIdentifiersToIgnore;
-    std::string localIP;
-    std::string publicIP;
-    std::string publicKeyFile;
-    std::string uuid;
+    VPNType                  vpnType;
+    int                      resultChainIndex;
+    std::set<int>            lockedChainIndex;
+    std::string              countryEndpoint;
+    int                      proxyCounter;
+    std::set<std::string>    networkIdentifiersToIgnore;
+    std::string              localIP;
+    std::string              publicIP;
+    std::string              publicKeyFile;
+    std::string              uuid;
     std::vector<std::string> allIPsToSet;
 
-    MSGPACK_DEFINE(vpnType, resultChainIndex, lockedChainIndex, countryEndpoint, proxyCounter, networkIdentifiersToIgnore, localIP, publicIP, publicKeyFile, uuid, allIPsToSet)
+    MSGPACK_DEFINE(
+        vpnType,
+        resultChainIndex,
+        lockedChainIndex,
+        countryEndpoint,
+        proxyCounter,
+        networkIdentifiersToIgnore,
+        localIP,
+        publicIP,
+        publicKeyFile,
+        uuid,
+        allIPsToSet)
 };
 
 #endif // MESSAGEBODY_H

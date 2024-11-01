@@ -366,22 +366,22 @@ Blockchain::getBlock(SearchEnum::BlockParam type, const std::string &value) {
 }
 
 std::pair<Transaction, BigNumber>
-Blockchain::getTransaction(SearchEnum::TxParam type, const std::string &value, const ActorId &token) {
+Blockchain::getTransaction(SearchEnum::TxParam type, const std::string &value, const TokenId &token) {
     switch (type) {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
-        return getTxBySenderOrReceiverAndToken(value, token);
+        return getTxBySenderOrReceiverAndToken(ActorId(value), token);
     case SearchEnum::TxParam::Hash:
         return getTxByHash(value, token);
     case SearchEnum::TxParam::User:
-        return getTxByUser(value, token);
+        return getTxByUser(ActorId(value), token);
     case SearchEnum::TxParam::UserApprover:
-        return getTxByApprover(value, token);
+        return getTxByApprover(ActorId(value), token);
     case SearchEnum::TxParam::UserReceiver:
-        return getTxByReceiver(value, token);
+        return getTxByReceiver(ActorId(value), token);
     case SearchEnum::TxParam::UserSender:
-        return getTxBySender(value, token);
+        return getTxBySender(ActorId(value), token);
     case SearchEnum::TxParam::UserSenderOrReceiver:
-        return getTxBySenderOrReceiver(value, token);
+        return getTxBySenderOrReceiver(ActorId(value), token);
     default:
         qWarning() << "Can't get tx: incorrect SearchEnum::TxParam. Value:" << value;
         return { Transaction(), BigNumber("-1") };

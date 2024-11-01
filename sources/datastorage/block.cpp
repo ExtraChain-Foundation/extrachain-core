@@ -154,7 +154,7 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::EmptySignatures;
     }
 
-    auto it = this->m_signatures.find(actor.id().toStdString());
+    auto it = this->m_signatures.find(actor.id());
 
     if (it == this->m_signatures.end()) {
         return BlockSignError::NoActorSignature;

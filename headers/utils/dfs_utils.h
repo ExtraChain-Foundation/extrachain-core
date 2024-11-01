@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "datastorage/actor.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
@@ -12,7 +13,7 @@
 #include <fmt/format.h>
 #include <msgpack.hpp>
 
-class ActorId;
+#include "utils/exc_magic.h"
 
 namespace Tools {
 template <typename T>
@@ -77,35 +78,57 @@ namespace Basic {
     };
 }
 
+struct DirRow {
+    ActorId actorId;
+
+    std::string fileId;
+    std::string fileIdPrev;
+
+    std::string hash;
+
+    std::string folder;
+    std::string name;
+
+    uint64_t              size;
+    uint64_t              lastModified;
+    DFS::Basic::FileState state;
+
+    std::string visualPath() const {
+        return folder + "/" + name;
+    }
+
+    MSGPACK_DEFINE(actorId, fileId, fileIdPrev, hash, folder, name, size, lastModified, state)
+};
+
 namespace Packets {
     struct ResponseDfsSize {
-        std::string Actor;
-        uint64_t    Size;
+        ActorId  Actor;
+        uint64_t Size;
 
         MSGPACK_DEFINE(Actor, Size)
     };
 
     struct RequestDfsSize {
-        std::string Actor;
+        ActorId Actor;
 
         MSGPACK_DEFINE(Actor)
     };
 
     struct ResponseBlockCount {
-        std::string Actor;
-        BigNumber   blockCount;
+        ActorId   Actor;
+        BigNumber blockCount;
 
         MSGPACK_DEFINE(Actor, blockCount)
     };
 
     struct RequestBlockCount {
-        std::string Actor;
+        ActorId Actor;
 
         MSGPACK_DEFINE(Actor)
     };
 
     struct AddFileMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileName;
         std::string FileHash;
         std::string Path;
@@ -114,7 +137,7 @@ namespace Packets {
     };
 
     struct RequestFileSegmentMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileName;
         std::string FileHash;
         std::string Path;
@@ -123,13 +146,13 @@ namespace Packets {
     };
 
     struct RemoveFileMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileName;
         MSGPACK_DEFINE(Actor, FileName)
     };
 
     struct SegmentMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileName;
         std::string FileHash;
         std::string Data;
@@ -138,14 +161,14 @@ namespace Packets {
     };
 
     enum SegmentMessageType {
-        add = 0,
-        insert = 1,
+        add     = 0,
+        insert  = 1,
         replace = 2,
-        remove = 3
+        remove  = 3
     };
 
     struct EditSegmentMessage {
-        std::string        Actor;
+        ActorId            Actor;
         std::string        FileName;
         std::string        FileHash;
         std::string        NewFileHash;
@@ -156,7 +179,7 @@ namespace Packets {
     };
 
     struct DeleteSegmentMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileName;
         std::string FileHash;
         uint64_t    Offset;
@@ -164,19 +187,8 @@ namespace Packets {
         MSGPACK_DEFINE(Actor, FileName, FileHash, Offset, Size)
     };
 
-    struct DirRow {
-        std::string fileHash;
-        std::string fileNamePrev;
-        std::string filePath;
-        std::string fileName;
-        std::string Actor;
-        uint64_t    fileSize;
-        uint64_t    lastModified;
-        MSGPACK_DEFINE(fileHash, fileNamePrev, filePath, fileName, Actor, fileSize, lastModified)
-    };
-
     struct VerifyFileMessage {
-        std::string Actor;
+        ActorId     Actor;
         std::string FileHash;
         std::string FileName;
         bool        Verified = false;
@@ -211,20 +223,20 @@ namespace Packets {
         ReferenceData() {
         }
 
-        ReferenceData(std::string _key, std::string _access) : key(_key), access(_access) {
-        };
+        ReferenceData(std::string _key, std::string _access)
+            : key(_key)
+            , access(_access) { };
 
         std::string toString() const {
-            return std::string(
-                fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
+            return std::string(fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
         }
     };
 }
 
 namespace Fragments {
-    static const std::string Extension                 = ".storj";
-    static const std::string ExtensionJournal          = ".storj-journal";
-    static const std::string TableNameFragments        = "Fragments";
+    static const std::string Extension          = ".storj";
+    static const std::string ExtensionJournal   = ".storj-journal";
+    static const std::string TableNameFragments = "Fragments";
     static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
                                                          + "("
                                                          "pos        INTEGER PRIMARY KEY NOT NULL, "
@@ -237,16 +249,16 @@ namespace Fragments {
     static const std::string GetSizeFragmants  = "SELECT SUM(size) FROM Fragments";
 
     struct FragmentsInfo {
-        std::string                    actor;
+        ActorId                        actor;
         std::string                    fileHash;
         std::string                    filePath;
         uint64_t                       fileSize;
         std::list<std::pair<int, int>> fragmentPositionList;
 
         void print() const {
-            qDebug() << "actor: [" << actor.c_str() << "]"
-                << "fileHash" << fileHash.c_str() << "]"
-                << "filePath" << filePath.c_str() << "]";
+            qDebug() << "actor: [" << actor << "]"
+                     << "fileHash" << fileHash.c_str() << "]"
+                     << "filePath" << filePath.c_str() << "]";
             for (const auto& pair : fragmentPositionList) {
                 qDebug() << pair.first << pair.second;
             }
@@ -271,7 +283,7 @@ namespace Historical {
         }
     };
 
-    static const std::string TableNameHC                = "HistoricalChain";
+    static const std::string TableNameHC = "HistoricalChain";
     static const std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
                                                           + "("
                                                           "num        INTEGER PRIMARY KEY NOT NULL,"
@@ -285,7 +297,7 @@ namespace Historical {
 namespace Reward {
     static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
     struct CoinReward {
-        std::string    Actor;
+        ActorId        Actor;
         BigNumberFloat Coin;
         MSGPACK_DEFINE(Actor, Coin)
     };
@@ -294,49 +306,57 @@ namespace Reward {
         Base,
         Test
     };
-        
+
     struct RequestReward {
-        std::string     Actor;
+        ActorId         Actor;
         uint64_t        DataStoredSize;
         TypeFunctioning TypeFunctioningObj;
         BigNumberFloat  RewardAmount;
         std::uint64_t   BytesSent;
         std::uint64_t   BytesReceived;
         BigNumber       BlocksStored;
-        MSGPACK_DEFINE(Actor, DataStoredSize, TypeFunctioningObj, RewardAmount, BytesSent, BytesReceived, BlocksStored)
+        MSGPACK_DEFINE(
+            Actor,
+            DataStoredSize,
+            TypeFunctioningObj,
+            RewardAmount,
+            BytesSent,
+            BytesReceived,
+            BlocksStored)
     };
 }
 
 namespace Tables {
     namespace ActorDirFile {
-        static const std::string TableName        = "FilesTable";
+        static const std::string TableName = "Files";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                                     + "("
-                                                    "fileName     TEXT PRIMARY KEY NOT NULL,"
-                                                    "fileNamePrev TEXT             NOT NULL,"
-                                                    "fileHash     TEXT             NOT NULL,"
-                                                    "filePath     TEXT             NOT NULL,"
-                                                    "fileSize     INTEGER          NOT NULL,"
-                                                    "lastModified INTEGER          NOT NULL,"
-                                                    "state        INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
+                                                    "fileId            TEXT PRIMARY KEY NOT NULL,"
+                                                    "fileIdPrev        TEXT             NOT NULL,"
+                                                    "hash          TEXT             NOT NULL,"
+                                                    "folder        TEXT             NOT NULL,"
+                                                    "name          TEXT             NOT NULL,"
+                                                    "size          INTEGER          NOT NULL,"
+                                                    "lastModified  INTEGER          NOT NULL,"
+                                                    "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);
         std::string        getLastName(DBConnector& db);
-        int                totalFileSize(const std::string& actorId);
-        uint64_t           dataAmountStoredSize(const std::string& actorId, const std::string& storjName);
+        int                totalFileSize(const ActorId& actorId);
+        uint64_t           dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
         // TODO: optional
-        DBConnector actorDbConnector(const std::string& actorId);
-        std::filesystem::path actorDbPath(const std::string& actorId);
-        std::filesystem::path storjDbPath(const std::string& actorId, const std::string& storjName);
-        DFS::Packets::DirRow getDirRow(const std::string& actorId, const std::string& fileHash);
-        std::vector<DFS::Packets::DirRow> getDirRows(const std::string& actorId, uint64_t lastModified = 0);
-        bool addDirRows(const std::string& actorId, const std::vector<DFS::Packets::DirRow>& dirRows);
+        DBConnector              actorDbConnector(const ActorId& actorId);
+        std::filesystem::path    actorDbPath(const ActorId& actorId);
+        std::filesystem::path    storjDbPath(const ActorId& actorId, const std::string& storjName);
+        DFS::DirRow              getDirRow(const ActorId& actorId, const std::string& fileHash);
+        std::vector<DFS::DirRow> getDirRows(const ActorId& actorId, uint64_t lastModified = 0);
+        bool                     addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
     }
 
     namespace DirsFile {
-        static const std::string TableName        = "Dirs";
+        static const std::string TableName = "Dirs";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                                     + "("
                                                     "actorId      TEXT PRIMARY KEY NOT NULL,"
@@ -348,12 +368,12 @@ namespace Tables {
             "parameter    TEXT    NOT NULL, "
             "value        TEXT    NOT NULL) ",
             ParametersDfs);
-        static const std::string BytesLimit      = "bytes_limit";
+        static const std::string BytesLimit = "bytes_limit";
         static const std::string BytesLimitQuery =
             fmt::format("SELECT * FROM {} WHERE parameter = '{}'", ParametersDfs, BytesLimit);
     }
 
-    static const std::string permissionTable       = "PermissionTable";
+    static const std::string permissionTable = "PermissionTable";
     static const std::string permissionTableCreate = "CREATE TABLE IF NOT EXISTS " + permissionTable
                                                      + " ("
                                                      "fileHash   TEXT NOT NULL, "
@@ -374,36 +394,47 @@ namespace Path {
 }
 
 namespace Balances {
-    const std::string balanceDbPath      = "blockchain/balance.db";
-    const std::string balancesTableName  = "balances";
-    const std::string createBalanceTable = "CREATE TABLE IF NOT EXISTS balances("
+    const std::string balanceDbPath     = "blockchain/balance.db";
+    const std::string balancesTableName = "balances";
+    const std::string createBalanceTable =
+        "CREATE TABLE IF NOT EXISTS balances("
         "actor_id       TEXT   NOT NULL, "
         "balance       TEXT   NOT NULL, "
         "last_update    TEXT   NOT NULL );";
     const std::string loadBalancesQuery = "SELECT * FROM balances";
 
     struct Balance {
-        std::string actor   = "";
+        ActorId     actor;
         std::string balance = "";
     };
 }
 
 enum class Encryption {
-    Public = 0,
+    Public    = 0,
     Encrypted = 1
 };
 }
 
-namespace DFSP = DFS::Packets;
-namespace DFSF = DFS::Fragments;
-namespace DFST = DFS::Tables;
-namespace STDFS = std::filesystem;
-namespace DFSHC = DFS::Historical;
-namespace DFSB = DFS::Basic;
+namespace DFSP     = DFS::Packets;
+namespace DFSF     = DFS::Fragments;
+namespace DFST     = DFS::Tables;
+namespace STDFS    = std::filesystem;
+namespace DFSHC    = DFS::Historical;
+namespace DFSB     = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
-namespace DFSR = DFS::Reward;
+namespace DFSR     = DFS::Reward;
 
+FORMAT_ENUM(DFS::Basic::FileState)
+FORMAT_ENUM(DFS::Packets::SegmentMessageType)
+FORMAT_ENUM(DFS::Reward::TypeFunctioning)
+MSGPACK_ADD_ENUM(DFS::Basic::FileState)
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
+
+BOOST_DESCRIBE_STRUCT(
+    DFS::DirRow,
+    (),
+    (actorId, fileId, fileIdPrev, hash, folder, name, size, lastModified, state))
+// MAKE_MAGICAL(DFS::DirRow)
 
 #endif // DFS_UTILS_H

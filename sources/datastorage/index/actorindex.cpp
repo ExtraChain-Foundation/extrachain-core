@@ -108,8 +108,8 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     if (node->accountController()->empty())
         return;
 
-    std::vector<std::string> result = allActorsStd();
-    result.erase(std::remove(result.begin(), result.end(), ignoredActorId.toStdString()), result.end());
+    auto result = allActors();
+    result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
     if (!result.empty()) {
         node->network()->send_message(
             result,
@@ -149,8 +149,8 @@ void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
     }
 }
 
-void ActorIndex::handleNewAllActors(const std::vector<std::string> &actors) {
-    for (const std::string &actor : actors)
+void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
+    for (const auto &actor : actors)
         getActor(actor);
 }
 
@@ -174,8 +174,8 @@ std::string ActorIndex::getFolderPath() const {
 QString ActorIndex::buildFilePath(const ActorId &id) const {
     QByteArray Id = id.toByteArray();
 
-    QByteArray section = Id.right(SECTION_NAME_SIZE);
-    QString pathToFolder = QString::fromStdString(folderPath) + section;
+    QByteArray section      = Id.right(SECTION_NAME_SIZE);
+    QString    pathToFolder = QString::fromStdString(folderPath) + section;
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {
@@ -217,7 +217,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
     //     qFatal("Try to add actor with id %s", id.toByteArray().constData());
 
     QString path = buildFilePath(id);
-    QFile file(path);
+    QFile   file(path);
     qDebug() << "[ActorIndex] Saving the file:" << path;
 
     if (file.exists()) {
@@ -247,7 +247,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
     QString filePath = QString::fromStdString(actorPath(id));
-    QFile file(filePath);
+    QFile   file(filePath);
     if (!file.exists()) {
         qDebug() << "[ActorIndex] File with path" << filePath << "not found";
         return QByteArray();
@@ -259,7 +259,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 }
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
-    int result = this->add(actor.id(), actor.toJson());
+    int  result  = this->add(actor.id(), actor.toJson());
     auto actorId = actor.id().toStdString();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
@@ -281,27 +281,14 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     return result;
 }
 
-QByteArrayList ActorIndex::allActors() {
-    QByteArrayList result;
+std::vector<ActorId> ActorIndex::allActors() {
+    std::vector<ActorId> result;
 
     DBConnector db(folderPath + "actors");
     db.open();
     auto actors = db.select("SELECT id FROM Actors");
     for (auto &actor : actors) {
-        result << actor["id"].data();
-    }
-
-    return result;
-}
-
-std::vector<std::string> ActorIndex::allActorsStd() {
-    std::vector<std::string> result;
-
-    DBConnector db(folderPath + "actors");
-    db.open();
-    auto actors = db.select("SELECT id FROM Actors");
-    for (auto &actor : actors) {
-        result.push_back(actor["id"]);
+        result.push_back(ActorId(actor["id"]));
     }
 
     return result;

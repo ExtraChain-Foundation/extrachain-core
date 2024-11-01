@@ -10,16 +10,16 @@ FileDataManager::FileDataManager(QObject *parent)
     updateAllTree();
 }
 
-QJsonDocument FileDataManager::getFileTree(std::string actorId, const bool &shouldUpdateList) {
+QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUpdateList) {
     QJsonDocument document;
-    QJsonArray array;
+    QJsonArray    array;
 
-    if (actorId.empty() && savedActorId.empty()) {
+    if (actorId.isZero() && savedActorId.isZero()) {
         qDebug() << "actor id and saved actor id are empty.";
         return document;
     }
 
-    if (actorId.empty()) {
+    if (actorId.isZero()) {
         actorId = savedActorId;
     }
 
@@ -42,8 +42,8 @@ QJsonDocument FileDataManager::getFileTree(std::string actorId, const bool &shou
     return document;
 }
 
-std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId) {
-    const auto pathToActorFolder = DFS::Path::actorPath(ActorId(actorId));
+std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
+    const auto            pathToActorFolder = DFS::Path::actorPath(actorId);
     std::vector<FileData> fileStructs;
 
     for (const auto &entry : std::filesystem::directory_iterator(pathToActorFolder)) {
@@ -64,8 +64,8 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
                 } else {
                     auto rows = db.select(DFSF::GetSizeFragmants);
                     if (!rows.empty()) {
-                        const int sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
-                        const auto fileSize = entry.file_size();
+                        const int  sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
+                        const auto fileSize      = entry.file_size();
                         if (fileSize == sizeFragments) {
                             status = FileStatus::Downloaded;
                         } else if (fileSize > sizeFragments) {
@@ -77,8 +77,9 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
             }
         }
 
-        FileData fileStruct =
-            FileData { .nameFile = entry.path().filename().string(), .pathFile = entry.path().string(), .status = status };
+        FileData fileStruct = FileData { .nameFile = entry.path().filename().string(),
+                                         .pathFile = entry.path().string(),
+                                         .status   = status };
         fileStructs.emplace_back(fileStruct);
     }
 
@@ -88,7 +89,7 @@ std::vector<FileData> FileDataManager::updateFileList(const std::string &actorId
     return fileStructs;
 }
 
-const std::map<std::string, std::vector<FileData>> &FileDataManager::getCachedData() const {
+const std::map<ActorId, std::vector<FileData>> &FileDataManager::getCachedData() const {
     return cachedData;
 }
 
@@ -120,13 +121,13 @@ QJsonObject FileDataManager::getFileDataByName(const std::string &nameFile, cons
     return object;
 }
 
-QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus,
-                                                    const bool &shouldUpdateList) {
+QJsonDocument
+FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
     if (shouldUpdateList)
         files = updateFileList(savedActorId);
 
     QJsonDocument document;
-    QJsonArray array;
+    QJsonArray    array;
 
     for (const auto &file : files) {
         if (file.status != fileStatus)
@@ -142,14 +143,14 @@ QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus
     return document;
 }
 
-void FileDataManager::setActorId(const std::string &actorId) {
+void FileDataManager::setActorId(const ActorId &actorId) {
     savedActorId = actorId;
 }
 
 void FileDataManager::updateAllTree() {
     for (const auto &entry : std::filesystem::directory_iterator(DFSB::fsActrRoot)) {
         if (entry.is_directory()) {
-            const std::string actorId = entry.path().filename().string();
+            const auto actorId = ActorId(entry.path().filename().string());
             updateFileList(actorId);
         }
     }

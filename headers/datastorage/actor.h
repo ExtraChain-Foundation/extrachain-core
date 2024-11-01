@@ -50,7 +50,7 @@ FORMAT_ENUM(ActorType)
 class EXTRACHAIN_EXPORT ActorId {
 public:
     ActorId();
-    ActorId(const std::string &actorId);
+    explicit ActorId(const std::string &actorId);
     ActorId(const ActorId &other);
     ActorId(ActorId &&other) noexcept;
 
@@ -237,7 +237,7 @@ public:
 
         Actor<T> actor;
         auto     array = QJsonDocument::fromJson(serialized).array();
-        actor.setId(array[0].toString().toStdString());
+        actor.setId(ActorId(array[0].toString().toStdString()));
         actor.setType(ActorType(array[1].toInt()));
         auto pub = ByteArray::fromBase64(array[2].toString()).toArray<32>();
 

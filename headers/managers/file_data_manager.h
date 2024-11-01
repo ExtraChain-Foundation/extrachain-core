@@ -1,5 +1,7 @@
 #pragma once
 
+#include "datastorage/actor.h"
+
 #include <QObject>
 #include <vector>
 
@@ -26,26 +28,27 @@ struct FileData {
 
 class FileDataManager : public QObject {
     Q_OBJECT
+
 public:
     FileDataManager(QObject *parent = nullptr);
-    QJsonDocument getFileTree(std::string actorId = "", const bool &shouldUpdateList = false);
+    QJsonDocument getFileTree(ActorId actorId = ActorId(), const bool &shouldUpdateList = false);
     bool          updateStatusByNameStatus(const std::string &nameFile, const FileStatus &newStatus);
     QJsonObject   getFileDataByName(const std::string &nameFile, const bool &shouldUpdateList = false);
     QJsonDocument getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList = false);
-    void          setActorId(const std::string &actorId);
+    void          setActorId(const ActorId &actorId);
     void          updateAllTree();
 
-    const std::map<std::string, std::vector<FileData>> &getCachedData() const;
+    const std::map<ActorId, std::vector<FileData>> &getCachedData() const;
 
 signals:
     void structuraChanged(FileData fileStruct);
     void statusChanged(FileData fileStruct);
 
 protected:
-    std::vector<FileData> updateFileList(const std::string &actorId);
+    std::vector<FileData> updateFileList(const ActorId &actorId);
 
 private:
-    std::vector<FileData>                        files;
-    std::map<std::string, std::vector<FileData>> cachedData;
-    std::string                                  savedActorId;
+    std::vector<FileData>                    files;
+    std::map<ActorId, std::vector<FileData>> cachedData;
+    ActorId                                  savedActorId;
 };

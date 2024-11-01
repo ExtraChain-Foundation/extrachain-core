@@ -305,7 +305,7 @@ bool ExtraChainNode::importUser(
     file.write(ByteArray(profileBytesEncrypted).toQByteArray());
     file.close();
 
-    m_accountController->addToProfileList(profile["main"].toString().toStdString());
+    m_accountController->addToProfileList(ActorId(profile["main"].toString().toStdString()));
 
     return true;
 }
@@ -529,11 +529,11 @@ void ExtraChainNode::connectSignals() {
         &TokenManager::sendToken,
         this,
         [=, this](const ActorId& actorId, const QString& pathToJson) {
-            auto actor = m_accountController->currentProfile().getActor(actorId);
-            m_dfs->addLocalFile(
-                actor,
+            m_dfs->storeFile(
+                actorId,
                 pathToJson.toStdString(),
-                "contract/token-description.json",
+                "contract",
+                "token-description.json",
                 DFS::Encryption::Public);
         });
     connect(m_dfs, &DfsController::checkIsContract, m_tokenManager, &TokenManager::checkIsContract);
@@ -556,7 +556,7 @@ void ExtraChainNode::prepareFolders() {
 
 void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
-    DFSP::RequestDfsSize msg { actorId.toStdString() };
+    DFSP::RequestDfsSize msg { .Actor = actorId };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
 }

@@ -123,9 +123,8 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     int addActor(const Actor<KeyPublic> &actor);
-    QByteArrayList allActors();
-    std::vector<std::string> allActorsStd();
-    void handleNewAllActors(const std::vector<std::string> &actors);
+    std::vector<ActorId> allActors();
+    void handleNewAllActors(const std::vector<ActorId> &actors);
 
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);

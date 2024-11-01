@@ -121,34 +121,41 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (node->isClientApp() && requestListNodes)
             send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
     }
-    connect(service, &WebSocketService::shareConnections, this, [&](const std::string& identifier, const QString ip, const quint16 port)
-            {
-                qInfo() << "shareConnections" << identifier << ip << port;
-                bool isUpdated = false;
-                auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-                for (auto it = m_reconnectionsToIdentifierLocked->begin();
-                     it != m_reconnectionsToIdentifierLocked->end();
-                     ++it) {
-                    if (it->first.ip == ip && it->first.port == port)
-                    {
-                        qInfo() << "shareConnections updated";
-                        isUpdated = true;
-                        it->second = QString::fromStdString(identifier);
-                    }
+    connect(
+        service,
+        &WebSocketService::shareConnections,
+        this,
+        [&](const std::string &identifier, const QString ip, const quint16 port) {
+            qInfo() << "shareConnections" << identifier << ip << port;
+            bool isUpdated                         = false;
+            auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
+            for (auto it = m_reconnectionsToIdentifierLocked->begin();
+                 it != m_reconnectionsToIdentifierLocked->end();
+                 ++it) {
+                if (it->first.ip == ip && it->first.port == port) {
+                    qInfo() << "shareConnections updated";
+                    isUpdated  = true;
+                    it->second = QString::fromStdString(identifier);
                 }
+            }
 
-                if (!isUpdated)
-                    m_reconnectionsToIdentifier->emplace(
-                        NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
-                        QString::fromStdString(identifier));
+            if (!isUpdated)
+                m_reconnectionsToIdentifier->emplace(
+                    NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
+                    QString::fromStdString(identifier));
 
-                auto        mainActor = node->accountController()->mainActor();
-                MessageBody message   =
-                    make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
-                auto        serialized = message.serialize();
-                auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
-                this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
-            });
+            auto        mainActor = node->accountController()->mainActor();
+            MessageBody message =
+                make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
+            auto serialized = message.serialize();
+            auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
+            this->sendMessage(
+                serialized + sign,
+                Config::Net::TypeSend::Focused,
+                identifier,
+                MessageType::ShareConnections,
+                MessageStatus::Request);
+        });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -558,7 +565,7 @@ void NetworkManager::messageReceived(
             auto ignoredActorId = MessagePack::deserialize<ActorId>(serialized);
             node->actorIndex()->handleGetAllActor(ignoredActorId, messageId);
         } else if (status == MessageStatus::Response) {
-            auto actors = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            auto actors = MessagePack::deserialize<std::vector<ActorId>>(serialized);
             node->actorIndex()->handleNewAllActors(actors);
         }
         break;
@@ -572,7 +579,7 @@ void NetworkManager::messageReceived(
             node->dfs()->sendDirData(actorId, 0, messageId);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<DFSP::DirRow>>>(serialized);
+                MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::DirRow>>>(serialized);
             node->dfs()->addDirData(actorId, dirRows);
         }
         break;
@@ -589,7 +596,7 @@ void NetworkManager::messageReceived(
     }
     case MessageType::DfsRequestFile: {
         auto [actorId, fileName] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        node->dfs()->sendFile(actorId.toStdString(), fileName, messageId);
+        node->dfs()->sendFile(actorId, fileName, messageId);
         break;
     }
     case MessageType::DfsRequestFileSegment: {
@@ -952,7 +959,8 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calcHash(
-            ByteArray(key.publicKey()).toString() + node->accountController()->mainActor()->id().toString().toStdString() + salt,
+            ByteArray(key.publicKey()).toString()
+                + node->accountController()->mainActor()->id().toString().toStdString() + salt,
             Utils::HashEncode::Sha3_512)
             .substr(0, 64);
 }
@@ -1022,14 +1030,12 @@ std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
         });
 }
 
-QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
-{
+QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     QString res;
     auto    m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it) {
-        if (it->first.ip == ip && it->first.port == port)
-        {
+        if (it->first.ip == ip && it->first.port == port) {
             res = it->second;
             break;
         }
@@ -1037,8 +1043,9 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port)
     return res;
 }
 
-void NetworkManager::sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                            const std::string &receiver_identifier)
-{
+void NetworkManager::sendNetworkMessageSlot(
+    const std::string    &serialized_message,
+    Config::Net::TypeSend type_send,
+    const std::string    &receiver_identifier) {
     sendMessage(serialized_message, type_send, receiver_identifier);
 }

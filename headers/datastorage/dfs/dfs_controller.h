@@ -19,6 +19,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <QThread>
 
 #include "datastorage/actor.h"
 #include "datastorage/dfs/fragment_storage.h"
@@ -33,20 +34,29 @@
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 
-#include <QThread>
+enum class DfsError {
+    NotExists,
+    NotFile,
+    NotReadable,
+    StorageFull,
+    AlreadyExists,
+    DirError
+};
+
 class ThreadAddFiles;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
 private:
-    ExtraChainNode                             *node;
-    uint64_t m_bytesLimit = 10995116277760;
-    uint64_t m_sizeTaken = 0;
+    ExtraChainNode *node;
+    uint64_t        m_bytesLimit = 10995116277760;
+    uint64_t        m_sizeTaken  = 0;
+    // TODO: for map ActorId, fileName
     std::map<std::string, DFSP::AddFileMessage> files;
-    std::vector<std::string> m_compliteFiles;
-    std::vector<std::string> m_unsynchonizedDirs;
-    uint64_t m_totalDfsSize = 0;
-    std::vector<DFSP::DirRow> m_dirRows;
+    std::vector<std::string>                    m_compliteFiles;
+    std::vector<ActorId>                        m_unsynchonizedDirs;
+    uint64_t                                    m_totalDfsSize = 0;
+    std::vector<DFS::DirRow>                    m_dirRows;
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -55,87 +65,95 @@ public:
     void initializeActor(const ActorId &actorId);
 
     // Internal use only
-    std::string addLocalFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
-                             std::string targetVirtualFilePath, DFS::Encryption securityLevel);
-    bool removeLocalFile(const std::string &actorId, const std::string &fileHash);
+    std::expected<std::string, DfsError> storeFile(
+        const ActorId               &actorId,
+        const std::filesystem::path &filePath,
+        const std::string           &visualPath,
+        const std::string           &visualName,
+        DFS::Encryption              securityLevel);
+    bool removeLocalFile(const ActorId &actorId, const std::string &fileHash);
     // visualMoveFile
 
     // External interfaces
     std::string addFile(const DFSP::AddFileMessage &msg, bool loadBytes);
     std::string getFileFromStorage(ActorId owner, std::string fileName);
-    bool removeFile(const DFSP::RemoveFileMessage &msg);
-    bool renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
+    bool        removeFile(const DFSP::RemoveFileMessage &msg);
+    bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
     // Unique file ID: hash+msec+salt
     std::string createFileName(std::filesystem::path file);
-    DBRow makeActrDirDBRow(std::string fileName, std::string fileNamePrev, std::string fileHash,
-                           std::string filePath, uint64_t fileSize);
-    uint64_t sizeTaken() const;
-    uint64_t totalDfsSize() const;
-    void increaseSizeTaken(uintmax_t value);
-    void insertToFiles(DFSP::AddFileMessage msg);
+    uint64_t    sizeTaken() const;
+    uint64_t    totalDfsSize() const;
+    void        increaseSizeTaken(uintmax_t value);
+    void        insertToFiles(DFSP::AddFileMessage msg);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
-    uint64_t calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
-    std::string makeReferenceFile(const std::string &actor, const std::string &nameFile,
-                                  const DFSP::ReferenceData &referenceData);
+    uint64_t    calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
+    std::string makeReferenceFile(
+        const ActorId             &actor,
+        const std::string         &nameFile,
+        const DFSP::ReferenceData &referenceData);
 
-    void dataFromReferenceString(const std::string &referenceStr, std::string &actor,
-                                 std::string &nameFile,
-                                 DFSP::ReferenceData &referenceData);
+    void dataFromReferenceString(
+        const std::string   &referenceStr,
+        std::string         &actor,
+        std::string         &nameFile,
+        DFSP::ReferenceData &referenceData);
 
 private:
-    bool insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
-    bool removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
-    uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
-    uint64_t calculateFilesSize(const std::string &folder = DFSB::fsActrRoot) const;
+    bool        insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
+    bool        removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
+    uint64_t    calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
+    uint64_t    calculateFilesSize(const std::string &folder = DFSB::fsActrRoot) const;
     std::string extractNextFragment();
-    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset,
-                                uint64_t fragmentSize);
+    std::string
+    extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset, uint64_t fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
-    void loadBytesLimit();
-    void eraseFirstUnsynchronizedDir();
-    void removeRowFromDB(const DFSP::RemoveFileMessage &msg);
-    void requestFileSegment(const DFSP::DirRow &row);
+    void        loadBytesLimit();
+    void        eraseFirstUnsynchronizedDir();
+    void        removeRowFromDB(const DFSP::RemoveFileMessage &msg);
+    void        requestFileSegment(const DFS::DirRow &row);
     void updateFileState(const ActorId &actorId, const std::string fileName, DFS::Basic::FileState state);
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
     void sendSizeReponseMsg(const DFSP::RequestDfsSize &msg, const std::string &messageId) const;
     void sendCountRequestMsg(const ActorId &actorId) const;
-    void sendCountReponseMsg(const DFS::Packets::RequestBlockCount &msg, const std::string &messageId, BigNumber dfsCount) const;
+    void sendCountReponseMsg(
+        const DFS::Packets::RequestBlockCount &msg,
+        const std::string                     &messageId,
+        BigNumber                              dfsCount) const;
     void requestSync();
     void requestDirFileAllActors();
     void sendSync(uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
     void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
-    void addDirData(const ActorId &actorId, const std::vector<DFSP::DirRow> &dirRows);
+    void addDirData(const ActorId &actorId, const std::vector<DFS::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileName);
-    void sendFile(const std::string &actorId, const std::string &fileName, const std::string &messageId = "");
+    void sendFile(const ActorId &actorId, const std::string &fileName, const std::string &messageId = "");
     void beginFetchNextFile();
     void requestNextFragment(const DFSP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
-    void fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
-    void fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
-    void verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
+    void        fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
+    void        fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
+    void        verifyFiles(std::vector<DFSP::VerifyFileMessage> &fileList, std::string &messageId);
     float       percentVerified(std::vector<DFSP::VerifyFileMessage> &fileList);
     void        loadVPNLocalizationFiles();
 
 public slots:
     std::string addFragment(const DFSP::SegmentMessage &msg);
-    void threadAddFragment(const DFSP::SegmentMessage &msg);
+    void        threadAddFragment(const DFSP::SegmentMessage &msg);
     std::string insertFragment(const DFSP::SegmentMessage &msg);
-    void addListFiles(const QStringList &files);
 
 public:
     std::string deleteFragment(const DFSP::DeleteSegmentMessage &msg);
-    uint64_t bytesLimit() const;
-    void setBytesLimit(uint64_t bytesLimit);
+    uint64_t    bytesLimit() const;
+    void        setBytesLimit(uint64_t bytesLimit);
 
 public:
     DFSP::AddFileMessage getFileHeader(const ActorId actor, const std::string fileName);
-    uint64_t bytesAvailable();
-    bool writeAvailable(uint64_t size = 10000);
+    uint64_t             bytesAvailable();
+    bool                 writeAvailable(uint64_t size = 10000);
 
 signals:
     void added(ActorId actorId, std::string fileHash, std::string visual, uint64_t size);
@@ -147,27 +165,6 @@ signals:
     void checkIsContract(const QString &pathToFile);
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);
     void vpnLocalizationLoadedFromStorage(const std::string actorId, const std::string fileName);
-};
-
-class ThreadAddFiles : public QThread {
-    Q_OBJECT
-    DfsController *m_dfsController;
-    QStringList m_files;
-    std::shared_ptr<Actor<KeyPrivate>> m_actor;
-
-public:
-    ThreadAddFiles(DfsController *dfsController, const std::shared_ptr<Actor<KeyPrivate>> actor, const QStringList &files,
-                   QObject *parent = nullptr);
-    ~ThreadAddFiles();
-
-    virtual void run() override;
-    void addFile(const std::shared_ptr<Actor<KeyPrivate>> actor, const std::filesystem::path &filePath,
-                 std::string targetVirtualFilePath);
-
-signals:
-    void error(std::string error, std::string fileName);
-    void sendMessage(DFSP::AddFileMessage msg, MessageType messageType);
-    void added(const DFSP::AddFileMessage &msg, const std::string &filePath);
 };
 
 #endif // DFS_CONTROLLER_H

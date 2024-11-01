@@ -121,7 +121,7 @@ void DataMiningManager::requestCoinReward() {
     const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
     auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
 
-    auto requestReward = DFS::Reward::RequestReward { .Actor              = actor->id().toStdString(),
+    auto requestReward = DFS::Reward::RequestReward { .Actor              = actor->id(),
                                                       .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = DFS::Reward::Base,
                                                       .RewardAmount       = calculateRewardAmount(),
