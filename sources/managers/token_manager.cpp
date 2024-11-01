@@ -103,13 +103,13 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
     DBConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
 
-    if (isDbOpen) {
+    if (!isDbOpen) {
         return false;
     }
 
     auto countRow = db.count(
         Token::tokenTableName,
-        fmt::format("UPPER(name)='{}' OR UPPER(ticker)='{}'", nameToken, tickerToken));
+        fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
     qDebug() << "[TokenManager] Name: count row:" << countRow;
     return countRow > 0;
 }
@@ -159,7 +159,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
     auto tokenData = TokenData { .token  = actor.id().toStdString(),
-                                 .owner  = actorId.toStdString(),
+                                 .owner  = owner.toStdString(),
                                  .count  = count,
                                  .name   = name,
                                  .ticker = ticker,
@@ -210,7 +210,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 return;
 
             DBRow rowRow;
-            rowRow.insert({ "actorId", "" }); // TODO
+            rowRow.insert({ "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
             rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
             rowRow.insert(
@@ -219,11 +219,14 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
             rowRow.insert({ "color", jsonObj[Token::Fields::color.c_str()].toString().toStdString() });
             rowRow.insert({ "smart", std::string() });
 
-            DBConnector db(Token::db_tokens_path);
-            bool        isDbOpen = db.open();
-            if (isDbOpen) {
-                const bool inserted = db.insert(Token::tokenTableName, rowRow);
-                qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+            const bool resultTokenExist = tokenExist(name, ticker);
+            if(!resultTokenExist) {
+                DBConnector db(Token::db_tokens_path);
+                bool        isDbOpen = db.open();
+                if (isDbOpen) {
+                    const bool inserted = db.insert(Token::tokenTableName, rowRow);
+                    qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+                }
             }
         }
     }
