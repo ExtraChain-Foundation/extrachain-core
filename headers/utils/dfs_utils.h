@@ -13,7 +13,9 @@
 #include <fmt/format.h>
 #include <msgpack.hpp>
 
+#include "utils/exc_logs.h"
 #include "utils/exc_magic.h"
+#include "utils/exc_msgpack_describe.h"
 
 namespace Tools {
 template <typename T>
@@ -52,58 +54,96 @@ T stdStringBytesToType(std::string value) {
 namespace Utils {
 std::string platformDelimeter();
 
-inline static uint64_t globalVariableOfDfsSize = 0;
+inline static std::uint64_t globalVariableOfDfsSize = 0;
 }
 
 namespace DFS {
 namespace Basic {
-    static const std::string  fsActrRoot                 = "dfs";
-    static const std::wstring fsActrRootW                = L"dfs";
-    static const std::string  fsMapName                  = ".dir";
-    static const std::string  dirsPath                   = "dfs/.dirs";
-    static const uint64_t     sectionSize                = /*2097152*/ 524228;
-    static const uint64_t     maxSectionSize             = 209715200;
-    static const uint64_t     minDfsLimit                = 2147483648;
-    static const uint64_t     historicalChainSectionSize = 209715200;
+    static const std::string   fsActrRoot                 = "dfs";
+    static const std::wstring  fsActrRootW                = L"dfs";
+    static const std::string   fsMapName                  = ".dir";
+    static const std::string   dirsPath                   = "dfs/.dirs";
+    static const std::uint64_t sectionSize                = /*2097152*/ 524228;
+    static const std::uint64_t maxSectionSize             = 209715200;
+    static const std::uint64_t minDfsLimit                = 2147483648;
+    static const std::uint64_t historicalChainSectionSize = 209715200;
 
-    static const uint64_t    encSectionSize   = 256;
-    static std::wstring      separator        = std::wstring(1, std::filesystem::path::preferred_separator);
-    static const int         miningReward     = 1;
-    static const std::string dsStoreExtention = ".DS_Store";
-
-    enum class FileState {
-        Unloaded  = 0,
-        Partially = 1,
-        Loaded    = 2
-    };
+    static const std::uint64_t encSectionSize   = 256;
+    static std::wstring        separator        = std::wstring(1, std::filesystem::path::preferred_separator);
+    static const int           miningReward     = 1;
+    static const std::string   dsStoreExtention = ".DS_Store";
 }
+
+enum class FileType {
+    Folder   = 0,
+    Bytes    = 1,
+    Database = 2
+};
+
+enum class FileState {
+    Unloaded  = 0,
+    Partially = 1,
+    Loaded    = 2
+};
+
+enum class Encryption {
+    Public    = 0,
+    Encrypted = 1
+};
 
 struct DirRow {
     ActorId actorId;
 
-    std::string fileId;
-    std::string fileIdPrev;
+    std::string                fileId;
+    std::optional<std::string> fileIdPrev;
 
     std::string hash;
 
-    std::string folder;
-    std::string name;
+    std::optional<std::string> folder;
+    std::string                name;
 
-    uint64_t              size;
-    uint64_t              lastModified;
-    DFS::Basic::FileState state;
+    std::size_t   size;
+    std::uint64_t created;
+    std::uint64_t lastModified;
+
+    DFS::FileType   type;
+    DFS::Encryption encryption;
+    DFS::FileState  state;
 
     std::string visualPath() const {
-        return folder + "/" + name;
+        if (folder.has_value())
+            return folder.value() + "/" + name;
+        else
+            return name;
     }
 
-    MSGPACK_DEFINE(actorId, fileId, fileIdPrev, hash, folder, name, size, lastModified, state)
+    bool isLoaded() const {
+        return state == DFS::FileState::Loaded;
+    }
+
+    bool isEncrypted() const {
+        return encryption == DFS::Encryption::Encrypted;
+    }
+
+    MSGPACK_DEFINE(
+        actorId,
+        fileId,
+        fileIdPrev,
+        hash,
+        folder,
+        name,
+        size,
+        created,
+        lastModified,
+        type,
+        encryption,
+        state)
 };
 
 namespace Packets {
     struct ResponseDfsSize {
-        ActorId  Actor;
-        uint64_t Size;
+        ActorId     Actor;
+        std::size_t Size;
 
         MSGPACK_DEFINE(Actor, Size)
     };
@@ -127,21 +167,12 @@ namespace Packets {
         MSGPACK_DEFINE(Actor)
     };
 
-    struct AddFileMessage {
-        ActorId     Actor;
-        std::string FileName;
-        std::string FileHash;
-        std::string Path;
-        uint64_t    Size;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Path, Size)
-    };
-
     struct RequestFileSegmentMessage {
-        ActorId     Actor;
-        std::string FileName;
-        std::string FileHash;
-        std::string Path;
-        uint64_t    Offset;
+        ActorId       Actor;
+        std::string   FileName;
+        std::string   FileHash;
+        std::string   Path;
+        std::uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Path, Offset)
     };
 
@@ -152,11 +183,11 @@ namespace Packets {
     };
 
     struct SegmentMessage {
-        ActorId     Actor;
-        std::string FileName;
-        std::string FileHash;
-        std::string Data;
-        uint64_t    Offset;
+        ActorId       Actor;
+        std::string   FileName;
+        std::string   FileHash;
+        std::string   Data;
+        std::uint64_t Offset;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
     };
 
@@ -173,26 +204,26 @@ namespace Packets {
         std::string        FileHash;
         std::string        NewFileHash;
         std::string        Data;
-        uint64_t           Offset;
+        std::uint64_t      Offset;
         SegmentMessageType ActionType;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset, ActionType)
     };
 
     struct DeleteSegmentMessage {
-        ActorId     Actor;
-        std::string FileName;
-        std::string FileHash;
-        uint64_t    Offset;
-        uint64_t    Size;
+        ActorId       Actor;
+        std::string   FileName;
+        std::string   FileHash;
+        std::uint64_t Offset;
+        std::uint64_t Size;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Offset, Size)
     };
 
     struct VerifyFileMessage {
-        ActorId     Actor;
-        std::string FileHash;
-        std::string FileName;
-        bool        Verified = false;
-        uint64_t    Size;
+        ActorId       Actor;
+        std::string   FileHash;
+        std::string   FileName;
+        bool          Verified = false;
+        std::uint64_t Size;
         MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
     };
 
@@ -204,15 +235,15 @@ namespace Packets {
     };
 
     struct Activity {
-        uint64_t timeactivity;
-        bool     active;
-        uint64_t score;
+        std::uint64_t timeactivity;
+        bool          active;
+        std::uint64_t score;
         MSGPACK_DEFINE(timeactivity, active, score)
     };
 
     struct WSConnection {
-        std::string address;
-        uint64_t    port;
+        std::string   address;
+        std::uint64_t port;
         MSGPACK_DEFINE(address, port)
     };
 
@@ -252,7 +283,7 @@ namespace Fragments {
         ActorId                        actor;
         std::string                    fileHash;
         std::string                    filePath;
-        uint64_t                       fileSize;
+        std::uint64_t                  fileSize;
         std::list<std::pair<int, int>> fragmentPositionList;
 
         void print() const {
@@ -270,15 +301,15 @@ namespace Fragments {
 
 namespace Historical {
     struct FileChange {
-        uint64_t    pos;
-        std::string data;
+        std::uint64_t pos;
+        std::string   data;
 
         std::string toStdString() {
-            return Tools::typeToStdStringBytes<uint64_t>(pos) + data;
+            return Tools::typeToStdStringBytes<std::uint64_t>(pos) + data;
         }
 
         void fromStdString(std::string string) {
-            pos  = Tools::stdStringBytesToType<uint64_t>(string.substr(0, 8));
+            pos  = Tools::stdStringBytesToType<std::uint64_t>(string.substr(0, 8));
             data = string.substr(8);
         }
     };
@@ -309,7 +340,7 @@ namespace Reward {
 
     struct RequestReward {
         ActorId         Actor;
-        uint64_t        DataStoredSize;
+        std::uint64_t   DataStoredSize;
         TypeFunctioning TypeFunctioningObj;
         BigNumberFloat  RewardAmount;
         std::uint64_t   BytesSent;
@@ -344,14 +375,14 @@ namespace Tables {
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);
         std::string        getLastName(DBConnector& db);
         int                totalFileSize(const ActorId& actorId);
-        uint64_t           dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
+        std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
         // TODO: optional
         DBConnector              actorDbConnector(const ActorId& actorId);
         std::filesystem::path    actorDbPath(const ActorId& actorId);
         std::filesystem::path    storjDbPath(const ActorId& actorId, const std::string& storjName);
-        DFS::DirRow              getDirRow(const ActorId& actorId, const std::string& fileHash);
-        std::vector<DFS::DirRow> getDirRows(const ActorId& actorId, uint64_t lastModified = 0);
+        DFS::DirRow              getDirRow(const ActorId& actorId, const std::string& fileId);
+        std::vector<DFS::DirRow> getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
         bool                     addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
     }
 
@@ -408,11 +439,6 @@ namespace Balances {
         std::string balance = "";
     };
 }
-
-enum class Encryption {
-    Public    = 0,
-    Encrypted = 1
-};
 }
 
 namespace DFSP     = DFS::Packets;
@@ -424,17 +450,22 @@ namespace DFSB     = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
 namespace DFSR     = DFS::Reward;
 
-FORMAT_ENUM(DFS::Basic::FileState)
+FORMAT_ENUM(DFS::FileType)
+FORMAT_ENUM(DFS::FileState)
+FORMAT_ENUM(DFS::Encryption)
 FORMAT_ENUM(DFS::Packets::SegmentMessageType)
 FORMAT_ENUM(DFS::Reward::TypeFunctioning)
-MSGPACK_ADD_ENUM(DFS::Basic::FileState)
+
+MSGPACK_ADD_ENUM(DFS::FileType)
+MSGPACK_ADD_ENUM(DFS::FileState)
+MSGPACK_ADD_ENUM(DFS::Encryption)
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
 
 BOOST_DESCRIBE_STRUCT(
-    DFS::DirRow,
+    ::DFS::DirRow,
     (),
-    (actorId, fileId, fileIdPrev, hash, folder, name, size, lastModified, state))
-// MAKE_MAGICAL(DFS::DirRow)
+    (actorId, fileId, fileIdPrev, hash, folder, name, size, created, lastModified, type, encryption, state))
+MAKE_MAGICAL(::DFS::DirRow)
 
 #endif // DFS_UTILS_H

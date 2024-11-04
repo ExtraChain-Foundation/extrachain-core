@@ -33,7 +33,7 @@ public:
     bool rename(const std::string& fileHash, const std::string& newFileHash);
 
 private:
-    DBRow                    makeDBRow(uint64_t num, uint64_t prevNum, int type, std::string data);
+    DBRow                    makeDBRow(std::uint64_t num, std::uint64_t prevNum, int type, std::string data);
     DBRow                    getLastRow();
     DBRow                    getNextRow(const int& currentNum);
     DBRow                    getRow(const int& num);

@@ -228,7 +228,7 @@ void NetworkManager::startNetwork() {
     qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
                        << wsServer->serverPort(); // << wsServer->serverName();
     DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-                                              .port    = static_cast<uint64_t>((int)wsPort) };
+                                              .port    = static_cast<std::uint64_t>((int)wsPort) };
     m_wsConnections.push_back(wsConnection);
 }
 
@@ -585,13 +585,13 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::DfsLastModified: {
-        auto msg = MessagePack::deserialize<uint64_t>(serialized);
+        auto msg = MessagePack::deserialize<std::uint64_t>(serialized);
         node->dfs()->sendSync(msg, messageId);
         break;
     }
     case MessageType::DfsAddFile: {
-        auto msg = MessagePack::deserialize<DFSP::AddFileMessage>(serialized);
-        node->dfs()->addFile(msg, true);
+        auto dirRow = MessagePack::deserialize<DFS::DirRow>(serialized);
+        node->dfs()->addFile(dirRow, true);
         break;
     }
     case MessageType::DfsRequestFile: {
@@ -1017,13 +1017,13 @@ qint64 CalculateTraffic::totalBytesReceivedFromConnection(const std::string &ip)
     return (it != m_trafficStats.end()) ? it->second.bytesReceived : 0;
 }
 
-std::pair<uint64_t, uint64_t> CalculateTraffic::totalBytes() {
+std::pair<std::uint64_t, std::uint64_t> CalculateTraffic::totalBytes() {
     std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     return std::accumulate(
         m_trafficStats.begin(),
         m_trafficStats.end(),
-        std::make_pair(uint64_t { 0 }, uint64_t { 0 }),
-        [](std::pair<uint64_t, uint64_t> acc, const auto &connection) {
+        std::make_pair(std::uint64_t { 0 }, std::uint64_t { 0 }),
+        [](std::pair<std::uint64_t, std::uint64_t> acc, const auto &connection) {
             acc.first += connection.second.bytesSent;
             acc.second += connection.second.bytesReceived;
             return acc;

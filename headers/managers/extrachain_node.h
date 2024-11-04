@@ -98,7 +98,7 @@ private:
     bool                   started               = false;
     bool                   isClientApplication   = false;
     bool                   allowRunRestApiServer = false;
-    uint64_t               blockCount;
+    std::uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
     VpnFunctionClearType   m_vpnClearFunc = nullptr;
 
@@ -152,7 +152,7 @@ public:
 
     void createNetworkIdentifier();
 
-    uint64_t getBlockCount() const;
+    std::uint64_t getBlockCount() const;
 
     void            InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager*   tokenManager() const;

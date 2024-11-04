@@ -79,6 +79,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+    Logger::instance().set_debug(true);
 }
 
 void ExtraChainNode::process() {
@@ -118,7 +119,7 @@ void ExtraChainNode::process() {
     emit NodeInitialised();
 }
 
-uint64_t ExtraChainNode::getBlockCount() const {
+std::uint64_t ExtraChainNode::getBlockCount() const {
     return blockCount;
 }
 

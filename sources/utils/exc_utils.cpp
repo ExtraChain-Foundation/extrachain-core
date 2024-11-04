@@ -692,10 +692,19 @@ std::string Utils::platformDelimeter() {
 
 boost::json::value Utils::stringToJsonValue(const std::string &value, const std::type_info &target_type) {
     if (value.empty()) {
-        return boost::json::value();
+        return boost::json::value(nullptr);
     }
 
     std::string type_name = boost::core::demangle(target_type.name());
+
+    if (type_name.find("optional") != std::string::npos) {
+        size_t start = type_name.find('<');
+        size_t end   = type_name.find('>');
+        if (start != std::string::npos && end != std::string::npos) {
+            std::string inner_type = type_name.substr(start + 1, end - start - 1);
+            return stringToJsonValue(value, typeid(inner_type));
+        }
+    }
 
     if (type_name.find("string") != std::string::npos) {
         return boost::json::value(std::string(value));

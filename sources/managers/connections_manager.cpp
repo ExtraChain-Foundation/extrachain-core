@@ -249,7 +249,7 @@ void ConnectionsManager::removeActivity(const Connection &connection)
     clientActivity.at(key) = act;
 }
 
-uint64_t ConnectionsManager::getActivityScore(const Connection &connection)
+std::uint64_t ConnectionsManager::getActivityScore(const Connection &connection)
 {
     std::string key = hashConnection(connection);
 
@@ -261,7 +261,7 @@ uint64_t ConnectionsManager::getActivityScore(const Connection &connection)
             return it->second.score + (std::time(nullptr) - it->second.timeactivity);
         }
         else if(it->second.timeactivity != 0 && !it->second.active){
-            uint64_t score;
+            std::uint64_t score;
             if(it->second.score != 0){
                 auto delta_score = std::time(nullptr) - it->second.timeactivity;
                 return it->second.score <= delta_score ? 0 : it->second.score - delta_score;
@@ -278,7 +278,7 @@ void ConnectionsManager::synchroActivityDB()
 {
     for (const auto& pair : clientActivity) {
         Activity act = pair.second;
-        uint64_t score;
+        std::uint64_t score;
         auto delta_score = std::time(nullptr) - pair.second.timeactivity;
         if(pair.second.active){
             score = pair.second.score + delta_score;

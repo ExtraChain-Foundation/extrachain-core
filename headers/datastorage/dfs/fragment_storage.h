@@ -21,28 +21,28 @@ public:
     FragmentStorage(DFSP::SegmentMessage segmentMessage);
     ~FragmentStorage() = default;
 
-    bool                 initLocalFile(uint64_t filesize);
+    bool                 initLocalFile(std::uint64_t filesize);
     bool                 initHistoricalChain();
     bool                 insertFragment(DFSP::SegmentMessage msg);
     bool                 editFragment(DFSP::EditSegmentMessage msg);
     bool                 removeFragment(DFSP::DeleteSegmentMessage msg);
-    DFSP::SegmentMessage getFragment(uint64_t pos);
+    DFSP::SegmentMessage getFragment(std::uint64_t pos);
     DFSP::SegmentMessage getFragment(std::string fragHash);
-    bool                 applyChanges(const std::string& data, uint64_t pos);
+    bool                 applyChanges(const std::string& data, std::uint64_t pos);
 
 private:
-    DBRow                   getPreviousFragment(uint64_t number);
-    DBRow                   getNextFragment(uint64_t number);
-    DBRow                   getRealPreviousFragment(uint64_t number);
-    DBRow                   getRealNextFragment(uint64_t number);
-    std::pair<DBRow, DBRow> getPrevNextPairFragment(uint64_t number);
-    DBRow                   makeFragmentRow(DFSP::SegmentMessage msg, uint64_t storedPos);
-    DBRow                   makeFragmentRow(uint64_t pos, uint64_t storedPos, uint64_t size);
-    uint64_t                writeFragment(DFSP::SegmentMessage msg);
-    void                    moveRows(DBRow curRow, uint64_t moveSize);
-    uint64_t                write(std::filesystem::path filePath, uint64_t pos, std::string data);
-    std::string             extract(std::filesystem::path filePath, uint64_t pos, uint64_t size);
-    uint64_t                remove(std::filesystem::path filePath, uint64_t pos, uint64_t size);
+    DBRow                   getPreviousFragment(std::uint64_t number);
+    DBRow                   getNextFragment(std::uint64_t number);
+    DBRow                   getRealPreviousFragment(std::uint64_t number);
+    DBRow                   getRealNextFragment(std::uint64_t number);
+    std::pair<DBRow, DBRow> getPrevNextPairFragment(std::uint64_t number);
+    DBRow                   makeFragmentRow(DFSP::SegmentMessage msg, std::uint64_t storedPos);
+    DBRow                   makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size);
+    std::uint64_t                writeFragment(DFSP::SegmentMessage msg);
+    void                    moveRows(DBRow curRow, std::uint64_t moveSize);
+    std::uint64_t                write(std::filesystem::path filePath, std::uint64_t pos, std::string data);
+    std::string             extract(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
+    std::uint64_t                remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
     bool                    checkRenameFile(const DFS::Packets::EditSegmentMessage& msg);
 };
 

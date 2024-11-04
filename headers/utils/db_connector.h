@@ -32,6 +32,7 @@
 
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
+#include <boost/core/demangle.hpp>
 
 #include "extrachain_global.h"
 #include "utils/exc_utils.h"
@@ -50,7 +51,9 @@ DBRow toDbRow(const T &obj) {
     DBRow result;
     for (const auto &field : json.as_object()) {
         const auto &value = field.value();
-        if (value.is_string()) {
+        if (value.is_null()) {
+            result[field.key()] = std::string();
+        } else if (value.is_string()) {
             result[field.key()] = std::string(value.as_string());
         } else {
             result[field.key()] = boost::json::serialize(value);
@@ -59,24 +62,6 @@ DBRow toDbRow(const T &obj) {
     return result;
 }
 
-// template <typename T>
-// std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
-//     try {
-//         boost::json::object json;
-//         for (const auto &[key, value] : map) {
-//             json[key] = Utils::stringToJsonValue(value);
-//         }
-
-//         return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string
-//         &err) {
-//             qDebug() << "Json parse error:" << err;
-//             return Utils::ParseError::Invalid;
-//         });
-//     } catch (...) {
-//         return std::unexpected(Utils::ParseError::Invalid);
-//     }
-// }
-
 template <typename T>
 std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
     try {
@@ -84,10 +69,23 @@ std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
         for (const auto &[key, value] : map) {
             boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
                 [&](auto D) {
-                    if (key == magic::detail::clean_field_name(D.name)) {
-                        using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
+                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                        if (key == magic::detail::clean_field_name(D.name)) {
+                            using MemberType =
+                                std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
 
-                        json[key] = stringToJsonValue(value, typeid(MemberType));
+                            if constexpr (magic::is_optional<MemberType>::value) {
+                                if (value.empty()) {
+                                    json[key] = nullptr;
+                                } else {
+                                    json[key] = stringToJsonValue(value, typeid(MemberType));
+                                }
+                            } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
+                                json[key] = value;
+                            } else {
+                                json[key] = stringToJsonValue(value, typeid(MemberType));
+                            }
+                        }
                     }
                 });
         }
@@ -100,7 +98,6 @@ std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
         return std::unexpected(Utils::ParseError::Invalid);
     }
 }
-
 } // namespace Utils
 
 struct DBColumn {

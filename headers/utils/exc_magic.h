@@ -31,11 +31,12 @@
 #include <string>
 #include <vector>
 #include <array>
-
-#include "utils/exc_logs.h"
+#include <optional>
 #include "magic_enum.hpp"
 #include "cpp-base64/base64.h"
 
+template <>
+struct fmt::formatter<boost::json::object> : fmt::ostream_formatter { };
 template <>
 struct fmt::formatter<boost::json::value> : fmt::ostream_formatter { };
 
@@ -45,6 +46,15 @@ template <typename T>
 std::string magic(const T& obj);
 
 // Type traits
+template <typename T>
+struct is_optional : std::false_type { };
+
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type { };
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<T>::value;
+
 template <typename T, typename = void>
 struct is_container : std::false_type { };
 
@@ -87,6 +97,11 @@ struct custom_magic {
     static std::string read(const T& value) {
         if constexpr (boost::describe::has_describe_members<T>::value) {
             return magic(value);
+        } else if constexpr (is_optional<T>::value) {
+            if (!value.has_value()) {
+                return "null";
+            }
+            return read(value.value());
         } else {
             std::ostringstream oss;
             oss << value;
@@ -140,7 +155,12 @@ namespace detail {
 
     template <typename T>
     std::string to_string(const T& value) {
-        if constexpr (std::is_same_v<T, std::string>) {
+        if constexpr (is_optional<T>::value) {
+            if (!value.has_value()) {
+                return "null";
+            }
+            return to_string(value.value());
+        } else if constexpr (std::is_same_v<T, std::string>) {
             return '"' + value + '"';
         } else if constexpr (std::is_enum_v<T>) {
             if constexpr (std::is_scoped_enum_v<T>) {
@@ -243,14 +263,19 @@ namespace detail {
     std::array<uint8_t, N> array_uint8_from_json(const boost::json::value& json) {
         std::string            decoded = base64_decode(json.as_string());
         std::array<uint8_t, N> result {};
-        std::size_t            copy_size = std::min(N, decoded.size());
+        std::size_t            copy_size = std::min<std::size_t>(N, decoded.size());
         std::memcpy(result.data(), decoded.data(), copy_size);
         return result;
     }
 
     template <typename T>
     boost::json::value to_json_impl(const T& obj) {
-        if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
+        if constexpr (magic::is_optional<T>::value) {
+            if (!obj.has_value()) {
+                return boost::json::value(nullptr);
+            }
+            return to_json(obj.value());
+        } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
             return boost::json::value(obj);
         } else if constexpr (std::is_enum_v<T>) {
             return boost::json::value(static_cast<std::underlying_type_t<T>>(obj));
@@ -290,7 +315,13 @@ namespace detail {
     template <typename T>
     T from_json_impl(const boost::json::value& json) {
         // eInfo("JSON: {} {} {}", typeid(T).name(), json, std::string(magic_enum::enum_name(json.kind())));
-        if constexpr (std::is_arithmetic_v<T>) {
+
+        if constexpr (magic::is_optional<T>::value) {
+            if (json.is_null()) {
+                return std::nullopt;
+            }
+            return std::make_optional(from_json<typename T::value_type>(json));
+        } else if constexpr (std::is_arithmetic_v<T>) {
             if constexpr (std::is_integral_v<T>) {
                 return json.is_uint64() ? json.as_uint64() : json.as_int64();
             }

@@ -42,7 +42,7 @@ DFS::Tables::ActorDirFile::storjDbPath(const ActorId &actorId, const std::string
 }
 
 std::vector<DFS::DirRow>
-DFS::Tables::ActorDirFile::getDirRows(const ActorId &actorId, uint64_t lastModified) {
+DFS::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         return {};
@@ -61,14 +61,14 @@ DFS::Tables::ActorDirFile::getDirRows(const ActorId &actorId, uint64_t lastModif
 }
 
 // TODO: expected?
-DFS::DirRow DFS::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &fileName) {
+DFS::DirRow DFS::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &fileId) {
     auto db = actorDbConnector(actorId);
     if (!db.isOpen()) {
         qFatal("DB Error");
         return {};
     }
 
-    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE fileName = '{}';", TableName, fileName));
+    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE fileId = '{}';", TableName, fileId));
     if (rows.empty()) {
         return {};
     }
@@ -93,6 +93,7 @@ bool DFS::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::ve
             // Uncommited row below and find out why hash is empty.
             // qFatal("Oh no why. Filehash is empty.");
         }
+
         auto row = Utils::toDbRow(dirRow);
         actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, row);
     }
@@ -141,7 +142,7 @@ int DFS::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     return std::stoi(row["SUM(fileSize)"]);
 }
 
-uint64_t
+std::uint64_t
 DFS::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const std::string &storjName) {
     DBConnector db(storjDbPath(actorId, storjName).string());
     db.open();

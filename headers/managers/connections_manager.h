@@ -42,7 +42,7 @@ public:
     void addNewConnection(const Connection &connection);
     void addActivity(const Connection &connection);
     void removeActivity(const Connection &connection);
-    uint64_t getActivityScore(const Connection &connection);
+    std::uint64_t getActivityScore(const Connection &connection);
     void synchroActivityDB();
     void removeConnection(Connection &connection);
     bool isConnection(const Connection &connection);

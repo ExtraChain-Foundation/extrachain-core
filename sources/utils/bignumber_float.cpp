@@ -74,7 +74,7 @@ BigNumberFloat::BigNumberFloat(long long number) {
     UPDATE_DEBUG()
 }
 
-BigNumberFloat::BigNumberFloat(uint64_t number) {
+BigNumberFloat::BigNumberFloat(std::uint64_t number) {
     this->m_data = cpp_dec_float_exc(number);
     UPDATE_DEBUG()
 }

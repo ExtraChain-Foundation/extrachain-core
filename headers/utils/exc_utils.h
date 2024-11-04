@@ -34,6 +34,7 @@
 #include "cpp-base64/base64.h"
 #include "utils/bignumber_float.h"
 #include <msgpack.hpp>
+#include "exc_msgpack_describe.h"
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -347,7 +348,7 @@ namespace Net {
 } // namespace Net
 
 namespace ExtraCoin {
-    static const uint64_t totalSupply = 300000000;
+    static const std::uint64_t totalSupply = 300000000;
 } // namespace ExtraCoin
 } // namespace Config
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
@@ -384,10 +385,9 @@ bool isEmpty(std::string_view str_view);
 namespace MessagePack {
 template <class T>
 std::string serialize(const T &t) {
-    std::stringstream ss;
-    msgpack::pack(ss, t);
-    ss.seekg(0);
-    return ss.str();
+    msgpack::sbuffer buffer;
+    msgpack::pack(buffer, t);
+    return std::string(buffer.data(), buffer.size());
 }
 
 template <class T, class StringContainer>
@@ -492,15 +492,15 @@ namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
 const static int              ReconnectInterval = 5000;
 
-static uint64_t currentDateSecs() {
+static std::uint64_t currentDateSecs() {
     using namespace std::chrono;
-    uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return secs;
 }
 
-static uint64_t currentDateMs() {
+static std::uint64_t currentDateMs() {
     using namespace std::chrono;
-    uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return ms;
 }
 

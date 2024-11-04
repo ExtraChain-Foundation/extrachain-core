@@ -46,8 +46,8 @@ class UPNPConnection;
 class CalculateTraffic {
 private:
     struct TrafficStats {
-        uint64_t bytesSent     = 0;
-        uint64_t bytesReceived = 0;
+        std::uint64_t bytesSent     = 0;
+        std::uint64_t bytesReceived = 0;
     };
 
     std::unordered_map<std::string, TrafficStats>
@@ -81,7 +81,7 @@ public:
     qint64 totalBytesReceivedFromConnection(const std::string& ip);
 
     //Method for gettint pair of sent and recieved bytes from all connections
-    std::pair<uint64_t, uint64_t> totalBytes();
+    std::pair<std::uint64_t, std::uint64_t> totalBytes();
 };
 
 struct NetworkReconnect {

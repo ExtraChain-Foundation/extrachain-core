@@ -56,7 +56,7 @@ public:
     explicit BigNumberFloat(const BigNumber &other);
     explicit BigNumberFloat(int number);
     explicit BigNumberFloat(long long number);
-    explicit BigNumberFloat(uint64_t number);
+    explicit BigNumberFloat(std::uint64_t number);
     explicit BigNumberFloat(const cpp_dec_float_exc &number);
     ~BigNumberFloat() = default;
 

@@ -3,7 +3,6 @@
 
 #include <cstdlib>
 #include <filesystem>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -16,21 +15,14 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/random.hpp>
-#include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <QThread>
 
 #include "datastorage/actor.h"
-#include "datastorage/dfs/fragment_storage.h"
-#include "datastorage/dfs/historical_chain.h"
 #include "datastorage/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
-#include "network/network_manager.h"
-#include "utils/db_connector.h"
 #include "utils/dfs_utils.h"
-#include "utils/exc_utils.h"
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 
@@ -43,20 +35,23 @@ enum class DfsError {
     DirError
 };
 
+using FileId = std::string;
+
 class ThreadAddFiles;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
 private:
     ExtraChainNode *node;
-    uint64_t        m_bytesLimit = 10995116277760;
-    uint64_t        m_sizeTaken  = 0;
-    // TODO: for map ActorId, fileName
-    std::map<std::string, DFSP::AddFileMessage> files;
-    std::vector<std::string>                    m_compliteFiles;
-    std::vector<ActorId>                        m_unsynchonizedDirs;
-    uint64_t                                    m_totalDfsSize = 0;
-    std::vector<DFS::DirRow>                    m_dirRows;
+
+    std::uint64_t m_bytesLimit = 10995116277760;
+    std::size_t   m_sizeTaken  = 0;
+
+    std::map<std::pair<ActorId, FileId>, DFS::DirRow> files;
+    std::vector<std::string>                          m_compliteFiles;
+    std::vector<ActorId>                              m_unsynchonizedDirs;
+    std::uint64_t                                     m_totalDfsSize = 0;
+    std::vector<DFS::DirRow>                          m_dirRows;
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -65,33 +60,33 @@ public:
     void initializeActor(const ActorId &actorId);
 
     // Internal use only
-    std::expected<std::string, DfsError> storeFile(
+    std::expected<DFS::DirRow, DfsError> storeFile(
         const ActorId               &actorId,
         const std::filesystem::path &filePath,
-        const std::string           &visualPath,
+        const std::string           &visualFolder,
         const std::string           &visualName,
         DFS::Encryption              securityLevel);
     bool removeLocalFile(const ActorId &actorId, const std::string &fileHash);
     // visualMoveFile
 
     // External interfaces
-    std::string addFile(const DFSP::AddFileMessage &msg, bool loadBytes);
+    std::string addFile(const DFS::DirRow &dirRow, bool loadBytes);
     std::string getFileFromStorage(ActorId owner, std::string fileName);
     bool        removeFile(const DFSP::RemoveFileMessage &msg);
     bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
     // Unique file ID: hash+msec+salt
-    std::string createFileName(std::filesystem::path file);
-    uint64_t    sizeTaken() const;
-    uint64_t    totalDfsSize() const;
-    void        increaseSizeTaken(uintmax_t value);
-    void        insertToFiles(DFSP::AddFileMessage msg);
+    std::string   createFileName(std::filesystem::path file);
+    std::uint64_t sizeTaken() const;
+    std::uint64_t totalDfsSize() const;
+    void          increaseSizeTaken(uintmax_t value);
+    void          insertToFiles(const DFS::DirRow &dirRow);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
-    uint64_t    calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
-    std::string makeReferenceFile(
-        const ActorId             &actor,
-        const std::string         &nameFile,
-        const DFSP::ReferenceData &referenceData);
+    std::uint64_t calculateDataAmountStored(const std::string &folder = DFSB::fsActrRoot) const;
+    std::string   makeReferenceFile(
+          const ActorId             &actor,
+          const std::string         &nameFile,
+          const DFSP::ReferenceData &referenceData);
 
     void dataFromReferenceString(
         const std::string   &referenceStr,
@@ -100,19 +95,21 @@ public:
         DFSP::ReferenceData &referenceData);
 
 private:
-    bool        insertDataChunk(std::string data, uint64_t position, std::filesystem::path file);
-    bool        removeDataChunk(uint64_t position, uint64_t length, std::filesystem::path file);
-    uint64_t    calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
-    uint64_t    calculateFilesSize(const std::string &folder = DFSB::fsActrRoot) const;
-    std::string extractNextFragment();
-    std::string
-    extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset, uint64_t fragmentSize);
-    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, uint64_t offset);
+    bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
+    bool          removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file);
+    std::uint64_t calculateSizeTaken(const std::string &folder = DFSB::fsActrRoot) const;
+    std::uint64_t calculateFilesSize(const std::string &folder = DFSB::fsActrRoot) const;
+    std::string   extractNextFragment();
+    std::string   extractFragment(
+          boost::interprocess::file_mapping &fmapTarget,
+          std::uint64_t                      offset,
+          std::uint64_t                      fragmentSize);
+    std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
     void        loadBytesLimit();
     void        eraseFirstUnsynchronizedDir();
     void        removeRowFromDB(const DFSP::RemoveFileMessage &msg);
     void        requestFileSegment(const DFS::DirRow &row);
-    void updateFileState(const ActorId &actorId, const std::string fileName, DFS::Basic::FileState state);
+    void        updateFileState(const ActorId &actorId, const std::string fileName, DFS::FileState state);
 
 public:
     void sendSizeRequestMsg(const ActorId &actorId) const;
@@ -124,15 +121,15 @@ public:
         BigNumber                              dfsCount) const;
     void requestSync();
     void requestDirFileAllActors();
-    void sendSync(uint64_t lastModified, const std::string &messageId);
+    void sendSync(std::uint64_t lastModified, const std::string &messageId);
     void requestDirData(const ActorId &actorId);
-    void sendDirData(const ActorId &actorId, uint64_t lastModified, const std::string &messageId);
+    void sendDirData(const ActorId &actorId, std::uint64_t lastModified, const std::string &messageId);
     void addDirData(const ActorId &actorId, const std::vector<DFS::DirRow> &dirRows);
     void requestFile(const ActorId &actorId, const std::string &fileName);
-    void sendFile(const ActorId &actorId, const std::string &fileName, const std::string &messageId = "");
+    void sendFile(const ActorId &actorId, const std::string &fileId, const std::string &messageId = "");
     void beginFetchNextFile();
     void requestNextFragment(const DFSP::RequestFileSegmentMessage &msg);
-    std::string sendNextFragment(uint64_t position, uint64_t size); // Attention~!!!
+    std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
     std::string sendFragment(const DFSP::RequestFileSegmentMessage &msg, const std::string &messageId);
     void        fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
     void        fetchFragment(DFSP::RequestFileSegmentMessage &msg, std::string &messageId);
@@ -146,17 +143,16 @@ public slots:
     std::string insertFragment(const DFSP::SegmentMessage &msg);
 
 public:
-    std::string deleteFragment(const DFSP::DeleteSegmentMessage &msg);
-    uint64_t    bytesLimit() const;
-    void        setBytesLimit(uint64_t bytesLimit);
+    std::string   deleteFragment(const DFSP::DeleteSegmentMessage &msg);
+    std::uint64_t bytesLimit() const;
+    void          setBytesLimit(std::uint64_t bytesLimit);
 
 public:
-    DFSP::AddFileMessage getFileHeader(const ActorId actor, const std::string fileName);
-    uint64_t             bytesAvailable();
-    bool                 writeAvailable(uint64_t size = 10000);
+    std::uint64_t bytesAvailable();
+    bool          writeAvailable(std::size_t = 10000);
 
 signals:
-    void added(ActorId actorId, std::string fileHash, std::string visual, uint64_t size);
+    void added(ActorId actorId, std::string fileHash, std::string visual, std::size_t size);
     void uploaded(ActorId actorId, std::string fileHash); // TODO: loadId
     void downloaded(ActorId actorId, std::string fileHash);
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
