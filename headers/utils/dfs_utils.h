@@ -124,21 +124,14 @@ struct DirRow {
     bool isEncrypted() const {
         return encryption == DFS::Encryption::Encrypted;
     }
-
-    MSGPACK_DEFINE(
-        actorId,
-        fileId,
-        fileIdPrev,
-        hash,
-        folder,
-        name,
-        size,
-        created,
-        lastModified,
-        type,
-        encryption,
-        state)
 };
+
+BOOST_DESCRIBE_STRUCT(
+    DirRow,
+    (),
+    (actorId, fileId, fileIdPrev, hash, folder, name, size, created, lastModified, type, encryption, state))
+
+MAKE_MAGICAL_OPERATORS(DirRow)
 
 namespace Packets {
     struct ResponseDfsSize {
@@ -450,6 +443,8 @@ namespace DFSB     = DFS::Basic;
 namespace DFS_PATH = DFS::Path;
 namespace DFSR     = DFS::Reward;
 
+MAKE_MAGICAL_FORMATTER(DFS::DirRow)
+
 FORMAT_ENUM(DFS::FileType)
 FORMAT_ENUM(DFS::FileState)
 FORMAT_ENUM(DFS::Encryption)
@@ -461,11 +456,5 @@ MSGPACK_ADD_ENUM(DFS::FileState)
 MSGPACK_ADD_ENUM(DFS::Encryption)
 MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
-
-BOOST_DESCRIBE_STRUCT(
-    ::DFS::DirRow,
-    (),
-    (actorId, fileId, fileIdPrev, hash, folder, name, size, created, lastModified, type, encryption, state))
-MAKE_MAGICAL(::DFS::DirRow)
 
 #endif // DFS_UTILS_H

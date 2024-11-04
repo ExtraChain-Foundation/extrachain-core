@@ -65,29 +65,29 @@ DBRow toDbRow(const T &obj) {
 template <typename T>
 std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
     try {
+        using namespace boost::mp11;
+
         boost::json::object json;
         for (const auto &[key, value] : map) {
-            boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        if (key == magic::detail::clean_field_name(D.name)) {
-                            using MemberType =
-                                std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
+            mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    if (key == magic::detail::clean_field_name(D.name)) {
+                        using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
 
-                            if constexpr (magic::is_optional<MemberType>::value) {
-                                if (value.empty()) {
-                                    json[key] = nullptr;
-                                } else {
-                                    json[key] = stringToJsonValue(value, typeid(MemberType));
-                                }
-                            } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
-                                json[key] = value;
+                        if constexpr (magic::is_optional<MemberType>::value) {
+                            if (value.empty()) {
+                                json[key] = nullptr;
                             } else {
                                 json[key] = stringToJsonValue(value, typeid(MemberType));
                             }
+                        } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
+                            json[key] = value;
+                        } else {
+                            json[key] = stringToJsonValue(value, typeid(MemberType));
                         }
                     }
-                });
+                }
+            });
         }
 
         return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {

@@ -367,8 +367,8 @@ namespace detail {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                         auto it = obj.find(magic::detail::clean_field_name(D.name));
                         if (it != obj.end()) {
-                            using MemberType = std::remove_reference_t<decltype(result.*D.pointer)>;
                             // eInfo("JSON: Parsing for {}", D.name);
+                            using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
                             result.*D.pointer = from_json<MemberType>(it->value());
                         }
                     }
@@ -395,15 +395,21 @@ T from_json(const boost::json::value& json) {
 } // namespace json_convert
 
 // Macros for adding magic support
-#define MAKE_MAGICAL(ClassName)                                                                              \
+#define MAKE_MAGICAL_OPERATORS(ClassName)                                                                    \
     inline std::ostream& operator<<(std::ostream& os, const ClassName& obj) {                                \
         return os << magic::magic(obj);                                                                      \
     }                                                                                                        \
     inline QDebug operator<<(QDebug debug, const ClassName& obj) {                                           \
         return debug << magic::magic(obj).c_str();                                                           \
-    }                                                                                                        \
+    }
+
+#define MAKE_MAGICAL_FORMATTER(ClassName)                                                                    \
     template <>                                                                                              \
     struct fmt::formatter<ClassName> : fmt::ostream_formatter { };
+
+#define MAKE_MAGICAL(ClassName)                                                                              \
+    MAKE_MAGICAL_OPERATORS(ClassName)                                                                        \
+    MAKE_MAGICAL_FORMATTER(ClassName)
 
 #define MAKE_CUSTOM_MAGICAL(ClassName)                                                                       \
     namespace magic {                                                                                        \
