@@ -85,18 +85,10 @@ const GenesisDataRows& BlockVariant::dataRows() const {
     return rows;
 }
 
-QString BlockVariant::toString() const {
+std::string BlockVariant::toString() const {
     return std::visit(
         [](const auto& b) {
             return b.toString();
-        },
-        m_block);
-}
-
-std::string BlockVariant::toStdString() const {
-    return std::visit(
-        [](const auto& b) {
-            return b.toStdString();
         },
         m_block);
 }

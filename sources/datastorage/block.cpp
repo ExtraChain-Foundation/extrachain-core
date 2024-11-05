@@ -78,7 +78,7 @@ Block Block::operator=(const Block &block) {
 
 void Block::calcHash() {
     SHA3        sha3(SHA3::Bits::Bits512);
-    std::string index = m_index.toStdString(NumeralBase::Hex);
+    std::string index = m_index.toString(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -195,17 +195,13 @@ Transaction Block::getTransactionByHash(std::string hash) const {
     return Transaction();
 }
 
-QString Block::toString() const {
-    return QString::fromStdString(this->toStdString());
-}
-
-std::string Block::toStdString() const {
+std::string Block::toString() const {
     std::ostringstream oss;
 
     oss << "Block { "
         << "type: " << Utils::enumFullName(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
+        << "index: " << m_index.toString() << " (" << m_index.toString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev_hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
@@ -324,12 +320,12 @@ void Block::setDataServiceFromMessagePack(const std::string &value) {
 
 QDebug operator<<(QDebug debug, const Approver &approver) {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << approver.toStdString();
+    debug.nospace().noquote() << approver.toString();
     return debug;
 }
 
 QDebug operator<<(QDebug debug, const Block &block) {
     QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << block.toStdString();
+    debug.nospace().noquote() << block.toString();
     return debug;
 }

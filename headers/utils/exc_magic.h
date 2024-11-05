@@ -38,6 +38,8 @@
 template <>
 struct fmt::formatter<boost::json::object> : fmt::ostream_formatter { };
 template <>
+struct fmt::formatter<boost::json::array> : fmt::ostream_formatter { };
+template <>
 struct fmt::formatter<boost::json::value> : fmt::ostream_formatter { };
 
 namespace magic {
@@ -405,7 +407,16 @@ T from_json(const boost::json::value& json) {
 
 #define MAKE_MAGICAL_FORMATTER(ClassName)                                                                    \
     template <>                                                                                              \
-    struct fmt::formatter<ClassName> : fmt::ostream_formatter { };
+    struct fmt::formatter<ClassName> {                                                                       \
+        constexpr auto parse(format_parse_context& ctx) const {                                              \
+            return ctx.begin();                                                                              \
+        }                                                                                                    \
+                                                                                                             \
+        template <typename FormatContext>                                                                    \
+        auto format(const ClassName& obj, FormatContext& ctx) const {                                        \
+            return fmt::format_to(ctx.out(), "{}", magic::magic(obj));                                       \
+        }                                                                                                    \
+    };
 
 #define MAKE_MAGICAL(ClassName)                                                                              \
     MAKE_MAGICAL_OPERATORS(ClassName)                                                                        \

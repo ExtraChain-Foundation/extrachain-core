@@ -155,10 +155,10 @@ void TokenManager::createToken(
     }
 
     auto    actor        = node->accountController()->createService();
-    QString actorId      = QString(actor.id().toString());
+    QString actorId      = QString(actor.id().toQString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
-    auto tokenData = TokenData { .actor  = actor.id().toStdString(),
+    auto tokenData = TokenData { .actor  = actor.id().toString(),
                                  .owner  = actorId.toStdString(),
                                  .count  = count,
                                  .name   = name,

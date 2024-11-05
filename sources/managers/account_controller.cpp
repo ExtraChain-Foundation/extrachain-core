@@ -148,7 +148,7 @@ bool AccountController::empty() const {
 
 void AccountController::changeCurrentProfile(const ActorId &actorId) {
     if (!getProfile(actorId).actors().empty()) {
-        m_currentProfile = actorId.toStdString();
+        m_currentProfile = actorId.toString();
     }
 }
 
@@ -197,7 +197,7 @@ void AccountController::addToProfileList(const ActorId &actorId) {
     profiles.push_back(actorId);
     QJsonArray array;
     for (auto &actorId : profiles) {
-        array.push_back(actorId.toString());
+        array.push_back(actorId.toQString());
     }
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
 

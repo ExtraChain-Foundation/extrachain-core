@@ -74,6 +74,15 @@ namespace Basic {
     static const std::string   dsStoreExtention = ".DS_Store";
 }
 
+enum class DfsError {
+    NotExists,
+    NotFile,
+    NotReadable,
+    StorageFull,
+    AlreadyExists,
+    DirError
+};
+
 enum class FileType {
     Folder   = 0,
     Bytes    = 1,
@@ -297,7 +306,7 @@ namespace Historical {
         std::uint64_t pos;
         std::string   data;
 
-        std::string toStdString() {
+        std::string toString() {
             return Tools::typeToStdStringBytes<std::uint64_t>(pos) + data;
         }
 
@@ -355,13 +364,16 @@ namespace Tables {
         static const std::string TableName = "Files";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                                     + "("
-                                                    "fileId            TEXT PRIMARY KEY NOT NULL,"
-                                                    "fileIdPrev        TEXT             NOT NULL,"
+                                                    "fileId        TEXT PRIMARY KEY NOT NULL,"
+                                                    "fileIdPrev    TEXT                     ,"
                                                     "hash          TEXT             NOT NULL,"
-                                                    "folder        TEXT             NOT NULL,"
+                                                    "folder        TEXT                     ,"
                                                     "name          TEXT             NOT NULL,"
                                                     "size          INTEGER          NOT NULL,"
+                                                    "created       INTEGER          NOT NULL,"
                                                     "lastModified  INTEGER          NOT NULL,"
+                                                    "type          INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
+                                                    "encryption    INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 1),"
                                                     "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
@@ -371,12 +383,14 @@ namespace Tables {
         std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
         // TODO: optional
-        DBConnector              actorDbConnector(const ActorId& actorId);
-        std::filesystem::path    actorDbPath(const ActorId& actorId);
-        std::filesystem::path    storjDbPath(const ActorId& actorId, const std::string& storjName);
-        DFS::DirRow              getDirRow(const ActorId& actorId, const std::string& fileId);
-        std::vector<DFS::DirRow> getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
-        bool                     addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
+        DBConnector           actorDbConnector(const ActorId& actorId);
+        std::filesystem::path actorDbPath(const ActorId& actorId);
+        std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
+        std::expected<DFS::DirRow, DFS::DfsError>
+        getDirRow(const ActorId& actorId, const std::string& fileId);
+        std::expected<std::vector<DFS::DirRow>, DFS::DfsError>
+             getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
+        bool addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
     }
 
     namespace DirsFile {
@@ -407,7 +421,7 @@ namespace Tables {
                                                      ");";
 
     static const std::string filesTableLast =
-        "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileName DESC LIMIT 1";
+        "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileId DESC LIMIT 1";
     static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
 }
 
@@ -415,22 +429,6 @@ namespace Path {
     std::filesystem::path convertPathToPlatform(const std::filesystem::path& path);
     std::filesystem::path filePath(const ActorId& actorId, const std::string& fileName);
     std::filesystem::path actorPath(const ActorId& actorId);
-}
-
-namespace Balances {
-    const std::string balanceDbPath     = "blockchain/balance.db";
-    const std::string balancesTableName = "balances";
-    const std::string createBalanceTable =
-        "CREATE TABLE IF NOT EXISTS balances("
-        "actor_id       TEXT   NOT NULL, "
-        "balance       TEXT   NOT NULL, "
-        "last_update    TEXT   NOT NULL );";
-    const std::string loadBalancesQuery = "SELECT * FROM balances";
-
-    struct Balance {
-        ActorId     actor;
-        std::string balance = "";
-    };
 }
 }
 
@@ -445,6 +443,7 @@ namespace DFSR     = DFS::Reward;
 
 MAKE_MAGICAL_FORMATTER(DFS::DirRow)
 
+FORMAT_ENUM(DFS::DfsError)
 FORMAT_ENUM(DFS::FileType)
 FORMAT_ENUM(DFS::FileState)
 FORMAT_ENUM(DFS::Encryption)

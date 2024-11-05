@@ -20,15 +20,15 @@ ActorId::ActorId(ActorId &&other) noexcept {
     other.m_id = "00000000000000000000";
 }
 
-QByteArray ActorId::toByteArray() const {
+QByteArray ActorId::toQByteArray() const {
     return QByteArray::fromStdString(m_id);
 }
 
-QString ActorId::toString() const {
+QString ActorId::toQString() const {
     return QString::fromStdString(m_id);
 }
 
-const std::string &ActorId::toStdString() const {
+const std::string &ActorId::toString() const {
     return m_id;
 }
 
@@ -60,7 +60,7 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
 
 namespace magic {
 std::string custom_magic<ActorId>::read(const ActorId &value) {
-    return value.toStdString();
+    return value.toString();
 }
 
 ActorId custom_magic<ActorId>::write(const std::string &value) {

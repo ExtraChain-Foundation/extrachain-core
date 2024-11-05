@@ -21,7 +21,7 @@ HistoricalChain::~HistoricalChain() {
 }
 
 bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
-    DBRow    lastRow = getLastRow();
+    DBRow         lastRow = getLastRow();
     std::uint64_t num;
     std::uint64_t prevNum;
     if (lastRow.empty()) {
@@ -37,9 +37,7 @@ bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
         DFSHC::FileChange fc;
         fc.pos  = msg.Offset;
         fc.data = msg.Data;
-        return chainFile.insert(
-            DFSHC::TableNameHC,
-            makeDBRow(num, prevNum, msg.ActionType, fc.toStdString()));
+        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toString()));
     }
 
     return false;
@@ -50,7 +48,7 @@ bool HistoricalChain::remove(DFSP::EditSegmentMessage msg) {
     const auto lastSegment = getLastEditSegmentMessage();
 
     if (msg.Data == lastSegment.Data) {
-        DBRow    lastRow = getLastRow();
+        DBRow         lastRow = getLastRow();
         std::uint64_t prevNum = std::stoull(lastRow.at(PREV_NUM));
         std::uint64_t num     = std::stoull(lastRow.at(NUM));
         removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));

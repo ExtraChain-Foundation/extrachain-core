@@ -107,7 +107,7 @@ const std::string &PrivateProfile::hash() const {
 
 QJsonObject PrivateProfile::toJson() const {
     QJsonObject json;
-    json["main"] = m_main.toString();
+    json["main"] = m_main.toQString();
 
     QJsonArray actors;
     for (const auto &actor : m_actors) {
@@ -117,7 +117,7 @@ QJsonObject PrivateProfile::toJson() const {
 
     QJsonObject walletNames;
     for (const auto &[actor, name] : this->walletNames) {
-        walletNames[actor.toString()] = QString::fromStdString(name);
+        walletNames[actor.toQString()] = QString::fromStdString(name);
     }
     json["walletNames"] = walletNames;
 
@@ -164,5 +164,5 @@ void PrivateProfile::load() {
 }
 
 std::filesystem::path PrivateProfile::path() {
-    return KeyStore::folder + Utils::platformDelimeter() + m_main.toStdString() + KeyStore::format;
+    return KeyStore::folder + Utils::platformDelimeter() + m_main.toString() + KeyStore::format;
 }

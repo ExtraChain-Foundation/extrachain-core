@@ -102,7 +102,7 @@ public:
      * @return genesis data row list
      */
     const GenesisDataRows &dataRows() const;
-    std::string            toStdString() const override;
+    std::string            toString() const override;
 
 protected:
     void calcHash() override;
@@ -115,7 +115,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.toStdString();
+        std::string index_str = m_index.toString();
         msgpack::type::make_define_array(
             m_type,
             index_str,

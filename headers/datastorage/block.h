@@ -34,8 +34,8 @@ struct Approver {
     std::string sign      = "";
     bool        isApprove = false;
 
-    std::string toStdString() const {
-        auto               actorIdStr = actorId.toStdString();
+    std::string toString() const {
+        auto               actorIdStr = actorId.toString();
         std::ostringstream oss;
         oss << "Approver { "
             << "actor_id: \""
@@ -150,8 +150,7 @@ public:
 
     bool                equals(const Block &block) const;
     bool                isEmpty() const;
-    QString             toString() const;
-    virtual std::string toStdString() const;
+    virtual std::string toString() const;
     bool                operator<(const Block &other);
     bool                isApprover(const ActorId &) const;
 
@@ -187,7 +186,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.toStdString();
+        std::string index_str = m_index.toString();
         msgpack::type::make_define_array(
             m_type,
             index_str,

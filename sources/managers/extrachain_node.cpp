@@ -102,7 +102,7 @@ void ExtraChainNode::process() {
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
     m_dmm                = new DataMiningManager(this);
-    auto key             = actorIndex()->firstId().toByteArray();
+    auto key             = actorIndex()->firstId().toQByteArray();
     auto address         = "12.12.12.12";
     auto port            = "1212";
     m_connectionsManager = new ConnectionsManager(address, port, key, this);
@@ -216,7 +216,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    qWarning() << fmt::format("Attempting to create: {}  from user [{}]", tx, actor->id().toStdString());
+    qWarning() << fmt::format("Attempting to create: {}  from user [{}]", tx, actor->id().toString());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->getLastRealBlock();
@@ -234,7 +234,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     // 3) sign transaction
     tx.sign(actor);
-    qDebug() << "[Transaction] Send" << tx.amount().toStdString(NumeralBase::Dec) << "to" << tx.receiver();
+    qDebug() << "[Transaction] Send" << tx.amount().toString(NumeralBase::Dec) << "to" << tx.receiver();
 
     return tx;
 }
@@ -334,7 +334,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             qDebug() << fmt::format("Attempting to create: {} from user {}", tx, actor->id());
 
             tx.sign(actor);
-            qDebug() << "[Transaction] Send tx" << tx.amount().toStdString(NumeralBase::Dec) << "to"
+            qDebug() << "[Transaction] Send tx" << tx.amount().toString(NumeralBase::Dec) << "to"
                      << tx.receiver();
             auto createdTx = this->createTransaction(tx);
             return createdTx;
@@ -355,7 +355,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         return this->createTransaction(tx);
     } else {
         qWarning() << QString("Can not create tx to [%1]. There no current user")
-                          .arg(QString(receiver.toByteArray()));
+                          .arg(QString(receiver.toQByteArray()));
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -411,7 +411,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(BigNumber::random(64).toStdString()).c_str());
+    file.write(Utils::calcHash(BigNumber::random(64).toString()).c_str());
     file.flush();
     file.close();
 }
@@ -457,7 +457,7 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
         std::string ip   = m_networkManager->localIp().toStdString();
         std::string port = QString::number(m_networkManager->wsPort).toStdString();
         blockCount       = m_connectionsManager->getActivityScore(Connection { ip, port, true })
-                     / (std::stoi(middleCount.toStdString()) * 2);
+                     / (std::stoi(middleCount.toString()) * 2);
     }
 }
 

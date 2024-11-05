@@ -54,9 +54,9 @@ public:
     ActorId(const ActorId &other);
     ActorId(ActorId &&other) noexcept;
 
-    QByteArray         toByteArray() const;
-    QString            toString() const;
-    const std::string &toStdString() const;
+    QByteArray         toQByteArray() const;
+    QString            toQString() const;
+    const std::string &toString() const;
     bool               isZero() const;
 
     auto     operator<=>(const ActorId &) const = default;
@@ -197,15 +197,6 @@ public:
         m_type = type;
     }
 
-    std::string toStdString() const {
-        std::ostringstream oss;
-
-        oss << "Actor { id:" << m_id << ", type: " << Utils::enumFullName(m_type) << ", key: " << m_key
-            << " }";
-
-        return oss.str();
-    }
-
     QByteArray toJson() const {
         auto       array  = toJsonArray();
         QByteArray result = QJsonDocument(array).toJson(QJsonDocument::Compact);
@@ -220,7 +211,7 @@ public:
         QJsonArray array;
         QString    pub = QString::fromStdString(Utils::bytesEncodeVec(m_key.publicKey()));
 
-        array << m_id.toString() << int(m_type) << pub;
+        array << m_id.toQString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             QString secret = QString::fromStdString(Utils::bytesEncodeVec(m_key.secretKey()));

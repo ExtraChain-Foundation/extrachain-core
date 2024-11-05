@@ -53,7 +53,7 @@ void TransactionManager::addTransactionNetwork(const Transaction &tx) {
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
-    emit addToCache(tx.receiver().toStdString(), tx);
+    emit addToCache(tx.receiver().toString(), tx);
 }
 
 // Block making
@@ -95,7 +95,7 @@ void TransactionManager::makeBlock() {
     auto maybeGenesisId = lastBlock->getIndex() + 1;
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
         qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
-                           << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
+                           << "| dec:" << maybeGenesisId.toString(NumeralBase::Dec);
         const auto actor   = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
@@ -119,7 +119,7 @@ void TransactionManager::makeBlock() {
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock.value());
-        dummyBlock.addData(lastRealBlock->getIndex().toStdString());
+        dummyBlock.addData(lastRealBlock->getIndex().toString());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node->blockchain()->signBlock(dummyBlockVariant);
         node->blockchain()->sendBlock(dummyBlockVariant);

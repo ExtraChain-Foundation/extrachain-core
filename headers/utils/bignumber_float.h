@@ -96,9 +96,8 @@ public:
 public:
     const cpp_dec_float_exc &data() const;
     bool                     isEmpty() const;
-    QByteArray               toByteArray(NumeralBase base = NumeralBase::Hex) const;
-    std::string              toStdString(NumeralBase base = NumeralBase::Hex) const;
-    QByteArray               toZeroByteArray(int size) const;
+    QByteArray               toQByteArray(NumeralBase base = NumeralBase::Hex) const;
+    std::string              toString(NumeralBase base = NumeralBase::Hex) const;
     BigNumberFloat           pow(unsigned long number);
     // BigNumberFloat sqrt(unsigned long number = 2) const;
     BigNumberFloat abs() const;
@@ -136,7 +135,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = toStdString();
+        std::string num = toString();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }

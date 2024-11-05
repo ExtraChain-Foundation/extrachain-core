@@ -26,15 +26,6 @@
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 
-enum class DfsError {
-    NotExists,
-    NotFile,
-    NotReadable,
-    StorageFull,
-    AlreadyExists,
-    DirError
-};
-
 using FileId = std::string;
 
 class ThreadAddFiles;
@@ -60,7 +51,7 @@ public:
     void initializeActor(const ActorId &actorId);
 
     // Internal use only
-    std::expected<DFS::DirRow, DfsError> storeFile(
+    std::expected<DFS::DirRow, DFS::DfsError> storeFile(
         const ActorId               &actorId,
         const std::filesystem::path &filePath,
         const std::string           &visualFolder,

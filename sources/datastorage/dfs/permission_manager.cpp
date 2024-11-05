@@ -1,8 +1,8 @@
 #include "datastorage/dfs/permission_manager.h"
 
 const QString PermissionManager::PermissionFileName = ".perm";
-const QString PermissionManager::ServiceDir = "Service";
-const QString PermissionManager::RootDir = "dfs";
+const QString PermissionManager::ServiceDir         = "Service";
+const QString PermissionManager::RootDir            = "dfs";
 
 PermissionManager::PermissionManager(QObject *parent)
     : QObject(parent) {
@@ -76,8 +76,8 @@ bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
     return true;
 }
 
-PermissionManager::Permission PermissionManager::getHighestPermission(const QString &userId,
-                                                                      const QString &fileHash) {
+PermissionManager::Permission
+PermissionManager::getHighestPermission(const QString &userId, const QString &fileHash) {
     Permission permFilePermission = getUserPermission(userId, fileHash);
 
     Permission sharedFilePermission = getUserPermission(QString::number(sharedId), fileHash);
@@ -97,13 +97,13 @@ PermissionManager::Permission PermissionManager::getHighestPermission(const QStr
     return NoPermission;
 }
 
-PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPrivate> &actor,
-                                                               const GetPermissionMsg &msg) {
-    const QString &userId = msg.userId.c_str();
+PermissionManager::Permission
+PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg &msg) {
+    const QString &userId   = msg.userId.c_str();
     const QString &fileHash = msg.fileHash.c_str();
 
     Permission permFilePermission =
-        getHighestPermission(actor.id().toStdString().c_str(), PermissionFileName);
+        getHighestPermission(actor.id().toString().c_str(), PermissionFileName);
 
     if (permFilePermission == Read || permFilePermission == Write || permFilePermission == Delete
         || permFilePermission == Edit) {
@@ -112,7 +112,7 @@ PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPr
         return targetFilePermission;
     }
 
-    qDebug() << __FUNCTION__ << " Actor " << actor.id().toStdString().c_str()
+    qDebug() << __FUNCTION__ << " Actor " << actor.id().toString().c_str()
              << " has no permission to read the Permissions file";
     return permFilePermission;
 }
@@ -186,7 +186,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //        }
     //    } else // Update existing entry
     //    {
-    //        const std::string &fileHashStr = currentPermissionRow["fileHash"];
+    //        const std::string &fileHashStr = currentPermissionRow["hash"];
     //        const std::string &userIdStr = currentPermissionRow["userId"];
     //        const std::string &signatureStr = currentPermissionRow["signature"];
 
@@ -208,8 +208,8 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     return true;
 }
 
-PermissionManager::Permission PermissionManager::getUserPermission(const QString &userId,
-                                                                   const QString &fileHash) {
+PermissionManager::Permission
+PermissionManager::getUserPermission(const QString &userId, const QString &fileHash) {
     //    DBRow currentPermissionRow = findDBRow(userId, fileHash);
 
     //    if (currentPermissionRow.empty()) {
@@ -252,8 +252,11 @@ PermissionManager::Permission PermissionManager::getUserPermission(const QString
 //                                  ServiceDir);
 //}
 
-DBRow PermissionManager::makeDBRow(const QString &fileHash, const Permission permission,
-                                   const QString &userId, const QString &signature) {
+DBRow PermissionManager::makeDBRow(
+    const QString   &fileHash,
+    const Permission permission,
+    const QString   &userId,
+    const QString   &signature) {
     return { { "fileHash", fileHash.toStdString() },
              { "permission", permissions[permission].toStdString() },
              { "userId", userId.toStdString() },

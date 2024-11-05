@@ -141,9 +141,9 @@ void Transaction::setDate(std::uint64_t value) {
 }
 
 void Transaction::calcHash() {
-    auto hashData = m_sender.toStdString() + m_receiver.toStdString() + m_amount.toStdString(NumeralBase::Hex)
-                    + m_data + std::to_string(m_date) + m_token.toStdString() + m_prevBlock.toStdString()
-                    + m_approver.toStdString() + m_producer.toStdString();
+    auto hashData = m_sender.toString() + m_receiver.toString() + m_amount.toString(NumeralBase::Hex)
+                    + m_data + std::to_string(m_date) + m_token.toString() + m_prevBlock.toString()
+                    + m_approver.toString() + m_producer.toString();
 
     std::string resultHash = Utils::calcHash(hashData);
     if (!resultHash.empty()) {

@@ -67,7 +67,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     qDebug() << QString("[Socket] First message:%1 | Current first:%2")
                     .arg(json.toJson())
-                    .arg(currentFirstId.toString());
+                    .arg(currentFirstId.toQString());
 
     if (currentFirstId.isZero() && !jsonFirstId.isZero()) { // TODO: remove hack
         node->actorIndex()->setFirstId(jsonFirstId);
@@ -81,7 +81,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
 
     if (!(somethingEmpty || isFirstIdsContains)) {
         qDebug() << "[Socket] Close, because network incompatible";
-        emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toString());
+        emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toQString());
         closeSocket();
         return false;
     }
@@ -118,7 +118,7 @@ void SocketService::closeSocket() {
 
 QByteArray SocketService::generateFirstMessage() {
     QJsonObject json;
-    json["firstId"]    = node->actorIndex()->firstId().toString();
+    json["firstId"]    = node->actorIndex()->firstId().toQString();
     json["version"]    = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     json["sendType"]   = QString::number(int(m_sendType));

@@ -38,8 +38,8 @@
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()                                                                                   \
-        qdata    = toStdString(NumeralBase::Hex);                                                            \
-        qdataDec = toStdString(NumeralBase::Dec);
+        qdata    = toString(NumeralBase::Hex);                                                               \
+        qdataDec = toString(NumeralBase::Dec);
 #else
     #define UPDATE_DEBUG()
 #endif
@@ -118,9 +118,8 @@ public:
 public:
     const boost::multiprecision::cpp_int &data() const;
     bool                                  isEmpty() const;
-    QByteArray                            toByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string                           toStdString(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string                           toZeroStdString(int size) const;
+    QByteArray                            toQByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string                           toString(NumeralBase numSystem = NumeralBase::Hex) const;
     BigNumber                             pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
@@ -157,7 +156,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = toStdString();
+        std::string num = toString();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }

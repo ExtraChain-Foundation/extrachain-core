@@ -117,7 +117,7 @@ DFSP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
         std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
         fragment.Offset                = pos;
         fragment.Data                  = extract(filePath, pos, std::stoull(fragMap.at("size")));
-        fragment.Actor                 = this->actor.toStdString();
+        fragment.Actor                 = this->actor.toString();
         fragment.FileHash              = this->fileName;
         return fragment;
     }
@@ -137,7 +137,7 @@ DFS::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) 
         std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
         fragment.Offset                = std::stoull(fragMap.at("pos"));
         fragment.Data  = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
-        fragment.Actor = this->actor.toStdString();
+        fragment.Actor = this->actor.toString();
         fragment.FileHash = fragMap.at("fragHash");
     }
     return fragment;
@@ -443,7 +443,7 @@ bool FragmentStorage::checkRenameFile(const DFS::Packets::EditSegmentMessage &ms
 
     fileHash                        = msg.NewFileHash;
     std::string           pathDelim = Utils::platformDelimeter();
-    std::filesystem::path path      = DFSB::fsActrRoot + pathDelim + msg.Actor.toStdString() + pathDelim;
+    std::filesystem::path path      = DFSB::fsActrRoot + pathDelim + msg.Actor.toString() + pathDelim;
     std::filesystem::rename(path / std::string(msg.FileHash), path / std::string(msg.NewFileHash));
     return std::filesystem::exists(path / std::string(msg.NewFileHash));
 }
@@ -473,8 +473,16 @@ void FragmentWriter::run() {
     std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, m_msg.FileName);
     actrDirData                    = actrDirFile.select(
         fmt::format("SELECT * FROM {} WHERE fileName = '{}'", DFST::ActorDirFile::TableName, m_msg.FileName));
-    std::string   virtualPath     = actrDirData[0].at("filePath");
-    std::uint64_t fileSize        = std::stoull(actrDirData[0].at("fileSize"));
+
+    DBRow dirRowDb  = actrDirData[0];
+    auto  dirRowExp = Utils::fromDbRow<DFS::DirRow>(dirRowDb);
+    if (!dirRowExp.has_value()) {
+        return;
+    }
+    auto dirRow = dirRowExp.value();
+
+    std::string   virtualPath     = dirRow.visualPath();
+    std::uint64_t fileSize        = dirRow.size;
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         qDebug() << "[Dfs] File is complite";

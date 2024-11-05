@@ -148,7 +148,7 @@ public:
     bool                     deleteTable(const std::string &name);
     bool                     tableExists(const std::string &table);
     bool                     dropTable(const std::string &table);
-    qint64                   count(const std::string &table, const std::string &where = "");
+    std::uint64_t            count(const std::string &table, const std::string &where = "");
     std::string              file() const;
     bool                     isOpen() const;
     std::vector<std::string> tableNames();

@@ -244,12 +244,12 @@ bool BigNumber::isEmpty() const // TODO
     return m_data == -1;
 }
 
-QByteArray BigNumber::toByteArray(NumeralBase numSystem) const {
-    auto res = toStdString(numSystem);
+QByteArray BigNumber::toQByteArray(NumeralBase numSystem) const {
+    auto res = toString(numSystem);
     return res.c_str();
 }
 
-std::string BigNumber::toStdString(NumeralBase numSystem) const {
+std::string BigNumber::toString(NumeralBase numSystem) const {
     if (numSystem == NumeralBase::Dec) {
         return m_data.str();
     } else {
@@ -262,14 +262,6 @@ std::string BigNumber::toStdString(NumeralBase numSystem) const {
             return "-" + ss.str();
         }
     }
-}
-
-std::string BigNumber::toZeroStdString(int size) const {
-    auto number = this->toStdString();
-    if (size <= number.length())
-        return number;
-    number.insert(0, size - number.size(), '0');
-    return number;
 }
 
 BigNumber BigNumber::pow(unsigned long number) {
@@ -328,7 +320,7 @@ BigNumber BigNumber::random(int n, bool zeroAllowed) {
 }
 
 BigNumber BigNumber::random(int n, const BigNumber &max, bool zeroAllowed) {
-    if (max.toByteArray(NumeralBase::Hex).length() < n)
+    if (max.toQByteArray(NumeralBase::Hex).length() < n)
         return BigNumber(0);
 
     BigNumber result;
@@ -340,14 +332,14 @@ BigNumber BigNumber::random(int n, const BigNumber &max, bool zeroAllowed) {
 }
 
 BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
-    QByteArray maxdata = max.toByteArray();
+    QByteArray maxdata = max.toQByteArray();
     QByteArray b;
     b.clear();
     b.fill('f', maxdata.size());
     BigNumber t(b.toStdString());
 
     while (t >= max) {
-        int        size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
+        int        size = QRandomGenerator::global()->bounded(1, max.toQByteArray().size());
         QByteArray res;
         res.clear();
         for (int i = 0; i < size; i++) {
@@ -362,7 +354,7 @@ BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
 
 namespace magic {
 std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-    return value.toStdString();
+    return value.toString();
 }
 
 BigNumber custom_magic<BigNumber>::write(const std::string &value) {

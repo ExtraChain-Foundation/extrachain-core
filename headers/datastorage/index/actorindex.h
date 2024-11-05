@@ -34,6 +34,7 @@ class ExtraChainNode;
  */
 class EXTRACHAIN_EXPORT ActorIndex : public QObject {
     Q_OBJECT
+
 private:
     ExtraChainNode *node;
 
@@ -108,7 +109,7 @@ public:
      */
     QByteArray getById(const ActorId &id) const;
 
-    qint64 getRecords() const;
+    std::size_t getRecords() const;
     void setFirstId(const ActorId &value);
     std::string getFolderPath() const;
 

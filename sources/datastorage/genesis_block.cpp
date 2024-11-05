@@ -74,7 +74,7 @@ const std::string &GenesisBlock::getDataForSignature() const {
 
 void GenesisBlock::calcHash() {
     SHA3 sha3(SHA3::Bits::Bits512);
-    auto index = m_index.toStdString(NumeralBase::Hex);
+    auto index = m_index.toString(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -83,9 +83,9 @@ void GenesisBlock::calcHash() {
 
     for (const auto &[key, row] : std::as_const(m_dataRows)) {
         auto &[actorId, tokenId] = key;
-        sha3.add(actorId.toStdString().c_str(), actorId.toStdString().size());
-        sha3.add(row.state.toStdString().c_str(), row.state.toStdString().size());
-        sha3.add(tokenId.toStdString().c_str(), tokenId.toStdString().size());
+        sha3.add(actorId.toString().c_str(), actorId.toString().size());
+        sha3.add(row.state.toString().c_str(), row.state.toString().size());
+        sha3.add(tokenId.toString().c_str(), tokenId.toString().size());
         sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
@@ -121,13 +121,13 @@ std::string GenesisBlock::getPrevGenHash() const {
     return m_prevGenHash;
 }
 
-std::string GenesisBlock::toStdString() const {
+std::string GenesisBlock::toString() const {
     std::ostringstream oss;
 
     oss << "GenesisBlock { "
         << "type: " << magic_enum::enum_name(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toStdString() << " (" << m_index.toStdString(NumeralBase::Dec) << "), "
+        << "index: " << m_index.toString() << " (" << m_index.toString(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."

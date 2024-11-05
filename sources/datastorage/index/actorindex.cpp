@@ -172,7 +172,7 @@ std::string ActorIndex::getFolderPath() const {
 }
 
 QString ActorIndex::buildFilePath(const ActorId &id) const {
-    QByteArray Id = id.toByteArray();
+    QByteArray Id = id.toQByteArray();
 
     QByteArray section      = Id.right(SECTION_NAME_SIZE);
     QString    pathToFolder = QString::fromStdString(folderPath) + section;
@@ -188,7 +188,7 @@ QString ActorIndex::buildFilePath(const ActorId &id) const {
 }
 
 std::string ActorIndex::actorPath(const ActorId &id) const {
-    const std::string &idStd = id.toStdString();
+    const std::string &idStd = id.toString();
     return folderPath + idStd.substr(idStd.length() - SECTION_NAME_SIZE) + '/' + idStd;
 }
 
@@ -196,8 +196,8 @@ void ActorIndex::setFirstId(const ActorId &value) {
     if (!m_firstId.isZero()) {
         if (firstId() != value) {
             auto message = QString("Another FirstId: %1 != %2")
-                               .arg(firstId().toString())
-                               .arg(value.toString())
+                               .arg(firstId().toQString())
+                               .arg(value.toQString())
                                .toStdString();
             qFatal("%s", message.c_str());
         }
@@ -208,7 +208,7 @@ void ActorIndex::setFirstId(const ActorId &value) {
     m_firstId = value;
 }
 
-qint64 ActorIndex::getRecords() const {
+std::size_t ActorIndex::getRecords() const {
     return records;
 }
 
@@ -242,7 +242,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
         qFatal("Can't get actor by zero id");
     }
 
-    node->network()->send_message(actorId.toStdString(), MessageType::Actor, MessageStatus::Request);
+    node->network()->send_message(actorId.toString(), MessageType::Actor, MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -260,7 +260,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     int  result  = this->add(actor.id(), actor.toJson());
-    auto actorId = actor.id().toStdString();
+    auto actorId = actor.id().toString();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;
