@@ -4,21 +4,21 @@
 
 #include <fstream>
 
-FragmentStorage::FragmentStorage(ActorId Actor, std::string FileName, std::string FileHash)
-    : storageFile(DFS_PATH::filePath(Actor, FileName).string() + DFSF::Extension) {
-    actor    = Actor;
-    fileName = FileName;
-    fileHash = FileHash;
+FragmentStorage::FragmentStorage(ActorId actorId, std::string fileId, std::string hash)
+    : storageFile(DFS_PATH::filePath(actorId, fileId).string() + DFSF::Extension) {
+    this->actorId = actorId;
+    this->fileId  = fileId;
+    this->hash    = hash;
     storageFile.open();
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
 
 FragmentStorage::FragmentStorage(DFS::Packets::SegmentMessage segmentMessage)
     : storageFile(
-          DFS_PATH::filePath(segmentMessage.Actor, segmentMessage.FileName).string() + DFSF::Extension)
-    , actor(segmentMessage.Actor)
-    , fileName(segmentMessage.FileName)
-    , fileHash(segmentMessage.FileHash) {
+          DFS_PATH::filePath(segmentMessage.actorId, segmentMessage.fileId).string() + DFSF::Extension)
+    , actorId(segmentMessage.actorId)
+    , fileId(segmentMessage.fileId)
+    , hash(segmentMessage.hash) {
     storageFile.open();
     storageFile.query(DFSF::CreateTableQueryFragments);
 }
@@ -29,55 +29,55 @@ bool FragmentStorage::initLocalFile(std::uint64_t filesize) {
 }
 
 bool FragmentStorage::initHistoricalChain() {
-    HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actor, fileName).string());
-    return hc.initLocal(actor, fileName, fileHash);
+    HistoricalChain hc(storageFile.file(), DFS_PATH::filePath(actorId, fileId).string());
+    return hc.initLocal(actorId, fileId, hash);
 }
 
 bool FragmentStorage::insertFragment(DFSP::SegmentMessage msg) {
     std::uint64_t pos      = writeFragment(msg);
     DBRow         row      = makeFragmentRow(msg, pos);
     const auto    inserted = storageFile.insert(DFSF::TableNameFragments, row);
-    moveRows(row, msg.Data.size());
+    moveRows(row, msg.data.size());
     return inserted;
 }
 
 bool FragmentStorage::editFragment(DFSP::EditSegmentMessage msg) {
-    const auto fileHash = msg.NewFileHash.empty() ? msg.FileHash : msg.NewFileHash;
+    const auto fileHash = msg.newHash.empty() ? msg.hash : msg.newHash;
 
-    switch (msg.ActionType) {
-    case DFSP::SegmentMessageType::insert: {
+    switch (msg.actionType) {
+    case DFSP::SegmentMessageType::Insert: {
         //        checkRenameFile(msg);
-        return insertFragment(DFSP::SegmentMessage { .Actor    = msg.Actor,
-                                                     .FileName = msg.FileName,
-                                                     .FileHash = msg.FileHash,
-                                                     .Data     = msg.Data,
-                                                     .Offset   = msg.Offset });
+        return insertFragment(DFSP::SegmentMessage { .actorId = msg.actorId,
+                                                     .fileId  = msg.fileId,
+                                                     .hash    = msg.hash,
+                                                     .data    = msg.data,
+                                                     .offset  = msg.offset });
     }
-    case DFSP::SegmentMessageType::add: {
+    case DFSP::SegmentMessageType::Add: {
         //        checkRenameFile(msg);
-        return insertFragment(DFSP::SegmentMessage { .Actor    = msg.Actor,
-                                                     .FileName = msg.FileName,
-                                                     .FileHash = msg.FileHash,
-                                                     .Data     = msg.Data,
-                                                     .Offset   = msg.Offset });
+        return insertFragment(DFSP::SegmentMessage { .actorId = msg.actorId,
+                                                     .fileId  = msg.fileId,
+                                                     .hash    = msg.hash,
+                                                     .data    = msg.data,
+                                                     .offset  = msg.offset });
     }
-    case DFSP::SegmentMessageType::replace: {
-        std::filesystem::path filePath = DFS::Path::filePath(actor, fileName);
+    case DFSP::SegmentMessageType::Replace: {
+        std::filesystem::path filePath = DFS::Path::filePath(actorId, fileId);
         HistoricalChain       historicalChain(storageFile.file(), filePath.string());
         historicalChain.apply(msg);
-        return applyChanges(msg.Data, msg.Offset);
+        return applyChanges(msg.data, msg.offset);
     }
-    case DFSP::SegmentMessageType::remove: {
+    case DFSP::SegmentMessageType::Remove: {
         //        checkRenameFile(msg);
-        std::filesystem::path             realFilePath = DFS_PATH::filePath(msg.Actor, fileHash);
+        std::filesystem::path             realFilePath = DFS_PATH::filePath(msg.actorId, fileHash);
         boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
         auto                              fileSize = std::filesystem::file_size(realFilePath);
 
-        return removeFragment(DFSP::DeleteSegmentMessage { .Actor    = msg.Actor,
-                                                           .FileName = msg.FileName,
-                                                           .FileHash = msg.FileHash,
-                                                           .Offset   = msg.Offset,
-                                                           .Size     = fileSize });
+        return removeFragment(DFSP::DeleteSegmentMessage { .actorId = msg.actorId,
+                                                           .fileId  = msg.fileId,
+                                                           .hash    = msg.hash,
+                                                           .offset  = msg.offset,
+                                                           .size    = fileSize });
     }
     }
     return false;
@@ -87,16 +87,16 @@ bool FragmentStorage::removeFragment(DFSP::DeleteSegmentMessage msg) {
     std::string GetStartFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
         DFSF::TableNameFragments,
-        std::to_string(msg.Offset));
+        std::to_string(msg.offset));
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow frag = array[0];
         storageFile.deleteRow(DFSF::TableNameFragments, frag);
-        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
+        std::filesystem::path filePath = DFS_PATH::filePath(actorId, fileId);
 
         HistoricalChain          historicalChain(storageFile.file(), filePath.string());
         DFSP::EditSegmentMessage editSegmentMessage =
-            historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::remove);
+            historicalChain.makeEditSegmentMessage(msg, DFSP::SegmentMessageType::Remove);
         historicalChain.apply(editSegmentMessage);
 
         return remove(filePath, std::stoull(frag.at("storedPos")), std::stoull(frag.at("size")));
@@ -114,11 +114,11 @@ DFSP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow                 fragMap  = array[0];
-        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
-        fragment.Offset                = pos;
-        fragment.Data                  = extract(filePath, pos, std::stoull(fragMap.at("size")));
-        fragment.Actor                 = this->actor.toString();
-        fragment.FileHash              = this->fileName;
+        std::filesystem::path filePath = DFS_PATH::filePath(actorId, fileId);
+        fragment.offset                = pos;
+        fragment.data                  = extract(filePath, pos, std::stoull(fragMap.at("size")));
+        fragment.actorId               = this->actorId.toString();
+        fragment.hash                  = this->fileId;
         return fragment;
     }
     return fragment;
@@ -134,11 +134,11 @@ DFS::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) 
     std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DBRow                 fragMap  = array[0];
-        std::filesystem::path filePath = DFS_PATH::filePath(actor, fileName);
-        fragment.Offset                = std::stoull(fragMap.at("pos"));
-        fragment.Data  = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
-        fragment.Actor = this->actor.toString();
-        fragment.FileHash = fragMap.at("fragHash");
+        std::filesystem::path filePath = DFS_PATH::filePath(actorId, fileId);
+        fragment.offset                = std::stoull(fragMap.at("pos"));
+        fragment.data    = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
+        fragment.actorId = this->actorId.toString();
+        fragment.hash    = fragMap.at("fragHash");
     }
     return fragment;
 }
@@ -149,7 +149,7 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
     }
 
     std::uint64_t      endPos   = pos + data.length();
-    auto               filePath = DFS_PATH::filePath(actor, fileName);
+    auto               filePath = DFS_PATH::filePath(actorId, fileId);
     std::vector<DBRow> frags    = storageFile.select(fmt::format(
         "SELECT * FROM {} WHERE pos + size > {} AND pos < {}",
         DFSF::TableNameFragments,
@@ -255,10 +255,10 @@ std::pair<DBRow, DBRow> FragmentStorage::getPrevNextPairFragment(std::uint64_t n
 
 DBRow FragmentStorage::makeFragmentRow(DFSP::SegmentMessage msg, std::uint64_t storedPos) {
     DBRow row;
-    row.insert({ "pos", std::to_string(msg.Offset) });
+    row.insert({ "pos", std::to_string(msg.offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
-    row.insert({ "size", std::to_string(msg.Data.size()) });
-    row.insert({ "fragHash", Utils::calcHash(msg.Data) });
+    row.insert({ "size", std::to_string(msg.data.size()) });
+    row.insert({ "fragHash", Utils::calcHash(msg.data) });
     return row;
 }
 
@@ -267,14 +267,14 @@ DBRow FragmentStorage::makeFragmentRow(std::uint64_t pos, std::uint64_t storedPo
     row.insert({ "pos", std::to_string(pos) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(size) });
-    row.insert({ "fragHash", fileHash });
+    row.insert({ "fragHash", hash });
 
     return row;
 }
 
 std::uint64_t FragmentStorage::writeFragment(DFSP::SegmentMessage msg) {
-    std::filesystem::path   filePath   = DFS_PATH::filePath(actor, fileName);
-    std::pair<DBRow, DBRow> prevnext   = getPrevNextPairFragment(msg.Offset);
+    std::filesystem::path   filePath   = DFS_PATH::filePath(actorId, fileId);
+    std::pair<DBRow, DBRow> prevnext   = getPrevNextPairFragment(msg.offset);
     std::uint64_t           posToWrite = 0;
     if (prevnext.first.empty()) {
         posToWrite = 0;
@@ -283,7 +283,7 @@ std::uint64_t FragmentStorage::writeFragment(DFSP::SegmentMessage msg) {
     } else {
         posToWrite = std::stoull(prevnext.second["storedPos"]);
     }
-    return write(filePath, posToWrite, msg.Data);
+    return write(filePath, posToWrite, msg.data);
 }
 
 void FragmentStorage::moveRows(DBRow curRow, std::uint64_t moveSize) {
@@ -438,14 +438,14 @@ std::uint64_t FragmentStorage::remove(std::filesystem::path filePath, std::uint6
 }
 
 bool FragmentStorage::checkRenameFile(const DFS::Packets::EditSegmentMessage &msg) {
-    if (msg.NewFileHash.empty())
+    if (msg.newHash.empty())
         return false;
 
-    fileHash                        = msg.NewFileHash;
+    hash                            = msg.newHash;
     std::string           pathDelim = Utils::platformDelimeter();
-    std::filesystem::path path      = DFSB::fsActrRoot + pathDelim + msg.Actor.toString() + pathDelim;
-    std::filesystem::rename(path / std::string(msg.FileHash), path / std::string(msg.NewFileHash));
-    return std::filesystem::exists(path / std::string(msg.NewFileHash));
+    std::filesystem::path path      = DFSB::fsActrRoot + pathDelim + msg.actorId.toString() + pathDelim;
+    std::filesystem::rename(path / std::string(msg.hash), path / std::string(msg.newHash));
+    return std::filesystem::exists(path / std::string(msg.newHash));
 }
 
 FragmentWriter::FragmentWriter(
@@ -458,14 +458,13 @@ FragmentWriter::FragmentWriter(
 }
 
 void FragmentWriter::run() {
-    auto fileName = DFS_PATH::filePath(m_msg.Actor, m_msg.FileName);
+    auto fileName = DFS_PATH::filePath(m_msg.actorId, m_msg.fileId);
     if (!std::filesystem::exists(fileName)
-        || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), m_msg.FileName)
-               != m_compliteFiles.end()) {
+        || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), m_msg.fileId) != m_compliteFiles.end()) {
         return;
     }
 
-    auto dirRowExp = DFS::Tables::ActorDirFile::getDirRow(m_msg.Actor, m_msg.FileName);
+    auto dirRowExp = DFS::Tables::ActorDirFile::getDirRow(m_msg.actorId, m_msg.fileId);
 
     if (!dirRowExp.has_value()) {
         eLog("[Dfs] Fragments: dir row error");
@@ -479,31 +478,31 @@ void FragmentWriter::run() {
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         qDebug() << "[Dfs] File is complite";
-        emit compliteFile(m_msg.FileName);
+        emit compliteFile(m_msg.fileId);
         return;
     }
 
     FragmentStorage fs(m_msg);
     fs.insertFragment(m_msg);
     currentFileSize = std::filesystem::file_size(fileName);
-    emit downloadProgress(m_msg.Actor, m_msg.FileName, double(m_msg.Offset) / double(fileSize) * 100);
+    emit downloadProgress(m_msg.actorId, m_msg.fileId, double(m_msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        if (m_msg.FileHash == Utils::calcHashForFile(fileName)) {
+        if (m_msg.hash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             emit eraseFromFiles(m_msg);
             emit downloadedFile(dirRow);
-            emit sendFile(m_msg.Actor, m_msg.FileName);
+            emit sendFile(m_msg.actorId, m_msg.fileId);
             //            fs.initHistoricalChain();
             qDebug() << "File " << fileName.c_str() << " downloaded";
         } else {
-            emit requestFile(m_msg.Actor, m_msg.FileName);
+            emit requestFile(m_msg.actorId, m_msg.fileId);
         }
     } else {
         DFSP::RequestFileSegmentMessage requestMsg {
-            .Actor    = m_msg.Actor,
-            .FileName = m_msg.FileName,
-            .FileHash = m_msg.FileHash,
-            .Offset   = m_msg.Offset,
+            .actorId = m_msg.actorId,
+            .fileId  = m_msg.fileId,
+            .hash    = m_msg.hash,
+            .offset  = m_msg.offset,
         };
         emit requestNextFragment(requestMsg);
     }

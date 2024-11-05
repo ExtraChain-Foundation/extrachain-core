@@ -31,13 +31,13 @@ bool HistoricalChain::apply(DFSP::EditSegmentMessage msg) {
         prevNum = std::stoull(lastRow.at(NUM));
         num     = prevNum + 1;
     }
-    if (STDFS::is_directory(objectPath) && msg.Offset == 0) {
-        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
+    if (STDFS::is_directory(objectPath) && msg.offset == 0) {
+        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.actionType, msg.data));
     } else if (STDFS::is_regular_file(objectPath)) {
         DFSHC::FileChange fc;
-        fc.pos  = msg.Offset;
-        fc.data = msg.Data;
-        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, fc.toString()));
+        fc.pos  = msg.offset;
+        fc.data = msg.data;
+        return chainFile.insert(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.actionType, fc.toString()));
     }
 
     return false;
@@ -47,13 +47,13 @@ bool HistoricalChain::remove(DFSP::EditSegmentMessage msg) {
     bool       removed     = false;
     const auto lastSegment = getLastEditSegmentMessage();
 
-    if (msg.Data == lastSegment.Data) {
+    if (msg.data == lastSegment.data) {
         DBRow         lastRow = getLastRow();
         std::uint64_t prevNum = std::stoull(lastRow.at(PREV_NUM));
         std::uint64_t num     = std::stoull(lastRow.at(NUM));
-        removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.ActionType, msg.Data));
+        removed = chainFile.deleteRow(DFSHC::TableNameHC, makeDBRow(num, prevNum, msg.actionType, msg.data));
     } else {
-        DBRow      dbRow   = getRow(msg.Data);
+        DBRow      dbRow   = getRow(msg.data);
         DBRow      nextRow = getNextRow(std::stoi(dbRow.at(NUM)));
         const bool updated = chainFile.update(fmt::format(
             "UPDATE {} SET prevNum={} WHERE hash={}",
@@ -73,7 +73,7 @@ bool HistoricalChain::remove(DFSP::EditSegmentMessage msg) {
 bool HistoricalChain::revert(DFSP::EditSegmentMessage msg) {
     bool reverted = true;
 
-    DBRow       row = getRow(msg.Data);
+    DBRow       row = getRow(msg.data);
     std::string queryGetListEditSegment =
         fmt::format("SELECT * FROM {} WHERE num >= {}", DFSHC::TableNameHC, row.at(NUM));
     std::vector<DBRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, DFSHC::TableNameHC);
@@ -93,10 +93,10 @@ bool HistoricalChain::update(DFSP::EditSegmentMessage msg, const int &num) {
     updated                                         = chainFile.update(fmt::format(
         "UPDATE {} SET type = {} data = {} hash = {} WHERE data= {}",
         DFSHC::TableNameHC,
-        std::to_string(msg.ActionType),
-        msg.Data,
-        msg.FileHash,
-        editableSegmentMessage.Data));
+        std::to_string(msg.actionType),
+        msg.data,
+        msg.hash,
+        editableSegmentMessage.data));
     return updated;
 }
 
@@ -122,24 +122,24 @@ DFSP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(
     const DFSP::SegmentMessage     &msg,
     const DFSP::SegmentMessageType &smType) {
-    return DFSP::EditSegmentMessage { .Actor      = msg.Actor,
-                                      .FileName   = msg.FileName,
-                                      .FileHash   = msg.FileHash,
-                                      .Data       = msg.Data,
-                                      .Offset     = msg.Offset,
-                                      .ActionType = smType };
+    return DFSP::EditSegmentMessage { .actorId    = msg.actorId,
+                                      .fileId     = msg.fileId,
+                                      .hash       = msg.hash,
+                                      .data       = msg.data,
+                                      .offset     = msg.offset,
+                                      .actionType = smType };
 }
 
 DFSP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(
     const DFSP::DeleteSegmentMessage &msg,
     const DFSP::SegmentMessageType   &smType) {
     return DFSP::EditSegmentMessage {
-        .Actor      = msg.Actor,
-        .FileName   = msg.FileName,
-        .FileHash   = msg.FileHash,
-        .Data       = "",
-        .Offset     = msg.Offset,
-        .ActionType = smType,
+        .actorId    = msg.actorId,
+        .fileId     = msg.fileId,
+        .hash       = msg.hash,
+        .data       = "",
+        .offset     = msg.offset,
+        .actionType = smType,
     };
 }
 
@@ -157,12 +157,12 @@ bool HistoricalChain::initLocal(
     ifs.seekg(0, ifs.beg);
 
     char                    *buffer = new char[DFS::Basic::historicalChainSectionSize];
-    DFSP::EditSegmentMessage esm { .Actor      = actor,
-                                   .FileHash   = fileHash,
-                                   .Offset     = 0,
-                                   .ActionType = DFSP::SegmentMessageType::insert };
+    DFSP::EditSegmentMessage esm { .actorId    = actor,
+                                   .hash       = fileHash,
+                                   .offset     = 0,
+                                   .actionType = DFSP::SegmentMessageType::Insert };
     do {
-        esm.Data = std::move(std::string(buffer, sizeof(buffer)));
+        esm.data = std::move(std::string(buffer, sizeof(buffer)));
         apply(esm);
     } while (ifs.read(buffer, DFS::Basic::historicalChainSectionSize));
     delete[] buffer;
@@ -244,13 +244,13 @@ DBRow HistoricalChain::getRow(const std::string &data) {
 
 DFSP::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
     DFSP::EditSegmentMessage result;
-    result.ActionType = static_cast<DFSP::SegmentMessageType>(std::stoi(dbRow.at(TYPE)));
+    result.actionType = static_cast<DFSP::SegmentMessageType>(std::stoi(dbRow.at(TYPE)));
 
     DFS::Historical::FileChange fc;
     fc.fromStdString(dbRow.at(DATA));
-    result.Data     = fc.data;
-    result.Offset   = fc.pos;
-    result.FileHash = dbRow.at(HASH);
-    result.Actor    = "";
+    result.data    = fc.data;
+    result.offset  = fc.pos;
+    result.hash    = dbRow.at(HASH);
+    result.actorId = "";
     return result;
 }

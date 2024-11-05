@@ -144,89 +144,88 @@ MAKE_MAGICAL_OPERATORS(DirRow)
 
 namespace Packets {
     struct ResponseDfsSize {
-        ActorId     Actor;
-        std::size_t Size;
+        ActorId     actorId;
+        std::size_t size;
 
-        MSGPACK_DEFINE(Actor, Size)
+        MSGPACK_DEFINE(actorId, size)
     };
 
     struct RequestDfsSize {
-        ActorId Actor;
+        ActorId actorId;
 
-        MSGPACK_DEFINE(Actor)
+        MSGPACK_DEFINE(actorId)
     };
 
     struct ResponseBlockCount {
-        ActorId   Actor;
+        ActorId   actorId;
         BigNumber blockCount;
 
-        MSGPACK_DEFINE(Actor, blockCount)
+        MSGPACK_DEFINE(actorId, blockCount)
     };
 
     struct RequestBlockCount {
-        ActorId Actor;
+        ActorId actorId;
 
-        MSGPACK_DEFINE(Actor)
+        MSGPACK_DEFINE(actorId)
     };
 
     struct RequestFileSegmentMessage {
-        ActorId       Actor;
-        std::string   FileName;
-        std::string   FileHash;
-        std::string   Path;
-        std::uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Path, Offset)
+        ActorId       actorId;
+        std::string   fileId;
+        std::string   hash;
+        std::uint64_t offset;
+        MSGPACK_DEFINE(actorId, fileId, hash, offset)
     };
 
     struct RemoveFileMessage {
-        ActorId     Actor;
-        std::string FileName;
-        MSGPACK_DEFINE(Actor, FileName)
+        ActorId     actorId;
+        std::string fileId;
+        MSGPACK_DEFINE(actorId, fileId)
     };
 
     struct SegmentMessage {
-        ActorId       Actor;
-        std::string   FileName;
-        std::string   FileHash;
-        std::string   Data;
-        std::uint64_t Offset;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset)
+        ActorId       actorId;
+        std::string   fileId;
+        std::string   hash;
+        std::string   data;
+        std::uint64_t offset;
+        MSGPACK_DEFINE(actorId, fileId, hash, data, offset)
     };
 
     enum SegmentMessageType {
-        add     = 0,
-        insert  = 1,
-        replace = 2,
-        remove  = 3
+        Add     = 0,
+        Insert  = 1,
+        Replace = 2,
+        Remove  = 3
     };
 
     struct EditSegmentMessage {
-        ActorId            Actor;
-        std::string        FileName;
-        std::string        FileHash;
-        std::string        NewFileHash;
-        std::string        Data;
-        std::uint64_t      Offset;
-        SegmentMessageType ActionType;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Data, Offset, ActionType)
+        ActorId            actorId;
+        std::string        fileId;
+        std::string        hash;
+        std::string        newHash;
+        std::string        data;
+        std::uint64_t      offset;
+        SegmentMessageType actionType;
+        MSGPACK_DEFINE(actorId, fileId, hash, data, offset, actionType)
     };
 
     struct DeleteSegmentMessage {
-        ActorId       Actor;
-        std::string   FileName;
-        std::string   FileHash;
-        std::uint64_t Offset;
-        std::uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Offset, Size)
+        ActorId       actorId;
+        std::string   fileId;
+        std::string   hash;
+        std::uint64_t offset;
+        std::uint64_t size;
+        MSGPACK_DEFINE(actorId, fileId, hash, offset, size)
     };
 
     struct VerifyFileMessage {
-        ActorId       Actor;
-        std::string   FileHash;
-        std::string   FileName;
-        bool          Verified = false;
-        std::uint64_t Size;
-        MSGPACK_DEFINE(Actor, FileName, FileHash, Verified, Size)
+        ActorId       actorId;
+        std::string   hash;
+        std::string   fileId;
+        bool          verified = false;
+        std::uint64_t size;
+        MSGPACK_DEFINE(actorId, fileId, hash, verified, size)
     };
 
     struct Connection {

@@ -57,7 +57,7 @@ public:
         const std::string           &visualFolder,
         const std::string           &visualName,
         DFS::Encryption              securityLevel);
-    bool removeLocalFile(const ActorId &actorId, const std::string &fileHash);
+    bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile
 
     // External interfaces
@@ -143,12 +143,12 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
-    void fileAdded(DFS::DirRow dirRow);
-    void fileUpdated(DFS::DirRow dirRow);
-    void fileRemoved(DFS::DirRow dirRow);
+    void added(DFS::DirRow dirRow);
+    void updated(DFS::DirRow dirRow);
+    void removed(DFS::DirRow dirRow);
 
-    void fileUploaded(DFS::DirRow dirRow);
-    void fileDownloaded(DFS::DirRow dirRow);
+    void uploaded(DFS::DirRow dirRow);
+    void downloaded(DFS::DirRow dirRow);
 
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);

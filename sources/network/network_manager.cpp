@@ -522,8 +522,8 @@ void NetworkManager::messageReceived(
     }
     case MessageType::ResponseDfsSize: {
         const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
-        if (Utils::globalVariableOfDfsSize < msgStruct.Size) {
-            Utils::globalVariableOfDfsSize = msgStruct.Size;
+        if (Utils::globalVariableOfDfsSize < msgStruct.size) {
+            Utils::globalVariableOfDfsSize = msgStruct.size;
         }
         break;
     }
