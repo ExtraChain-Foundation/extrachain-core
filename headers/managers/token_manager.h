@@ -58,6 +58,7 @@ public:
 
     static bool isValidName(const std::string &name);
     static bool isValidTicker(const std::string &ticker);
+    static QMap<QString, QString> mapTokens();
 
 public slots:
     std::expected<TokenData, CreateTokenError> createToken(
@@ -82,6 +83,7 @@ signals:
     void errorTickerTokenExist(const QString &);
     void added(const ActorId &owner, const TokenId &token);
     void sendToken(const ActorId &actor, const QString &pathToJson);
+    void newToken();
 };
 
 #endif // TOKEN_MANAGER_H

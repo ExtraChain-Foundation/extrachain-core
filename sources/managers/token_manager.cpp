@@ -65,6 +65,25 @@ bool TokenManager::isValidTicker(const std::string &ticker) {
     });
 }
 
+QMap<QString, QString> TokenManager::mapTokens()
+{
+    QMap<QString, QString> map = {{ActorId().toString(), "ExC"}};
+    DBConnector db(Token::db_tokens_path);
+    bool isDbOpen = db.open();
+    if(!isDbOpen) {
+        qWarning() << "Database doesn't opened.";
+        return map;
+    }
+    auto resultSelect = db.selectAll(Token::tokenTableName);
+    for(auto& t : resultSelect) {
+        auto tokenId = t.at("actorId").c_str();
+        auto ticker = t.at("ticker").c_str();
+        map.insert(tokenId, ticker);
+    }
+
+    return map;
+}
+
 void TokenManager::sendInitialTransaction(
     const ActorId        &owner,
     const TokenId        &token,
@@ -188,7 +207,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
                  << " not open.";
     }
 
-    sendInitialTransaction(owner, owner, BigNumberFloat(count, NumeralBase::Dec));
+    sendInitialTransaction(owner, tokenData.token, BigNumberFloat(count, NumeralBase::Dec));
     return tokenData;
 }
 
@@ -226,6 +245,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 if (isDbOpen) {
                     const bool inserted = db.insert(Token::tokenTableName, rowRow);
                     qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+                    emit newToken();
                 }
             }
         }
@@ -245,7 +265,7 @@ bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
 
 QJsonDocument TokenData::toJsonDocument() {
     QJsonObject jsonObj;
-    // jsonObj[Token::Fields::actorId.c_str()] = actor.c_str();
+    jsonObj[Token::Fields::actorId.c_str()] = token.c_str();
     jsonObj[Token::Fields::owner.c_str()]  = owner.c_str();
     jsonObj[Token::Fields::count.c_str()]  = std::stoi(count);
     jsonObj[Token::Fields::name.c_str()]   = name.c_str();
