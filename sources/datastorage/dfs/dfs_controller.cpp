@@ -165,7 +165,9 @@ std::expected<DFS::DirRow, DFS::DfsError> DfsController::storeFile(
 
     sendFile(actorId, fileName);
 
-    // TODO: signals?
+    insertToFiles(dirRow);
+
+    emit fileAdded(dirRow);
 
     return dirRow;
     // return addFile(msg, false);
@@ -239,8 +241,9 @@ std::string DfsController::addFile(const DFS::DirRow &dirRow, bool loadBytes) {
     auto        prevRowOpt   = result.empty() ? std::optional<DBRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
 
-    const DBRow dirRowDb  = Utils::toDbRow(dirRow);
-    bool        insertRes = actrDirFile.insert(DFST::ActorDirFile::TableName, dirRowDb);
+    DBRow dirRowDb  = Utils::toDbRow(dirRow);
+    dirRowDb.erase("actorId");
+    bool        insertRes = actrDirFile.replace(DFST::ActorDirFile::TableName, dirRowDb);
 
     if (!insertRes) {
         auto errorStr = fmt::format(
@@ -277,7 +280,7 @@ std::string DfsController::addFile(const DFS::DirRow &dirRow, bool loadBytes) {
     }
 
     insertToFiles(dirRow);
-    emit added(dirRow.actorId, dirRow.fileId, dirRow.visualPath(), dirRow.size);
+    emit fileAdded(dirRow);
 
     eLog("[DFS] File {}/{} was added", dirRow.actorId, dirRow.fileId);
 
@@ -930,7 +933,9 @@ DfsController::sendFragment(const DFSP::RequestFileSegmentMessage &msg, const st
         messageId,
         Config::Net::TypeSend::Focused);
     if (msg.Offset + DFSB::sectionSize >= fileSize) {
-        emit uploaded(msg.Actor, msg.FileName);
+        if (const auto dirRow = DFS::Tables::ActorDirFile::getDirRow(msg.Actor, msg.FileName); dirRow.has_value()) {
+            emit fileUploaded(dirRow.value());
+        }
         return "";
     }
     emit uploadProgress(msg.Actor, msg.FileName, double(msg.Offset) / double(fileSize) * 100);
@@ -980,7 +985,9 @@ void DfsController::fetchFragments(DFS::Packets::RequestFileSegmentMessage &msg,
             Config::Net::TypeSend::Focused);
 
         if (lastFragment) {
-            emit uploaded(msg.Actor, msg.FileName);
+            if (const auto dirRow = DFS::Tables::ActorDirFile::getDirRow(msg.Actor, msg.FileName); dirRow.has_value()) {
+                emit fileUploaded(dirRow.value());
+            }
         } else {
             emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
         }
@@ -1030,7 +1037,9 @@ void DfsController::fetchFragment(DFS::Packets::RequestFileSegmentMessage &msg, 
         Config::Net::TypeSend::Focused);
 
     if (lastFragment) {
-        emit uploaded(msg.Actor, msg.FileName);
+        if (const auto dirRow = DFS::Tables::ActorDirFile::getDirRow(msg.Actor, msg.FileName); dirRow.has_value()) {
+            emit fileUploaded(dirRow.value());
+        }
     } else {
         emit uploadProgress(msg.Actor, msg.FileName, double(totalOffset) / double(fileSize) * 100);
     }
@@ -1137,7 +1146,7 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
         exit(EXIT_FAILURE);
     }
     std::vector<DBRow> actrDirData = actrDirFile.select(
-        fmt::format("SELECT * FROM {} WHERE fileName = '{}';", DFST::ActorDirFile::TableName, msg.FileName));
+        fmt::format("SELECT * FROM {} WHERE fileId = '{}';", DFST::ActorDirFile::TableName, msg.FileName));
     actrDirFile.close();
 
     DBRow dirRowDb  = actrDirData[0];
@@ -1163,8 +1172,9 @@ std::string DfsController::addFragment(const DFSP::SegmentMessage &msg) {
     if (fileSize == currentFileSize) {
         if (msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+            auto dirRow = files.at({ msg.Actor, msg.FileName });
             files.erase({ msg.Actor, msg.FileName });
-            emit downloaded(msg.Actor, msg.FileName);
+            emit fileDownloaded(dirRow);
             sendFile(msg.Actor, msg.FileName); // temp
             fs.initHistoricalChain();
             return "hash";
@@ -1195,16 +1205,16 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
     });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
     connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
-    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
+    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::fileDownloaded);
     connect(
         &fw,
         &FragmentWriter::downloadedFile,
         this,
-        [=, this](const ActorId &actor, const std::string &fileName) {
-            this->updateFileState(actor, fileName, DFS::FileState::Loaded);
+        [this](const DFS::DirRow &dirRow) {
+            this->updateFileState(dirRow.actorId, dirRow.fileId, DFS::FileState::Loaded);
         });
 
-    connect(&fw, &FragmentWriter::compliteFile, this, [&](const std::string &fileName) {
+    connect(&fw, &FragmentWriter::compliteFile, this, [this](const std::string &fileName) {
         m_compliteFiles.push_back(fileName);
     });
     connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
@@ -1307,7 +1317,7 @@ void DfsController::updateFileState(
     DFS::FileState    state) {
     auto actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
     actrDirFile.update(fmt::format(
-        "UPDATE {} SET state = '{}' WHERE fileName = '{}'",
+        "UPDATE {} SET state = '{}' WHERE fileId = '{}'",
         DFST::ActorDirFile::TableName,
         std::to_underlying(state),
         fileName));
@@ -1324,7 +1334,7 @@ void DfsController::loadVPNLocalizationFiles() {
         DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(actorId);
 
         auto actorRows = actrDirFile.select(fmt::format(
-            "SELECT fileName FROM {} WHERE filePath='localizationInfo' AND state={}",
+            "SELECT fileId FROM {} WHERE name='localizationInfo' AND state={}",
             DFST::ActorDirFile::TableName,
             std::to_string(std::to_underlying(DFS::FileState::Loaded))));
         for (const auto &actorRow : actorRows) {

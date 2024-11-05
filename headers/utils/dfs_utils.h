@@ -372,8 +372,8 @@ namespace Tables {
                                                     "size          INTEGER          NOT NULL,"
                                                     "created       INTEGER          NOT NULL,"
                                                     "lastModified  INTEGER          NOT NULL,"
-                                                    "type          INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
-                                                    "encryption    INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 1),"
+                                                    "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 2),"
+                                                    "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
                                                     "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
@@ -384,12 +384,16 @@ namespace Tables {
 
         // TODO: optional
         DBConnector           actorDbConnector(const ActorId& actorId);
+
         std::filesystem::path actorDbPath(const ActorId& actorId);
         std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
         std::expected<DFS::DirRow, DFS::DfsError>
+
         getDirRow(const ActorId& actorId, const std::string& fileId);
         std::expected<std::vector<DFS::DirRow>, DFS::DfsError>
              getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
+
+        bool addDirRow(const ActorId& actorId, const DFS::DirRow& dirRow);
         bool addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
     }
 

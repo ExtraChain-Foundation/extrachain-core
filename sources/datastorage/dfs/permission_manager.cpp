@@ -194,7 +194,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //            (std::stringstream() << "UPDATE " << Config::DataStorage::permissionTable << " SET
     //            permission = '"
     //                                 << newPermissionStr << "', signature = '" << newSignatureStr
-    //                                 << "' WHERE fileHash = '" << fileHashStr << "' AND userId = '" <<
+    //                                 << "' WHERE hash = '" << fileHashStr << "' AND userId = '" <<
     //                                 userIdStr
     //                                 << "' AND signature = '" << signatureStr << "'")
     //                .str();
@@ -266,7 +266,7 @@ DBRow PermissionManager::makeDBRow(
 // DBRow PermissionManager::findDBRow(const QString &userId, const QString &fileHash) {
 //    const std::string selectQuery =
 //        (std::stringstream() << "SELECT * FROM " << Config::DataStorage::permissionTable
-//                             << " WHERE fileHash = '" << fileHash.toStdString() << "' AND userId = '"
+//                             << " WHERE hash = '" << fileHash.toStdString() << "' AND userId = '"
 //                             << userId.toStdString() << "'")
 //            .str();
 

@@ -537,7 +537,6 @@ void ExtraChainNode::connectSignals() {
                 "token-description.json",
                 DFS::Encryption::Public);
         });
-    connect(m_dfs, &DfsController::checkIsContract, m_tokenManager, &TokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {

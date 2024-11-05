@@ -53,6 +53,15 @@ DBConnector::DBConnector(const std::string &filePath, DBConnectorType type) {
     this->m_file = filePath;
 }
 
+DBConnector::DBConnector(const std::filesystem::path &filePath, DBConnectorType type) {
+    DBConnector(filePath.string(), type);
+}
+
+DBConnector::DBConnector(const char *filePath, DBConnectorType type)
+{
+    DBConnector(std::string(filePath), type);
+}
+
 DBConnector::DBConnector(DBConnector &&rhs) {
     if (this == &rhs)
         return;
@@ -499,6 +508,15 @@ bool DBConnector::implementationInsert(const std::string &tableName, const DBRow
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
         qDebug() << "[DBConnector] ImplementationInsert: Execution failed: " << sqlite3_errmsg(db);
+        qDebug() << file().c_str() << "(false):" << query.c_str();
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+    int changes = sqlite3_changes(db);
+    if (changes == 0 && !isReplace) {
+        qDebug() << "[DBConnector] ImplementationInsert: No rows affected:" << sqlite3_errmsg(db);
         qDebug() << file().c_str() << "(false):" << query.c_str();
         sqlite3_finalize(stmt);
         dbmutex.unlock();

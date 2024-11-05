@@ -465,20 +465,13 @@ void FragmentWriter::run() {
         return;
     }
 
-    DBConnector actrDirFile = DFST::ActorDirFile::actorDbConnector(m_msg.Actor);
-    if (!actrDirFile.isOpen()) {
-        qFatal("Error addFragment 1");
-        exit(EXIT_FAILURE);
-    }
-    std::vector<DBRow> actrDirData = DFST::ActorDirFile::getFileDataByName(&actrDirFile, m_msg.FileName);
-    actrDirData                    = actrDirFile.select(
-        fmt::format("SELECT * FROM {} WHERE fileName = '{}'", DFST::ActorDirFile::TableName, m_msg.FileName));
+    auto dirRowExp = DFS::Tables::ActorDirFile::getDirRow(m_msg.Actor, m_msg.FileName);
 
-    DBRow dirRowDb  = actrDirData[0];
-    auto  dirRowExp = Utils::fromDbRow<DFS::DirRow>(dirRowDb);
     if (!dirRowExp.has_value()) {
+        eLog("[Dfs] Fragments: dir row error");
         return;
     }
+
     auto dirRow = dirRowExp.value();
 
     std::string   virtualPath     = dirRow.visualPath();
@@ -498,7 +491,7 @@ void FragmentWriter::run() {
         if (m_msg.FileHash == Utils::calcHashForFile(fileName)) {
             qDebug() << "[Dfs] File" << fileName.c_str() << "done";
             emit eraseFromFiles(m_msg);
-            emit downloadedFile(m_msg.Actor, m_msg.FileName);
+            emit downloadedFile(dirRow);
             emit sendFile(m_msg.Actor, m_msg.FileName);
             //            fs.initHistoricalChain();
             qDebug() << "File " << fileName.c_str() << " downloaded";

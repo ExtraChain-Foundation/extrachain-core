@@ -130,6 +130,8 @@ protected:
 
 public:
     explicit DBConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
+    explicit DBConnector(const std::filesystem::path &filePath, DBConnectorType type = DBConnectorType::Regular);
+    explicit DBConnector(const char* filePath, DBConnectorType type = DBConnectorType::Regular);
     DBConnector(DBConnector &&db);
     ~DBConnector();
 

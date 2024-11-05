@@ -3,12 +3,12 @@
 #include "datastorage/actor.h"
 
 std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByHash(DBConnector *db, std::string hash) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE fileHash = '{}'", TableName, hash);
+    std::string query = fmt::format("SELECT * FROM {} WHERE hash = '{}'", TableName, hash);
     return db->select(query);
 }
 
 std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByName(DBConnector *db, std::string name) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE fileName = '{}'", TableName, name);
+    std::string query = fmt::format("SELECT * FROM {} WHERE fileId = '{}'", TableName, name);
     return db->select(query);
 }
 
@@ -55,6 +55,7 @@ DFS::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t last
     for (auto &row : actrDirData) {
         auto dirRow = Utils::fromDbRow<DFS::DirRow>(row);
         if (dirRow.has_value()) {
+            dirRow->actorId = actorId;
             dirRows.push_back(dirRow.value());
         }
     }
@@ -81,26 +82,39 @@ DFS::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &
         return std::unexpected(DFS::DfsError::DirError);
     }
 
+    dirRow->actorId = actorId;
     return dirRow.value();
 }
 
+bool DFS::Tables::ActorDirFile::addDirRow(const ActorId &actorId, const DirRow &dirRow) {
+    auto dirFile = actorDbConnector(actorId);
+
+    if (!dirFile.isOpen()) {
+        return false;
+    }
+
+    auto dirRowDb = Utils::toDbRow(dirRow);
+    dirRowDb.erase("actorId");
+    bool res = dirFile.insert(DFS::Tables::ActorDirFile::TableName, dirRowDb);
+
+    return res;
+}
+
 bool DFS::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::vector<DirRow> &dirRows) {
-    std::string pathDelim = Utils::platformDelimeter();
-    std::string actrDirFilePath =
-        DFSB::fsActrRoot + pathDelim + actorId.toString() + pathDelim + DFSB::fsMapName;
-    DBConnector actrDirFile(actrDirFilePath);
-    if (!actrDirFile.open()) {
+    auto dirFile = actorDbConnector(actorId);
+
+    if (!dirFile.isOpen()) {
         return false;
     }
 
     for (auto &dirRow : dirRows) {
         if (dirRow.hash.empty()) {
-            // Uncommited row below and find out why hash is empty.
-            // qFatal("Oh no why. Filehash is empty.");
+            continue;
         }
 
-        auto row = Utils::toDbRow(dirRow);
-        actrDirFile.insert(DFS::Tables::ActorDirFile::TableName, row);
+        auto dirRowDb = Utils::toDbRow(dirRow);
+        dirRowDb.erase("actorId");
+        dirFile.insert(DFS::Tables::ActorDirFile::TableName, dirRowDb);
     }
 
     return true;
@@ -141,8 +155,8 @@ int DFS::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     if (count == 0)
         return 0;
 
-    auto row = db.select(fmt::format("SELECT SUM(fileSize) from {}", TableName)).at(0);
-    return std::stoi(row["SUM(fileSize)"]);
+    auto row = db.select(fmt::format("SELECT SUM(size) from {}", TableName)).at(0);
+    return std::stoi(row["SUM(size)"]);
 }
 
 std::uint64_t

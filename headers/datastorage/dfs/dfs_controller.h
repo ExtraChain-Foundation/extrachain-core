@@ -143,13 +143,17 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
-    void added(ActorId actorId, std::string fileHash, std::string visual, std::size_t size);
-    void uploaded(ActorId actorId, std::string fileHash); // TODO: loadId
-    void downloaded(ActorId actorId, std::string fileHash);
+    void fileAdded(DFS::DirRow dirRow);
+    void fileUpdated(DFS::DirRow dirRow);
+    void fileRemoved(DFS::DirRow dirRow);
+
+    void fileUploaded(DFS::DirRow dirRow);
+    void fileDownloaded(DFS::DirRow dirRow);
+
     void downloadProgress(ActorId actorId, std::string fileHash, int progress);
     void uploadProgress(ActorId actorId, std::string fileHash, int progress);
-    void resultAddFile(const QString &result, const QString &fileName);
-    void checkIsContract(const QString &pathToFile);
+
+    //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);
     void vpnLocalizationLoadedFromStorage(const std::string actorId, const std::string fileName);
 };
