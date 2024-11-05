@@ -80,9 +80,22 @@
     // #include <cstdbool>
     #include <optional>
     #include <expected>
+    #include <filesystem>
+    #include <ranges>
+    #include <span>
+    #include <concepts>
+    #include <source_location>
+    #include <coroutine>
+    #include <compare>
+    #include <version>
+    #include <bit>
+    #include <numbers>
+    #include <barrier>
+    #include <latch>
+    #include <semaphore>
 
-    #include <msgpack.hpp>
     #include <sodium.h>
+    #include <msgpack.hpp>
 
     #include <fmt/chrono.h>
     #include <fmt/color.h>
@@ -90,7 +103,27 @@
     #include <fmt/os.h>
     #include <fmt/ostream.h>
     #include <fmt/ranges.h>
+    #include <fmt/format.h>
+
     #include <magic_enum.hpp>
+    #include <magic_enum_iostream.hpp>
+
+    #include "cpp-base64/base64.h"
+
+    #include <boost/generator_iterator.hpp>
+    #include <boost/random.hpp>
+    #include <boost/core/demangle.hpp>
+    #include <boost/algorithm/string/classification.hpp>
+    #include <boost/algorithm/string/join.hpp>
+    #include <boost/algorithm/string/split.hpp>
+    #include <boost/algorithm/string.hpp>
+    #include <boost/algorithm/string/replace.hpp>
+    #include <boost/interprocess/file_mapping.hpp>
+    #include <boost/interprocess/mapped_region.hpp>
+    #include <boost/describe.hpp>
+    #include <boost/mp11.hpp>
+    #include <boost/json.hpp>
+
 
     #ifdef Q_OS_WINDOWS
         #define UINT32_C(c) (c##ULL)
