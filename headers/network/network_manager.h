@@ -107,7 +107,7 @@ struct NetworkReconnect {
         return false;
     }
 
-    static NetworkReconnect fromWsConnection(const DFSP::WSConnection& wsConnection) {
+    static NetworkReconnect fromWsConnection(const DfsP::WSConnection& wsConnection) {
         return NetworkReconnect{ .ip = QString::fromStdString(wsConnection.address),
                                  .port = static_cast<quint16>(wsConnection.port),
                                  .protocol = Network::Protocol::WebSocket };
@@ -161,7 +161,7 @@ private:
     std::map<std::string, std::string>           m_messages;
     std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
-    std::vector<DFSP::WSConnection>              m_wsConnections;
+    std::vector<DfsP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
 
@@ -191,8 +191,8 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
-    void addFragSignal(const DFSP::SegmentMessage& msg);
-    void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
+    void addFragSignal(const DfsP::SegmentMessage& msg);
+    void fetchFragment(DfsP::RequestFileSegmentMessage& msg, std::string& messageId);
     void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
                             const std::string &receiver_identifier);
 

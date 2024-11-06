@@ -18,16 +18,16 @@ private:
 
 public:
     FragmentStorage(ActorId Actor, std::string FileName, std::string FileHash);
-    FragmentStorage(DFSP::SegmentMessage segmentMessage);
+    FragmentStorage(DfsP::SegmentMessage segmentMessage);
     ~FragmentStorage() = default;
 
     bool                 initLocalFile(std::uint64_t filesize);
     bool                 initHistoricalChain();
-    bool                 insertFragment(DFSP::SegmentMessage msg);
-    bool                 editFragment(DFSP::EditSegmentMessage msg);
-    bool                 removeFragment(DFSP::DeleteSegmentMessage msg);
-    DFSP::SegmentMessage getFragment(std::uint64_t pos);
-    DFSP::SegmentMessage getFragment(std::string fragHash);
+    bool                 insertFragment(DfsP::SegmentMessage msg);
+    bool                 editFragment(DfsP::EditSegmentMessage msg);
+    bool                 removeFragment(DfsP::DeleteSegmentMessage msg);
+    DfsP::SegmentMessage getFragment(std::uint64_t pos);
+    DfsP::SegmentMessage getFragment(std::string fragHash);
     bool                 applyChanges(const std::string& data, std::uint64_t pos);
 
 private:
@@ -36,24 +36,24 @@ private:
     DBRow                   getRealPreviousFragment(std::uint64_t number);
     DBRow                   getRealNextFragment(std::uint64_t number);
     std::pair<DBRow, DBRow> getPrevNextPairFragment(std::uint64_t number);
-    DBRow                   makeFragmentRow(DFSP::SegmentMessage msg, std::uint64_t storedPos);
+    DBRow                   makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos);
     DBRow                   makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size);
-    std::uint64_t                writeFragment(DFSP::SegmentMessage msg);
+    std::uint64_t                writeFragment(DfsP::SegmentMessage msg);
     void                    moveRows(DBRow curRow, std::uint64_t moveSize);
     std::uint64_t                write(std::filesystem::path filePath, std::uint64_t pos, std::string data);
     std::string             extract(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
     std::uint64_t                remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
-    bool                    checkRenameFile(const DFS::Packets::EditSegmentMessage& msg);
+    bool                    checkRenameFile(const Dfs::Packets::EditSegmentMessage& msg);
 };
 
 class FragmentWriter : public QThread {
     Q_OBJECT
-    DFSP::SegmentMessage     m_msg;
+    DfsP::SegmentMessage     m_msg;
     std::vector<std::string> m_compliteFiles;
 
 public:
     FragmentWriter(
-        const DFSP::SegmentMessage& msg,
+        const DfsP::SegmentMessage& msg,
         std::vector<std::string>    m_compliteFiles,
         QObject*                    parent = nullptr);
     ~FragmentWriter() {
@@ -64,13 +64,13 @@ protected:
     void run() override;
 
 signals:
-    void downloadedFile(DFS::DirRow dirRow);
-    void eraseFromFiles(const DFSP::SegmentMessage m_msg);
+    void downloadedFile(Dfs::DirRow dirRow);
+    void eraseFromFiles(const DfsP::SegmentMessage m_msg);
     void sendFile(const ActorId& actor, const std::string& fileName, const std::string& messageId = "");
     void downloadProgress(const ActorId& actor, const std::string& fileName, const double progress);
     void requestFile(const ActorId& actor, const std::string& fileName);
     void compliteFile(const std::string& fileName);
-    void requestNextFragment(const DFSP::RequestFileSegmentMessage&);
+    void requestNextFragment(const DfsP::RequestFileSegmentMessage&);
 };
 
 #endif // FRAGMENT_STORAGE_H

@@ -43,26 +43,26 @@ QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUp
 }
 
 std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
-    const auto            pathToActorFolder = DFS::Path::actorPath(actorId);
+    const auto            pathToActorFolder = Dfs::Path::actorPath(actorId);
     std::vector<FileData> fileStructs;
 
     for (const auto &entry : std::filesystem::directory_iterator(pathToActorFolder)) {
         const auto nameFile = entry.path().filename();
-        if (nameFile == DFSB::fsMapName || nameFile.extension() == DFSF::Extension)
+        if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
             continue;
 
         FileStatus status = FileStatus::None;
         const auto pathToStorjFile =
-            pathToActorFolder.string() + Utils::platformDelimeter() + nameFile.string() + DFSF::Extension;
+            pathToActorFolder.string() + Utils::platformDelimeter() + nameFile.string() + DfsF::Extension;
 
         if (std::filesystem::exists(pathToStorjFile)) {
             DBConnector db(pathToStorjFile);
             if (db.open()) {
-                auto countRow = db.select(DFSF::GetCountFragmants)[0];
+                auto countRow = db.select(DfsF::GetCountFragmants)[0];
                 if (std::stoi(countRow["COUNT(size)"]) == 0) {
                     status = FileStatus::NotLoaded;
                 } else {
-                    auto rows = db.select(DFSF::GetSizeFragmants);
+                    auto rows = db.select(DfsF::GetSizeFragmants);
                     if (!rows.empty()) {
                         const int  sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
                         const auto fileSize      = entry.file_size();
@@ -148,7 +148,7 @@ void FileDataManager::setActorId(const ActorId &actorId) {
 }
 
 void FileDataManager::updateAllTree() {
-    for (const auto &entry : std::filesystem::directory_iterator(DFSB::fsActrRoot)) {
+    for (const auto &entry : std::filesystem::directory_iterator(DfsB::fsActrRoot)) {
         if (entry.is_directory()) {
             const auto actorId = ActorId(entry.path().filename().string());
             updateFileList(actorId);

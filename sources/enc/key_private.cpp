@@ -83,7 +83,7 @@ void KeyPrivate::encryptFile(const std::filesystem::path &input, const std::file
         qFatal("[encryptFile] Cannot open files");
     }
 
-    Bytes buffer(DFSB::encSectionSize);
+    Bytes buffer(DfsB::encSectionSize);
     while (in.read(reinterpret_cast<char *>(buffer.data()), buffer.size())) {
         Bytes    encrypted = encryptSelf({ buffer.begin(), buffer.begin() + in.gcount() });
         uint32_t size      = encrypted.size();

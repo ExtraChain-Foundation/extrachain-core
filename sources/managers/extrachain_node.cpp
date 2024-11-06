@@ -535,7 +535,7 @@ void ExtraChainNode::connectSignals() {
                 pathToJson.toStdString(),
                 "contract",
                 "token-description.json",
-                DFS::Encryption::Public);
+                Dfs::Encryption::Public);
         });
 }
 
@@ -556,7 +556,7 @@ void ExtraChainNode::prepareFolders() {
 
 void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
-    DFSP::RequestDfsSize msg { .actorId = actorId };
+    DfsP::RequestDfsSize msg { .actorId = actorId };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
 }

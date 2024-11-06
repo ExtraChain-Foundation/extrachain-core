@@ -54,12 +54,12 @@ public:
      * @return amount of reward
      */
     BigNumberFloat calculateRewardAmount() const;
-    BigNumberFloat calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const;
+    BigNumberFloat calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const;
 
     /**
      * @brief Send reward amount
      */
-    void sendCoinsReward(const DFS::Reward::RequestReward &requestReward);
+    void sendCoinsReward(const Dfs::Reward::RequestReward &requestReward);
 
 private:
 };

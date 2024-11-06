@@ -83,7 +83,7 @@ const std::vector<Connection> &ConnectionsManager::getActiveConnection() const {
     return activeConnections;
 }
 
-bool ConnectionsManager::insertConnection(const DFS::Packets::Connection &connection) {
+bool ConnectionsManager::insertConnection(const Dfs::Packets::Connection &connection) {
     dbConnector.open();
     DBRow row = ecryptConnection(connection);
 
@@ -92,7 +92,7 @@ bool ConnectionsManager::insertConnection(const DFS::Packets::Connection &connec
     return result;
 }
 
-bool ConnectionsManager::insertActivity(const std::string hash, const DFS::Packets::Activity &activity)
+bool ConnectionsManager::insertActivity(const std::string hash, const Dfs::Packets::Activity &activity)
 {
     dbActivity.open();
     DBRow row = ecryptActivity(hash, activity);
@@ -131,18 +131,18 @@ void ConnectionsManager::loadActivityRecords()
     dbActivity.close();
 }
 
-void ConnectionsManager::removeConnection(const DFS::Packets::Connection &connection) {
+void ConnectionsManager::removeConnection(const Dfs::Packets::Connection &connection) {
     dbConnector.open();
     dbConnector.query(
         fmt::format("DELETE FROM {} WHERE hash = '{}'", ConnectionsTableName, hashConnection(connection)));
     dbConnector.close();
 }
 
-std::string ConnectionsManager::hashConnection(const DFS::Packets::Connection &connection) {
+std::string ConnectionsManager::hashConnection(const Dfs::Packets::Connection &connection) {
     return Utils::calcHash(connection.address + connection.port);
 }
 
-DBRow ConnectionsManager::ecryptConnection(const DFS::Packets::Connection &connection) {
+DBRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
     auto key = Cryptography::getKeyPassFromPassword(hash);
 
@@ -194,7 +194,7 @@ std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DBRow
     return std::make_pair(ByteArray(key).toString(), activity);
 }
 
-void ConnectionsManager::addConnection(const DFS::Packets::Connection &connection) {
+void ConnectionsManager::addConnection(const Dfs::Packets::Connection &connection) {
     if (connection.active) {
         activeConnections.push_back(connection);
         insertConnection(connection);
@@ -215,7 +215,7 @@ void ConnectionsManager::tryToNewConnect() {
     }
 }
 
-void ConnectionsManager::addNewConnection(const DFS::Packets::Connection &connection) {
+void ConnectionsManager::addNewConnection(const Dfs::Packets::Connection &connection) {
     newConnections.push_back(connection);
 }
 
@@ -299,7 +299,7 @@ void ConnectionsManager::synchroActivityDB()
     }
 }
 
-void ConnectionsManager::removeConnection(DFS::Packets::Connection &connection) {
+void ConnectionsManager::removeConnection(Dfs::Packets::Connection &connection) {
     activeConnections.erase(std::remove_if(activeConnections.begin(), activeConnections.end(),
                                            [&](Connection const &item) {
                                                return item.address == connection.address
@@ -308,6 +308,6 @@ void ConnectionsManager::removeConnection(DFS::Packets::Connection &connection) 
                             activeConnections.end());
 }
 
-bool ConnectionsManager::isConnection(const DFS::Packets::Connection &connection) {
+bool ConnectionsManager::isConnection(const Dfs::Packets::Connection &connection) {
     return m_address == connection.address && m_port == connection.port;
 }

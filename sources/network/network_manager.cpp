@@ -227,7 +227,7 @@ void NetworkManager::startNetwork() {
 
     qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
                        << wsServer->serverPort(); // << wsServer->serverName();
-    DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
+    Dfs::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
                                               .port    = static_cast<std::uint64_t>((int)wsPort) };
     m_wsConnections.push_back(wsConnection);
 }
@@ -521,25 +521,25 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::ResponseDfsSize: {
-        const auto msgStruct = MessagePack::deserialize<DFSP::ResponseDfsSize>(serialized);
+        const auto msgStruct = MessagePack::deserialize<DfsP::ResponseDfsSize>(serialized);
         if (Utils::globalVariableOfDfsSize < msgStruct.size) {
             Utils::globalVariableOfDfsSize = msgStruct.size;
         }
         break;
     }
     case MessageType::RequestDfsSize: {
-        const auto msgStruct = MessagePack::deserialize<DFSP::RequestDfsSize>(serialized);
+        const auto msgStruct = MessagePack::deserialize<DfsP::RequestDfsSize>(serialized);
         node->dfs()->sendSizeReponseMsg(msgStruct, messageId);
         break;
     }
     case MessageType::ResponseBlockCount: {
-        const auto msgStruct = MessagePack::deserialize<DFSP::ResponseBlockCount>(serialized);
+        const auto msgStruct = MessagePack::deserialize<DfsP::ResponseBlockCount>(serialized);
         BigNumber  count     = msgStruct.blockCount;
         emit       messageCountReceived(count);
         break;
     }
     case MessageType::RequestBlockCount: {
-        const auto msgStruct = MessagePack::deserialize<DFSP::RequestBlockCount>(serialized);
+        const auto msgStruct = MessagePack::deserialize<DfsP::RequestBlockCount>(serialized);
         BigNumber  dfsCount  = node->blockchain()->getBlockCount();
         node->dfs()->sendCountReponseMsg(msgStruct, messageId, dfsCount);
         break;
@@ -579,7 +579,7 @@ void NetworkManager::messageReceived(
             node->dfs()->sendDirData(actorId, 0, messageId);
         } else if (status == MessageStatus::Response) {
             auto [actorId, dirRows] =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<DFS::DirRow>>>(serialized);
+                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
             node->dfs()->addDirData(actorId, dirRows);
         }
         break;
@@ -590,7 +590,7 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::DfsAddFile: {
-        auto dirRow = MessagePack::deserialize<DFS::DirRow>(serialized);
+        auto dirRow = MessagePack::deserialize<Dfs::DirRow>(serialized);
         node->dfs()->addFile(dirRow, true);
         break;
     }
@@ -600,27 +600,27 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::DfsRequestFileSegment: {
-        auto msg = MessagePack::deserialize<DFSP::RequestFileSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DfsP::RequestFileSegmentMessage>(serialized);
         emit fetchFragment(msg, messageId);
         break;
     }
     case MessageType::DfsAddSegment: {
-        auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
         emit addFragSignal(msg);
         break;
     }
     case MessageType::DfsEditSegment: {
-        auto msg = MessagePack::deserialize<DFSP::SegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
         node->dfs()->insertFragment(msg);
         break;
     }
     case MessageType::DfsDeleteSegment: {
-        auto msg = MessagePack::deserialize<DFSP::DeleteSegmentMessage>(serialized);
+        auto msg = MessagePack::deserialize<DfsP::DeleteSegmentMessage>(serialized);
         node->dfs()->deleteFragment(msg);
         break;
     }
     case MessageType::DfsRemoveFile: {
-        auto msg = MessagePack::deserialize<DFSP::RemoveFileMessage>(serialized);
+        auto msg = MessagePack::deserialize<DfsP::RemoveFileMessage>(serialized);
         node->dfs()->removeFile(msg);
         break;
     }
@@ -637,16 +637,16 @@ void NetworkManager::messageReceived(
         case MessageStatus::Request: {
             std::vector<std::string> listMessage =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DfsP::VerifyFileMessage>(listMessage);
             node->dfs()->verifyFiles(listVerifiedMessage, messageId);
             break;
         }
         case MessageStatus::Response: {
             std::vector<std::string> listMessage =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DFSP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserializeContainer<DFSP::VerifyFileMessage>(listMessage);
+            std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
+                MessagePack::deserializeContainer<DfsP::VerifyFileMessage>(listMessage);
             float percentVerified = node->dfs()->percentVerified(listVerifiedMessage);
             break;
         }
@@ -708,13 +708,13 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::FragmentDataInfo: {
-        auto msg = MessagePack::deserialize<DFSF::FragmentsInfo>(serialized);
+        auto msg = MessagePack::deserialize<DfsF::FragmentsInfo>(serialized);
         msg.print();
         break;
     }
 
     case MessageType::FragmentsDataListInfo: {
-        auto fragmentsInfoList = MessagePack::deserialize<std::vector<DFSF::FragmentsInfo>>(serialized);
+        auto fragmentsInfoList = MessagePack::deserialize<std::vector<DfsF::FragmentsInfo>>(serialized);
         qDebug() << "Recieved fragment data info from list";
         for (const auto &msg : fragmentsInfoList) {
             msg.print();
@@ -723,7 +723,7 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::BlockchainCoinReward: {
-        auto requestReward = MessagePack::deserialize<DFSR::RequestReward>(serialized);
+        auto requestReward = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
         switch (status) {
         case MessageStatus::NoStatus:
             break;
@@ -733,11 +733,11 @@ void NetworkManager::messageReceived(
         }
         case MessageStatus::Response: {
             switch (requestReward.TypeFunctioningObj) {
-            case DFSR::TypeFunctioning::Test: {
+            case Dfs::Reward::TypeFunctioning::Test: {
                 qDebug() << "[TEST] You could receive" << requestReward.RewardAmount;
                 break;
             }
-            case DFS::Reward::Base:
+            case Dfs::Reward::Base:
                 break;
             }
             break;
@@ -749,14 +749,14 @@ void NetworkManager::messageReceived(
     }
 
     case MessageType::NewListConnections: {
-        auto connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+        auto connection = MessagePack::deserialize<DfsP::Connection>(serialized);
         node->connectionsManager()->addNewConnection(connection);
         node->connectionsManager()->addActivity(connection);
         break;
     }
 
     case MessageType::GetListConnections: {
-        DFSP::Connection connection = MessagePack::deserialize<DFSP::Connection>(serialized);
+        DfsP::Connection connection = MessagePack::deserialize<DfsP::Connection>(serialized);
         node->connectionsManager()->addConnection(connection);
         for (const auto &connection : node->connectionsManager()->getActiveConnection()) {
             this->send_message(connection, MessageType::NewListConnections);
@@ -772,7 +772,7 @@ void NetworkManager::messageReceived(
 
     case MessageType::NewNodeConnected: {
         qDebug() << "Get new node";
-        DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
+        DfsP::WSConnection wsConnection = MessagePack::deserialize<DfsP::WSConnection>(serialized);
         m_reconnectionsToIdentifier->emplace(NetworkReconnect::fromWsConnection(wsConnection), "");
         m_wsConnections.push_back(wsConnection);
         if (!node->isClientApp()) {
@@ -783,7 +783,7 @@ void NetworkManager::messageReceived(
 
     case MessageType::SpreadNodeConnection: {
         qDebug() << "received new node connection";
-        DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
+        DfsP::WSConnection wsConnection = MessagePack::deserialize<DfsP::WSConnection>(serialized);
         if (wsConnection.address == local->ip().toString().toStdString() && wsConnection.port == wsPort) {
             qDebug() << "[WS] connection port" << wsPort << "address:" << local->ip().toString();
         } else {
@@ -796,8 +796,8 @@ void NetworkManager::messageReceived(
         if (status == MessageStatus::Response && node->isClientApp()) {
             std::vector<std::string> newWsConnectionsList =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DFSP::WSConnection> newWSConnections =
-                MessagePack::deserializeContainer<DFSP::WSConnection>(newWsConnectionsList);
+            std::vector<DfsP::WSConnection> newWSConnections =
+                MessagePack::deserializeContainer<DfsP::WSConnection>(newWsConnectionsList);
 
             for (const auto &c : newWSConnections) {
                 m_reconnectionsToIdentifier->emplace(

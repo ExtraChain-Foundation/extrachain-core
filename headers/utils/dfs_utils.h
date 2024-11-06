@@ -15,7 +15,6 @@
 
 #include "utils/exc_logs.h"
 #include "utils/exc_magic.h"
-#include "utils/exc_msgpack_describe.h"
 
 namespace Tools {
 template <typename T>
@@ -57,7 +56,7 @@ std::string platformDelimeter();
 inline static std::uint64_t globalVariableOfDfsSize = 0;
 }
 
-namespace DFS {
+namespace Dfs {
 namespace Basic {
     static const std::string   fsActrRoot                 = "dfs";
     static const std::wstring  fsActrRootW                = L"dfs";
@@ -115,9 +114,9 @@ struct DirRow {
     std::uint64_t created      = 0;
     std::uint64_t lastModified = 0;
 
-    DFS::FileType   type;
-    DFS::Encryption encryption;
-    DFS::FileState  state;
+    Dfs::FileType   type;
+    Dfs::Encryption encryption;
+    Dfs::FileState  state;
 
     std::string visualPath() const {
         if (folder.has_value())
@@ -127,11 +126,11 @@ struct DirRow {
     }
 
     bool isLoaded() const {
-        return state == DFS::FileState::Loaded;
+        return state == Dfs::FileState::Loaded;
     }
 
     bool isEncrypted() const {
-        return encryption == DFS::Encryption::Encrypted;
+        return encryption == Dfs::Encryption::Encrypted;
     }
 };
 
@@ -386,14 +385,14 @@ namespace Tables {
 
         std::filesystem::path actorDbPath(const ActorId& actorId);
         std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
-        std::expected<DFS::DirRow, DFS::DfsError>
+        std::expected<Dfs::DirRow, Dfs::DfsError>
 
         getDirRow(const ActorId& actorId, const std::string& fileId);
-        std::expected<std::vector<DFS::DirRow>, DFS::DfsError>
+        std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError>
         getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
 
-        bool addDirRow(const ActorId& actorId, DirRow &dirRow);
-        bool addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
+        bool addDirRow(const ActorId& actorId, DirRow& dirRow);
+        bool addDirRows(const ActorId& actorId, const std::vector<Dfs::DirRow>& dirRows);
     }
 
     namespace DirsFile {
@@ -424,8 +423,8 @@ namespace Tables {
                                                      ");";
 
     static const std::string filesTableLast =
-        "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName + " ORDER BY fileId DESC LIMIT 1";
-    static const std::string filesTableFull = "SELECT * FROM " + DFS::Tables::ActorDirFile::TableName;
+        "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName + " ORDER BY fileId DESC LIMIT 1";
+    static const std::string filesTableFull = "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName;
 }
 
 namespace Path {
@@ -435,28 +434,26 @@ namespace Path {
 }
 }
 
-namespace DFSP     = DFS::Packets;
-namespace DFSF     = DFS::Fragments;
-namespace DFST     = DFS::Tables;
-namespace STDFS    = std::filesystem;
-namespace DFSHC    = DFS::Historical;
-namespace DFSB     = DFS::Basic;
-namespace DFS_PATH = DFS::Path;
-namespace DFSR     = DFS::Reward;
+namespace DfsP    = Dfs::Packets;
+namespace DfsF    = Dfs::Fragments;
+namespace DfsT    = Dfs::Tables;
+namespace DfsHc   = Dfs::Historical;
+namespace DfsB    = Dfs::Basic;
+namespace DfsPath = Dfs::Path;
 
-MAKE_MAGICAL_FORMATTER(DFS::DirRow)
+MAKE_MAGICAL_FORMATTER(Dfs::DirRow)
 
-FORMAT_ENUM(DFS::DfsError)
-FORMAT_ENUM(DFS::FileType)
-FORMAT_ENUM(DFS::FileState)
-FORMAT_ENUM(DFS::Encryption)
-FORMAT_ENUM(DFS::Packets::SegmentMessageType)
-FORMAT_ENUM(DFS::Reward::TypeFunctioning)
+FORMAT_ENUM(Dfs::DfsError)
+FORMAT_ENUM(Dfs::FileType)
+FORMAT_ENUM(Dfs::FileState)
+FORMAT_ENUM(Dfs::Encryption)
+FORMAT_ENUM(Dfs::Packets::SegmentMessageType)
+FORMAT_ENUM(Dfs::Reward::TypeFunctioning)
 
-MSGPACK_ADD_ENUM(DFS::FileType)
-MSGPACK_ADD_ENUM(DFS::FileState)
-MSGPACK_ADD_ENUM(DFS::Encryption)
-MSGPACK_ADD_ENUM(DFS::Packets::SegmentMessageType)
-MSGPACK_ADD_ENUM(DFS::Reward::TypeFunctioning)
+MSGPACK_ADD_ENUM(Dfs::FileType)
+MSGPACK_ADD_ENUM(Dfs::FileState)
+MSGPACK_ADD_ENUM(Dfs::Encryption)
+MSGPACK_ADD_ENUM(Dfs::Packets::SegmentMessageType)
+MSGPACK_ADD_ENUM(Dfs::Reward::TypeFunctioning)
 
 #endif // DFS_UTILS_H

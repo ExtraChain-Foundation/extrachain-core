@@ -420,7 +420,7 @@ void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DFSB::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();

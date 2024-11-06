@@ -246,7 +246,6 @@ std::expected<std::string, SqlCreateError> DBConnector::createTable(const DbSche
     if (!sql.has_value())
         return sql;
 
-    fmt::println("{}", sql.value());
     createTable(sql.value());
     return sql;
 }

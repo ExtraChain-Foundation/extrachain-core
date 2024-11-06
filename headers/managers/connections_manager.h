@@ -6,8 +6,8 @@
 #include <QObject>
 #include <algorithm>
 
-using DFSP::Connection;
-using DFSP::Activity;
+using DfsP::Connection;
+using DfsP::Activity;
 
 static const std::string ConnectionsTableName = "Connections";
 static const std::string ActivityTableName = "Activity";
