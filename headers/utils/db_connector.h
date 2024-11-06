@@ -36,6 +36,7 @@
 
 #include "extrachain_global.h"
 #include "utils/exc_utils.h"
+#include "utils/db_schema.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -130,31 +131,34 @@ protected:
 
 public:
     explicit DBConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
-    explicit DBConnector(const std::filesystem::path &filePath, DBConnectorType type = DBConnectorType::Regular);
-    explicit DBConnector(const char* filePath, DBConnectorType type = DBConnectorType::Regular);
+    explicit DBConnector(
+        const std::filesystem::path &filePath,
+        DBConnectorType              type = DBConnectorType::Regular);
+    explicit DBConnector(const char *filePath, DBConnectorType type = DBConnectorType::Regular);
     DBConnector(DBConnector &&db);
     ~DBConnector();
 
 public:
     static QString sqlite_version();
 
-    bool                     open();
-    bool                     close();
-    std::vector<DBRow>       select(std::string query, std::string tableName = "", DBRow binds = {});
-    std::vector<DBRow>       selectAll(std::string table, int limit = -1);
-    bool                     insert(const std::string &tableName, const DBRow &data);
-    bool                     replace(const std::string &tableName, const DBRow &data);
-    bool                     update(const std::string &query);
-    bool                     createTable(const std::string &query);
-    bool                     deleteRow(const std::string &tableName, const DBRow &data);
-    bool                     deleteTable(const std::string &name);
-    bool                     tableExists(const std::string &table);
-    bool                     dropTable(const std::string &table);
-    std::uint64_t            count(const std::string &table, const std::string &where = "");
-    std::string              file() const;
-    bool                     isOpen() const;
-    std::vector<std::string> tableNames();
-    std::vector<DBColumn>    tableColumns(const std::string &table);
+    bool               open();
+    bool               close();
+    std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
+    std::vector<DBRow> selectAll(std::string table, int limit = -1);
+    bool               insert(const std::string &tableName, const DBRow &data);
+    bool               replace(const std::string &tableName, const DBRow &data);
+    bool               update(const std::string &query);
+    bool               createTable(const std::string &query);
+    std::expected<std::string, SqlCreateError> createTable(const DbSchema &query);
+    bool                                       deleteRow(const std::string &tableName, const DBRow &data);
+    bool                                       deleteTable(const std::string &name);
+    bool                                       tableExists(const std::string &table);
+    bool                                       dropTable(const std::string &table);
+    std::uint64_t                              count(const std::string &table, const std::string &where = "");
+    std::string                                file() const;
+    bool                                       isOpen() const;
+    std::vector<std::string>                   tableNames();
+    std::vector<DBColumn>                      tableColumns(const std::string &table);
 
 public:
     bool          query(std::string query);

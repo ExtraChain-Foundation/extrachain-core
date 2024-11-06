@@ -57,6 +57,10 @@ public:
         const std::string           &visualFolder,
         const std::string           &visualName,
         DFS::Encryption              securityLevel);
+
+    std::expected<DFS::DirRow, DFS::DfsError>
+    storeDb(const ActorId &actorId, const std::string &visualName, const DbSchema &schema);
+
     bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile
 
@@ -67,7 +71,8 @@ public:
     bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
     // Unique file ID: hash+msec+salt
-    std::string   createFileName(std::filesystem::path file);
+    std::string   createFileId(std::filesystem::path file);
+    std::string   createFileIdFromData(const std::string &data);
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
@@ -84,6 +89,8 @@ public:
         std::string         &actor,
         std::string         &nameFile,
         DFSP::ReferenceData &referenceData);
+
+    void updateDirsLastModified(const ActorId &actorId, std::uint64_t lastModified);
 
 private:
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);

@@ -87,6 +87,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
@@ -133,6 +134,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp

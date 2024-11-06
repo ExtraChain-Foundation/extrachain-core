@@ -112,8 +112,8 @@ struct DirRow {
     std::string                name;
 
     std::size_t   size;
-    std::uint64_t created;
-    std::uint64_t lastModified;
+    std::uint64_t created      = 0;
+    std::uint64_t lastModified = 0;
 
     DFS::FileType   type;
     DFS::Encryption encryption;
@@ -377,12 +377,12 @@ namespace Tables {
                                                     ");";
         std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
         std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);
-        std::string        getLastName(DBConnector& db);
+        std::string        getLastFileId(DBConnector& db);
         int                totalFileSize(const ActorId& actorId);
         std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
         // TODO: optional
-        DBConnector           actorDbConnector(const ActorId& actorId);
+        DBConnector actorDbConnector(const ActorId& actorId);
 
         std::filesystem::path actorDbPath(const ActorId& actorId);
         std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
@@ -390,9 +390,9 @@ namespace Tables {
 
         getDirRow(const ActorId& actorId, const std::string& fileId);
         std::expected<std::vector<DFS::DirRow>, DFS::DfsError>
-             getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
+        getDirRows(const ActorId& actorId, std::uint64_t lastModified = 0);
 
-        bool addDirRow(const ActorId& actorId, const DFS::DirRow& dirRow);
+        bool addDirRow(const ActorId& actorId, DirRow &dirRow);
         bool addDirRows(const ActorId& actorId, const std::vector<DFS::DirRow>& dirRows);
     }
 

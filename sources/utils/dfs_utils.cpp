@@ -12,7 +12,7 @@ std::vector<DBRow> DFS::Tables::ActorDirFile::getFileDataByName(DBConnector *db,
     return db->select(query);
 }
 
-std::string DFS::Tables::ActorDirFile::getLastName(DBConnector &db) {
+std::string DFS::Tables::ActorDirFile::getLastFileId(DBConnector &db) {
     if (!db.isOpen()) {
         qFatal("DB not opened");
     }
@@ -86,12 +86,19 @@ DFS::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &
     return dirRow.value();
 }
 
-bool DFS::Tables::ActorDirFile::addDirRow(const ActorId &actorId, const DirRow &dirRow) {
+bool DFS::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow) {
     auto dirFile = actorDbConnector(actorId);
 
     if (!dirFile.isOpen()) {
         return false;
     }
+
+    auto currentSecs = Utils::currentDateSecs();
+    auto fileIdPrev  = DFST::ActorDirFile::getLastFileId(dirFile);
+
+    dirRow.created      = currentSecs;
+    dirRow.lastModified = currentSecs;
+    dirRow.fileIdPrev   = fileIdPrev;
 
     auto dirRowDb = Utils::toDbRow(dirRow);
     dirRowDb.erase("actorId");

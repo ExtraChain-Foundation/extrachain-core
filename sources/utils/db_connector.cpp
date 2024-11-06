@@ -53,13 +53,12 @@ DBConnector::DBConnector(const std::string &filePath, DBConnectorType type) {
     this->m_file = filePath;
 }
 
-DBConnector::DBConnector(const std::filesystem::path &filePath, DBConnectorType type) {
-    DBConnector(filePath.string(), type);
+DBConnector::DBConnector(const std::filesystem::path &filePath, DBConnectorType type)
+    : DBConnector(filePath.string(), type) {
 }
 
 DBConnector::DBConnector(const char *filePath, DBConnectorType type)
-{
-    DBConnector(std::string(filePath), type);
+    : DBConnector(std::string(filePath), type) {
 }
 
 DBConnector::DBConnector(DBConnector &&rhs) {
@@ -90,6 +89,11 @@ bool DBConnector::open() {
         qFatal("[DBConnector] Double open");
         return false;
     }
+    if (m_file.empty()) {
+        qFatal("[DBConnector] File name empty");
+        return false;
+    }
+
     int rc = sqlite3_open(m_file.c_str(), &db);
     if (rc) {
         qDebug() << "[DBConnector]" << file().c_str() << " | failed to open DB:" << sqlite3_errmsg(db);
@@ -235,6 +239,16 @@ bool DBConnector::update(const std::string &query) {
 bool DBConnector::createTable(const std::string &query) {
     QString queryTemp = QString::fromStdString(query).replace(QRegularExpression("\\s+"), " "); // temp
     return this->query(queryTemp.toStdString());
+}
+
+std::expected<std::string, SqlCreateError> DBConnector::createTable(const DbSchema &query) {
+    auto sql = query.to_sql();
+    if (!sql.has_value())
+        return sql;
+
+    fmt::println("{}", sql.value());
+    createTable(sql.value());
+    return sql;
 }
 
 bool DBConnector::deleteRow(const std::string &tableName, const DBRow &data) {
