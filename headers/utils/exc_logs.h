@@ -329,4 +329,6 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 #define eFatal(...) ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
 #define eLog(...)   eDebug(__VA_ARGS__)
 
+#include "utils/exc_logs_extra.h"
+
 #endif // EXC_LOGS_H

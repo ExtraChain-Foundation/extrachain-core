@@ -158,6 +158,39 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
         m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
     }
 
+    using namespace sqlite::literals;
+
+    auto tokens = DbSchema("tokens");
+    tokens.add_columns(
+        "tokenId"_text.primary_key(),
+        "name"_text.not_null().unique(),
+        "ticker"_text.not_null().unique(),
+        "count"_text.not_null(),
+        "owner"_text.not_null(), // perm: field for author actor id
+        "color"_text.not_null(),
+        "smart"_text);
+
+    if (tokens.validation_error()) {
+        eCritical("Token database not correct: {}", tokens.validation_error().value());
+        Utils::wipeDataFiles();
+        return false;
+    }
+
+    auto storeRes = m_dfs->storeDatabase(first.id(), "tokens", tokens);
+    if (!storeRes.has_value()) {
+        eCritical("Can't create token cache database, because {}", storeRes.error());
+        Utils::wipeDataFiles();
+        return false;
+    }
+
+    auto tokenId = ActorId().toString();
+
+    // DBRow for tokens
+    DBRow tokensRow = { { "tokenId", tokenId }, { "name", "ExtraChain" },           { "ticker", "EXC" },
+                        { "count", "0" },       { "owner", first.id().toString() }, { "color", "#111111" },
+                        { "smart", "" } };
+    m_dfs->databaseInsert(storeRes->actorId, storeRes->fileId, tokensRow);
+
     return true;
 }
 

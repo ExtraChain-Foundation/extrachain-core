@@ -79,7 +79,9 @@ enum class DfsError {
     NotReadable,
     StorageFull,
     AlreadyExists,
-    DirError
+    DirError,
+    DirValueNotExists,
+    DatabaseCreationError
 };
 
 enum class FileType {
@@ -402,15 +404,6 @@ namespace Tables {
                                                     "actorId      TEXT PRIMARY KEY NOT NULL,"
                                                     "lastModified INTEGER          NOT NULL "
                                                     ");";
-        static const std::string ParametersDfs              = "Parameters";
-        static const std::string CreateParametersTableQuery = fmt::format(
-            "CREATE TABLE IF NOT EXISTS {}("
-            "parameter    TEXT    NOT NULL, "
-            "value        TEXT    NOT NULL) ",
-            ParametersDfs);
-        static const std::string BytesLimit = "bytes_limit";
-        static const std::string BytesLimitQuery =
-            fmt::format("SELECT * FROM {} WHERE parameter = '{}'", ParametersDfs, BytesLimit);
     }
 
     static const std::string permissionTable = "PermissionTable";

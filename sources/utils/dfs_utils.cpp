@@ -79,7 +79,7 @@ Dfs::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &
     auto  dirRow = Utils::fromDbRow<Dfs::DirRow>(row);
 
     if (!dirRow.has_value()) {
-        return std::unexpected(Dfs::DfsError::DirError);
+        return std::unexpected(Dfs::DfsError::DirValueNotExists);
     }
 
     dirRow->actorId = actorId;

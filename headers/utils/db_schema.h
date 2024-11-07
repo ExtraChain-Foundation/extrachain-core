@@ -8,12 +8,25 @@
 #include <expected>
 #include <boost/algorithm/string/join.hpp>
 
+#include "utils/exc_utils.h"
+
 enum class SqlCreateError {
     EmptyIdentifier,
     InvalidIdentifierFormat,
     ReservedKeyword,
     InvalidValue,
-    SqlInjectionRisk
+    SqlInjectionRisk,
+    AutoincrementNotInteger
+};
+
+enum class SqlAutoincrement {
+    Yes,
+    No
+};
+
+enum class SqlInclusiveness {
+    Inclusive, // <= or >=
+    Exclusive  // < or >
 };
 
 class SQLValidator {
@@ -48,26 +61,30 @@ struct Blob {
     using cpp_type                         = std::vector<uint8_t>;
     static constexpr std::string_view name = "BLOB";
 };
+
+struct Json {
+    using cpp_type                         = std::string;
+    static constexpr std::string_view name = "JSON";
+};
 }
 
 template <typename T>
 struct Bound {
-    T    value;
-    bool inclusive;
+    T                value;
+    SqlInclusiveness inclusive;
 
-    std::expected<std::string, SqlCreateError> to_sql(std::string_view column) const {
+    std::expected<std::string, SqlCreateError> to_sql(std::string_view column, bool is_upper) const {
+        const char* op = is_upper ? (inclusive == SqlInclusiveness::Inclusive ? "<=" : "<")
+                                  : (inclusive == SqlInclusiveness::Inclusive ? ">=" : ">");
+
         if constexpr (std::is_arithmetic_v<T>) {
-            return fmt::format("{} {} {}", column, inclusive ? ">=" : ">", value);
+            return fmt::format("{} {} {}", column, op, value);
         } else {
             auto validation = SQLValidator::validate_value(value);
             if (!validation) {
                 return std::unexpected(validation.error());
             }
-            return fmt::format(
-                "{} {} {}",
-                column,
-                inclusive ? ">=" : ">",
-                SQLValidator::escape_string(value));
+            return fmt::format("{} {} {}", column, op, SQLValidator::escape_string(value));
         }
     }
 };
@@ -78,12 +95,12 @@ struct Interval {
     Bound<T> upper;
 
     std::expected<std::string, SqlCreateError> to_sql(std::string_view column) const {
-        auto lower_sql = lower.to_sql(column);
+        auto lower_sql = lower.to_sql(column, false);
         if (!lower_sql) {
             return std::unexpected(lower_sql.error());
         }
 
-        auto upper_sql = upper.to_sql(column);
+        auto upper_sql = upper.to_sql(column, true);
         if (!upper_sql) {
             return std::unexpected(upper_sql.error());
         }
@@ -105,9 +122,15 @@ public:
     Column(Column&& other) noexcept            = default;
     Column& operator=(Column&& other) noexcept = default;
 
-    Column& primary_key(bool autoincrement = false) {
-        m_is_primary_key   = true;
-        m_is_autoincrement = autoincrement;
+    Column& primary_key(SqlAutoincrement autoincrement = SqlAutoincrement::No) {
+        m_is_primary_key = true;
+        if (autoincrement == SqlAutoincrement::Yes) {
+            if constexpr (!std::is_same_v<T, sqlite::Integer>) {
+                m_validation_error = SqlCreateError::AutoincrementNotInteger;
+            } else {
+                m_is_autoincrement = true;
+            }
+        }
         return *this;
     }
 
@@ -164,8 +187,11 @@ public:
     }
 
     template <typename U>
-    Column&
-    between(const U& lower, const U& upper, bool lower_inclusive = true, bool upper_inclusive = true) {
+    Column& between(
+        const U&         lower,
+        const U&         upper,
+        SqlInclusiveness lower_inclusive = SqlInclusiveness::Inclusive,
+        SqlInclusiveness upper_inclusive = SqlInclusiveness::Inclusive) {
         Interval<U> interval { Bound<U> { lower, lower_inclusive }, Bound<U> { upper, upper_inclusive } };
 
         if (auto sql = interval.to_sql(m_name); !sql) {
@@ -256,6 +282,8 @@ public:
 
     std::expected<std::string, SqlCreateError> to_sql() const;
 
+    const std::optional<SqlCreateError>& validation_error() const;
+
 private:
     std::string                   m_table_name;
     std::vector<std::string>      m_columns;
@@ -268,4 +296,5 @@ Column<sqlite::Integer> operator""_int(const char* name, size_t);
 Column<sqlite::Real>    operator""_real(const char* name, size_t);
 Column<sqlite::Text>    operator""_text(const char* name, size_t);
 Column<sqlite::Blob>    operator""_blob(const char* name, size_t);
+Column<Json>            operator""_json(const char* name, size_t);
 }

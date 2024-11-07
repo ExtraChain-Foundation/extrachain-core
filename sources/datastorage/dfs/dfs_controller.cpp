@@ -1,5 +1,6 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/dfs/fragment_storage.h"
+#include "datastorage/dfs/historical_chain.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
@@ -8,13 +9,12 @@ DfsController::DfsController(ExtraChainNode *node)
 
     DBConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
-    dirsFile.query(DfsT::DirsFile::CreateTableQuery);
-    dirsFile.query(DfsT::DirsFile::CreateParametersTableQuery);
+    dirsFile.createTable(DfsT::DirsFile::CreateTableQuery);
     dirsFile.close();
 
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
-    loadBytesLimit();
+    // loadBytesLimit();
     qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
                     .c_str();
 
@@ -161,13 +161,18 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError>
-DfsController::storeDb(const ActorId &actorId, const std::string &visualName, const DbSchema &schema) {
-    std::string           fileId  = createFileIdFromData("db");
-    std::filesystem::path dfsPath = DfsPath::filePath(actorId, fileId);
-    DBConnector           db(dfsPath);
+DfsController::storeDatabase(const ActorId &actorId, const std::string &visualName, const DbSchema &schema) {
+    std::string fileId  = createFileIdFromData("db");
+    auto        dfsPath = DfsPath::filePath(actorId, fileId);
+
+    DBConnector db(dfsPath);
     db.open();
-    db.createTable(schema);
+    auto resCreate = db.createTable(schema);
     db.close();
+
+    if (!resCreate.has_value()) {
+        return std::unexpected(Dfs::DfsError::DatabaseCreationError);
+    }
 
     std::string fileHash = Utils::calcHashForFile(dfsPath);
     auto        fileSize = std::filesystem::file_size(dfsPath);
@@ -185,11 +190,17 @@ DfsController::storeDb(const ActorId &actorId, const std::string &visualName, co
                            .encryption   = Dfs::Encryption::Public,
                            .state        = Dfs::FileState::Loaded };
 
-    auto res = Dfs::Tables::ActorDirFile::addDirRow(actorId, dirRow);
+    auto resDirRow = Dfs::Tables::ActorDirFile::addDirRow(actorId, dirRow);
+
+    if (!resDirRow) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
 
     FragmentStorage fs(actorId, fileId, fileHash);
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
+
+    HistoricalChainSql::create(dfsPath);
 
     updateDirsLastModified(actorId, dirRow.lastModified);
 
@@ -198,6 +209,24 @@ DfsController::storeDb(const ActorId &actorId, const std::string &visualName, co
     sendFile(actorId, fileId);
 
     return dirRow;
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError>
+DfsController::databaseInsert(const ActorId &actorId, const std::string &fileId, DBRow row) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+    if (!dirRowExp.has_value()) {
+        return dirRowExp;
+    }
+
+    // TODO: check fields
+
+    auto        dfsPath = DfsPath::filePath(actorId, fileId);
+    DBConnector db(dfsPath);
+    db.open();
+    auto resInsert = db.insert("tokens", row);
+    db.close();
+
+    return dirRowExp;
 }
 
 bool DfsController::removeLocalFile(const ActorId &actorId, const std::string &fileId) {
@@ -620,7 +649,7 @@ void DfsController::exportFile(
     }
 
     if (actorId.isZero()) {
-        qDebug() << "[Dfs] Path or actor_id hadn't been found. Please check in parameters.";
+        qDebug() << "[Dfs] Path or actorId hadn't been found. Please check in parameters.";
         return;
     }
 
@@ -1127,20 +1156,6 @@ float DfsController::percentVerified(std::vector<Dfs::Packets::VerifyFileMessage
     return result;
 }
 
-void DfsController::loadBytesLimit() {
-    DBConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-    const auto rows = dirsFile.select(DfsT::DirsFile::BytesLimitQuery);
-    if (!rows.empty()) {
-        const auto row = rows.at(0);
-        m_bytesLimit   = std::stoll(row.at("value"));
-    } else {
-        m_bytesLimit = DfsB::minDfsLimit;
-    }
-    qDebug() << "[Dfs] Limit is" << m_bytesLimit;
-    dirsFile.close();
-}
-
 void DfsController::eraseFirstUnsynchronizedDir() {
     if (!m_unsynchonizedDirs.empty())
         m_unsynchonizedDirs.erase(m_unsynchonizedDirs.begin());
@@ -1318,28 +1333,6 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
 
 std::uint64_t DfsController::bytesLimit() const {
     return m_bytesLimit;
-}
-
-void DfsController::setBytesLimit(std::uint64_t bytesLimit) {
-    m_bytesLimit = bytesLimit < DfsB::minDfsLimit ? DfsB::minDfsLimit : bytesLimit;
-
-    DBConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-
-    const bool noLimit = dirsFile.select(DfsT::DirsFile::BytesLimitQuery).empty();
-    if (!noLimit) {
-        dirsFile.update(fmt::format(
-            "UPDATE {} SET value='{}' WHERE parameter = '{}'",
-            DfsT::DirsFile::ParametersDfs,
-            std::to_string(bytesLimit),
-            DfsT::DirsFile::BytesLimit));
-    } else {
-        dirsFile.insert(
-            DfsT::DirsFile::ParametersDfs,
-            DBRow { { "parameter", DfsT::DirsFile::BytesLimit }, { "value", std::to_string(bytesLimit) } });
-    }
-
-    qDebug() << "[Dfs] Changed limit:" << m_bytesLimit;
 }
 
 std::uint64_t DfsController::bytesAvailable() {

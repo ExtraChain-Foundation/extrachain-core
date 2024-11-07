@@ -96,6 +96,10 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     return sql;
 }
 
+const std::optional<SqlCreateError>& DbSchema::validation_error() const {
+    return m_validation_error;
+}
+
 namespace sqlite::literals {
 Column<sqlite::Integer> operator""_int(const char* name, size_t) {
     return Column<sqlite::Integer>(name);
@@ -111,5 +115,9 @@ Column<sqlite::Text> operator""_text(const char* name, size_t) {
 
 Column<sqlite::Blob> operator""_blob(const char* name, size_t) {
     return Column<sqlite::Blob>(name);
+}
+
+Column<sqlite::Json> operator""_json(const char* name, size_t) {
+    return Column<sqlite::Json>(name);
 }
 }

@@ -26,7 +26,8 @@
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 
-using FileId = std::string;
+using FileId         = std::string;
+using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
 
 class ThreadAddFiles;
 class EXTRACHAIN_EXPORT DfsController : public QObject {
@@ -59,7 +60,9 @@ public:
         Dfs::Encryption              securityLevel);
 
     std::expected<Dfs::DirRow, Dfs::DfsError>
-    storeDb(const ActorId &actorId, const std::string &visualName, const DbSchema &schema);
+    storeDatabase(const ActorId &actorId, const std::string &visualName, const DbSchema &schema);
+
+    ExpectedDirRow databaseInsert(const ActorId &actorId, const std::string &fileId, DBRow row);
 
     bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile
@@ -103,7 +106,6 @@ private:
           std::uint64_t                      offset,
           std::uint64_t                      fragmentSize);
     std::string extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
-    void        loadBytesLimit();
     void        eraseFirstUnsynchronizedDir();
     void        removeRowFromDB(const DfsP::RemoveFileMessage &msg);
     void        requestFileSegment(const Dfs::DirRow &row);
@@ -143,7 +145,6 @@ public slots:
 public:
     std::string   deleteFragment(const DfsP::DeleteSegmentMessage &msg);
     std::uint64_t bytesLimit() const;
-    void          setBytesLimit(std::uint64_t bytesLimit);
 
 public:
     std::uint64_t bytesAvailable();
