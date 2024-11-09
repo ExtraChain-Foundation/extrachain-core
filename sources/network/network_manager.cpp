@@ -22,7 +22,6 @@
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
-#include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
@@ -33,7 +32,7 @@
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
-const QList<SocketService *> &NetworkManager::connections() const {
+SafePtr<QList<SocketService *>> NetworkManager::connections() const {
     return m_connections;
 }
 
@@ -91,7 +90,8 @@ void NetworkManager::reconnection() {
 
 void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
     qDebug() << "Reconnect socket: " << connectInfo.ip << connectInfo.port;
-    for (auto it = m_connections.begin(); it != m_connections.end(); ++it) {
+    auto connectionsLocked = *m_connections;
+    for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
         if ((*it)->identifier() == identifier) {
             emit(*it)->close();
             emit(*it)->finished();
@@ -124,72 +124,72 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::activated, this, [&] {
         emit this->newSocketActivated();
     });
-    if (!m_connections.contains(service)) {
-        m_connections.append(service);
-        if (node->isClientApp() && requestListNodes)
-            send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
+
+    {
+        auto connectionsLocked = *m_connections;
+        if (!connectionsLocked->contains(service)) {
+            connectionsLocked->append(service);
+            // if (node->isClientApp() && requestListNodes)
+            //     send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
+        }
     }
-    connect(service, &WebSocketService::shareConnections, this, [&](const std::string& identifier, const QString ip, const quint16 port)
+    connect(service, &WebSocketService::shareConnections, this, [&](const QJsonArray connectionsArr) {
+        qInfo() << "shareConnections" << connectionsArr;
+        auto initIP = node->getInitPublicIPAndCountry().first;
+        for (const QJsonValue &value : connectionsArr) {
+            bool canConnect = true;
+            auto ip         = value.toString();
             {
-                qInfo() << "shareConnections" << identifier << ip << port;
-                bool isUpdated = false;
-                auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-                for (auto it = m_reconnectionsToIdentifierLocked->begin();
-                     it != m_reconnectionsToIdentifierLocked->end();
-                     ++it) {
-                    if (it->first.ip == ip && it->first.port == port)
-                    {
-                        qInfo() << "shareConnections updated";
-                        isUpdated = true;
-                        it->second = QString::fromStdString(identifier);
+                auto connectionsLocked = *m_connections;
+                for (const auto &connItem : *connectionsLocked) {
+                    if (ip == connItem->ip() || ip == initIP) {
+                        canConnect = false;
+                        break;
                     }
                 }
+            }
 
-                if (!isUpdated)
-                    m_reconnectionsToIdentifier->emplace(
-                        NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
-                        QString::fromStdString(identifier));
-
-                auto        mainActor = node->accountController()->mainActor();
-                MessageBody message   =
-                    make_message("", MessageType::ShareConnections, MessageStatus::Request, mainActor->id(), "");
-                auto        serialized = message.serialize();
-                auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
-                this->sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier, MessageType::ShareConnections, MessageStatus::Request);
-            });
+            if (canConnect)
+                connectToNode(ip, Network::Protocol::WebSocket);
+        }
+    });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
     if (identifier.isEmpty())
         qFatal("Try remove with empty identifier");
-
-    for (const auto &connection : std::as_const(m_connections)) {
+    auto connectionsLocked = *m_connections;
+    for (const auto &connection : *connectionsLocked) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
 }
 
 NetworkManager::~NetworkManager() {
-    qDebug() << "[NetworkManager] Finish him with" << m_connections.length() << "connections";
+    qDebug() << "[NetworkManager] Finish him with" << m_connections->length() << "connections";
 
-    for (const auto &connection : std::as_const(m_connections)) {
+    auto connectionsLocked = *m_connections;
+    for (const auto &connection : *connectionsLocked) {
         connection->final();
         emit connection->close();
         emit connection->finished();
     }
-    m_connections.clear();
+    connectionsLocked->clear();
 }
 
 void NetworkManager::checkConnectionsStatus() {
     m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
-    std::for_each(m_connections.begin(), m_connections.end(), [&](SocketService *el) {
-        flag = flag || el->isActive();
-        if (el->isActive()) {
-            count++;
-        }
-    });
+    {
+        auto connectionsLocked = *m_connections;
+        std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](SocketService *el) {
+            flag = flag || el->isActive();
+            if (el->isActive()) {
+                count++;
+            }
+        });
+    }
     emit connectionStatusChanged(flag);
     emit connectionsCountChanged(count); // TODO: check prev count value
 
@@ -228,9 +228,9 @@ void NetworkManager::startNetwork() {
 
     qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
                        << wsServer->serverPort(); // << wsServer->serverName();
-    DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-                                              .port    = static_cast<uint64_t>((int)wsPort) };
-    m_wsConnections.push_back(wsConnection);
+    // DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
+    //                                           .port    = static_cast<uint64_t>((int)wsPort) };
+    // m_wsConnections.push_back(wsConnection);
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -241,10 +241,16 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol, const bool request) {
-    if (m_connections.length() >= Network::maxConnections) {
-        qDebug() << "[NetworkManager] Can't connect because the maximum number of connections";
-        return;
+void NetworkManager::connectToNode(
+    const QString    &ip,
+    Network::Protocol protocol,
+    const bool        request,
+    const bool        isConstant) {
+    if (m_connections->length() >= Network::maxConnections) {
+        if (!removeOneConnection()) {
+            qDebug() << "[NetworkManager] Can't connect because the maximum number of connections";
+            return;
+        }
     }
 
     if (ip.isEmpty())
@@ -262,15 +268,19 @@ void NetworkManager::connectToNode(const QString &ip, Network::Protocol protocol
     case Protocol::Udp:
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), port, request);
+        connectToWebSocket(ip.simplified(), port, request, isConstant);
         break;
     case Protocol::Undefined:
         qFatal("Undefined connectToNode");
     }
 }
 
-void NetworkManager::connectToWebSocket(const QString &ip, quint16 port, bool requestListNodes) {
-    auto service = new WebSocketService(nullptr, node, this);
+void NetworkManager::connectToWebSocket(
+    const QString &ip,
+    quint16        port,
+    bool           requestListNodes,
+    const bool     isConstant) {
+    auto service = new WebSocketService(nullptr, node, this, isConstant);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
     m_reconnectionsToIdentifier->emplace(
@@ -305,12 +315,35 @@ void NetworkManager::sendMessage(
         }
     };
 
-    for (const auto &service : std::as_const(m_connections)) {
+    auto connectionsLocked = *m_connections;
+    for (const auto &service : *connectionsLocked) {
         if (service->isActive()
             && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->sendMessage(QByteArray::fromStdString(serialized_message));
         }
+    }
+}
+
+void NetworkManager::saveCustomMessage(const std::string &messageId) {
+    m_receivedMessageId->insert_or_assign(messageId, true);
+}
+
+void NetworkManager::sendCustomMessageFurther(
+    const CustomMessage &customMessage,
+    const MessageStatus &status,
+    const std::string   &messageId) {
+    auto receivedMessageIdLocked = *m_receivedMessageId;
+    auto it                      = receivedMessageIdLocked->find(messageId);
+    if (it != receivedMessageIdLocked->end() || !it->second) {
+        node->network()->send_message(
+            customMessage,
+            MessageType::Custom,
+            status,
+            messageId,
+            Config::Net::TypeSend::Except);
+
+        receivedMessageIdLocked->insert_or_assign(messageId, true);
     }
 }
 
@@ -405,10 +438,11 @@ void NetworkManager::sendFromCache() {
 }
 
 bool NetworkManager::isActiveConnectionExists() {
-    if (this->m_connections.isEmpty())
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->isEmpty())
         return false;
 
-    for (const auto &el : std::as_const(this->m_connections)) {
+    for (const auto &el : *connectionsLocked) {
         if (el->isActive())
             return true;
     }
@@ -425,7 +459,7 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     if (it == msgHashList.end())
         msgHashList.insert(hashMsg, value);
     else {
-        if (msgHashList.find(hashMsg).value() == m_connections.length() - 1) {
+        if (msgHashList.find(hashMsg).value() == m_connections->length() - 1) {
             msgHashList.remove(hashMsg);
             flag_result = false;
         } else {
@@ -447,8 +481,6 @@ void NetworkManager::messageReceived(
         return;
     }
 
-    m_messages[identifier] = message;
-
     std::string_view msg  = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
 
@@ -462,11 +494,6 @@ void NetworkManager::messageReceived(
     if (status == MessageStatus::Request) {
         m_messages[messageId] = identifier;
     }
-
-    if (m_receivedMessageId.find(messageId) != m_receivedMessageId.end()) {
-        return;
-    }
-    m_receivedMessageId.insert(messageId);
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
@@ -487,57 +514,35 @@ void NetworkManager::messageReceived(
     // try {
     switch (type) {
     case MessageType::Custom: {
+        qInfo() << "Achieved CUSTOM. MessageID:" + messageId + "; SenderID:" + mb.sender_id.toStdString();
+
+        auto receivedMessageIdLocked = *m_receivedMessageId;
+        auto res                     = receivedMessageIdLocked->try_emplace(messageId);
+        if (!res.second) {
+            if (!res.first->second) {
+                qInfo() << "Custom Response package forwarded further" << messageId;
+                const auto custom = MessagePack::deserialize<CustomMessage>(serialized);
+                node->network()->send_message(
+                    custom,
+                    MessageType::Custom,
+                    status,
+                    messageId,
+                    Config::Net::TypeSend::Except);
+
+                res.first->second = true;
+            }
+            return;
+        }
+
         const auto custom     = MessagePack::deserialize<CustomMessage>(serialized);
         const bool isContains = m_customPool.contains(custom.owner);
 
-        if (isContains) {
-            emit customMessageReceived(custom.owner, custom.data);
-        } else {
-            node->network()
-                ->send_message(custom, MessageType::Custom, status, messageId, Config::Net::TypeSend::Except);
-        }
+        // TODO: change when will be understanding how to work with VPN actors
+        if (/*isContains*/ true)
+            emit customMessageReceived(custom, status, messageId, mb.sender_id, identifier);
+        else
+            sendCustomMessageFurther(custom, status, messageId);
 
-        break;
-    }
-
-    case MessageType::ShareConnections: {
-        if (status == MessageStatus::Request) {
-            qInfo() << "Achieved ShareConnections(Request)" << messageId;
-            std::vector<std::string> ips;
-            for (const auto &item : m_connections) {
-                if (identifier != item->identifier().toStdString()) {
-                    qDebug() << item->ip().toStdString();
-                    if (item->ip().isEmpty())
-                        continue;
-                    ips.emplace_back(item->ip().toStdString());
-                }
-            }
-
-            if (!ips.empty()) {
-                node->network()->send_message(
-                    MessagePack::serializeContainer(ips),
-                    MessageType::ShareConnections,
-                    MessageStatus::Response,
-                    messageId,
-                    Config::Net::TypeSend::Focused);
-            }
-        } else if (status == MessageStatus::Response) {
-            qInfo() << "Achieved ShareConnections(Response)" << messageId;
-            auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            auto ips      = MessagePack::deserializeContainer<std::string>(ipsInput);
-            for (const auto &item : ips) {
-                bool canConnect = true;
-                for (const auto &connItem : m_connections) {
-                    if (item == connItem->ip().toStdString()) {
-                        canConnect = false;
-                        break;
-                    }
-                }
-
-                if (canConnect)
-                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
-            }
-        }
         break;
     }
     case MessageType::ResponseDfsSize: {
@@ -793,6 +798,7 @@ void NetworkManager::messageReceived(
         break;
     }
 
+<<<<<<< HEAD
     case MessageType::NewNodeConnected: {
         qDebug() << "Get new node";
         DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
@@ -846,35 +852,6 @@ void NetworkManager::messageReceived(
         break;
     }
 
-<<<<<<< HEAD
-    case MessageType::VPNHandshake:
-    case MessageType::VPNConnection:
-    case MessageType::VPNDisconnect:
-    case MessageType::VPNUpdateConnection: {
-=======
-    case MessageType::Accrual: {
-        /*
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        qDebug() << "Begin accrual for actor " << actor.id().toString();
-        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
-        ActorId(Token::ROCC_TOKEN)); tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node->transactionManager()->addTransaction(tx);
-        node->network()->send_message(tx, MessageType::BlockchainTransaction);
-        */
-        break;
-    }
-
-    // TODO: custom, how to know it's user network message or VPN ?
-    case MessageType::Custom: {
->>>>>>> 08b2897f (init changes)
-        if (node->isRaccoon) {
-            auto inputMsg = MessagePack::deserialize<VPNMessage>(serialized);
-            emit node->vpnWorker(inputMsg, status, messageId, mb.sender_id, identifier);
-        }
-        break;
-    }
-
     default:
         std::string error =
             fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
@@ -884,21 +861,12 @@ void NetworkManager::messageReceived(
     // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
-void NetworkManager::requestWSNodeList(std::string message_id) {
-    qDebug() << "requestWSNodeList" << m_wsConnections.size();
-    if (m_wsConnections.empty() || node->isClientApp())
-        return;
-
-    std::vector<std::string> serializedData = MessagePack::serializeContainer(m_wsConnections);
-    send_message(serializedData, MessageType::RequestListNodes, MessageStatus::Response, message_id);
-}
-
 void NetworkManager::removeWsConnection() {
     if (QObject::sender() == nullptr)
         return;
 
     auto connection = qobject_cast<SocketService *>(QObject::sender());
-    auto removed    = m_connections.removeAll(connection);
+    auto removed    = m_connections->removeAll(connection);
     qDebug() << "[WS] Removed" << connection;
     //    m_reconnections.remove(NetworkReconnect {
     //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
@@ -998,22 +966,53 @@ QString NetworkManager::localIp() {
 }
 
 void NetworkManager::onNewWsConnection() {
+    qInfo() << "NetworkManager::onNewWsConnection()";
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
         qFatal("[WS] Error: ws == nulltpr");
 
-    if (m_connections.length() >= Network::maxConnections) {
-        qDebug() << "[NetworkManager] Can't connect from WS server because the maximum number of connections";
-        return;
+    bool needToDelete = false;
+    if (m_connections->length() >= Network::maxConnections) {
+        if (!removeOneConnection()) {
+            qDebug() << "[NetworkManager] Can't connect from WS server because the maximum number of "
+                        "constant connections reached!";
+            needToDelete = true;
+        }
     }
 
-    auto service = new WebSocketService(ws, node, this);
+    auto service = new WebSocketService(ws, node, this, false, needToDelete);
     connectWsService(service);
-    m_reconnectionsToIdentifier->emplace(
-        NetworkReconnect { .ip       = service->ip(),
-                           .port     = service->port(),
-                           .protocol = Network::Protocol::WebSocket },
-        "");
+    if (!needToDelete)
+        m_reconnectionsToIdentifier->emplace(
+            NetworkReconnect { .ip       = service->ip(),
+                               .port     = service->port(),
+                               .protocol = Network::Protocol::WebSocket },
+            "");
+}
+
+bool NetworkManager::removeOneConnection() {
+    auto connectionsLocked = *m_connections;
+    bool isChanged         = false;
+    for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
+        if (!(*it)->isConstant()) {
+            qDebug()
+                << QString("[NetworkManager] Socket with ip \"%1\" was changed to another.").arg((*it)->ip());
+            connectionsLocked->erase(it);
+
+            NetworkReconnect tempConnection { .ip       = (*it)->ip(),
+                                              .port     = (*it)->port(),
+                                              .protocol = Network::Protocol::WebSocket };
+
+            auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
+            auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
+            if (findRes != reconnectionsToIdentifierLocked->end())
+                reconnectionsToIdentifierLocked->erase(tempConnection);
+
+            isChanged = true;
+            break;
+        }
+    }
+    return isChanged;
 }
 
 CalculateTraffic *CalculateTraffic::GetInstance() {
@@ -1076,4 +1075,52 @@ void NetworkManager::sendNetworkMessageSlot(
     Config::Net::TypeSend type_send,
     const std::string    &receiver_identifier) {
     sendMessage(serialized_message, type_send, receiver_identifier);
+}
+
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
+    try {
+        QNetworkAccessManager manager;
+        QNetworkRequest       request(QUrl("http://ip-api.com/json"));
+        request.setTransferTimeout(5000);
+        QNetworkReply *reply = manager.get(request);
+
+        QString    ip, country, output;
+        QEventLoop loop;
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+        QString errorText;
+        QObject::connect(reply, &QNetworkReply::finished, [&]() {
+            if (reply->error() != QNetworkReply::NoError) {
+                errorText = reply->errorString();
+                return;
+            }
+            output = reply->readAll();
+        });
+        loop.exec();
+        reply->deleteLater();
+
+        if (!errorText.isEmpty())
+            throw std::runtime_error(errorText.toStdString());
+
+        QJsonParseError parseError;
+        QJsonDocument   jsonDoc = QJsonDocument::fromJson(output.toUtf8(), &parseError);
+
+        if (parseError.error != QJsonParseError::NoError)
+            throw std::runtime_error("Failed to parse JSON:" + parseError.errorString().toStdString());
+        if (!jsonDoc.isObject())
+            throw std::runtime_error("JSON is not an object.");
+
+        QJsonObject jsonObj = jsonDoc.object();
+
+        ip      = jsonObj.value("query").toString();
+        country = jsonObj.value("country").toString();
+
+        return { ip, country };
+    } catch (const std::exception &error) {
+        qCritical() << "Get public ip error: " + QString::fromStdString(error.what());
+        return {};
+    } catch (...) {
+        qCritical() << "Get public ip error unknown.";
+        return {};
+    }
 }

@@ -223,6 +223,7 @@ enum class SocketServiceError {
     IncompatibleNetwork    = 2,
     IncompatibleIdentifier = 3,
     DuplicateIdentifier    = 4,
+    IncorrectPublicKey     = 5,
 };
 Q_ENUM_NS(SocketServiceError)
 

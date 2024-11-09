@@ -1114,7 +1114,7 @@ void DfsController::threadAddFragment(const DFS::Packets::SegmentMessage &msg) {
                 this->updateFileState(msg.Actor, msg.FileName, DFS::Basic::FileState::Partially);
             });
     connect(&fw, &FragmentWriter::eraseFromFiles, this,
-            [=](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
+            [=, this](DFSP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
     connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);

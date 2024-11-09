@@ -27,9 +27,7 @@
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
 #include <QtWebSockets/QWebSocketServer>
-#include <algorithm>
 #include <string>
-#include <string_view>
 #include <shared_mutex>
 
 #include "managers/account_controller.h"
@@ -154,17 +152,17 @@ private:
     ExtraChainNode*                        node;
     std::shared_ptr<QNetworkAddressEntry>  local;
     QWebSocketServer*      wsServer = nullptr;
-    QList<SocketService*>  m_connections;
+    SafePtr<QList<SocketService*>>               m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus          m_networkStatus;
 
     std::map<std::string, std::string>           m_messages;
     std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
-    std::vector<DFSP::WSConnection>              m_wsConnections;
+    // std::vector<DFSP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
-    std::set<std::string>                        m_receivedMessageId;
+    SafePtr<std::map<std::string, bool>>         m_receivedMessageId;
     std::set<ActorId>                            m_customPool;
 
     std::string m_networkHashForVPN;
@@ -173,6 +171,7 @@ public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void localInizialization();
+    std::pair<QString, QString> getPublicIPAndCountry();
 
     std::string getNetworkVPNHash() noexcept;
     void        setNetworkVPNHash() noexcept;
@@ -183,9 +182,10 @@ public:
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+    bool removeOneConnection();
 
 public:
-    const QList<SocketService*>& connections() const;
+    SafePtr<QList<SocketService*>> connections() const;
     bool                         serverStatus(Network::Protocol protocol) const;
 
 public slots:
@@ -200,7 +200,11 @@ signals:
     void accrual(const ActorId& actorId);
 
 protected:
-    void connectToWebSocket(const QString& ip, quint16 port, bool requestListNodes = false);
+    void connectToWebSocket(
+        const QString& ip,
+        quint16        port,
+        bool           requestListNodes = false,
+        const bool     isConstant       = false);
 
     /**
      * @brief NetworkManager::checkMsgCount
@@ -218,7 +222,11 @@ protected slots:
 
 public slots:
     void startNetwork();
-    void connectToNode(const QString& ip, Network::Protocol protocol, const bool request = false);
+    void connectToNode(
+        const QString&    ip,
+        Network::Protocol protocol,
+        const bool        request    = false,
+        const bool        isConstant = false);
     void process();
     void reconnection();
     void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
@@ -243,6 +251,14 @@ public:
                      const std::string&    receiver_identifier,
                      MessageType           type_info = MessageType::Unknown,
                      MessageStatus         status_info = MessageStatus::NoStatus);
+
+    void saveCustomMessage(const std::string& messageId);
+
+    void sendCustomMessageFurther(
+        const CustomMessage& customMessage,
+        const MessageStatus& status,
+        const std::string&   messageId);
+
     void saveToCache(
         const std::string&    serialized_message,
         Config::Net::TypeSend typeSend,
@@ -303,13 +319,12 @@ public:
         }
         #endif
 
-        m_receivedMessageId.insert(message.message_id);
         this->sendMessage(serialized + sign, typeSend, receiver_identifier, type, status);
 
         return message.message_id;
     }
 
-    void                    requestWSNodeList(std::string message_id);
+    // void                                         requestWSNodeList(std::string message_id);
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
@@ -323,7 +338,12 @@ signals:
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
     void messageCountReceived(BigNumber count);
-    void customMessageReceived(ActorId owner, std::string data);
+    void customMessageReceived(
+        const CustomMessage customPackage,
+        const MessageStatus status,
+        const std::string   messageId,
+        const ActorId       senderId,
+        const std::string   identifier);
 
     friend class DfsNetworkManager;
 };

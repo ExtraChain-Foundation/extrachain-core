@@ -9,7 +9,10 @@ enum class NetworkVPNType;
 struct VPNConfigStorage {
     struct VPNHandhakeCache {
         std::string              uuid;
+        std::string              requesterIP;
+        std::string              requesterMessageID;
         std::string              requesterNodeID;
+        std::string              nextNodeIP;
         std::string              nextNodeID;
         NetworkVPNType           nextNodeIDType;
         int                      chainIndex;
@@ -26,6 +29,7 @@ struct VPNConfigStorage {
         int         chainIndex;
         std::string requesterNodeID;
         std::string nextNodeID;
+        std::string nextNodeIP;
         qint64      lastUpdateRequsterTS;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
@@ -35,7 +39,6 @@ struct VPNConfigStorage {
 
     std::atomic_bool                           vpnIsClient = false;
     std::vector<std::string>                   vpnFileAddedHash;
-    std::pair<QString, QString>                vpnInitPublicIPAndCountry;
     SafePtr<std::map<std::string, VPNWorkers>> vpnUuidToVPNWorkers;
     std::optional<NetworkVPNType>              vpnConnectedType;
     std::string                                vpnLocalizationFileHash;

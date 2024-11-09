@@ -30,6 +30,7 @@ public:
     int bytesCompressed() const;
     int bytesOutgoing() const;
     int bytesIncoming() const;
+    bool                      isConstant() const;
 
 public:
     virtual void sendMessage(const QByteArray &data) = 0;
@@ -45,10 +46,10 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
-    void shareConnections(const std::string& identifier, const QString ip, const quint16 port);
+    void shareConnections(const QJsonArray connectionsArr);
 
 protected:
-    bool checkFirstMessage(const QString &message);
+    bool       checkFirstMessage(const QString &message, const bool canUseConnection);
     QByteArray generateFirstMessage();
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
@@ -58,10 +59,12 @@ protected:
     QString m_ip;
     quint16 m_port = 0;
     bool m_activated = false;
+    bool            m_needToDelete;
     int m_bytesIncoming = 0;
     int m_bytesOutgoing = 0;
     int m_bytesCompressed = 0;
     SendType m_sendType = SendType::All;
+    bool            m_isConstant      = false;
     // ActorId subNetwork;
 
     KeyPrivate priv;

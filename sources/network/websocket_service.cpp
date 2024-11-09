@@ -1,7 +1,14 @@
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent)
+WebSocketService::WebSocketService(
+    QWebSocket     *ws,
+    ExtraChainNode *node,
+    QObject        *parent,
+    const bool      isConstant,
+    const bool      needToDelete)
     : SocketService(node, parent) {
+    m_isConstant = isConstant;
+    m_needToDelete = needToDelete;
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
         qDebug() << "[WS] Create new ws";
@@ -11,7 +18,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
         this->m_port = m_ws->peerPort();
         qDebug() << "[WS] New service:" << m_ip;
         connections();
-        handshake();
+
+        // handshake();
     }
 
     connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
@@ -60,31 +68,74 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     if (message.isEmpty())
         return;
 
-    if (pub.empty()) {
-        if (message == "StatusOnly") {
-            m_ws->sendTextMessage(generateFirstMessage());
-            return;
-        }
+    auto json = QJsonDocument::fromJson(message.toLatin1());
 
-        pub = KeyPublic(ByteArray::fromBase64(message).toArray<32>());
+    if (json["isRequest"].toBool()) {
+        // if (message == "StatusOnly") {
+        //     m_ws->sendTextMessage(generateFirstMessage());
+        //     return;
+        // }
+
+        auto json    = QJsonDocument::fromJson(message.toLatin1());
+        m_isConstant = json["isConstant"].toBool();
+        m_identifier = json["identifier"].toString();
+        auto tempPub = json["pub"].toString();
+
+        qInfo() << QString("[WS] First message key achieved: %1, isConstant: %2")
+                       .arg(json.toJson())
+                       .arg(m_isConstant);
+
+        pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
         if (pub.empty()) { // or incorrect
             qFatal("Incorrect public key in socket");
         }
 
-        auto firstMessage = generateFirstMessage();
+        QJsonObject jsonAnswer;
+        jsonAnswer["isRequest"]        = false;
+        jsonAnswer["canUseConnection"] = !m_needToDelete;
+        jsonAnswer["pub"]              = ByteArray(priv.publicKey()).toBase64QString();
+
+        auto firstMessage  = generateFirstMessage();
         auto prepared     = prepareSendMessage(firstMessage);
-        auto decoded      = ByteArray(prepared).toBase64QString();
-        m_ws->sendTextMessage(decoded);
+        jsonAnswer["data"] = ByteArray(prepared).toBase64QString();
+
+        QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
+
+        m_activated = true;
+        QTimer::singleShot(1000, [this] {
+            qDebug() << "[Socket] Emit activation after timeout:" << this << protocol();
+            emit activated();
+        });
+
+        m_ws->sendTextMessage(result);
+        m_ws->flush();
+        if (m_needToDelete)
+            closeSocket();
         return;
     }
 
     if (m_activated)
         return;
 
-    qDebug() << "[WS] First message:" << message;
-    auto decoded  = ByteArray::fromBase64(message).toQByteArray();
-    auto prepared = prepareReceiveMessage(decoded);
-    checkFirstMessage(prepared);
+    bool canUseConnection = json["canUseConnection"].toBool();
+
+    auto tempPub = json["pub"].toString();
+    pub          = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
+    if (pub.empty()) {
+        qDebug("Incorrect public key in socket");
+        emit error(Network::SocketServiceError::IncorrectPublicKey, "");
+        closeSocket();
+        return;
+    }
+
+    auto data = json["data"].toString();
+    qDebug() << "[WS] First message:" << data;
+    auto coded   = ByteArray::fromBase64(data).toQByteArray();
+    auto decoded = prepareReceiveMessage(coded);
+    checkFirstMessage(decoded, canUseConnection);
+
+    if (m_needToDelete)
+        closeSocket();
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
@@ -144,8 +195,14 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::handshake() {
-    auto key = ByteArray(priv.publicKey()).toBase64QString();
-    m_ws->sendTextMessage(key);
+    QJsonObject json;
+    json["isRequest"]  = true;
+    json["isConstant"] = m_isConstant;
+    json["pub"]        = ByteArray(priv.publicKey()).toBase64QString();
+    json["identifier"] = QString(Network::currentIdentifier());
+
+    QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+    m_ws->sendTextMessage(result);
 }
 
 quint16 WebSocketService::port() const {

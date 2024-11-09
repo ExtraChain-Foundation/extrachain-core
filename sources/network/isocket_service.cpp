@@ -47,7 +47,11 @@ int SocketService::bytesIncoming() const {
     return m_bytesIncoming;
 }
 
-bool SocketService::checkFirstMessage(const QString &message) {
+bool SocketService::isConstant() const {
+    return m_isConstant;
+}
+
+bool SocketService::checkFirstMessage(const QString &message, const bool canUseConnection) {
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
     if (json.isEmpty()) {
@@ -64,6 +68,7 @@ bool SocketService::checkFirstMessage(const QString &message) {
     ActorId currentFirstId     = node->actorIndex()->firstId();
     bool    isFirstIdsContains = currentFirstId == jsonFirstId;
     bool    somethingEmpty     = jsonFirstId.isZero() || currentFirstId.isZero();
+    QJsonArray connectionsArr     = json["connections"].toArray();
 
     qDebug() << QString("[Socket] First message:%1 | Current first:%2")
                     .arg(json.toJson())
@@ -93,8 +98,8 @@ bool SocketService::checkFirstMessage(const QString &message) {
     }
 
     bool  flag        = false;
-    auto &connections = node->network()->connections();
-    std::for_each(connections.begin(), connections.end(), [&flag, this](SocketService *el) {
+    auto  connectionsLocked = *node->network()->connections();
+    std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
 
@@ -105,11 +110,18 @@ bool SocketService::checkFirstMessage(const QString &message) {
         return false;
     }
 
-    qDebug() << "[Socket] Activated" << this << protocol();
-    m_activated = true;
-    emit activated();
-    emit shareConnections(m_identifier.toStdString(), m_ip, m_port);
-    return true;
+    if (canUseConnection) {
+        qDebug() << "[Socket] Activated" << this << protocol();
+        m_activated = true;
+        emit activated();
+        emit shareConnections(connectionsArr);
+        return true;
+    } else {
+        qDebug() << "[Socket] Ignored as external node don't have enough slots." << this << protocol();
+        m_activated    = false;
+        m_needToDelete = true;
+        return false;
+    }
 }
 
 void SocketService::closeSocket() {
@@ -122,6 +134,14 @@ QByteArray SocketService::generateFirstMessage() {
     json["version"]    = EXTRACHAIN_VERSION;
     json["identifier"] = QString(Network::currentIdentifier());
     json["sendType"]   = QString::number(int(m_sendType));
+
+    QJsonArray connectionsArr;
+    {
+        auto connectionsLocked = *node->network()->connections();
+        for (auto &it : *connectionsLocked)
+            connectionsArr.append(it->ip());
+    }
+    json["connections"] = connectionsArr;
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
     return result;

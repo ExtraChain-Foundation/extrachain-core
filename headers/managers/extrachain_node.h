@@ -101,6 +101,7 @@ private:
     uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
     VpnFunctionClearType   m_vpnClearFunc = nullptr;
+    std::pair<QString, QString> m_initPublicIPAndCountry;
 
 public:
     ~ExtraChainNode();
@@ -111,6 +112,8 @@ public:
     bool isClientApp() {
         return isClientApplication;
     };
+
+    std::pair<QString, QString> getInitPublicIPAndCountry() const;
 
     Blockchain*         blockchain();
     NetworkManager*     network();
@@ -192,12 +195,6 @@ signals:
     void readyInitLocalizationFiles();
     void vpnConnected(std::pair<QString, QString> publicIPAndCountry);
     void vpnDisconnect();
-    void vpnWorker(
-        const VPNMessage    networkInput,
-        const MessageStatus status,
-        const std::string   messageId,
-        const ActorId       senderId,
-        const std::string   identifier);
 
 private slots:
     void getAllActorsTimerCall();
