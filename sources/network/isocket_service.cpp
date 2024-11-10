@@ -48,7 +48,11 @@ int SocketService::bytesIncoming() const {
 }
 
 bool SocketService::isConstant() const {
-    return m_isConstant;
+    return m_isConstant.load();
+}
+
+void SocketService::setConstant(bool isConstant) {
+    m_isConstant = isConstant;
 }
 
 bool SocketService::checkFirstMessage(const QString &message, const bool canUseConnection) {

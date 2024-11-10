@@ -54,6 +54,7 @@ struct VPNMessage;
 class ExtraChainNode;
 enum class MessageType;
 enum class MessageStatus;
+class WebSocketService;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {

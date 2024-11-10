@@ -207,7 +207,7 @@ namespace Network {
 Q_NAMESPACE
 
 static bool    isStartedServer = true;
-static quint16 maxConnections  = 1; // 100;
+static quint16 maxConnections  = 100;
 static bool    networkDebug    = false;
 
 enum class Protocol {

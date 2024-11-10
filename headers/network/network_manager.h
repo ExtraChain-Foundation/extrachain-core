@@ -172,6 +172,7 @@ public:
     ~NetworkManager();
     void localInizialization();
     std::pair<QString, QString> getPublicIPAndCountry();
+    bool                        removeOneConnection();
 
     std::string getNetworkVPNHash() noexcept;
     void        setNetworkVPNHash() noexcept;
@@ -182,7 +183,6 @@ public:
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
-    bool removeOneConnection();
 
 public:
     SafePtr<QList<SocketService*>> connections() const;
@@ -335,6 +335,7 @@ public:
 
 signals:
     void newSocketActivated();
+    void newSocketActivatedWithParams(const std::string ip, const std::string identifier);
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);

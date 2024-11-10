@@ -197,7 +197,7 @@ void WebSocketService::connections() {
 void WebSocketService::handshake() {
     QJsonObject json;
     json["isRequest"]  = true;
-    json["isConstant"] = m_isConstant;
+    json["isConstant"] = m_isConstant.load();
     json["pub"]        = ByteArray(priv.publicKey()).toBase64QString();
     json["identifier"] = QString(Network::currentIdentifier());
 

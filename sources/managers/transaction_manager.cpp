@@ -59,7 +59,6 @@ void TransactionManager::addProvedTransaction(const Transaction &tx) {
 // Block making
 
 void TransactionManager::makeBlock() {
-    return;
     if (node->accountController()->empty())
         return;
 

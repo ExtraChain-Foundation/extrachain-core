@@ -122,7 +122,16 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
     connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
     connect(service, &WebSocketService::activated, this, [&] {
+        auto senderObj = QObject::sender();
+        if (senderObj == nullptr)
+            return;
+
+        auto service = qobject_cast<SocketService *>(senderObj);
+
         emit this->newSocketActivated();
+        emit this->newSocketActivatedWithParams(
+            service->ip().toStdString(),
+            service->identifier().toStdString());
     });
 
     {
@@ -531,13 +540,6 @@ void NetworkManager::messageReceived(
                 auto identifier = res.first->second.first;
 
                 qInfo() << "Custom Response package forwarded further" << messageId << identifier;
-                // const auto custom = MessagePack::deserialize<CustomMessage>(serialized);
-                // node->network()->send_message(
-                //     custom,
-                //     MessageType::Custom,
-                //     status,
-                //     messageId,
-                //     Config::Net::TypeSend::Focused);
 
                 auto        mainActor = node->accountController()->mainActor();
                 MessageBody message =
@@ -546,7 +548,6 @@ void NetworkManager::messageReceived(
                 auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
                 sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
 
-                // res.first->second = true;
                 // TODO: how to erase if no response!
                 // receivedMessageIdLocked->erase(res.first);
             }
