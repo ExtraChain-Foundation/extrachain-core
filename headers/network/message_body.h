@@ -125,6 +125,7 @@ struct VPNMessage {
     std::string              publicKeyFile;
     std::string              uuid;
     std::vector<std::string> allIPsToSet;
+    std::string              senderID;
 
     MSGPACK_DEFINE(
         vpnCommand,
@@ -139,7 +140,8 @@ struct VPNMessage {
         publicIP,
         publicKeyFile,
         uuid,
-        allIPsToSet)
+        allIPsToSet,
+        senderID)
 };
 
 #endif // MESSAGEBODY_H

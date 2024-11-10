@@ -162,7 +162,7 @@ private:
     // std::vector<DFSP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
-    SafePtr<std::map<std::string, bool>>         m_receivedMessageId;
+    SafePtr<std::map<std::string, std::pair<std::string, bool>>> m_receivedMessageId;
     std::set<ActorId>                            m_customPool;
 
     std::string m_networkHashForVPN;
@@ -252,12 +252,13 @@ public:
                      MessageType           type_info = MessageType::Unknown,
                      MessageStatus         status_info = MessageStatus::NoStatus);
 
-    void saveCustomMessage(const std::string& messageId);
+    void saveCustomMessage(const std::string& messageId, const std::string& identifier);
 
     void sendCustomMessageFurther(
         const CustomMessage& customMessage,
         const MessageStatus& status,
-        const std::string&   messageId);
+        const std::string&   messageId,
+        const std::string&   identifier);
 
     void saveToCache(
         const std::string&    serialized_message,

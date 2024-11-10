@@ -111,7 +111,7 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     }
 
     if (canUseConnection) {
-        qDebug() << "[Socket] Activated" << this << protocol();
+        qDebug() << "[Socket] Activated" << this << ip() << protocol();
         m_activated = true;
         emit activated();
         emit shareConnections(connectionsArr);

@@ -103,7 +103,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 
         m_activated = true;
         QTimer::singleShot(1000, [this] {
-            qDebug() << "[Socket] Emit activation after timeout:" << this << protocol();
+            qDebug() << "[Socket] Emit activation after timeout:" << this << ip() << protocol();
             emit activated();
         });
 

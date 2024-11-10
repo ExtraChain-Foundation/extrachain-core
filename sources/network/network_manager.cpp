@@ -136,6 +136,12 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     connect(service, &WebSocketService::shareConnections, this, [&](const QJsonArray connectionsArr) {
         qInfo() << "shareConnections" << connectionsArr;
         auto initIP = node->getInitPublicIPAndCountry().first;
+
+        if (m_connections->length() >= Network::maxConnections) {
+            qDebug() << "shareConnections ignored by max connections limit";
+            return;
+        }
+
         for (const QJsonValue &value : connectionsArr) {
             bool canConnect = true;
             auto ip         = value.toString();
@@ -325,17 +331,18 @@ void NetworkManager::sendMessage(
     }
 }
 
-void NetworkManager::saveCustomMessage(const std::string &messageId) {
-    m_receivedMessageId->insert_or_assign(messageId, true);
+void NetworkManager::saveCustomMessage(const std::string &messageId, const std::string &identifier) {
+    m_receivedMessageId->insert_or_assign(messageId, std::make_pair(identifier, true));
 }
 
 void NetworkManager::sendCustomMessageFurther(
     const CustomMessage &customMessage,
     const MessageStatus &status,
-    const std::string   &messageId) {
+    const std::string   &messageId,
+    const std::string   &identifier) {
     auto receivedMessageIdLocked = *m_receivedMessageId;
     auto it                      = receivedMessageIdLocked->find(messageId);
-    if (it != receivedMessageIdLocked->end() || !it->second) {
+    if (it != receivedMessageIdLocked->end() || !it->second.second) {
         node->network()->send_message(
             customMessage,
             MessageType::Custom,
@@ -343,7 +350,8 @@ void NetworkManager::sendCustomMessageFurther(
             messageId,
             Config::Net::TypeSend::Except);
 
-        receivedMessageIdLocked->insert_or_assign(messageId, true);
+        it->second.first  = identifier;
+        it->second.second = true;
     }
 }
 
@@ -517,19 +525,30 @@ void NetworkManager::messageReceived(
         qInfo() << "Achieved CUSTOM. MessageID:" + messageId + "; SenderID:" + mb.sender_id.toStdString();
 
         auto receivedMessageIdLocked = *m_receivedMessageId;
-        auto res                     = receivedMessageIdLocked->try_emplace(messageId);
+        auto res = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
         if (!res.second) {
-            if (!res.first->second) {
-                qInfo() << "Custom Response package forwarded further" << messageId;
-                const auto custom = MessagePack::deserialize<CustomMessage>(serialized);
-                node->network()->send_message(
-                    custom,
-                    MessageType::Custom,
-                    status,
-                    messageId,
-                    Config::Net::TypeSend::Except);
+            if (res.first->second.second && status == MessageStatus::Response) {
+                auto identifier = res.first->second.first;
 
-                res.first->second = true;
+                qInfo() << "Custom Response package forwarded further" << messageId << identifier;
+                // const auto custom = MessagePack::deserialize<CustomMessage>(serialized);
+                // node->network()->send_message(
+                //     custom,
+                //     MessageType::Custom,
+                //     status,
+                //     messageId,
+                //     Config::Net::TypeSend::Focused);
+
+                auto        mainActor = node->accountController()->mainActor();
+                MessageBody message =
+                    make_message(serialized, MessageType::Custom, status, mainActor->id(), messageId);
+                auto serialized = message.serialize();
+                auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
+                sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
+
+                // res.first->second = true;
+                // TODO: how to erase if no response!
+                // receivedMessageIdLocked->erase(res.first);
             }
             return;
         }
@@ -541,7 +560,7 @@ void NetworkManager::messageReceived(
         if (/*isContains*/ true)
             emit customMessageReceived(custom, status, messageId, mb.sender_id, identifier);
         else
-            sendCustomMessageFurther(custom, status, messageId);
+            sendCustomMessageFurther(custom, status, messageId, identifier);
 
         break;
     }
