@@ -159,7 +159,6 @@ private:
     std::map<std::string, std::string>           m_messages;
     std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;
     std::map<std::string, MessageIdDataReceived> m_messages_received;
-    // std::vector<DFSP::WSConnection>              m_wsConnections;
     QTimer*                                      m_reconnectTimer;
     CalculateTraffic*                            calculateTraffic;
     SafePtr<std::map<std::string, std::pair<std::string, bool>>> m_receivedMessageId;
@@ -195,8 +194,6 @@ signals:
     void finished(); // ThreadPool
     void addFragSignal(const DFSP::SegmentMessage& msg);
     void fetchFragment(DFSP::RequestFileSegmentMessage& msg, std::string& messageId);
-    void sendNetworkMessage(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                            const std::string &receiver_identifier);
     void accrual(const ActorId& actorId);
 
 protected:
@@ -236,8 +233,6 @@ public slots:
         quint16                  port,
         const QString&           user,
         const QString&           password);
-    void sendNetworkMessageSlot(const std::string &serialized_message, Config::Net::TypeSend type_send,
-                                const std::string &receiver_identifier);
 
 private slots:
     void removeWsConnection();
@@ -325,7 +320,6 @@ public:
         return message.message_id;
     }
 
-    // void                                         requestWSNodeList(std::string message_id);
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;

@@ -69,8 +69,6 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     localInizialization();
     m_reconnectTimer = new QTimer(this);
     calculateTraffic = CalculateTraffic::GetInstance();
-
-    connect(this, &NetworkManager::sendNetworkMessage, this, &NetworkManager::sendNetworkMessageSlot);
 }
 
 void NetworkManager::process() {
@@ -240,9 +238,6 @@ void NetworkManager::startNetwork() {
 
     qDebug().noquote() << "[WS] Start listening:" << wsServer->serverAddress().toString()
                        << wsServer->serverPort(); // << wsServer->serverName();
-    // DFS::Packets::WSConnection wsConnection { .address = local->ip().toString().toStdString(),
-    //                                           .port    = static_cast<uint64_t>((int)wsPort) };
-    // m_wsConnections.push_back(wsConnection);
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -560,6 +555,50 @@ void NetworkManager::messageReceived(
         else
             sendCustomMessageFurther(custom, status, messageId, identifier);
 
+        break;
+    }
+    case MessageType::ShareConnections: {
+        if (status == MessageStatus::Request) {
+            qInfo() << "Achieved ShareConnections(Request)" << messageId;
+            std::vector<std::string> ips;
+
+            {
+                auto connectionsLocked = *m_connections;
+                for (const auto &item : *connectionsLocked) {
+                    if (identifier != item->identifier().toStdString()) {
+                        if (item->ip().isEmpty())
+                            continue;
+                        ips.emplace_back(item->ip().toStdString());
+                    }
+                }
+            }
+
+            if (!ips.empty()) {
+                node->network()->send_message(
+                    MessagePack::serializeContainer(ips),
+                    MessageType::ShareConnections,
+                    MessageStatus::Response,
+                    messageId,
+                    Config::Net::TypeSend::Focused);
+            }
+        } else if (status == MessageStatus::Response) {
+            qInfo() << "Achieved ShareConnections(Response)" << messageId;
+            auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            auto ips      = MessagePack::deserializeContainer<std::string>(ipsInput);
+            for (const auto &item : ips) {
+                bool canConnect        = true;
+                auto connectionsLocked = *m_connections;
+                for (const auto &connItem : *connectionsLocked) {
+                    if (item == connItem->ip().toStdString()) {
+                        canConnect = false;
+                        break;
+                    }
+                }
+
+                if (canConnect)
+                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
+            }
+        }
         break;
     }
     case MessageType::ResponseDfsSize: {
@@ -1031,13 +1070,6 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
         }
     }
     return res;
-}
-
-void NetworkManager::sendNetworkMessageSlot(
-    const std::string    &serialized_message,
-    Config::Net::TypeSend type_send,
-    const std::string    &receiver_identifier) {
-    sendMessage(serialized_message, type_send, receiver_identifier);
 }
 
 std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {

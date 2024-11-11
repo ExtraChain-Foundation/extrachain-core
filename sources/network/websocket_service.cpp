@@ -18,8 +18,6 @@ WebSocketService::WebSocketService(
         this->m_port = m_ws->peerPort();
         qDebug() << "[WS] New service:" << m_ip;
         connections();
-
-        // handshake();
     }
 
     connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
@@ -71,11 +69,6 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
     if (json["isRequest"].toBool()) {
-        // if (message == "StatusOnly") {
-        //     m_ws->sendTextMessage(generateFirstMessage());
-        //     return;
-        // }
-
         auto json    = QJsonDocument::fromJson(message.toLatin1());
         m_isConstant = json["isConstant"].toBool();
         m_identifier = json["identifier"].toString();
