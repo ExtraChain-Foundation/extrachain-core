@@ -53,11 +53,6 @@ enum class MessageType {
 
     ShareConnections = 113,
 
-    VPNHandshake = 241,
-    VPNConnection = 242,
-    VPNDisconnect = 243,
-    VPNUpdateConnection = 244,
-
     Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)
@@ -90,6 +85,13 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
+struct CustomMessage {
+    ActorId owner;
+    std::string data;
+
+    MSGPACK_DEFINE(owner, data)
+};
+
 inline MessageBody make_message(const std::string &data, MessageType type, MessageStatus status,
                                 const ActorId &sender, std::string to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
@@ -109,28 +111,37 @@ inline MessageBody make_message(const std::string &data, MessageType type, Messa
     return message;
 }
 
-enum class VPNType {
-    CLIENT,
-    SERVER,
-    PROXY
-};
-MSGPACK_ADD_ENUM(VPNType)
-FORMAT_ENUM(VPNType)
-
 struct VPNMessage {
-    VPNType vpnType;
-    int resultChainIndex;
-    std::set<int> lockedChainIndex;
-    std::string countryEndpoint;
-    int proxyCounter;
-    std::set<std::string> networkIdentifiersToIgnore;
-    std::string localIP;
-    std::string publicIP;
-    std::string publicKeyFile;
-    std::string uuid;
+    int                      vpnCommand;
+    int                      vpnType;
+    int                      resultChainIndex;
+    std::set<int>            lockedChainIndex;
+    std::string              countryEndpoint;
+    int                      proxyCounter;
+    std::string              lookingForNodeID;
+    std::set<std::string>    networkIdentifiersToIgnore;
+    std::string              localIP;
+    std::string              publicIP;
+    std::string              publicKeyFile;
+    std::string              uuid;
     std::vector<std::string> allIPsToSet;
+    std::string              senderID;
 
-    MSGPACK_DEFINE(vpnType, resultChainIndex, lockedChainIndex, countryEndpoint, proxyCounter, networkIdentifiersToIgnore, localIP, publicIP, publicKeyFile, uuid, allIPsToSet)
+    MSGPACK_DEFINE(
+        vpnCommand,
+        vpnType,
+        resultChainIndex,
+        lockedChainIndex,
+        countryEndpoint,
+        proxyCounter,
+        lookingForNodeID,
+        networkIdentifiersToIgnore,
+        localIP,
+        publicIP,
+        publicKeyFile,
+        uuid,
+        allIPsToSet,
+        senderID)
 };
 
 #endif // MESSAGEBODY_H

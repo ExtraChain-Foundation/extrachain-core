@@ -4,37 +4,32 @@
 #include "utils/safeptr.h"
 
 class ActorId;
-enum class VPNType;
+enum class NetworkVPNType;
 
 struct VPNConfigStorage {
     struct VPNHandhakeCache {
         std::string              uuid;
-        std::string              requesterIdentifier;
-        std::string              nextIdentifier;
-        VPNType                  nextIdentifierType;
+        std::string              requesterIP;
+        std::string              requesterMessageID;
+        std::string              requesterNodeID;
+        std::string              nextNodeIP;
+        std::string              nextNodeID;
+        NetworkVPNType           nextNodeIDType;
         int                      chainIndex;
-        int                      proxyIndex;
-        int                      internalIndex;
         QDateTime                timestamp = QDateTime();
-        std::string              proxyResponseMessageID;
         std::string              localIPForSetup;
         std::string              proxyCounter;
         std::vector<std::string> allIPsToSet;
         std::string              requesterPublicKeyFile;
-        ActorId                  requesterId;
         std::string              nextPublicKeyFile;
-        std::string              nextPublicIP;
     };
 
     struct VPNWorkers {
         std::string uuid;
         int         chainIndex;
-        std::string requesterIdentifier;
-        QString     requesterIP;
-        quint16     requesterPort;
-        std::string nextIdentifier;
-        QString     nextIP;
-        quint16     nextPort;
+        std::string requesterNodeID;
+        std::string nextNodeID;
+        std::string nextNodeIP;
         qint64      lastUpdateRequsterTS;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
@@ -44,9 +39,8 @@ struct VPNConfigStorage {
 
     std::atomic_bool                           vpnIsClient = false;
     std::vector<std::string>                   vpnFileAddedHash;
-    std::pair<QString, QString>                vpnInitPublicIPAndCountry;
     SafePtr<std::map<std::string, VPNWorkers>> vpnUuidToVPNWorkers;
-    std::optional<VPNType>                     vpnConnectedType;
+    std::optional<NetworkVPNType>              vpnConnectedType;
     std::string                                vpnLocalizationFileHash;
 };
 
