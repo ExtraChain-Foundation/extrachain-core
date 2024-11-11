@@ -288,10 +288,13 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     GenesisBlock genesis;
     genesis.setIndex(BigNumber(0));
     // genesis.addRows(dataRows);
+    GenesisDataInfo gdi;
+    gdi.state = BigNumberFloat(0);
+    gdi.type = DataStorage::DataRowType::Universal;
     genesis.addRow(
         ActorId(),
         ActorId(),
-        GenesisDataInfo(BigNumberFloat(0), DataStorage::DataRowType::Universal));
+        gdi);
     genesis.addData(actor->id().toStdString());
     genesis.sign(actor);
     return BlockVariant(genesis);
@@ -848,7 +851,6 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
                     }
                 }
             }
-
             return TransactionProveError::SelfPleasure;
         }
     }

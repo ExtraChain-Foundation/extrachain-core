@@ -356,8 +356,10 @@ FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
+static const int FILE_NOT_EXISTS = 0;
 static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED  = 102;
+static const int UNDEFINED  = 103;
 
 // Blocks
 // static const int BLOCK_IS_NOT_VALID = 201;
@@ -476,16 +478,16 @@ static const std::string tokenTableCreate =
     "count         TEXT  NOT NULL, "
     "owner         TEXT  NOT NULL, "
     "color         TEXT  NOT NULL, "
-    "smart           TEXT  NOT NULL);";
+    "smart         TEXT  NOT NULL);";
 namespace Fields {
-    static const std::string              actorId = "actorId";
-    static const std::string              name    = "name";
-    static const std::string              ticker  = "ticker";
-    static const std::string              count   = "count";
-    static const std::string              owner   = "owner";
-    static const std::string              color   = "color";
-    static const std::string              smart   = "smart";
-    static const std::vector<std::string> fields  = { actorId, name, ticker, count, owner, color, smart };
+    static const std::string actorId = "actorId";
+    static const std::string name = "name";
+    static const std::string ticker = "ticker";
+    static const std::string count = "count";
+    static const std::string owner = "owner";
+    static const std::string color = "color";
+    static const std::string smart = "smart";
+    static const std::vector<std::string> fields = { name, ticker, count, owner, color, smart };
 }
 }
 

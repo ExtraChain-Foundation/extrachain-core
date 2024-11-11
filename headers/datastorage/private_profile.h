@@ -37,6 +37,8 @@ public:
     const std::string                       &hash() const;
     QJsonObject                              toJson() const;
 
+    std::map<ActorId, std::string>          getWalletNames() const;
+
 private:
     PrivateProfile() = default;
 

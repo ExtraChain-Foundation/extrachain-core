@@ -151,7 +151,7 @@ void TransactionManager::proveTransactions() {
             // qDebug() << "[TransactionManager] Transaction approved!";
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager] Transaction not approved:" << res << tx;
+            qDebug() << "[TransactionManager] Transaction not approved:" << tx << res;
             // qDebug() << "[TransactionManager] Transaction not approved:" << res;
         }
     }

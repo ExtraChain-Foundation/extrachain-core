@@ -65,6 +65,25 @@ bool TokenManager::isValidTicker(const std::string &ticker) {
     });
 }
 
+QMap<QString, QString> TokenManager::mapTokens()
+{
+    QMap<QString, QString> map = {{ActorId().toString(), "ExC"}};
+    DBConnector db(Token::db_tokens_path);
+    bool isDbOpen = db.open();
+    if(!isDbOpen) {
+        qWarning() << "Database doesn't opened.";
+        return map;
+    }
+    auto resultSelect = db.selectAll(Token::tokenTableName);
+    for(auto& t : resultSelect) {
+        auto tokenId = t.at("actorId").c_str();
+        auto ticker = t.at("ticker").c_str();
+        map.insert(tokenId, ticker);
+    }
+
+    return map;
+}
+
 void TokenManager::sendInitialTransaction(
     const ActorId        &owner,
     const TokenId        &token,
@@ -103,18 +122,18 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
     DBConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
 
-    if (isDbOpen) {
+    if (!isDbOpen) {
         return false;
     }
 
     auto countRow = db.count(
         Token::tokenTableName,
-        fmt::format("UPPER(name)='{}' OR UPPER(ticker)='{}'", nameToken, tickerToken));
+        fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
     qDebug() << "[TokenManager] Name: count row:" << countRow;
     return countRow > 0;
 }
 
-void TokenManager::createToken(
+std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     const std::string &count,
     const std::string &name,
     const std::string &ticker,
@@ -127,39 +146,39 @@ void TokenManager::createToken(
     auto countBn = BigNumberFloat::create(count, NumeralBase::Dec);
     if (!countBn.has_value()) {
         emit errorNameTokenExist("count");
-        return;
+        return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
     if (countBn.value() < 0 || countBn.value() >= Token::MAX_TOKEN_COUNT) {
         qDebug() << "[TokenManager] Error create token. Count:" << count << "| name:" << name
                  << "| ticker:" << ticker << "| rull address:" << owner << "| color:" << color;
-        return;
+        return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
     qDebug() << "[TokenManager] Create token. Count:" << count << "| name:" << name << "| ticker:" << ticker
              << "| rull address:" << owner << "| color:" << color;
 
     if (!isValidName(name) || !isValidTicker(ticker)) {
+        qDebug() << "[TokenManager] Incorrecnt name:" << isValidName(name) << isValidTicker(ticker);
         qDebug() << "[TokenManager] Incorrecnt name. Name:" << name << "| ticker:" << ticker;
         emit errorNameTokenExist("name");
-        return;
+        return std::unexpected(CreateTokenError::InvalidName);
     }
 
     auto upperTokenName = Utils::str_to_upper(name);
     auto tickerSymbol   = Utils::str_to_upper(ticker);
-    if (upperTokenName == "RACCOON" || upperTokenName == "EXTRACOIN" || tickerSymbol == "ROCC"
-        || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
+    if (upperTokenName == "EXTRACOIN" || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
         qDebug() << "[TokenManager] Name or ticker exists";
         emit errorNameTokenExist("exists");
-        return;
+        return std::unexpected(CreateTokenError::ExistToken);
     }
 
     auto    actor        = node->accountController()->createService();
     QString actorId      = QString(actor.id().toString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
-    auto tokenData = TokenData { .actor  = actor.id().toStdString(),
-                                 .owner  = actorId.toStdString(),
+    auto tokenData = TokenData { .token  = actor.id().toStdString(),
+                                 .owner  = owner.toStdString(),
                                  .count  = count,
                                  .name   = name,
                                  .ticker = ticker,
@@ -188,7 +207,8 @@ void TokenManager::createToken(
                  << " not open.";
     }
 
-    sendInitialTransaction(owner, owner, BigNumberFloat(count, NumeralBase::Dec));
+    sendInitialTransaction(owner, tokenData.token, BigNumberFloat(count, NumeralBase::Dec));
+    return tokenData;
 }
 
 void TokenManager::checkIsContract(const QString &pathToFile) {
@@ -209,7 +229,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 return;
 
             DBRow rowRow;
-            rowRow.insert({ "actorId", "" }); // TODO
+            rowRow.insert({ "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
             rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
             rowRow.insert(
@@ -218,11 +238,15 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
             rowRow.insert({ "color", jsonObj[Token::Fields::color.c_str()].toString().toStdString() });
             rowRow.insert({ "smart", std::string() });
 
-            DBConnector db(Token::db_tokens_path);
-            bool        isDbOpen = db.open();
-            if (isDbOpen) {
-                const bool inserted = db.insert(Token::tokenTableName, rowRow);
-                qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+            const bool resultTokenExist = tokenExist(name, ticker);
+            if(!resultTokenExist) {
+                DBConnector db(Token::db_tokens_path);
+                bool        isDbOpen = db.open();
+                if (isDbOpen) {
+                    const bool inserted = db.insert(Token::tokenTableName, rowRow);
+                    qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+                    emit newToken();
+                }
             }
         }
     }
@@ -231,6 +255,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
 bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
     for (const std::string &field : Token::Fields::fields) {
         if (!jsonObj.contains(field.c_str())) {
+
             qWarning() << "JSON contract doesn't has this field:" << field;
             return false;
         }
@@ -240,7 +265,7 @@ bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
 
 QJsonDocument TokenData::toJsonDocument() {
     QJsonObject jsonObj;
-    // jsonObj[Token::Fields::actorId.c_str()] = actor.c_str();
+    jsonObj[Token::Fields::actorId.c_str()] = token.c_str();
     jsonObj[Token::Fields::owner.c_str()]  = owner.c_str();
     jsonObj[Token::Fields::count.c_str()]  = std::stoi(count);
     jsonObj[Token::Fields::name.c_str()]   = name.c_str();
@@ -253,7 +278,7 @@ QJsonDocument TokenData::toJsonDocument() {
 
 DBRow TokenData::toDBRow() {
     DBRow dbRow;
-    dbRow.insert({ "actor", actor });
+    dbRow.insert({ "actorId", token });
     dbRow.insert({ "name", name });
     dbRow.insert({ "ticker", ticker });
     dbRow.insert({ "count", count });

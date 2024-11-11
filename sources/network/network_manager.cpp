@@ -539,7 +539,10 @@ void NetworkManager::messageReceived(
     }
     case MessageType::NewActor: {
         auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        node->actorIndex()->handleNewActor(actor);
+        auto result = node->actorIndex()->handleNewActor(actor);
+        if(result == Errors::FILE_NOT_EXISTS) {
+            emit accrual(actor.id());
+        }
         break;
     }
     case MessageType::Actor: {
@@ -813,19 +816,6 @@ void NetworkManager::messageReceived(
             requestWSNodeList(messageId);
         }
 
-        break;
-    }
-
-    case MessageType::Accrual: {
-        /*
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        qDebug() << "Begin accrual for actor " << actor.id().toString();
-        Transaction tx(ActorId(), actor.id(), BigNumberFloat("1000", NumeralBase::Dec),
-        ActorId(Token::ROCC_TOKEN)); tx.setDate(QDateTime::currentMSecsSinceEpoch());
-        tx.setData(fmt::format("accrual:{}", actor.id().toStdString()));
-        node->transactionManager()->addTransaction(tx);
-        node->network()->send_message(tx, MessageType::BlockchainTransaction);
-        */
         break;
     }
 
