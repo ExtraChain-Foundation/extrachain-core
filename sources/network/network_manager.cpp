@@ -136,11 +136,8 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
     {
         auto connectionsLocked = *m_connections;
-        if (!connectionsLocked->contains(service)) {
+        if (!connectionsLocked->contains(service))
             connectionsLocked->append(service);
-            // if (node->isClientApp() && requestListNodes)
-            //     send_message(std::string {}, MessageType::RequestListNodes, MessageStatus::Request);
-        }
     }
     connect(service, &WebSocketService::shareConnections, this, [&](const QJsonArray connectionsArr) {
         qInfo() << "shareConnections" << connectionsArr;
@@ -815,60 +812,6 @@ void NetworkManager::messageReceived(
     }
     case MessageType::ProcessNewConnections: {
         node->connectionsManager()->tryToNewConnect();
-        break;
-    }
-
-<<<<<<< HEAD
-    case MessageType::NewNodeConnected: {
-        qDebug() << "Get new node";
-        DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
-        m_reconnectionsToIdentifier->emplace(NetworkReconnect::fromWsConnection(wsConnection), "");
-        m_wsConnections.push_back(wsConnection);
-        if (!node->isClientApp()) {
-            send_message(wsConnection, MessageType::SpreadNodeConnection);
-        }
-        break;
-    }
-
-    case MessageType::SpreadNodeConnection: {
-        qDebug() << "received new node connection";
-        DFSP::WSConnection wsConnection = MessagePack::deserialize<DFSP::WSConnection>(serialized);
-        if (wsConnection.address == local->ip().toString().toStdString() && wsConnection.port == wsPort) {
-            qDebug() << "[WS] connection port" << wsPort << "address:" << local->ip().toString();
-        } else {
-            connectToWebSocket(QString::fromStdString(wsConnection.address), wsConnection.port, true);
-        }
-        break;
-    }
-
-    case MessageType::RequestListNodes: {
-        if (status == MessageStatus::Response && node->isClientApp()) {
-            std::vector<std::string> newWsConnectionsList =
-                MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DFSP::WSConnection> newWSConnections =
-                MessagePack::deserializeContainer<DFSP::WSConnection>(newWsConnectionsList);
-
-            for (const auto &c : newWSConnections) {
-                m_reconnectionsToIdentifier->emplace(
-                    NetworkReconnect { .ip       = QString::fromStdString(c.address),
-                                       .port     = static_cast<quint16>(c.port),
-                                       .protocol = Network::Protocol::WebSocket },
-                    "");
-                // wsPort = c.port;
-                connectToWebSocket(QString::fromStdString(c.address), wsPort, false);
-            }
-
-            qDebug() << "count reconnect urls:" << m_reconnectionsToIdentifier->size();
-            auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-            for (auto it = m_reconnectionsToIdentifierLocked->begin();
-                 it != m_reconnectionsToIdentifierLocked->end();
-                 ++it)
-                it->first.print();
-
-        } else if (status == MessageStatus::Request) {
-            requestWSNodeList(messageId);
-        }
-
         break;
     }
 
