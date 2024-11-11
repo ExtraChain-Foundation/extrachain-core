@@ -24,11 +24,11 @@
 #include "sqlite3.h"
 #include "boost/describe.hpp"
 
-class DBConnectorStrict : public DBConnector {
+class DBConnectorStrict : public DbConnector {
 public:
-    explicit DBConnectorStrict(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular) : DBConnector(filePath, type) {
+    explicit DBConnectorStrict(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular) : DbConnector(filePath, type) {
     }
-    DBConnectorStrict(DBConnectorStrict &&rhs) : DBConnector(std::move(rhs)) {
+    DBConnectorStrict(DBConnectorStrict &&rhs) : DbConnector(std::move(rhs)) {
     }
     ~DBConnectorStrict()   =default;
 

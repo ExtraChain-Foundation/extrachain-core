@@ -11,7 +11,7 @@
 class FragmentWriter;
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
-    DBConnector storageFile;
+    DbConnector storageFile;
     ActorId     actorId;
     std::string fileId;
     std::string hash;
@@ -31,15 +31,15 @@ public:
     bool                 applyChanges(const std::string& data, std::uint64_t pos);
 
 private:
-    DBRow                   getPreviousFragment(std::uint64_t number);
-    DBRow                   getNextFragment(std::uint64_t number);
-    DBRow                   getRealPreviousFragment(std::uint64_t number);
-    DBRow                   getRealNextFragment(std::uint64_t number);
-    std::pair<DBRow, DBRow> getPrevNextPairFragment(std::uint64_t number);
-    DBRow                   makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos);
-    DBRow                   makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size);
+    DbRow                   getPreviousFragment(std::uint64_t number);
+    DbRow                   getNextFragment(std::uint64_t number);
+    DbRow                   getRealPreviousFragment(std::uint64_t number);
+    DbRow                   getRealNextFragment(std::uint64_t number);
+    std::pair<DbRow, DbRow> getPrevNextPairFragment(std::uint64_t number);
+    DbRow                   makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos);
+    DbRow                   makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size);
     std::uint64_t                writeFragment(DfsP::SegmentMessage msg);
-    void                    moveRows(DBRow curRow, std::uint64_t moveSize);
+    void                    moveRows(DbRow curRow, std::uint64_t moveSize);
     std::uint64_t                write(std::filesystem::path filePath, std::uint64_t pos, std::string data);
     std::string             extract(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
     std::uint64_t                remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);

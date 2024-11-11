@@ -25,8 +25,8 @@ static const std::string score_act = "score";
 class ConnectionsManager : public QObject {
     Q_OBJECT
 
-    DBConnector dbConnector;
-    DBConnector dbActivity;
+    DbConnector dbConnector;
+    DbConnector dbActivity;
     std::vector<Connection> activeConnections;
     std::vector<Connection> newConnections;
     std::unordered_map<std::string, Activity> clientActivity;
@@ -52,10 +52,10 @@ public:
     void setAddress(const std::string &newAddress);
     const std::vector<Connection> &getActiveConnection() const;
 
-    DBRow ecryptConnection(const Connection &connection);
-    DBRow ecryptActivity(const std::string hash, const Activity &activity);
-    Connection decryptConnection(const DBRow &row);
-    std::pair<std::string, Activity> decryptActivity(const DBRow &row);
+    DbRow ecryptConnection(const Connection &connection);
+    DbRow ecryptActivity(const std::string hash, const Activity &activity);
+    Connection decryptConnection(const DbRow &row);
+    std::pair<std::string, Activity> decryptActivity(const DbRow &row);
     void loadRecords();
     void loadActivityRecords();
     void removeConnection(const Connection &connection);

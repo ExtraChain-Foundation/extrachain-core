@@ -2,28 +2,28 @@
 
 #include "datastorage/actor.h"
 
-std::vector<DBRow> Dfs::Tables::ActorDirFile::getFileDataByHash(DBConnector *db, std::string hash) {
+std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByHash(DbConnector *db, std::string hash) {
     std::string query = fmt::format("SELECT * FROM {} WHERE hash = '{}'", TableName, hash);
     return db->select(query);
 }
 
-std::vector<DBRow> Dfs::Tables::ActorDirFile::getFileDataByName(DBConnector *db, std::string name) {
+std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db, std::string name) {
     std::string query = fmt::format("SELECT * FROM {} WHERE fileId = '{}'", TableName, name);
     return db->select(query);
 }
 
-std::string Dfs::Tables::ActorDirFile::getLastFileId(DBConnector &db) {
+std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
     if (!db.isOpen()) {
         qFatal("DB not opened");
     }
     auto        result       = db.select(Dfs::Tables::filesTableLast);
-    auto        prevRowOpt   = result.empty() ? std::optional<DBRow> {} : result[0];
+    auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
     return lastFileName;
 }
 
-DBConnector Dfs::Tables::ActorDirFile::actorDbConnector(const ActorId &actorId) {
-    DBConnector db(actorDbPath(actorId).string());
+DbConnector Dfs::Tables::ActorDirFile::actorDbConnector(const ActorId &actorId) {
+    DbConnector db(actorDbPath(actorId).string());
     db.open();
     return db;
 }
@@ -168,7 +168,7 @@ int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
 
 std::uint64_t
 Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const std::string &storjName) {
-    DBConnector db(storjDbPath(actorId, storjName).string());
+    DbConnector db(storjDbPath(actorId, storjName).string());
     db.open();
     if (!db.isOpen()) {
         qFatal("DB Error");

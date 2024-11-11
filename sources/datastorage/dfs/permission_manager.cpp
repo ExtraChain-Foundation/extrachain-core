@@ -252,7 +252,7 @@ PermissionManager::getUserPermission(const QString &userId, const QString &fileH
 //                                  ServiceDir);
 //}
 
-DBRow PermissionManager::makeDBRow(
+DbRow PermissionManager::makeDBRow(
     const QString   &fileHash,
     const Permission permission,
     const QString   &userId,

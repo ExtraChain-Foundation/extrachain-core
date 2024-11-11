@@ -1,13 +1,13 @@
 #include "datastorage/dfs/dfs_controller.h"
 #include "datastorage/dfs/fragment_storage.h"
-#include "datastorage/dfs/historical_chain.h"
+#include "datastorage/dfs/historical_sql.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
     std::filesystem::create_directories(DfsB::fsActrRoot);
 
-    DBConnector dirsFile(DfsB::dirsPath);
+    DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
     dirsFile.createTable(DfsT::DirsFile::CreateTableQuery);
     dirsFile.close();
@@ -29,7 +29,7 @@ DfsController::~DfsController() {
 void DfsController::initializeActor(const ActorId &actorId) {
     std::string pathDelim = Utils::platformDelimeter();
     std::filesystem::create_directories(DfsB::fsActrRoot + pathDelim + actorId.toString());
-    DBConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(actorId);
+    DbConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(actorId);
     actrDirFile.query(DfsT::ActorDirFile::CreateTableQuery);
     requestDirData(actorId);
 }
@@ -164,15 +164,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError>
 DfsController::storeDatabase(const ActorId &actorId, const std::string &visualName, const DbSchema &schema) {
     std::string fileId  = createFileIdFromData("db");
     auto        dfsPath = DfsPath::filePath(actorId, fileId);
+    auto        actor   = node->accountController()->currentProfile().getActor(actorId);
 
-    DBConnector db(dfsPath);
-    db.open();
-    auto resCreate = db.createTable(schema);
-    db.close();
-
-    if (!resCreate.has_value()) {
-        return std::unexpected(Dfs::DfsError::DatabaseCreationError);
-    }
+    auto chain = HistoricalSql::create(actor, fileId);
+    chain.create_table(schema);
 
     std::string fileHash = Utils::calcHashForFile(dfsPath);
     auto        fileSize = std::filesystem::file_size(dfsPath);
@@ -200,8 +195,6 @@ DfsController::storeDatabase(const ActorId &actorId, const std::string &visualNa
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
 
-    HistoricalChainSql::create(dfsPath);
-
     updateDirsLastModified(actorId, dirRow.lastModified);
 
     insertToFiles(dirRow);
@@ -211,8 +204,7 @@ DfsController::storeDatabase(const ActorId &actorId, const std::string &visualNa
     return dirRow;
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError>
-DfsController::databaseInsert(const ActorId &actorId, const std::string &fileId, DBRow row) {
+ExpectedDirRow DfsController::databaseInsert(const ActorId &actorId, const std::string &fileId, DbRow row) {
     auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
     if (!dirRowExp.has_value()) {
         return dirRowExp;
@@ -220,11 +212,42 @@ DfsController::databaseInsert(const ActorId &actorId, const std::string &fileId,
 
     // TODO: check fields
 
-    auto        dfsPath = DfsPath::filePath(actorId, fileId);
-    DBConnector db(dfsPath);
-    db.open();
-    auto resInsert = db.insert("tokens", row);
-    db.close();
+    auto dfsPath = DfsPath::filePath(actorId, fileId);
+    auto actor   = node->accountController()->currentProfile().getActor(actorId);
+    auto chain   = HistoricalSql::load(actor, fileId);
+    chain.insert_into(row, "tokens");
+
+    return dirRowExp;
+}
+
+ExpectedDirRow DfsController::databaseUpdate(const ActorId &actorId, const std::string &fileId, DbRow row) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+    if (!dirRowExp.has_value()) {
+        return dirRowExp;
+    }
+
+    // TODO: check fields
+
+    auto dfsPath = DfsPath::filePath(actorId, fileId);
+    auto actor   = node->accountController()->currentProfile().getActor(actorId);
+    auto chain   = HistoricalSql::load(actor, fileId);
+    chain.update_where(row, "tokens");
+
+    return dirRowExp;
+}
+
+ExpectedDirRow DfsController::databaseDelete(const ActorId &actorId, const std::string &fileId, DbRow row) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+    if (!dirRowExp.has_value()) {
+        return dirRowExp;
+    }
+
+    // TODO: check fields
+
+    auto dfsPath = DfsPath::filePath(actorId, fileId);
+    auto actor   = node->accountController()->currentProfile().getActor(actorId);
+    auto chain   = HistoricalSql::load(actor, fileId);
+    chain.delete_where(row, "tokens");
 
     return dirRowExp;
 }
@@ -287,17 +310,17 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
         fs.close();
     }
 
-    DBConnector actrDirFile(actrDirFilePath);
+    DbConnector actrDirFile(actrDirFilePath);
 
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
 
     auto        result       = actrDirFile.select(DfsT::filesTableLast);
-    auto        prevRowOpt   = result.empty() ? std::optional<DBRow> {} : result[0];
+    auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
 
-    DBRow dirRowDb = Utils::toDbRow(dirRow);
+    DbRow dirRowDb = Utils::toDbRow(dirRow);
     dirRowDb.erase("actorId");
     bool insertRes = actrDirFile.replace(DfsT::ActorDirFile::TableName, dirRowDb);
 
@@ -312,7 +335,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     }
     actrDirFile.close();
 
-    DBConnector dirsFile(DfsB::dirsPath);
+    DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
     dirsFile.replace(
         DfsT::DirsFile::TableName,
@@ -348,13 +371,13 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
     const std::string     ownerPath       = DfsB::fsActrRoot + pathDelim + owner.toString() + pathDelim;
     std::filesystem::path realFilePath    = fmt::format("{}{}", ownerPath, fileName);
     std::string           actrDirFilePath = fmt::format("{}{}", ownerPath, DfsB::fsMapName);
-    DBConnector           actrDirFile(actrDirFilePath);
+    DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         qFatal("Can't open %s", actrDirFilePath.c_str());
         exit(EXIT_FAILURE);
     }
 
-    std::vector<DBRow>    actrDirData  = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, fileName);
+    std::vector<DbRow>    actrDirData  = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, fileName);
     std::filesystem::path tempFilePath = fmt::format("temp{}{}", pathDelim, owner.toString());
     if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("filePath");
@@ -449,11 +472,11 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
     std::string           actorPath       = DfsB::fsActrRoot + pathDelim + msg.actorId.toString() + pathDelim;
     std::string           actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
     std::filesystem::path realFilePath    = fmt::format("{}{}", actorPath, msg.fileId);
-    DBConnector           actrDirFile(actrDirFilePath);
+    DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
-    std::vector<DBRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
+    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
 
     if (actrDirData.empty()) {
         qDebug() << "[Dfs] editFile: Skipped because of empty result";
@@ -788,7 +811,7 @@ void DfsController::dataFromReferenceString(
 }
 
 void DfsController::updateDirsLastModified(const ActorId &actorId, uint64_t lastModified) {
-    DBConnector dirsFile(DfsB::dirsPath);
+    DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
     dirsFile.replace(
         DfsT::DirsFile::TableName,
@@ -856,7 +879,7 @@ void DfsController::requestDirFileAllActors() {
 }
 
 void DfsController::sendSync(std::uint64_t lastModified, const std::string &messageId) {
-    DBConnector dirsFile(DfsB::dirsPath);
+    DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
     auto actors = dirsFile.select(fmt::format(
         "SELECT actorId FROM {} WHERE lastModified = {}",
@@ -1167,12 +1190,12 @@ void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) 
     std::string pathDelim = Utils::platformDelimeter();
     std::string actorPath = fmt::format("{}{}{}{}", DfsB::fsActrRoot, pathDelim, msg.actorId, pathDelim);
     std::string actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
-    DBConnector actrDirFile(actrDirFilePath);
+    DbConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
 
-    std::vector<DBRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
+    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
     std::string        prevHash;
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("fileId") == msg.fileId) {
@@ -1201,16 +1224,16 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
         return "";
     }
 
-    DBConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(msg.actorId);
+    DbConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(msg.actorId);
     if (!actrDirFile.isOpen()) {
         qFatal("Error addFragment 1");
         exit(EXIT_FAILURE);
     }
-    std::vector<DBRow> actrDirData = actrDirFile.select(
+    std::vector<DbRow> actrDirData = actrDirFile.select(
         fmt::format("SELECT * FROM {} WHERE fileId = '{}';", DfsT::ActorDirFile::TableName, msg.fileId));
     actrDirFile.close();
 
-    DBRow dirRowDb  = actrDirData[0];
+    DbRow dirRowDb  = actrDirData[0];
     auto  dirRowExp = Utils::fromDbRow<Dfs::DirRow>(dirRowDb);
     if (!dirRowExp.has_value()) {
         return "expected !has_value()";
@@ -1285,11 +1308,11 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
     std::string           pathActor       = DfsB::fsActrRoot + pathDelim + msg.actorId.toString() + pathDelim;
     std::string           actrDirFilePath = fmt::format("{}{}", pathActor, DfsB::fsMapName);
     std::filesystem::path realFilePath    = fmt::format("{}{}", pathActor, msg.hash);
-    DBConnector           actrDirFile(actrDirFilePath);
+    DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         exit(EXIT_FAILURE);
     }
-    std::vector<DBRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
+    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
 
     if (actrDirData.empty()) {
         qDebug() << "[Dfs] editFile: Skipped because of empty result";
@@ -1360,13 +1383,13 @@ void DfsController::updateFileState(
 }
 
 void DfsController::loadVPNLocalizationFiles() {
-    DBConnector dirsFile(DfsB::dirsPath);
+    DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
 
     auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {}", DfsT::DirsFile::TableName));
     for (const auto &row : actors) {
         auto        actorId     = ActorId(row.begin()->second);
-        DBConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(actorId);
+        DbConnector actrDirFile = DfsT::ActorDirFile::actorDbConnector(actorId);
 
         auto actorRows = actrDirFile.select(fmt::format(
             "SELECT fileId FROM {} WHERE name='localizationInfo' AND state={}",

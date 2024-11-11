@@ -56,7 +56,7 @@ std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
             pathToActorFolder.string() + Utils::platformDelimeter() + nameFile.string() + DfsF::Extension;
 
         if (std::filesystem::exists(pathToStorjFile)) {
-            DBConnector db(pathToStorjFile);
+            DbConnector db(pathToStorjFile);
             if (db.open()) {
                 auto countRow = db.select(DfsF::GetCountFragmants)[0];
                 if (std::stoi(countRow["COUNT(size)"]) == 0) {

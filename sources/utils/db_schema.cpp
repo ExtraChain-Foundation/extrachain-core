@@ -69,6 +69,119 @@ std::string SQLValidator::escape_string(std::string_view value) {
     return result;
 }
 
+// DbColumn implementation
+DbColumn::DbColumn(std::string_view name, ColumnType type)
+    : m_type(type) {
+    if (auto validation = SQLValidator::validate_identifier(name); !validation) {
+        m_validation_error = validation.error();
+    }
+    m_name = std::string(name);
+}
+
+DbColumn& DbColumn::primary_key(SqlAutoincrement autoincrement) {
+    m_is_primary_key = true;
+    if (autoincrement == SqlAutoincrement::Yes) {
+        if (m_type != ColumnType::Integer) {
+            m_validation_error = SqlCreateError::AutoincrementNotInteger;
+        } else {
+            m_is_autoincrement = true;
+        }
+    }
+    return *this;
+}
+
+DbColumn& DbColumn::not_null() {
+    m_is_not_null = true;
+    return *this;
+}
+
+DbColumn& DbColumn::unique() {
+    m_is_unique = true;
+    return *this;
+}
+
+DbColumn& DbColumn::default_value(std::string_view value) {
+    if (auto validation = SQLValidator::validate_value(value); !validation) {
+        m_validation_error = validation.error();
+    } else {
+        m_default_value = fmt::format("DEFAULT {}", value);
+    }
+    return *this;
+}
+
+DbColumn& DbColumn::check(std::string_view condition) {
+    if (auto validation = SQLValidator::validate_value(condition); !validation) {
+        m_validation_error = validation.error();
+    } else {
+        m_checks.push_back(fmt::format("CHECK ({})", condition));
+    }
+    return *this;
+}
+
+std::string_view DbColumn::get_type_name() const {
+    switch (m_type) {
+    case ColumnType::Integer:
+        return "INTEGER";
+    case ColumnType::Real:
+        return "REAL";
+    case ColumnType::Text:
+        return "TEXT";
+    case ColumnType::Blob:
+        return "BLOB";
+    case ColumnType::Json:
+        return "JSON";
+    }
+    return ""; // Should never happen
+}
+
+std::expected<std::string, SqlCreateError> DbColumn::to_sql() const {
+    if (m_validation_error) {
+        return std::unexpected(*m_validation_error);
+    }
+
+    std::string sql = fmt::format("{} {}", m_name, get_type_name());
+
+    if (m_is_primary_key) {
+        sql += " PRIMARY KEY";
+        if (m_is_autoincrement) {
+            sql += " AUTOINCREMENT";
+        }
+    }
+    if (m_is_not_null)
+        sql += " NOT NULL";
+    if (m_is_unique)
+        sql += " UNIQUE";
+    if (!m_default_value.empty())
+        sql += " " + m_default_value;
+    for (const auto& check : m_checks) {
+        sql += " " + check;
+    }
+
+    return sql;
+}
+
+const std::optional<SqlCreateError>& DbColumn::validation_error() const {
+    return m_validation_error;
+}
+
+// DbSchema implementation
+DbSchema::DbSchema() = default;
+
+DbSchema::DbSchema(std::string_view table_name) {
+    if (auto validation = SQLValidator::validate_identifier(table_name); !validation) {
+        m_validation_error = validation.error();
+    }
+    m_table_name = std::string(table_name);
+}
+
+DbSchema& DbSchema::add_column(DbColumn&& column) {
+    if (column.validation_error()) {
+        m_validation_error = column.validation_error();
+    }
+    m_columns.push_back(std::make_unique<DbColumn>(std::move(column)));
+    return *this;
+}
+
 std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     if (m_validation_error) {
         return std::unexpected(*m_validation_error);
@@ -77,16 +190,13 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     std::string sql = fmt::format("CREATE TABLE IF NOT EXISTS {} (\n", m_table_name);
 
     for (size_t i = 0; i < m_columns.size(); ++i) {
-        sql += "    " + m_columns[i];
-        if (i < m_columns.size() - 1 || !m_constraints.empty()) {
-            sql += ",";
+        auto column_sql = m_columns[i]->to_sql();
+        if (!column_sql) {
+            return std::unexpected(column_sql.error());
         }
-        sql += "\n";
-    }
 
-    for (size_t i = 0; i < m_constraints.size(); ++i) {
-        sql += "    " + m_constraints[i];
-        if (i < m_constraints.size() - 1) {
+        sql += "    " + *column_sql;
+        if (i < m_columns.size() - 1) {
             sql += ",";
         }
         sql += "\n";
@@ -96,28 +206,36 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     return sql;
 }
 
+std::string DbSchema::to_json() const {
+    auto json = Json::serialize(*this);
+    return json;
+}
+
 const std::optional<SqlCreateError>& DbSchema::validation_error() const {
     return m_validation_error;
 }
 
+// SQLite literals implementation
 namespace sqlite::literals {
-Column<sqlite::Integer> operator""_int(const char* name, size_t) {
-    return Column<sqlite::Integer>(name);
+
+DbColumn operator""_int(const char* name, size_t) {
+    return DbColumn(name, ColumnType::Integer);
 }
 
-Column<sqlite::Real> operator""_real(const char* name, size_t) {
-    return Column<sqlite::Real>(name);
+DbColumn operator""_real(const char* name, size_t) {
+    return DbColumn(name, ColumnType::Real);
 }
 
-Column<sqlite::Text> operator""_text(const char* name, size_t) {
-    return Column<sqlite::Text>(name);
+DbColumn operator""_text(const char* name, size_t) {
+    return DbColumn(name, ColumnType::Text);
 }
 
-Column<sqlite::Blob> operator""_blob(const char* name, size_t) {
-    return Column<sqlite::Blob>(name);
+DbColumn operator""_blob(const char* name, size_t) {
+    return DbColumn(name, ColumnType::Blob);
 }
 
-Column<sqlite::Json> operator""_json(const char* name, size_t) {
-    return Column<sqlite::Json>(name);
+DbColumn operator""_json(const char* name, size_t) {
+    return DbColumn(name, ColumnType::Json);
 }
-}
+
+} // namespace sqlite::literals

@@ -186,7 +186,7 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
     auto tokenId = ActorId().toString();
 
     // DBRow for tokens
-    DBRow tokensRow = { { "tokenId", tokenId }, { "name", "ExtraChain" },           { "ticker", "EXC" },
+    DbRow tokensRow = { { "tokenId", tokenId }, { "name", "ExtraChain" },           { "ticker", "EXC" },
                         { "count", "0" },       { "owner", first.id().toString() }, { "color", "#111111" },
                         { "smart", "" } };
     m_dfs->databaseInsert(storeRes->actorId, storeRes->fileId, tokensRow);

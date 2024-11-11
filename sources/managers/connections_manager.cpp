@@ -85,7 +85,7 @@ const std::vector<Connection> &ConnectionsManager::getActiveConnection() const {
 
 bool ConnectionsManager::insertConnection(const Dfs::Packets::Connection &connection) {
     dbConnector.open();
-    DBRow row = ecryptConnection(connection);
+    DbRow row = ecryptConnection(connection);
 
     bool result = dbConnector.insert(ConnectionsTableName, row);
     dbConnector.close();
@@ -95,7 +95,7 @@ bool ConnectionsManager::insertConnection(const Dfs::Packets::Connection &connec
 bool ConnectionsManager::insertActivity(const std::string hash, const Dfs::Packets::Activity &activity)
 {
     dbActivity.open();
-    DBRow row = ecryptActivity(hash, activity);
+    DbRow row = ecryptActivity(hash, activity);
 
     bool result = dbActivity.insert(ActivityTableName, row);
     dbActivity.close();
@@ -142,7 +142,7 @@ std::string ConnectionsManager::hashConnection(const Dfs::Packets::Connection &c
     return Utils::calcHash(connection.address + connection.port);
 }
 
-DBRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &connection) {
+DbRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
     auto key = Cryptography::getKeyPassFromPassword(hash);
 
@@ -150,7 +150,7 @@ DBRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &conne
     std::string encryptedPort = Cryptography::encrypt(connection.port, key);
     std::string encryptedActive = Cryptography::encrypt(std::to_string(connection.active), key);
 
-    DBRow row { { hash_connection, hash },
+    DbRow row { { hash_connection, hash },
                 { port_connection, encryptedPort },
                 { address_connection, ecryptedAddress },
                 { active_connection, encryptedActive } };
@@ -158,14 +158,14 @@ DBRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &conne
     return row;
 }
 
-DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity) {
+DbRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity) {
     auto key = Cryptography::getKeyPassFromPassword(hash);
 
     std::string timeactivity = Cryptography::encrypt(std::to_string(activity.timeactivity), key);
     std::string active = Cryptography::encrypt(std::to_string(activity.active), key);
     std::string score = Cryptography::encrypt(std::to_string(activity.score), key);
 
-    DBRow row { { hash_connection, hash },
+    DbRow row { { hash_connection, hash },
               { active_connection, active },
               { score_act, score },
               { time_act, timeactivity } };
@@ -173,7 +173,7 @@ DBRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity 
     return row;
 }
 
-Connection ConnectionsManager::decryptConnection(const DBRow &row) {
+Connection ConnectionsManager::decryptConnection(const DbRow &row) {
     Connection connection;
     auto key = Cryptography::getKeyPassFromPassword(row.at(hash_connection));
 
@@ -183,7 +183,7 @@ Connection ConnectionsManager::decryptConnection(const DBRow &row) {
     return connection;
 }
 
-std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DBRow &row)
+std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DbRow &row)
 {
     Activity activity;
     auto key = Cryptography::getKeyPassFromPassword(row.at(hash_connection));

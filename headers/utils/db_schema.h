@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 #include <expected>
+#include <memory>
 #include <boost/algorithm/string/join.hpp>
 
 #include "utils/exc_utils.h"
@@ -29,6 +30,14 @@ enum class SqlInclusiveness {
     Exclusive  // < or >
 };
 
+enum class ColumnType {
+    Integer,
+    Real,
+    Text,
+    Blob,
+    Json
+};
+
 class SQLValidator {
 public:
     static std::expected<void, SqlCreateError> validate_identifier(std::string_view identifier);
@@ -40,33 +49,6 @@ private:
     static const std::regex&                    get_identifier_regex();
     static const std::regex&                    get_value_regex();
 };
-
-namespace sqlite {
-struct Integer {
-    using cpp_type                         = int64_t;
-    static constexpr std::string_view name = "INTEGER";
-};
-
-struct Real {
-    using cpp_type                         = double;
-    static constexpr std::string_view name = "REAL";
-};
-
-struct Text {
-    using cpp_type                         = std::string;
-    static constexpr std::string_view name = "TEXT";
-};
-
-struct Blob {
-    using cpp_type                         = std::vector<uint8_t>;
-    static constexpr std::string_view name = "BLOB";
-};
-
-struct Json {
-    using cpp_type                         = std::string;
-    static constexpr std::string_view name = "JSON";
-};
-}
 
 template <typename T>
 struct Bound {
@@ -109,61 +91,22 @@ struct Interval {
     }
 };
 
-template <typename T>
-class Column {
+class DbColumn {
 public:
-    explicit Column(std::string_view name) {
-        if (auto validation = SQLValidator::validate_identifier(name); !validation) {
-            m_validation_error = validation.error();
-        }
-        m_name = std::string(name);
+    DbColumn()
+        : m_type(ColumnType::Integer) {
     }
+    explicit DbColumn(std::string_view name, ColumnType type);
+    virtual ~DbColumn() = default;
 
-    Column(Column&& other) noexcept            = default;
-    Column& operator=(Column&& other) noexcept = default;
-
-    Column& primary_key(SqlAutoincrement autoincrement = SqlAutoincrement::No) {
-        m_is_primary_key = true;
-        if (autoincrement == SqlAutoincrement::Yes) {
-            if constexpr (!std::is_same_v<T, sqlite::Integer>) {
-                m_validation_error = SqlCreateError::AutoincrementNotInteger;
-            } else {
-                m_is_autoincrement = true;
-            }
-        }
-        return *this;
-    }
-
-    Column& not_null() {
-        m_is_not_null = true;
-        return *this;
-    }
-
-    Column& unique() {
-        m_is_unique = true;
-        return *this;
-    }
-
-    Column& default_value(std::string_view value) {
-        if (auto validation = SQLValidator::validate_value(value); !validation) {
-            m_validation_error = validation.error();
-        } else {
-            m_default_value = fmt::format("DEFAULT {}", value);
-        }
-        return *this;
-    }
-
-    Column& check(std::string_view condition) {
-        if (auto validation = SQLValidator::validate_value(condition); !validation) {
-            m_validation_error = validation.error();
-        } else {
-            m_checks.push_back(fmt::format("CHECK ({})", condition));
-        }
-        return *this;
-    }
+    DbColumn& primary_key(SqlAutoincrement autoincrement = SqlAutoincrement::No);
+    DbColumn& not_null();
+    DbColumn& unique();
+    DbColumn& default_value(std::string_view value);
+    DbColumn& check(std::string_view condition);
 
     template <typename... Args>
-    Column& one_of(Args&&... values) {
+    DbColumn& one_of(Args&&... values) {
         std::vector<std::string> vals;
         vals.reserve(sizeof...(Args));
         bool has_error = false;
@@ -187,7 +130,7 @@ public:
     }
 
     template <typename U>
-    Column& between(
+    DbColumn& between(
         const U&         lower,
         const U&         upper,
         SqlInclusiveness lower_inclusive = SqlInclusiveness::Inclusive,
@@ -202,41 +145,11 @@ public:
         return *this;
     }
 
-    std::expected<std::string, SqlCreateError> to_sql() const {
-        if (m_validation_error) {
-            return std::unexpected(*m_validation_error);
-        }
-
-        std::string sql = fmt::format("{} {}", m_name, T::name);
-
-        if (m_is_primary_key) {
-            sql += " PRIMARY KEY";
-            if (m_is_autoincrement) {
-                sql += " AUTOINCREMENT";
-            }
-        }
-        if (m_is_not_null)
-            sql += " NOT NULL";
-        if (m_is_unique)
-            sql += " UNIQUE";
-        if (!m_default_value.empty())
-            sql += " " + m_default_value;
-        for (const auto& check : m_checks) {
-            sql += " " + check;
-        }
-
-        return sql;
-    }
+    std::expected<std::string, SqlCreateError> to_sql() const;
+    const std::optional<SqlCreateError>&       validation_error() const;
 
 private:
-    std::string                   m_name;
-    bool                          m_is_primary_key   = false;
-    bool                          m_is_not_null      = false;
-    bool                          m_is_unique        = false;
-    bool                          m_is_autoincrement = false;
-    std::string                   m_default_value;
-    std::vector<std::string>      m_checks;
-    std::optional<SqlCreateError> m_validation_error;
+    std::string_view get_type_name() const;
 
     template <typename U>
     static std::expected<std::string, SqlCreateError> format_value(const U& value) {
@@ -249,29 +162,42 @@ private:
             return SQLValidator::escape_string(value);
         }
     }
+
+    std::string                   m_name;
+    ColumnType                    m_type;
+    bool                          m_is_primary_key   = false;
+    bool                          m_is_not_null      = false;
+    bool                          m_is_unique        = false;
+    bool                          m_is_autoincrement = false;
+    std::string                   m_default_value;
+    std::vector<std::string>      m_checks;
+    std::optional<SqlCreateError> m_validation_error;
+
+    BOOST_DESCRIBE_CLASS(
+        DbColumn,
+        (),
+        (),
+        (),
+        (m_name,
+         m_type,
+         m_is_primary_key,
+         m_is_not_null,
+         m_is_unique,
+         m_is_autoincrement,
+         m_default_value,
+         m_checks))
 };
+MAKE_MAGICAL(DbColumn)
 
 class DbSchema {
 public:
-    explicit DbSchema(std::string_view table_name) {
-        if (auto validation = SQLValidator::validate_identifier(table_name); !validation) {
-            m_validation_error = validation.error();
-        }
-        m_table_name = std::string(table_name);
-    }
+    explicit DbSchema();
+    explicit DbSchema(std::string_view table_name);
 
     DbSchema(DbSchema&& other) noexcept            = default;
     DbSchema& operator=(DbSchema&& other) noexcept = default;
 
-    template <typename T>
-    DbSchema& add_column(Column<T>&& column) {
-        if (auto sql = column.to_sql(); !sql) {
-            m_validation_error = sql.error();
-        } else {
-            m_columns.push_back(*sql);
-        }
-        return *this;
-    }
+    DbSchema& add_column(DbColumn&& column);
 
     template <typename... Cols>
     DbSchema& add_columns(Cols&&... cols) {
@@ -281,20 +207,22 @@ public:
     }
 
     std::expected<std::string, SqlCreateError> to_sql() const;
-
-    const std::optional<SqlCreateError>& validation_error() const;
+    std::string                                to_json() const;
+    const std::optional<SqlCreateError>&       validation_error() const;
 
 private:
-    std::string                   m_table_name;
-    std::vector<std::string>      m_columns;
-    std::vector<std::string>      m_constraints;
-    std::optional<SqlCreateError> m_validation_error;
+    std::string                            m_table_name;
+    std::vector<std::unique_ptr<DbColumn>> m_columns;
+    std::optional<SqlCreateError>          m_validation_error;
+
+    BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns))
 };
+MAKE_MAGICAL(DbSchema)
 
 namespace sqlite::literals {
-Column<sqlite::Integer> operator""_int(const char* name, size_t);
-Column<sqlite::Real>    operator""_real(const char* name, size_t);
-Column<sqlite::Text>    operator""_text(const char* name, size_t);
-Column<sqlite::Blob>    operator""_blob(const char* name, size_t);
-Column<Json>            operator""_json(const char* name, size_t);
-}
+DbColumn operator""_int(const char* name, size_t);
+DbColumn operator""_real(const char* name, size_t);
+DbColumn operator""_text(const char* name, size_t);
+DbColumn operator""_blob(const char* name, size_t);
+DbColumn operator""_json(const char* name, size_t);
+} // namespace sqlite::literals

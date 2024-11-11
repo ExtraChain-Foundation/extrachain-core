@@ -376,14 +376,14 @@ namespace Tables {
                                                     "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
                                                     "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
                                                     ");";
-        std::vector<DBRow> getFileDataByHash(DBConnector* db, std::string hash);
-        std::vector<DBRow> getFileDataByName(DBConnector* db, std::string name);
-        std::string        getLastFileId(DBConnector& db);
+        std::vector<DbRow> getFileDataByHash(DbConnector* db, std::string hash);
+        std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
+        std::string        getLastFileId(DbConnector& db);
         int                totalFileSize(const ActorId& actorId);
         std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
         // TODO: optional
-        DBConnector actorDbConnector(const ActorId& actorId);
+        DbConnector actorDbConnector(const ActorId& actorId);
 
         std::filesystem::path actorDbPath(const ActorId& actorId);
         std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);

@@ -13,7 +13,7 @@ TokenManager::TokenManager(ExtraChainNode *node)
     : node(node)
     , QObject(node) {
     initializeTokenArray();
-    DBConnector db(Token::db_tokens_path);
+    DbConnector db(Token::db_tokens_path);
     bool        isDbOpened = db.open();
 
     if (isDbOpened)
@@ -100,7 +100,7 @@ void TokenManager::initializeTokenArray() {
 }
 
 bool TokenManager::tokenExist(const std::string &nameToken, const std::string &tickerToken) {
-    DBConnector db(Token::db_tokens_path);
+    DbConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
 
     if (isDbOpen) {
@@ -166,10 +166,10 @@ void TokenManager::createToken(
                                  .color  = color,
                                  .smart  = "" };
 
-    DBConnector db(Token::db_tokens_path);
+    DbConnector db(Token::db_tokens_path);
     bool        isDbOpen = db.open();
     if (isDbOpen) {
-        DBRow rowRow = tokenData.toDBRow();
+        DbRow rowRow = tokenData.toDBRow();
 
         const bool inserted = db.insert(Token::tokenTableName, rowRow);
         qDebug() << "Inserted token into db:" << (inserted ? "success" : "failed") << ".";
@@ -208,7 +208,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
             if (!checkJsonObjectHasTokenFields(jsonObj) || checkTokenExist)
                 return;
 
-            DBRow rowRow;
+            DbRow rowRow;
             rowRow.insert({ "actorId", "" }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
             rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
@@ -218,7 +218,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
             rowRow.insert({ "color", jsonObj[Token::Fields::color.c_str()].toString().toStdString() });
             rowRow.insert({ "smart", std::string() });
 
-            DBConnector db(Token::db_tokens_path);
+            DbConnector db(Token::db_tokens_path);
             bool        isDbOpen = db.open();
             if (isDbOpen) {
                 const bool inserted = db.insert(Token::tokenTableName, rowRow);
@@ -251,8 +251,8 @@ QJsonDocument TokenData::toJsonDocument() {
     return jsonDoc;
 }
 
-DBRow TokenData::toDBRow() {
-    DBRow dbRow;
+DbRow TokenData::toDBRow() {
+    DbRow dbRow;
     dbRow.insert({ "actor", actor });
     dbRow.insert({ "name", name });
     dbRow.insert({ "ticker", ticker });

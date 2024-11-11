@@ -43,13 +43,13 @@ struct sqlite3_stmt;
 
 static QMutex dbmutex;
 
-typedef std::unordered_map<std::string, std::string> DBRow;
+using DbRow = std::unordered_map<std::string, std::string>;
 
 namespace Utils {
 template <typename T>
-DBRow toDbRow(const T &obj) {
+DbRow toDbRow(const T &obj) {
     auto  json = Json::serializeValue(obj);
-    DBRow result;
+    DbRow result;
     for (const auto &field : json.as_object()) {
         const auto &value = field.value();
         if (value.is_null()) {
@@ -64,7 +64,7 @@ DBRow toDbRow(const T &obj) {
 }
 
 template <typename T>
-std::expected<T, Utils::ParseError> fromDbRow(const DBRow &map) {
+std::expected<T, Utils::ParseError> fromDbRow(const DbRow &map) {
     try {
         using namespace boost::mp11;
 
@@ -122,7 +122,7 @@ FORMAT_ENUM(DBConnectorType)
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
-class EXTRACHAIN_EXPORT DBConnector {
+class EXTRACHAIN_EXPORT DbConnector {
 protected:
     std::string     m_file;
     bool            m_open = false;
@@ -130,27 +130,27 @@ protected:
     DBConnectorType m_type = DBConnectorType::Regular;
 
 public:
-    explicit DBConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
-    explicit DBConnector(
+    explicit DbConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
+    explicit DbConnector(
         const std::filesystem::path &filePath,
         DBConnectorType              type = DBConnectorType::Regular);
-    explicit DBConnector(const char *filePath, DBConnectorType type = DBConnectorType::Regular);
-    DBConnector(DBConnector &&db);
-    ~DBConnector();
+    explicit DbConnector(const char *filePath, DBConnectorType type = DBConnectorType::Regular);
+    DbConnector(DbConnector &&db);
+    ~DbConnector();
 
 public:
     static QString sqlite_version();
 
     bool               open();
     bool               close();
-    std::vector<DBRow> select(std::string query, std::string tableName = "", DBRow binds = {});
-    std::vector<DBRow> selectAll(std::string table, int limit = -1);
-    bool               insert(const std::string &tableName, const DBRow &data);
-    bool               replace(const std::string &tableName, const DBRow &data);
+    std::vector<DbRow> select(std::string query, std::string tableName = "", DbRow binds = {});
+    std::vector<DbRow> selectAll(std::string table, int limit = -1);
+    bool               insert(const std::string &tableName, const DbRow &data);
+    bool               replace(const std::string &tableName, const DbRow &data);
     bool               update(const std::string &query);
     bool               createTable(const std::string &query);
     std::expected<std::string, SqlCreateError> createTable(const DbSchema &query);
-    bool                                       deleteRow(const std::string &tableName, const DBRow &data);
+    bool                                       deleteRow(const std::string &tableName, const DbRow &data);
     bool                                       deleteTable(const std::string &name);
     bool                                       tableExists(const std::string &table);
     bool                                       dropTable(const std::string &table);
@@ -169,7 +169,7 @@ public:
     sqlite3 *getDb() const;
 
 private:
-    bool implementationPrepare(const std::string &tableName, const DBRow &data, sqlite3_stmt *stmt);
-    bool implementationInsert(const std::string &tableName, const DBRow &data, bool isReplace);
+    bool implementationPrepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
+    bool implementationInsert(const std::string &tableName, const DbRow &data, bool isReplace);
 };
 #endif // DB_CONNECTOR_H

@@ -275,6 +275,20 @@ void println_impl(
             message);
     }
 
+#if defined(Q_OS_WIN)
+    if (IsDebuggerPresent()) {
+        auto log = fmt::format(
+            "{} [file:/{}:{}] [{}] {}\n",
+            get_current_time(),
+            get_filename(loc.file_name()),
+            loc.line(),
+            get_thread_id(),
+            message);
+        OutputDebugStringA(log.c_str());
+        // OutputDebugStringA("\n");
+    }
+#endif
+
     // File output
     if (Logger::instance().is_file_output()) {
         std::string file_message;

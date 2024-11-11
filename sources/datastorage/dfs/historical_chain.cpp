@@ -21,7 +21,7 @@ HistoricalChain::~HistoricalChain() {
 }
 
 bool HistoricalChain::apply(DfsP::EditSegmentMessage msg) {
-    DBRow         lastRow = getLastRow();
+    DbRow         lastRow = getLastRow();
     std::uint64_t num;
     std::uint64_t prevNum;
     if (lastRow.empty()) {
@@ -48,13 +48,13 @@ bool HistoricalChain::remove(DfsP::EditSegmentMessage msg) {
     const auto lastSegment = getLastEditSegmentMessage();
 
     if (msg.data == lastSegment.data) {
-        DBRow         lastRow = getLastRow();
+        DbRow         lastRow = getLastRow();
         std::uint64_t prevNum = std::stoull(lastRow.at(PREV_NUM));
         std::uint64_t num     = std::stoull(lastRow.at(NUM));
         removed = chainFile.deleteRow(DfsHc::TableNameHC, makeDBRow(num, prevNum, msg.actionType, msg.data));
     } else {
-        DBRow      dbRow   = getRow(msg.data);
-        DBRow      nextRow = getNextRow(std::stoi(dbRow.at(NUM)));
+        DbRow      dbRow   = getRow(msg.data);
+        DbRow      nextRow = getNextRow(std::stoi(dbRow.at(NUM)));
         const bool updated = chainFile.update(fmt::format(
             "UPDATE {} SET prevNum={} WHERE hash={}",
             DfsHc::TableNameHC,
@@ -73,12 +73,12 @@ bool HistoricalChain::remove(DfsP::EditSegmentMessage msg) {
 bool HistoricalChain::revert(DfsP::EditSegmentMessage msg) {
     bool reverted = true;
 
-    DBRow       row = getRow(msg.data);
+    DbRow       row = getRow(msg.data);
     std::string queryGetListEditSegment =
         fmt::format("SELECT * FROM {} WHERE num >= {}", DfsHc::TableNameHC, row.at(NUM));
-    std::vector<DBRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, DfsHc::TableNameHC);
+    std::vector<DbRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, DfsHc::TableNameHC);
 
-    for (const DBRow &row : editSegmentMessageList) {
+    for (const DbRow &row : editSegmentMessageList) {
         if (!chainFile.deleteRow(DfsHc::TableNameHC, row)) {
             reverted = false;
             break;
@@ -101,7 +101,7 @@ bool HistoricalChain::update(DfsP::EditSegmentMessage msg, const int &num) {
 }
 
 DfsP::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const int &num) {
-    DBRow dbRow = getRow(num);
+    DbRow dbRow = getRow(num);
 
     if (dbRow.empty()) {
         return DfsP::EditSegmentMessage();
@@ -110,7 +110,7 @@ DfsP::EditSegmentMessage HistoricalChain::getEditSegmentMessage(const int &num) 
 }
 
 DfsP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
-    DBRow lastRow = getLastRow();
+    DbRow lastRow = getLastRow();
 
     if (lastRow.empty()) {
         return DfsP::EditSegmentMessage();
@@ -184,8 +184,8 @@ bool HistoricalChain::rename(const std::string &fileHash, const std::string &new
     return std::filesystem::exists(path / std::string(newFileHash + DfsF::Extension));
 }
 
-DBRow HistoricalChain::makeDBRow(std::uint64_t num, std::uint64_t prevNum, int type, std::string data) {
-    DBRow row;
+DbRow HistoricalChain::makeDBRow(std::uint64_t num, std::uint64_t prevNum, int type, std::string data) {
+    DbRow row;
     row.insert({ NUM, std::to_string(num) });
     row.insert({ PREV_NUM, std::to_string(prevNum) });
     row.insert({ TYPE, std::to_string(type) });
@@ -194,55 +194,55 @@ DBRow HistoricalChain::makeDBRow(std::uint64_t num, std::uint64_t prevNum, int t
     return row;
 }
 
-DBRow HistoricalChain::getLastRow() {
-    std::vector<DBRow>      res;
-    std::pair<DBRow, DBRow> ret;
+DbRow HistoricalChain::getLastRow() {
+    std::vector<DbRow>      res;
+    std::pair<DbRow, DbRow> ret;
     std::string GetLastQuery = fmt::format("SELECT * FROM {} ORDER BY num DESC LIMIT 1", DfsHc::TableNameHC);
     res                      = chainFile.select(GetLastQuery);
     if (res.empty())
-        return DBRow();
+        return DbRow();
     else
         return res[0];
 }
 
-DBRow HistoricalChain::getNextRow(const int &currentNum) {
-    std::vector<DBRow>      res;
-    std::pair<DBRow, DBRow> ret;
+DbRow HistoricalChain::getNextRow(const int &currentNum) {
+    std::vector<DbRow>      res;
+    std::pair<DbRow, DbRow> ret;
     std::string             GetNextQuery = fmt::format(
         "SELECT * FROM {} WHERE num>{} ORDER BY num DESC LIMIT 1",
         DfsHc::TableNameHC,
         std::to_string(currentNum));
     res = chainFile.select(GetNextQuery);
     if (res.empty())
-        return DBRow();
+        return DbRow();
     else
         return res[0];
 }
 
-DBRow HistoricalChain::getRow(const int &num) {
-    std::vector<DBRow>      res;
-    std::pair<DBRow, DBRow> ret;
+DbRow HistoricalChain::getRow(const int &num) {
+    std::vector<DbRow>      res;
+    std::pair<DbRow, DbRow> ret;
     std::string             GetLastQuery =
         fmt::format("SELECT * FROM {} WHERE num={}", DfsHc::TableNameHC, std::to_string(num));
     res = chainFile.select(GetLastQuery);
     if (res.empty())
-        return DBRow();
+        return DbRow();
     else
         return res[0];
 }
 
-DBRow HistoricalChain::getRow(const std::string &data) {
-    std::vector<DBRow>      res;
-    std::pair<DBRow, DBRow> ret;
+DbRow HistoricalChain::getRow(const std::string &data) {
+    std::vector<DbRow>      res;
+    std::pair<DbRow, DbRow> ret;
     std::string GetLastQuery = fmt::format("SELECT * FROM {} WHERE data={}", DfsHc::TableNameHC, data);
     res                      = chainFile.select(GetLastQuery);
     if (res.empty())
-        return DBRow();
+        return DbRow();
     else
         return res[0];
 }
 
-DfsP::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DBRow &dbRow) {
+DfsP::EditSegmentMessage HistoricalChain::segmentMessageFromDBRow(const DbRow &dbRow) {
     DfsP::EditSegmentMessage result;
     result.actionType = static_cast<DfsP::SegmentMessageType>(std::stoi(dbRow.at(TYPE)));
 

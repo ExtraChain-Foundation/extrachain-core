@@ -457,7 +457,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         // }
     }
 
-    DBConnector db(
+    DbConnector db(
         path.toStdString(),
         m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
 
@@ -473,7 +473,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         db.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
         db.createTable(Config::DataStorage::SignBlockTableCreate);
 
-        DBRow row;
+        DbRow row;
         row.insert({ "type", block.getTypeStr() });
         row.insert({ "id", block.getIndex().toString() });
         row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
@@ -486,7 +486,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         auto rows = block.dataRows();
         for (const auto &[key, row] : std::as_const(rows)) {
             const auto &[actorId, tokenId] = key;
-            DBRow rowRow;
+            DbRow rowRow;
             rowRow.insert({ "actorId", actorId.toString() });
             rowRow.insert({ "state", row.state.toString() });
             rowRow.insert({ "token", tokenId.toString() });
@@ -496,7 +496,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
         auto signatures = block.signatures();
         for (const auto &[actorId, sign] : std::as_const(signatures)) {
-            DBRow rowRow;
+            DbRow rowRow;
             rowRow.insert({ "actorId", actorId.toString() });
             rowRow.insert({ "signature", ByteArray(sign).toBase64() });
             rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
@@ -522,7 +522,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         db.createTable(Config::DataStorage::BlockTableCreate);
         db.createTable(Config::DataStorage::TxBlockTableCreate);
         db.createTable(Config::DataStorage::SignBlockTableCreate);
-        DBRow row;
+        DbRow row;
 
         row.insert({ "type", block.getTypeStr() });
         row.insert({ "id", block.getIndex().toString() });
@@ -534,7 +534,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
         auto rows = block.transactions();
         for (const auto &tmp : std::as_const(rows)) {
-            DBRow rowRow;
+            DbRow rowRow;
             rowRow.insert({ "type", std::to_string(std::to_underlying(tmp.type())) });
             rowRow.insert({ "sender", tmp.sender().toString() });
             rowRow.insert({ "receiver", tmp.receiver().toString() });
@@ -555,7 +555,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
         auto signatures = block.signatures();
         for (const auto &[actorId, sign] : std::as_const(signatures)) {
-            DBRow rowRow;
+            DbRow rowRow;
             rowRow.insert({ "actorId", actorId.toString() });
             rowRow.insert({ "signature", ByteArray(sign).toBase64() });
             rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
@@ -718,7 +718,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
         return std::unexpected(BlockError::NotExists);
     }
 
-    DBConnector db(path, m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
+    DbConnector db(path, m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
 
     if (!db.open() || db.tableNames().empty()) {
         return std::unexpected(BlockError::NotExists);
@@ -728,7 +728,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     const std::string blockTable =
         isGenesis ? Config::DataStorage::GenesisBlockTable : Config::DataStorage::BlockTable;
 
-    std::vector<DBRow> res = db.selectAll(blockTable);
+    std::vector<DbRow> res = db.selectAll(blockTable);
     if (res.empty()) {
         return std::unexpected(BlockError::NotExists);
     }
@@ -740,7 +740,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
         return std::unexpected(BlockError::Invalid);
     }
 
-    std::vector<DBRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
+    std::vector<DbRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
     Signatures         signatures;
 
     for (const auto &dbSign : dbSigns) {
@@ -752,7 +752,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     if (isGenesis) {
         std::string prevGenHash = std::move(res[0].at("prevGenHash"));
 
-        std::vector<DBRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
+        std::vector<DbRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
         GenesisDataRows    dataRows;
         for (const auto &row : rows) {
             GenesisDataInfo dRow;
@@ -776,7 +776,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
 
         return BlockVariant(block);
     } else {
-        std::vector<DBRow>    rows = db.selectAll(Config::DataStorage::TxBlockTable);
+        std::vector<DbRow>    rows = db.selectAll(Config::DataStorage::TxBlockTable);
         std::set<Transaction> transactions;
 
         for (const auto &tmp : rows) {

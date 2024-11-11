@@ -16,7 +16,7 @@ struct TokenData {
     std::string actor, owner, count, name, ticker, color, smart;
 
     QJsonDocument toJsonDocument();
-    DBRow         toDBRow();
+    DbRow         toDBRow();
 };
 
 class TokenManager : public QObject {

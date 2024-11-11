@@ -76,11 +76,13 @@ void TransactionManager::makeBlock() {
     }
 
     if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-        qDebug() << "[Blockchain] Last block:" << lastBlock->getIndex()
-                 << "| last real:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+        eLog(
+            "[Blockchain] Last block: {}, last real: {}, type: {}",
+            lastBlock->getIndex(),
+            lastRealBlock->getIndex(),
+            lastRealBlock->getType());
     } else {
-        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|"
-                 << lastRealBlock->getType();
+        eLog("[Blockchain] Last block: {}, type: {}", lastRealBlock->getIndex(), lastRealBlock->getType());
     }
 
     if (!node->network()->isActiveConnectionExists()) {

@@ -47,7 +47,7 @@ private:
     //    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
     //    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
 
-    DBRow makeDBRow(const QString &fileHash, const Permission permission, const QString &userId,
+    DbRow makeDBRow(const QString &fileHash, const Permission permission, const QString &userId,
                     const QString &signature);
     //    DBRow findDBRow(const QString & userId, const QString & fileHash);
 

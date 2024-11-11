@@ -24,7 +24,7 @@ FragmentStorage::FragmentStorage(Dfs::Packets::SegmentMessage segmentMessage)
 }
 
 bool FragmentStorage::initLocalFile(std::uint64_t filesize) {
-    DBRow row = makeFragmentRow(0, 0, filesize);
+    DbRow row = makeFragmentRow(0, 0, filesize);
     return storageFile.insert(DfsF::TableNameFragments, row);
 }
 
@@ -35,7 +35,7 @@ bool FragmentStorage::initHistoricalChain() {
 
 bool FragmentStorage::insertFragment(DfsP::SegmentMessage msg) {
     std::uint64_t pos      = writeFragment(msg);
-    DBRow         row      = makeFragmentRow(msg, pos);
+    DbRow         row      = makeFragmentRow(msg, pos);
     const auto    inserted = storageFile.insert(DfsF::TableNameFragments, row);
     moveRows(row, msg.data.size());
     return inserted;
@@ -88,9 +88,9 @@ bool FragmentStorage::removeFragment(DfsP::DeleteSegmentMessage msg) {
         "SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(msg.offset));
-    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
-        DBRow frag = array[0];
+        DbRow frag = array[0];
         storageFile.deleteRow(DfsF::TableNameFragments, frag);
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
 
@@ -111,9 +111,9 @@ DfsP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
         "SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(pos));
-    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
-        DBRow                 fragMap  = array[0];
+        DbRow                 fragMap  = array[0];
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
         fragment.offset                = pos;
         fragment.data                  = extract(filePath, pos, std::stoull(fragMap.at("size")));
@@ -131,9 +131,9 @@ Dfs::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) 
         "SELECT * FROM {} WHERE fragHash = '{}' ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
         fragHash);
-    std::vector<DBRow> array = storageFile.select(GetStartFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
-        DBRow                 fragMap  = array[0];
+        DbRow                 fragMap  = array[0];
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
         fragment.offset                = std::stoull(fragMap.at("pos"));
         fragment.data    = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
@@ -150,7 +150,7 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
 
     std::uint64_t      endPos   = pos + data.length();
     auto               filePath = DfsPath::filePath(actorId, fileId);
-    std::vector<DBRow> frags    = storageFile.select(fmt::format(
+    std::vector<DbRow> frags    = storageFile.select(fmt::format(
         "SELECT * FROM {} WHERE pos + size > {} AND pos < {}",
         DfsF::TableNameFragments,
         std::to_string(pos),
@@ -179,61 +179,61 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
     return true;
 }
 
-DBRow FragmentStorage::getPreviousFragment(std::uint64_t number) {
-    DBRow       ret;
+DbRow FragmentStorage::getPreviousFragment(std::uint64_t number) {
+    DbRow       ret;
     std::string GetPrevFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(number));
-    std::vector<DBRow> array = storageFile.select(GetPrevFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
     return ret;
 }
 
-DBRow FragmentStorage::getNextFragment(std::uint64_t number) {
-    DBRow       ret;
+DbRow FragmentStorage::getNextFragment(std::uint64_t number) {
+    DbRow       ret;
     std::string GetNextFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE pos > {} ORDER BY pos ASC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(number));
-    std::vector<DBRow> array = storageFile.select(GetNextFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
     return ret;
 }
 
-DBRow FragmentStorage::getRealPreviousFragment(std::uint64_t number) {
-    DBRow       ret;
+DbRow FragmentStorage::getRealPreviousFragment(std::uint64_t number) {
+    DbRow       ret;
     std::string GetPrevFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE storedPos < {} ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(number));
-    std::vector<DBRow> array = storageFile.select(GetPrevFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
     return ret;
 }
 
-DBRow FragmentStorage::getRealNextFragment(std::uint64_t number) {
-    DBRow       ret;
+DbRow FragmentStorage::getRealNextFragment(std::uint64_t number) {
+    DbRow       ret;
     std::string GetNextFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE storedPos > {} ORDER BY pos ASC LIMIT 1",
         DfsF::TableNameFragments,
         std::to_string(number));
-    std::vector<DBRow> array = storageFile.select(GetNextFragmentQuery);
+    std::vector<DbRow> array = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
     return ret;
 }
 
-std::pair<DBRow, DBRow> FragmentStorage::getPrevNextPairFragment(std::uint64_t number) {
-    std::vector<DBRow>      res;
-    std::pair<DBRow, DBRow> ret;
+std::pair<DbRow, DbRow> FragmentStorage::getPrevNextPairFragment(std::uint64_t number) {
+    std::vector<DbRow>      res;
+    std::pair<DbRow, DbRow> ret;
     std::string             GetPrevFragmentQuery = fmt::format(
         "SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
         DfsF::TableNameFragments,
@@ -253,8 +253,8 @@ std::pair<DBRow, DBRow> FragmentStorage::getPrevNextPairFragment(std::uint64_t n
     return ret;
 }
 
-DBRow FragmentStorage::makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos) {
-    DBRow row;
+DbRow FragmentStorage::makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos) {
+    DbRow row;
     row.insert({ "pos", std::to_string(msg.offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.data.size()) });
@@ -262,8 +262,8 @@ DBRow FragmentStorage::makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t s
     return row;
 }
 
-DBRow FragmentStorage::makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size) {
-    DBRow row;
+DbRow FragmentStorage::makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size) {
+    DbRow row;
     row.insert({ "pos", std::to_string(pos) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(size) });
@@ -274,7 +274,7 @@ DBRow FragmentStorage::makeFragmentRow(std::uint64_t pos, std::uint64_t storedPo
 
 std::uint64_t FragmentStorage::writeFragment(DfsP::SegmentMessage msg) {
     std::filesystem::path   filePath   = DfsPath::filePath(actorId, fileId);
-    std::pair<DBRow, DBRow> prevnext   = getPrevNextPairFragment(msg.offset);
+    std::pair<DbRow, DbRow> prevnext   = getPrevNextPairFragment(msg.offset);
     std::uint64_t           posToWrite = 0;
     if (prevnext.first.empty()) {
         posToWrite = 0;
@@ -286,9 +286,9 @@ std::uint64_t FragmentStorage::writeFragment(DfsP::SegmentMessage msg) {
     return write(filePath, posToWrite, msg.data);
 }
 
-void FragmentStorage::moveRows(DBRow curRow, std::uint64_t moveSize) {
+void FragmentStorage::moveRows(DbRow curRow, std::uint64_t moveSize) {
     std::uint64_t curPos       = std::stoull(curRow["storedPos"]);
-    DBRow         nextFragment = getNextFragment(std::stoull(curRow["pos"]));
+    DbRow         nextFragment = getNextFragment(std::stoull(curRow["pos"]));
     if (nextFragment.empty()) {
         return;
     } else {
