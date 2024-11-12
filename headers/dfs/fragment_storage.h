@@ -3,7 +3,7 @@
 
 #include "extrachain_global.h"
 #include "utils/db_connector.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include <QThread>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>

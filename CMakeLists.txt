@@ -50,6 +50,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_sql.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
@@ -88,7 +89,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
@@ -101,6 +101,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_sql.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp
@@ -136,7 +137,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )

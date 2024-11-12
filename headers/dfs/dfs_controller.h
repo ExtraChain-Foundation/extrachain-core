@@ -22,7 +22,7 @@
 #include "blockchain/index/actorindex.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include <QtConcurrent>
 #include <boost/algorithm/string.hpp>
 

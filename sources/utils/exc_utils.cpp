@@ -42,7 +42,7 @@
 #include "encryption/encryption_tools.h"
 #include "managers/data_mining_manager.h"
 #include "sha3.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"

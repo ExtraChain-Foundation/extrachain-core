@@ -1,6 +1,6 @@
 #include "dfs/fragment_storage.h"
 #include "dfs/historical_chain.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 
 #include <fstream>
 

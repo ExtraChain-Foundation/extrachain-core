@@ -1,7 +1,7 @@
 #pragma once
 
 #include "utils/db_connector.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 #include <QObject>
 #include <algorithm>

@@ -1,4 +1,4 @@
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 
 #include "blockchain/actor.h"
 

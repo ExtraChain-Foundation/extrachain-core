@@ -4,7 +4,7 @@
 #include <filesystem>
 #include "utils/exc_magic.h"
 #include "utils/db_schema.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include "blockchain/actor.h"
 
 enum class HistoricalSqlOperation {

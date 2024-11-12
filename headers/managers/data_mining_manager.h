@@ -25,31 +25,33 @@
 
 #include "dfs/dfs_controller.h"
 #include "utils/bignumber_float.h"
-#include <managers/extrachain_node.h>
-#include <utils/db_connector.h>
-#include <utils/dfs_utils.h>
+#include "managers/extrachain_node.h"
+#include "utils/db_connector.h"
+#include "dfs/dfs_utils.h"
 
 class DataMiningManager : public QObject {
     Q_OBJECT
 
     ExtraChainNode *node;
-    const int CoinProductionRate = 100;
-    bool isRecalculate = false;
+    const int       CoinProductionRate = 100;
+    bool            isRecalculate      = false;
 
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
 
-    BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored,
-                                  BigNumberFloat dataAmountTotalStoredInNetwork,
-                                  BigNumberFloat circulativeSupply, BigNumberFloat blockAmount,
-                                  double coefficient);
+    BigNumberFloat calculateCoins(
+        BigNumberFloat dataAmountStored,
+        BigNumberFloat dataAmountTotalStoredInNetwork,
+        BigNumberFloat circulativeSupply,
+        BigNumberFloat blockAmount,
+        double         coefficient);
 
     /**
      * @brief Reward request
      * */
     void requestCoinReward();
-    
-     /**
+
+    /**
      * @brief calculate reward amound
      * @return amount of reward
      */

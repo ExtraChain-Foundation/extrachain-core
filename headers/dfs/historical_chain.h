@@ -4,7 +4,7 @@
 #include <filesystem>
 
 #include "managers/extrachain_node.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 
 class EXTRACHAIN_EXPORT HistoricalChain {
 private:

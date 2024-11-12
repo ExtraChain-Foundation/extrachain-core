@@ -19,7 +19,7 @@
 
 #include "encryption/key_private.h"
 #include "encryption/encryption_tools.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 
 #include <sodium.h>

@@ -25,7 +25,7 @@
 #include "blockchain/genesis_block.h"
 #include "blockchain/index/blockindex.h"
 #include "blockchain/transaction.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include "utils/bignumber.h"
 
 #include <QByteArray>

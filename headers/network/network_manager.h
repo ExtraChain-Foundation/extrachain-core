@@ -34,7 +34,7 @@
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 
 class SocketService;
