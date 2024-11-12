@@ -1,6 +1,6 @@
 #include "utils/dfs_utils.h"
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 
 std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByHash(DbConnector *db, std::string hash) {
     std::string query = fmt::format("SELECT * FROM {} WHERE hash = '{}'", TableName, hash);

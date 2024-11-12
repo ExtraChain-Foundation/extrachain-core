@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "datastorage/blockchain.h"
-#include "datastorage/dfs/dfs_controller.h"
+#include "blockchain/blockchain.h"
+#include "dfs/dfs_controller.h"
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"

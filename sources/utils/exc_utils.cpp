@@ -39,7 +39,7 @@
 #include "boost/version.hpp"
 
 #include "cpp-base64/base64.cpp"
-#include "enc/enc_tools.h"
+#include "encryption/encryption_tools.h"
 #include "managers/data_mining_manager.h"
 #include "sha3.h"
 #include "utils/dfs_utils.h"

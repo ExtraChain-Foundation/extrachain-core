@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/db_connector.h"

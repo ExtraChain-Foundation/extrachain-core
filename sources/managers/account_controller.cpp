@@ -19,8 +19,8 @@
 
 #include "managers/account_controller.h"
 
-#include "datastorage/blockchain.h"
-#include "datastorage/index/actorindex.h"
+#include "blockchain/blockchain.h"
+#include "blockchain/index/actorindex.h"
 #include "managers/transaction_manager.h"
 
 AccountController::AccountController(ExtraChainNode *node)

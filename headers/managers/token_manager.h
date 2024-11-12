@@ -4,7 +4,7 @@
 #include <QDebug>
 #include <QObject>
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 #include "utils/db_connector.h"
 
 class ExtraChainNode;

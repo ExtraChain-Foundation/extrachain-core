@@ -29,7 +29,7 @@
 #include <QObject>
 #include <QTimer>
 
-#include "datastorage/transaction.h"
+#include "blockchain/transaction.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 

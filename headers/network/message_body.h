@@ -3,7 +3,7 @@
 
 #include <msgpack.hpp>
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 #include "utils/exc_utils.h"
 
 enum class MessageType {

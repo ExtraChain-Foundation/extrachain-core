@@ -1,5 +1,5 @@
 #include "managers/connections_manager.h"
-#include "enc/enc_tools.h"
+#include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
 ConnectionsManager::ConnectionsManager(const std::string address, const std::string port,

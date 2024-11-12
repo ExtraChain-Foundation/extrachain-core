@@ -18,8 +18,8 @@
  */
 
 #include "managers/data_mining_manager.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/dfs/dfs_controller.h"
+#include "blockchain/blockchain.h"
+#include "dfs/dfs_controller.h"
 #include "managers/transaction_manager.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"

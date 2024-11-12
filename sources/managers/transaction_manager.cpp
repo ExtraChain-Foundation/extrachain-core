@@ -24,7 +24,7 @@
 
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "datastorage/blockchain.h"
+#include "blockchain/blockchain.h"
 #include "network/network_manager.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {

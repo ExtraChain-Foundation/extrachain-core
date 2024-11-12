@@ -4,8 +4,8 @@
 
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "datastorage/transaction.h"
-#include "enc/key_private.h"
+#include "blockchain/transaction.h"
+#include "encryption/key_private.h"
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 

@@ -1,8 +1,8 @@
 #include "network/isocket_service.h"
-#include "datastorage/index/actorindex.h"
+#include "blockchain/index/actorindex.h"
 #include <QJsonObject>
 
-#include "enc/enc_tools.h"
+#include "encryption/encryption_tools.h"
 #include "network/network_manager.h"
 
 #ifndef EXTRACHAIN_CMAKE

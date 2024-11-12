@@ -23,7 +23,7 @@
 #include <string>
 #include <QObject>
 
-#include "datastorage/dfs/dfs_controller.h"
+#include "dfs/dfs_controller.h"
 #include "utils/bignumber_float.h"
 #include <managers/extrachain_node.h>
 #include <utils/db_connector.h>

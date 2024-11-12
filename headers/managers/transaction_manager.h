@@ -27,7 +27,7 @@
 #include <QThread>
 #include <QTimer>
 
-#include "datastorage/transaction.h"
+#include "blockchain/transaction.h"
 
 class ExtraChainNode;
 

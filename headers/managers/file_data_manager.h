@@ -1,6 +1,6 @@
 #pragma once
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 
 #include <QObject>
 #include <vector>
