@@ -523,7 +523,7 @@ void NetworkManager::messageReceived(
     // try {
     switch (type) {
     case MessageType::Custom: {
-        qInfo() << "Achieved CUSTOM. MessageID:" + messageId + "; SenderID:" + mb.sender_id.toStdString();
+        qInfo() << "Achieved CUSTOM. MessageID:" + messageId + "| SenderID:" << mb.sender_id;
 
         auto receivedMessageIdLocked = *m_receivedMessageId;
         auto res = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
@@ -626,9 +626,9 @@ void NetworkManager::messageReceived(
         break;
     }
     case MessageType::NewActor: {
-        auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        auto actor  = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         auto result = node->actorIndex()->handleNewActor(actor);
-        if(result == Errors::FILE_NOT_EXISTS) {
+        if (result == Errors::FILE_NOT_EXISTS) {
             emit accrual(actor.id());
         }
         break;
@@ -955,12 +955,11 @@ void NetworkManager::setNetworkVPNHash() noexcept {
 
     KeyPrivate key;
     key.generate();
-    m_networkHashForVPN =
-        Utils::calcHash(
-            ByteArray(key.publicKey()).toString()
-                + node->accountController()->mainActor()->id().toString() + salt,
-            Utils::HashEncode::Sha3_512)
-            .substr(0, 64);
+    m_networkHashForVPN = Utils::calcHash(
+                              ByteArray(key.publicKey()).toString()
+                                  + node->accountController()->mainActor()->id().toString() + salt,
+                              Utils::HashEncode::Sha3_512)
+                              .substr(0, 64);
 }
 
 QString NetworkManager::localIp() {

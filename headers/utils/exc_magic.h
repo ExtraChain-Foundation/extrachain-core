@@ -358,7 +358,7 @@ namespace detail {
 
     template <typename T>
     T from_json_impl(const boost::json::value& json) {
-        eInfo("JSON: {} {} {}", typeid(T).name(), json, std::string(magic_enum::enum_name(json.kind())));
+        // eInfo("JSON: {} {} {}", typeid(T).name(), json, std::string(magic_enum::enum_name(json.kind())));
 
         if constexpr (magic::is_shared_ptr_v<T>) {
             if (json.is_null()) {
@@ -422,7 +422,8 @@ namespace detail {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                         auto it = obj.find(magic::detail::clean_field_name(D.name));
                         if (it != obj.end()) {
-                            eInfo("JSON: Parsing for {}", D.name);
+                            // eInfo("JSON: Parsing for {}", D.name);
+
                             using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
                             result.*D.pointer = from_json<MemberType>(it->value());
                         }
