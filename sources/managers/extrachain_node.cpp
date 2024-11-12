@@ -115,6 +115,8 @@ void ExtraChainNode::process() {
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     timer->start(30000);
 
+    m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
+
     connectSignals();
     emit NodeInitialised();
 }
@@ -433,7 +435,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {
-    if (m_accountController->count() > 0 && m_networkManager->connections().length() > 0) {
+    if (m_accountController->count() > 0 && m_networkManager->connections()->length() > 0) {
         ActorId actorId = m_accountController->mainActor()->id();
 
         if (!actorId.isZero())
@@ -634,4 +636,8 @@ void ExtraChainNode::logout() {
 
 void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
     m_vpnClearFunc = vpnClearFunc;
+}
+
+std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
+    return m_initPublicIPAndCountry;
 }

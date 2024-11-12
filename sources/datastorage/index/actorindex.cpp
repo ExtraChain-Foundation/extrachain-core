@@ -133,20 +133,26 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     }
 }
 
-void ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
+int ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
     switch (addActor(actor)) {
-    case 0:
+    case 0: {
         qDebug() << "[ActorIndex] New actor" << actor << "is successfully saved";
-        break;
-    case Errors::FILE_ALREADY_EXISTS:
-        qDebug() << "[ActorIndex] New actor" << actor << "can't be added: it is already in storage";
-        break;
-    case Errors::FILE_IS_NOT_OPENED:
-        qWarning() << "[ActorIndex] Error: new actor" << actor << "is not saved";
-        break;
-    default:
-        qWarning() << "[ActorIndex] Error: unexpected return type";
+        return Errors::FILE_NOT_EXISTS;
     }
+    case Errors::FILE_ALREADY_EXISTS: {
+        qDebug() << "[ActorIndex] New actor" << actor << "can't be added: it is already in storage";
+        return Errors::FILE_ALREADY_EXISTS;
+    }
+    case Errors::FILE_IS_NOT_OPENED: {
+        qWarning() << "[ActorIndex] Error: new actor" << actor << "is not saved";
+        return Errors::FILE_IS_NOT_OPENED;
+    }
+    default: {
+        qWarning() << "[ActorIndex] Error: unexpected return type";
+        return Errors::UNDEFINED;
+    }
+    }
+    return Errors::UNDEFINED;
 }
 
 void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {

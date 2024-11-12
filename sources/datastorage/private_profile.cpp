@@ -166,3 +166,8 @@ void PrivateProfile::load() {
 std::filesystem::path PrivateProfile::path() {
     return KeyStore::folder + Utils::platformDelimeter() + m_main.toString() + KeyStore::format;
 }
+
+std::map<ActorId, std::string> PrivateProfile::getWalletNames() const
+{
+    return walletNames;
+}

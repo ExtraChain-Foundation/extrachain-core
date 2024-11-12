@@ -51,12 +51,6 @@ enum class MessageType {
     RequestListNodes     = 112,
 
     ShareConnections = 113,
-    Accrual          = 120,
-
-    VPNHandshake        = 241,
-    VPNConnection       = 242,
-    VPNDisconnect       = 243,
-    VPNUpdateConnection = 244,
 
     Unknown = 250
 };
@@ -90,6 +84,13 @@ struct SocketIdentifier {
     std::string messageId;
 };
 
+struct CustomMessage {
+    ActorId owner;
+    std::string data;
+
+    MSGPACK_DEFINE(owner, data)
+};
+
 inline MessageBody make_message(
     const std::string &data,
     MessageType        type,
@@ -114,39 +115,37 @@ inline MessageBody make_message(
     return message;
 }
 
-enum class VPNType {
-    CLIENT,
-    SERVER,
-    PROXY
-};
-MSGPACK_ADD_ENUM(VPNType)
-FORMAT_ENUM(VPNType)
-
 struct VPNMessage {
-    VPNType                  vpnType;
+    int                      vpnCommand;
+    int                      vpnType;
     int                      resultChainIndex;
     std::set<int>            lockedChainIndex;
     std::string              countryEndpoint;
     int                      proxyCounter;
+    std::string              lookingForNodeID;
     std::set<std::string>    networkIdentifiersToIgnore;
     std::string              localIP;
     std::string              publicIP;
     std::string              publicKeyFile;
     std::string              uuid;
     std::vector<std::string> allIPsToSet;
+    std::string              senderID;
 
     MSGPACK_DEFINE(
+        vpnCommand,
         vpnType,
         resultChainIndex,
         lockedChainIndex,
         countryEndpoint,
         proxyCounter,
+        lookingForNodeID,
         networkIdentifiersToIgnore,
         localIP,
         publicIP,
         publicKeyFile,
         uuid,
-        allIPsToSet)
+        allIPsToSet,
+        senderID)
 };
 
 #endif // MESSAGEBODY_H

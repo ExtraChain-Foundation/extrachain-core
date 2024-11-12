@@ -1276,17 +1276,13 @@ void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
     FragmentWriter fw(msg, m_compliteFiles);
 
     connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
-    connect(
-        &fw,
-        &FragmentWriter::downloadProgress,
-        this,
-        [=, this](const ActorId &actor, const std::string &fileName, const double progress) {
-            emit this->downloadProgress(ActorId(actor), fileName, progress);
-            this->updateFileState(msg.actorId, msg.fileId, Dfs::FileState::Partially);
-        });
-    connect(&fw, &FragmentWriter::eraseFromFiles, this, [this](DfsP::SegmentMessage msg) {
-        this->files.erase({ msg.actorId, msg.fileId });
-    });
+    connect(&fw, &FragmentWriter::downloadProgress, this,
+            [=, this](const std::string &actor, const std::string &fileName, const double progress) {
+                emit this->downloadProgress(ActorId(actor), fileName, progress);
+                this->updateFileState(msg.actorId, msg.fileId, Dfs::Basic::FileState::Partially);
+            });
+    connect(&fw, &FragmentWriter::eraseFromFiles, this,
+            [=, this](DfsP::SegmentMessage msg) { files.erase(msg.Actor + msg.FileName); });
     connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
     connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
     connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);

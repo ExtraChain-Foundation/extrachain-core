@@ -117,7 +117,7 @@ public:
      * @brief Attempts to save actor to local storage
      * @param actor
      */
-    void handleNewActor(Actor<KeyPublic> actor);
+    int handleNewActor(Actor<KeyPublic> actor);
     /**
      * @brief Serializes an actor and make a file in fs.
      * @param actor
