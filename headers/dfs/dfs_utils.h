@@ -451,8 +451,6 @@ namespace DfsHc   = Dfs::Historical;
 namespace DfsB    = Dfs::Basic;
 namespace DfsPath = Dfs::Path;
 
-MAKE_MAGICAL_FORMATTER(Dfs::DirRow)
-
 FORMAT_ENUM(Dfs::DfsError)
 FORMAT_ENUM(Dfs::FileType)
 FORMAT_ENUM(Dfs::FileState)

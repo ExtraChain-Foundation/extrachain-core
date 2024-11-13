@@ -21,6 +21,7 @@
 #define EXC_LOGS_EXTRA_H
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <optional>
 #include <expected>
 #include <variant>
@@ -134,6 +135,104 @@ struct fmt::formatter<std::filesystem::path> {
         default:
             return fmt::format_to(ctx.out(), "{}", p.string());
         }
+    }
+};
+
+//
+// Qt types support for fmt
+//
+
+#include <QString>
+#include <QVariant>
+#include <QDateTime>
+#include <QUrl>
+#include <QMap>
+#include <QHash>
+
+#include <fmt/ranges.h>
+
+// Qt basic types support for fmt
+template <>
+struct fmt::formatter<QString> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QString& str, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", str.toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QByteArray> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QByteArray& bytes, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", bytes.toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QVariant> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QVariant& var, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", var.toString().toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QTime> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QTime& time, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", time.toString("HH:mm:ss.zzz").toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QDate> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QDate& date, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", date.toString("yyyy-MM-dd").toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QDateTime> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QDateTime& dt, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", dt.toString("yyyy-MM-dd HH:mm:ss.zzz").toStdString());
+    }
+};
+
+template <>
+struct fmt::formatter<QUrl> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const QUrl& url, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", url.toString().toStdString());
     }
 };
 

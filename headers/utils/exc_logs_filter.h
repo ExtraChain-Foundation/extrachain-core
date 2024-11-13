@@ -28,10 +28,10 @@
 
 enum class LogModule {
     None       = 0,
-    DFS        = 1 << 0,
+    Dfs        = 1 << 0,
     Network    = 1 << 1,
     Utils      = 1 << 2,
-    Block      = 1 << 3,
+    Blockchain = 1 << 3,
     Managers   = 1 << 4,
     Global     = 1 << 5,
     Encryption = 1 << 6,
@@ -64,7 +64,7 @@ private:
 
 public:
     FileFilter() {
-        m_modules["DFS"] = { "dfs_controller",     "fragment_storage", "historical_chain", "historical_sql",
+        m_modules["Dfs"] = { "dfs_controller",     "fragment_storage", "historical_chain", "historical_sql",
                              "permission_manager", "dfs_utils",        "name_validator" };
 
         m_modules["Blockchain"] = { "actor",
@@ -203,14 +203,14 @@ public:
     }
 
     LogModule determineModule(std::string_view filename) const {
-        if (matchesModule(filename, "DFS"))
-            return LogModule::DFS;
+        if (matchesModule(filename, "Dfs"))
+            return LogModule::Dfs;
         if (matchesModule(filename, "Network"))
             return LogModule::Network;
         if (matchesModule(filename, "Utils"))
             return LogModule::Utils;
         if (matchesModule(filename, "Blockchain"))
-            return LogModule::Block;
+            return LogModule::Blockchain;
         if (matchesModule(filename, "Managers"))
             return LogModule::Managers;
         if (matchesModule(filename, "Global"))

@@ -459,22 +459,7 @@ T from_json(const boost::json::value& json) {
         return debug << magic::magic(obj).c_str();                                                           \
     }
 
-#define MAKE_MAGICAL_FORMATTER(ClassName)                                                                    \
-    template <>                                                                                              \
-    struct fmt::formatter<ClassName> {                                                                       \
-        constexpr auto parse(format_parse_context& ctx) const {                                              \
-            return ctx.begin();                                                                              \
-        }                                                                                                    \
-                                                                                                             \
-        template <typename FormatContext>                                                                    \
-        auto format(const ClassName& obj, FormatContext& ctx) const {                                        \
-            return fmt::format_to(ctx.out(), "{}", magic::magic(obj));                                       \
-        }                                                                                                    \
-    };
-
-#define MAKE_MAGICAL(ClassName)                                                                              \
-    MAKE_MAGICAL_OPERATORS(ClassName)                                                                        \
-    MAKE_MAGICAL_FORMATTER(ClassName)
+#define MAKE_MAGICAL(ClassName) MAKE_MAGICAL_OPERATORS(ClassName)
 
 #define MAKE_CUSTOM_MAGICAL(ClassName)                                                                       \
     namespace magic {                                                                                        \
@@ -485,5 +470,21 @@ T from_json(const boost::json::value& json) {
         };                                                                                                   \
     }                                                                                                        \
     MAKE_MAGICAL(ClassName)
+
+template <typename T>
+struct fmt::formatter<
+    T,
+    std::enable_if_t<
+        boost::describe::has_describe_members<T>::value || json_convert::has_custom_magic_v<T>,
+        char>> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const T& obj, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", magic::magic(obj));
+    }
+};
 
 #endif // EXC_MAGIC_HPP
