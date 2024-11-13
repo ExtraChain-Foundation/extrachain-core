@@ -24,6 +24,7 @@
 #include "managers/logs_manager.h"
 
 #include <fmt/core.h>
+#include "utils/exc_logs.h"
 
 #include <QJsonObject>
 #include <QMutex>
@@ -37,18 +38,13 @@
 #endif
 
 bool LogsManager::toConsole = true;
-bool LogsManager::toFile = false;
-bool LogsManager::toModel =
-#ifdef LOG_FILENAME
-    true;
-#else
-    true;
-#endif
+bool LogsManager::toFile    = false;
+bool LogsManager::toModel   = false;
 
 VariantModel LogsManager::logs = VariantModel(nullptr, { "text", "date", "file", "line", "func" });
-QStringList LogsManager::filesFilter;
-bool LogsManager::antiFilter = false;
-bool LogsManager::debugLogs = false;
+QStringList  LogsManager::filesFilter;
+bool         LogsManager::antiFilter = false;
+bool         LogsManager::debugLogs  = false;
 QString LogsManager::currentThread = QString::number(reinterpret_cast<quintptr>(QThread::currentThreadId()));
 
 LogsManager::LogsManager() {
@@ -84,8 +80,8 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
             QJsonObject json;
             json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
 #ifdef LOG_FILENAME
-            json["file"] = normalizeFileName(context.file);
-            json["line"] = QString::number(context.line);
+            json["file"]     = normalizeFileName(context.file);
+            json["line"]     = QString::number(context.line);
             json["function"] = QString(context.function);
 #endif
             json["message"] = msg;
@@ -101,6 +97,16 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
     }
 }
 
+void LogsManager::anotherMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
+    auto level = type == QtDebugMsg      ? LogLevel::Debug
+                 : type == QtWarningMsg  ? LogLevel::Debug
+                 : type == QtCriticalMsg ? LogLevel::Critical
+                 : type == QtFatalMsg    ? LogLevel::Fatal
+                                         : LogLevel::Info;
+
+    detail::println_impl(level, ctx.file ? ctx.file : "FromQt", ctx.line, "{}", msg.toStdString());
+}
+
 void LogsManager::makeLog(const QString& file, int line, const QString& function, const QString& msg) {
     Q_UNUSED(file)
     Q_UNUSED(line)
@@ -111,13 +117,13 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     if (LogsManager::toFile && !logFile.isOpen())
         logFile.open(QFile::Append | QFile::Text);
 
-    QString message = msg;
+    QString   message         = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
 
 #ifdef LOG_FILENAME
     // TODO: to std::string
     QString fileName = normalizeFileName(file);
-    bool isPrint = !filesFilter.length();
+    bool    isPrint  = !filesFilter.length();
 
     if (!isPrint) {
         for (auto&& file : filesFilter) {
@@ -226,13 +232,13 @@ QString LogsManager::normalizeFileName(const QString& file) {
 
 void LogsManager::on() {
     LogsManager::toConsole = true;
-    LogsManager::toFile = true;
+    LogsManager::onFile();
     LogsManager::toModel = true;
 }
 
 void LogsManager::off() {
     LogsManager::toConsole = false;
-    LogsManager::toFile = false;
+    LogsManager::offFile();
     LogsManager::toModel = false;
 }
 
@@ -247,10 +253,12 @@ void LogsManager::offConsole() {
 void LogsManager::onFile() {
     QDir().mkpath("logs");
     LogsManager::toFile = true;
+    Logger::instance().set_file_output(true);
 }
 
 void LogsManager::offFile() {
     LogsManager::toFile = false;
+    Logger::instance().set_file_output(false);
 }
 
 void LogsManager::onQml() {
@@ -263,7 +271,8 @@ void LogsManager::offQml() {
 
 void LogsManager::etHandler() {
     std::ios_base::sync_with_stdio(false);
-    qInstallMessageHandler(LogsManager::messageHandler);
+    Logger::instance().set_debug(true);
+    qInstallMessageHandler(LogsManager::anotherMessageHandler);
 
 #ifdef Q_OS_WIN
     SetConsoleOutputCP(CP_UTF8);

@@ -42,7 +42,8 @@ enum class LogLevel {
     Info,
     Warning,
     Critical,
-    Fatal
+    Fatal,
+    Success
 };
 
 class Logger {
@@ -199,6 +200,7 @@ inline bool should_log(LogLevel level) {
     case LogLevel::Debug:
     case LogLevel::Warning:
     case LogLevel::Critical:
+    case LogLevel::Success:
         return Logger::instance().is_debug();
     default:
         return false;
@@ -217,6 +219,8 @@ inline fmt::text_style get_level_style(LogLevel level) {
         return fmt::fg(fmt::color::orange_red);
     case LogLevel::Fatal:
         return fmt::emphasis::bold | fmt::fg(fmt::color::red);
+    case LogLevel::Success:
+        return fmt::fg(fmt::color::green);
     default:
         return fmt::text_style();
     }
@@ -234,6 +238,8 @@ inline std::string_view get_level_name(LogLevel level) {
         return "Critical";
     case LogLevel::Fatal:
         return "Fatal";
+    case LogLevel::Success:
+        return "Success"; // Label for success messages
     default:
         return "Unknown";
     }
@@ -242,7 +248,8 @@ inline std::string_view get_level_name(LogLevel level) {
 template <typename... Args>
 void println_impl(
     LogLevel                    level,
-    const std::source_location& loc,
+    std::string_view            file,
+    uint32_t                    line,
     fmt::format_string<Args...> format_str,
     Args&&... args) {
     if (!should_log(level))
@@ -258,8 +265,8 @@ void println_impl(
             stdout,
             "{} [file:/{}:{}] [{}] {}\n",
             get_current_time(),
-            get_filename(loc.file_name()),
-            loc.line(),
+            get_filename(file),
+            line,
             get_thread_id(),
             message);
     } else {
@@ -269,8 +276,8 @@ void println_impl(
             "{} [{}] [file:/{}:{}] [{}] {}\n",
             get_current_time(),
             level_name,
-            get_filename(loc.file_name()),
-            loc.line(),
+            get_filename(file),
+            line,
             get_thread_id(),
             message);
     }
@@ -280,8 +287,8 @@ void println_impl(
         auto log = fmt::format(
             "{} [file:/{}:{}] [{}] {}\n",
             get_current_time(),
-            get_filename(loc.file_name()),
-            loc.line(),
+            get_filename(file),
+            line,
             get_thread_id(),
             message);
         OutputDebugStringA(log.c_str());
@@ -296,8 +303,8 @@ void println_impl(
             file_message = fmt::format(
                 "{} [file:/{}:{}] [{}] {}\n",
                 get_full_time(),
-                get_filename(loc.file_name()),
-                loc.line(),
+                get_filename(file),
+                line,
                 get_thread_id(),
                 message);
         } else {
@@ -305,8 +312,8 @@ void println_impl(
                 "{} [{}] [file:/{}:{}] [{}] {}\n",
                 get_full_time(),
                 level_name,
-                get_filename(loc.file_name()),
-                loc.line(),
+                get_filename(file),
+                line,
                 get_thread_id(),
                 message);
         }
@@ -314,6 +321,16 @@ void println_impl(
     }
 
     fflush(stdout);
+}
+
+// source_location wrapper
+template <typename... Args>
+void println_impl(
+    LogLevel                    level,
+    const std::source_location& loc,
+    fmt::format_string<Args...> format_str,
+    Args&&... args) {
+    println_impl(level, loc.file_name(), loc.line(), format_str, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
@@ -340,8 +357,9 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 #define eWarning(...) ::detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
 #define eCritical(...)                                                                                       \
     ::detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
-#define eFatal(...) ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
-#define eLog(...)   eDebug(__VA_ARGS__)
+#define eFatal(...)   ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
+#define eSuccess(...) ::detail::println_impl(LogLevel::Success, std::source_location::current(), __VA_ARGS__)
+#define eLog(...)     eDebug(__VA_ARGS__)
 
 #include "utils/exc_logs_extra.h"
 

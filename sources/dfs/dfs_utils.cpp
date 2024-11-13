@@ -101,8 +101,7 @@ bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow
     dirRow.fileIdPrev   = fileIdPrev;
 
     auto dirRowDb = Utils::toDbRow(dirRow);
-    dirRowDb.erase("actorId");
-    bool res = dirFile.insert(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
+    bool res      = dirFile.insert(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
 
     return res;
 }
@@ -120,7 +119,6 @@ bool Dfs::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::ve
         }
 
         auto dirRowDb = Utils::toDbRow(dirRow);
-        dirRowDb.erase("actorId");
         dirFile.insert(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
     }
 

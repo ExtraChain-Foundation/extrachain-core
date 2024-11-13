@@ -98,7 +98,7 @@ bool DbConnector::open() {
 
     int rc = sqlite3_open(m_file.c_str(), &db);
     if (rc) {
-        eLog("[DBConnector] {} | failed to open DB: {}", m_file, sqlite3_errmsg(db));
+        eWarning("[DBConnector] {} | failed to open DB: {}", m_file, sqlite3_errmsg(db));
         return false;
     } else {
         m_open = true;
@@ -116,7 +116,7 @@ bool DbConnector::close() {
 
     int rc = sqlite3_close_v2(db);
     if (rc) {
-        eLog("[DBConnector] {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}", sqlite3_errmsg(db));
         return false;
     } else {
         m_open = false;
@@ -152,7 +152,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     if (!binds.empty()) {
         dbmutex.unlock();
         if (!implementationPrepare(tableName, binds, stmt)) {
-            eLog("[DBConnector] Select bind error");
+            eWarning("[DBConnector] Select bind error");
             return {};
         }
         dbmutex.lock();
@@ -202,7 +202,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     dbmutex.unlock();
 
     if (rs != SQLITE_DONE) {
-        eLog("[DBConnector] {} {} error: {}", m_file, m_type, sqlite3_errmsg(db));
+        eWarning("[DBConnector] {} {} error: {}", m_file, m_type, sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         return {};
     }
@@ -249,7 +249,7 @@ bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
     }
 
     if (data.size() == 0) {
-        eLog("[DBConnector] {}(false): [ImplementationInsert] DBRow is empty", file());
+        eWarning("[DBConnector] {}(false): [ImplementationInsert] DBRow is empty", file());
         return false;
     }
 
@@ -269,16 +269,16 @@ bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
 
     dbmutex.unlock();
     if (!implementationPrepare(tableName, data, stmt)) {
-        eLog("[DBConnector] Delete row. Bind failed: {}", sqlite3_errmsg(db));
-        eLog("{}(false): {}", file(), query);
+        eWarning("[DBConnector] Delete row. Bind failed: {}", sqlite3_errmsg(db));
+        eWarning("{}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         return false;
     }
 
     dbmutex.lock();
     if (rc != SQLITE_OK) {
-        eLog("[DBConnector] {}(false): {}", file(), query);
-        eLog("[DBConnector] Prepare failed: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] Prepare failed: {}", sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;
@@ -286,8 +286,8 @@ bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        eLog("[DBConnector] DeleteRow.Execution failed: {}", sqlite3_errmsg(db));
-        eLog("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] DeleteRow.Execution failed: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;
@@ -376,7 +376,7 @@ bool DbConnector::query(std::string query) {
 #endif
         eLog("[DBConnector] {}({}): {}", file(), (res == SQLITE_DONE ? "true" : "false"), query);
     if (res != SQLITE_DONE)
-        eLog("[DBConnector] Query error: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] Query error: {}", sqlite3_errmsg(db));
 
     sqlite3_finalize(stmt);
     dbmutex.unlock();
@@ -430,7 +430,7 @@ bool DbConnector::implementationPrepare(const std::string &tableName, const DbRo
             return column.name == toFind;
         });
         if (it == columns.end()) {
-            eLog("[DBConnector] ImplementationPrepare: Column find error");
+            eWarning("[DBConnector] ImplementationPrepare: Column find error");
             sqlite3_finalize(stmt);
             return false;
         }
@@ -449,7 +449,7 @@ bool DbConnector::implementationPrepare(const std::string &tableName, const DbRo
         else if (column == "REAL" || column == "NUMERIC")
             rc = sqlite3_bind_double(stmt, fieldNum, std::stod(el.second.data()));
         else {
-            eLog("[DBConnector] ImplementationPrepare: Column type not supported");
+            eWarning("[DBConnector] ImplementationPrepare: Column type not supported");
             sqlite3_finalize(stmt);
             return false;
         }
@@ -470,7 +470,7 @@ bool DbConnector::implementationInsert(const std::string &tableName, const DbRow
     }
 
     if (data.size() == 0) {
-        eLog("[DBConnector] {}(false): [ImplementationInsert] DBRow is empty", file());
+        eWarning("[DBConnector] {}(false): [ImplementationInsert] DBRow is empty", file());
         return false;
     }
 
@@ -494,16 +494,16 @@ bool DbConnector::implementationInsert(const std::string &tableName, const DbRow
 
     dbmutex.unlock();
     if (!implementationPrepare(tableName, data, stmt)) {
-        eLog("[DBConnector] ImplementationInsert: Bind failed: {}", sqlite3_errmsg(db));
-        eLog("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] ImplementationInsert: Bind failed: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         return false;
     }
 
     dbmutex.lock();
     if (rc != SQLITE_OK) {
-        eLog("[DBConnector] {}(false): {}", file(), query);
-        eLog("[DBConnector] ImplementationInsert: prepare failed: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] ImplementationInsert: prepare failed: {}", sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;
@@ -511,8 +511,8 @@ bool DbConnector::implementationInsert(const std::string &tableName, const DbRow
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
-        eLog("[DBConnector] ImplementationInsert: Execution failed: {}", sqlite3_errmsg(db));
-        eLog("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] ImplementationInsert: Execution failed: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;
@@ -520,8 +520,8 @@ bool DbConnector::implementationInsert(const std::string &tableName, const DbRow
 
     int changes = sqlite3_changes(db);
     if (changes == 0 && !isReplace) {
-        eLog("[DBConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
-        eLog("[DBConnector] {}(false): {}", file(), query);
+        eWarning("[DBConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
+        eWarning("[DBConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;

@@ -22,11 +22,13 @@ endif()
 message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT} | build: ${CMAKE_BUILD_TYPE}")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    message("Use flags")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpedantic -Werror=return-type -Werror=implicit-fallthrough")
     if (UNIX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     endif (UNIX)
+endif()
+if(MSVC)
+    # add_compile_options(/W4 /analyze)
 endif()
 
 
@@ -51,6 +53,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_sql.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
@@ -102,6 +105,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_sql.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp

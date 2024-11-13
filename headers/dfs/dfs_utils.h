@@ -81,7 +81,8 @@ enum class DfsError {
     AlreadyExists,
     DirError,
     DirValueNotExists,
-    DatabaseCreationError
+    DatabaseCreationError,
+    InvalidName
 };
 
 enum class FileType {
@@ -120,6 +121,8 @@ struct DirRow {
     Dfs::Encryption encryption;
     Dfs::FileState  state;
 
+    Signature sign;
+
     std::string visualPath() const {
         if (folder.has_value())
             return folder.value() + "/" + name;
@@ -139,7 +142,19 @@ struct DirRow {
 BOOST_DESCRIBE_STRUCT(
     DirRow,
     (),
-    (actorId, fileId, fileIdPrev, hash, folder, name, size, created, lastModified, type, encryption, state))
+    (actorId,
+     fileId,
+     fileIdPrev,
+     hash,
+     folder,
+     name,
+     size,
+     created,
+     lastModified,
+     type,
+     encryption,
+     state,
+     sign))
 
 MAKE_MAGICAL_OPERATORS(DirRow)
 
@@ -364,6 +379,7 @@ namespace Tables {
         static const std::string TableName = "Files";
         static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                                     + "("
+                                                    "actorId       TEXT             NOT NULL,"
                                                     "fileId        TEXT PRIMARY KEY NOT NULL,"
                                                     "fileIdPrev    TEXT                     ,"
                                                     "hash          TEXT             NOT NULL,"
@@ -374,7 +390,8 @@ namespace Tables {
                                                     "lastModified  INTEGER          NOT NULL,"
                                                     "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 2),"
                                                     "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
-                                                    "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2)"
+                                                    "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
+                                                    "sign          TEXT             NOT NULL"
                                                     ");";
         std::vector<DbRow> getFileDataByHash(DbConnector* db, std::string hash);
         std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);

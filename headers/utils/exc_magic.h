@@ -486,18 +486,4 @@ T from_json(const boost::json::value& json) {
     }                                                                                                        \
     MAKE_MAGICAL(ClassName)
 
-namespace magic {
-template <>
-struct custom_magic<std::vector<uint8_t>> {
-    static std::string read(const std::vector<uint8_t>& value) {
-        return "...";
-    }
-
-    static std::vector<uint8_t> write(const std::string& value) {
-        return std::vector<uint8_t>();
-    }
-};
-}
-MAKE_MAGICAL(std::vector<uint8_t>)
-
 #endif // EXC_MAGIC_HPP

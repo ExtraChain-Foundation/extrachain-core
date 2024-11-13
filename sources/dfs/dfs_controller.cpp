@@ -1,6 +1,7 @@
 #include "dfs/dfs_controller.h"
 #include "dfs/fragment_storage.h"
 #include "dfs/historical_sql.h"
+#include "dfs/name_validator.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
@@ -42,7 +43,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
     Dfs::Encryption              securityLevel) {
     std::filesystem::path fpath                    = DfsPath::convertPathToPlatform(filePath);
     std::filesystem::path newFilePath              = fpath;
-    std::string           newTargetVirtualFilePath = visualFolder + "/" + visualName;
+
+    auto name_res = NameValidator::validate(visualName);
+    if (!name_res.has_value()) {
+        eLog("[Dfs] Can't load file - invalid name");
+        return std::unexpected(Dfs::DfsError::InvalidName);
+    }
+
+    std::string newTargetVirtualFilePath = visualFolder + "/" + visualName;
 
 #ifdef ANDROID
     auto tempPath =
@@ -54,18 +62,18 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
 #endif
 
     if (!std::filesystem::exists(newFilePath)) {
-        qInfo() << "[Dfs] Can't load file";
+        eInfo("[Dfs] Can't load file: file doesn't exist");
         return std::unexpected(Dfs::DfsError::NotExists);
     }
 
     if (!std::filesystem::is_regular_file(newFilePath)) {
-        qInfo() << "[Dfs] This is not a file";
+        eInfo("[Dfs] This is not a file");
         return std::unexpected(Dfs::DfsError::NotFile);
     }
 
     std::ifstream my_file(newFilePath);
     if (!my_file) {
-        qDebug() << "Can't read";
+        eWarning("[Dfs] Can't read file");
         return std::unexpected(Dfs::DfsError::NotReadable);
     }
     my_file.close();
@@ -104,7 +112,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
-            qDebug() << "[DFS] File already in DFS";
+            eWarning("[Dfs] File already in DFS");
             return std::unexpected(Dfs::DfsError::AlreadyExists);
         }
     }
@@ -117,7 +125,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
         std::filesystem::copy(newFilePath, dfsPath);
 #endif
     } catch (std::filesystem::filesystem_error const &err) {
-        qDebug() << "[Dfs] Copy error:" << err.what(); // error
+        eWarning("[Dfs] Copy error: {}", err.what());
     }
 
     if (std::filesystem::exists(newFilePath) && securityLevel == Dfs::Encryption::Encrypted)
