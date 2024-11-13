@@ -312,8 +312,13 @@ void LogsManager::setDebugLogs(bool debugLogs) {
 
 void LogsManager::setAntiFilter(bool value) {
     antiFilter = value;
+    Logger::instance().setInverseMode(value);
 }
 
 void LogsManager::setFilesFilter(const QStringList& value) {
     filesFilter = value;
+
+    for (const auto& file : filesFilter) {
+        Logger::instance().addCustomPattern(file.toStdString());
+    }
 }

@@ -19,7 +19,7 @@
 #include <QThread>
 
 #include "blockchain/actor.h"
-#include "blockchain/index/actorindex.h"
+#include "blockchain/actor_index.h"
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_utils.h"

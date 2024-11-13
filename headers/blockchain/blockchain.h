@@ -23,7 +23,7 @@
 #include "blockchain/actor.h"
 #include "blockchain/block.h"
 #include "blockchain/genesis_block.h"
-#include "blockchain/index/blockindex.h"
+#include "blockchain/block_index.h"
 #include "blockchain/transaction.h"
 #include "dfs/dfs_utils.h"
 #include "utils/bignumber.h"

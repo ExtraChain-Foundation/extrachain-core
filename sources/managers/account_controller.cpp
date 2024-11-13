@@ -20,7 +20,7 @@
 #include "managers/account_controller.h"
 
 #include "blockchain/blockchain.h"
-#include "blockchain/index/actorindex.h"
+#include "blockchain/actor_index.h"
 #include "managers/transaction_manager.h"
 
 AccountController::AccountController(ExtraChainNode *node)

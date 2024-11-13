@@ -1,5 +1,5 @@
 #include "network/isocket_service.h"
-#include "blockchain/index/actorindex.h"
+#include "blockchain/actor_index.h"
 #include <QJsonObject>
 
 #include "encryption/encryption_tools.h"

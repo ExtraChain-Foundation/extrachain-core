@@ -21,7 +21,7 @@
 
 #include "blockchain/blockchain.h"
 // #include "dfs/dfs_controller.h"
-#include "blockchain/index/actorindex.h"
+#include "blockchain/actor_index.h"
 #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
 

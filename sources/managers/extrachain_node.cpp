@@ -28,7 +28,7 @@
 #include "blockchain/blockchain.h"
 #include "dfs/dfs_controller.h"
 // #include "dfs/permission_manager.h"
-#include "blockchain/index/actorindex.h"
+#include "blockchain/actor_index.h"
 #include "blockchain/transaction.h"
 #include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"

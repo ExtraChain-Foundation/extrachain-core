@@ -59,8 +59,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/genesis_block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_variant.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/index/actorindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/index/blockindex.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
@@ -94,6 +94,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
@@ -111,8 +112,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/genesis_block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_variant.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/index/actorindex.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/index/blockindex.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
@@ -128,7 +129,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
-    # ${CMAKE_CURRENT_LIST_DIR}/sources/managers/restApiServerManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
