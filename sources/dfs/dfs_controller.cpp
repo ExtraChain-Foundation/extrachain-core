@@ -218,12 +218,17 @@ ExpectedDirRow DfsController::databaseInsert(const ActorId &actorId, const std::
         return dirRowExp;
     }
 
+    auto dirRow = dirRowExp.value();
+
     // TODO: check fields
 
     auto dfsPath = DfsPath::filePath(actorId, fileId);
     auto actor   = node->accountController()->currentProfile().getActor(actorId);
     auto chain   = HistoricalSql::load(actor, fileId);
     chain.insert_into(row, "tokens");
+
+    dirRow.hash = Utils::calcHashForFile(dfsPath);
+    Dfs::Tables::ActorDirFile::updateHash(actorId, dirRow);
 
     return dirRowExp;
 }
@@ -328,9 +333,8 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
 
-    DbRow dirRowDb = Utils::toDbRow(dirRow);
-    dirRowDb.erase("actorId");
-    bool insertRes = actrDirFile.replace(DfsT::ActorDirFile::TableName, dirRowDb);
+    DbRow dirRowDb  = Utils::toDbRow(dirRow);
+    bool  insertRes = actrDirFile.replace(DfsT::ActorDirFile::TableName, dirRowDb);
 
     if (!insertRes) {
         auto errorStr = fmt::format(
@@ -338,7 +342,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
             actrDirFile.file().c_str(),
             DfsT::ActorDirFile::TableName.c_str());
         qDebug() << errorStr;
-        eFatal("Error 2: %s", errorStr.c_str());
+        eFatal("Error 2: {}", errorStr.c_str());
         return "";
     }
     actrDirFile.close();
@@ -381,7 +385,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
     std::string           actrDirFilePath = fmt::format("{}{}", ownerPath, DfsB::fsMapName);
     DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
-        eFatal("Can't open %s", actrDirFilePath.c_str());
+        eFatal("Can't open {}", actrDirFilePath);
         exit(EXIT_FAILURE);
     }
 
@@ -497,7 +501,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
             "[Dfs] editFile: Query select failed: Query result has unsupported size:{}",
             actrDirData.size());
         qDebug() << QString::fromStdString(errorStr);
-        eFatal("Error 4: %s", errorStr.c_str());
+        eFatal("Error 4: {}", errorStr);
         return "";
     }
     insertDataChunk(msg.data, msg.offset, realFilePath);

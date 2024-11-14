@@ -201,11 +201,7 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 void ActorIndex::setFirstId(const ActorId &value) {
     if (!m_firstId.is_zero()) {
         if (firstId() != value) {
-            auto message = QString("Another FirstId: %1 != %2")
-                               .arg(firstId().toQString())
-                               .arg(value.toQString())
-                               .toStdString();
-            eFatal("%s", message.c_str());
+            eFatal("Another FirstId: {} != {}", firstId(), value);
         }
         return;
     }
@@ -220,7 +216,7 @@ std::size_t ActorIndex::getRecords() const {
 
 int ActorIndex::add(const ActorId &id, const QByteArray &data) {
     // if (id <= 1000)
-    //     eFatal("Try to add actor with id %s", id.toByteArray().constData());
+    //     eFatal("Try to add actor with id {}", id);
 
     QString path = buildFilePath(id);
     QFile   file(path);

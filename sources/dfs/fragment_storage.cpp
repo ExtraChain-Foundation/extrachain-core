@@ -35,7 +35,7 @@ bool FragmentStorage::initHistoricalChain() {
 bool FragmentStorage::insertFragment(DfsP::SegmentMessage msg) {
     std::uint64_t pos      = writeFragment(msg);
     DbRow         row      = makeFragmentRow(msg, pos);
-    const auto    inserted = storageFile.insert(DfsF::TableNameFragments, row);
+    const auto    inserted = storageFile.replace(DfsF::TableNameFragments, row);
     moveRows(row, msg.data.size());
     return inserted;
 }

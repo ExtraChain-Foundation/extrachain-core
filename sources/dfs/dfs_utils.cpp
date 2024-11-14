@@ -184,3 +184,15 @@ Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const st
 
     return std::stoull(row["SUM(size)"]);
 }
+
+bool Dfs::Tables::ActorDirFile::updateHash(const ActorId &actorId, DirRow &dirRow) {
+    auto db = actorDbConnector(actorId);
+    if (!db.is_open()) {
+        eFatal("Database error");
+        return 0;
+    }
+
+    std::string query =
+        fmt::format("UPDATE {} SET hash = '{}' WHERE fileId = '{}'", TableName, dirRow.hash, dirRow.fileId);
+    return db.update(query);
+}

@@ -84,7 +84,7 @@ private:
         m_id = std::string(20 - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
-            eFatal("[ActorId] Not correct hex: %s", m_id.c_str());
+            eFatal("[ActorId] Not correct hex: {}", m_id.c_str());
             m_id = "00000000000000000000";
         }
     }

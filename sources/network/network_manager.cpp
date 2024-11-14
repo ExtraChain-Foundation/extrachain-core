@@ -857,7 +857,7 @@ void NetworkManager::messageReceived(
     default:
         std::string error =
             fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
-        eFatal("%s", error.data());
+        eFatal("{}", error.data());
         break;
     }
     // } catch (std::exception e) { eFatal("[NetworkManager/messageReceived] Error deserialize"); }

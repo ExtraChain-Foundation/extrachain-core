@@ -412,6 +412,8 @@ namespace Tables {
 
         bool addDirRow(const ActorId& actorId, DirRow& dirRow);
         bool addDirRows(const ActorId& actorId, const std::vector<Dfs::DirRow>& dirRows);
+
+        bool updateHash(const ActorId& actorId, DirRow& dirRow);
     }
 
     namespace DirsFile {

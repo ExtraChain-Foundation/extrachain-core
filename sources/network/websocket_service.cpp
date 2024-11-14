@@ -95,10 +95,12 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
 
         m_activated = true;
-        QTimer::singleShot(1000, [this] {
-            qDebug() << "[Socket] Emit activation after timeout:" << this << ip() << protocol();
+        m_timer.setSingleShot(true);
+        connect(&m_timer, &QTimer::timeout, this, [this] {
+            eLog("[Socket] Emit activation after timeout: {} {} {}", fmt::ptr(this), ip(), protocol());
             emit activated();
         });
+        m_timer.start(1000);
 
         m_ws->sendTextMessage(result);
         m_ws->flush();

@@ -87,6 +87,8 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
 void Blockchain::sync(const BigNumber &from) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
+    if (lastBlock.has_value())
+        removeBlock(lastBlock.value());
     if (fromBlock < 0)
         fromBlock = 0;
     // qDebug() << "[Blockchain] Request sync from" << fromBlock;
