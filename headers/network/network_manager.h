@@ -184,7 +184,7 @@ private:
 
 public:
     SafePtr<QList<SocketService*>> connections() const;
-    bool                           serverStatus(Network::Protocol protocol) const;
+    bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
 
 public slots:
     void removeConnection(const QString& identifier);
