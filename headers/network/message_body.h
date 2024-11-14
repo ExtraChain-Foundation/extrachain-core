@@ -1,6 +1,8 @@
 #ifndef MESSAGEBODY_H
 #define MESSAGEBODY_H
 
+#include <QRandomGenerator>
+
 #include <msgpack.hpp>
 
 #include "blockchain/actor.h"

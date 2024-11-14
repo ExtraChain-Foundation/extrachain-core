@@ -160,8 +160,8 @@ signals:
     void uploaded(Dfs::DirRow dirRow);
     void downloaded(Dfs::DirRow dirRow);
 
-    void downloadProgress(ActorId actorId, std::string fileHash, int progress);
-    void uploadProgress(ActorId actorId, std::string fileHash, int progress);
+    void downloadProgress(ActorId actorId, std::string fileId, int progress);
+    void uploadProgress(ActorId actorId, std::string fileId, int progress);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);
