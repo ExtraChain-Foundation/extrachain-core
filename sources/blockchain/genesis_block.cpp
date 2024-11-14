@@ -74,7 +74,7 @@ const std::string &GenesisBlock::getDataForSignature() const {
 
 void GenesisBlock::calcHash() {
     SHA3 sha3(SHA3::Bits::Bits512);
-    auto index = m_index.toString(NumeralBase::Hex);
+    auto index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -83,9 +83,9 @@ void GenesisBlock::calcHash() {
 
     for (const auto &[key, row] : std::as_const(m_dataRows)) {
         auto &[actorId, tokenId] = key;
-        sha3.add(actorId.toString().c_str(), actorId.toString().size());
-        sha3.add(row.state.toString().c_str(), row.state.toString().size());
-        sha3.add(tokenId.toString().c_str(), tokenId.toString().size());
+        sha3.add(actorId.to_string().c_str(), actorId.to_string().size());
+        sha3.add(row.state.to_string().c_str(), row.state.to_string().size());
+        sha3.add(tokenId.to_string().c_str(), tokenId.to_string().size());
         sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
@@ -103,7 +103,7 @@ void GenesisBlock::setPrevGen(const BlockVariant &block) {
 
 void GenesisBlock::setType(BlockType value) {
     if (value != BlockType::Genesis) {
-        qFatal("GenesisBlock: try to set not genesis type");
+        eFatal("GenesisBlock: try to set not genesis type");
     }
 
     m_type = value;
@@ -113,7 +113,7 @@ void GenesisBlock::setType(const std::string &value) {
     if (value == "genesis") {
         m_type = BlockType::Genesis;
     } else {
-        qFatal("GenesisBlock: try to set not genesis type");
+        eFatal("GenesisBlock: try to set not genesis type");
     }
 }
 
@@ -127,7 +127,7 @@ std::string GenesisBlock::toString() const {
     oss << "GenesisBlock { "
         << "type: " << magic_enum::enum_name(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toString() << " (" << m_index.toString(NumeralBase::Dec) << "), "
+        << "index: " << m_index.to_string() << " (" << m_index.to_string(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."

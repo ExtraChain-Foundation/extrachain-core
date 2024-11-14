@@ -29,7 +29,7 @@ BlockIndex::BlockIndex() {
     this->sectionSize = Config::DataStorage::SECTION_SIZE;
     firstSavedId      = loadFirstId();
     lastSavedId       = loadLastId();
-    QDir          dir(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName);
+    QDir          dir(QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName));
     QFileInfoList sectionList = dir.entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
 
     removeDummyBlocks();
@@ -106,7 +106,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const Bi
         id -= Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
     }
 
-    qFatal("No genesis?");
+    eFatal("No genesis?");
     return std::unexpected(BlockError::NoGenesis); // BlockError::BlockNotExists?
 }
 
@@ -122,7 +122,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getGenesisBlockById(const Bi
 
 std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber &id) const {
     if (id < 0) {
-        qFatal("getBlockById < 0");
+        eFatal("getBlockById < 0");
     }
 
     auto block = this->getById(id);
@@ -200,27 +200,27 @@ BlockIndex::getLastTxByData(const std::string &data, const TokenId &token) const
 
 std::pair<Transaction, BigNumber>
 BlockIndex::getLastTxBySender(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.toString(), SearchEnum::TxParam::UserSender, token);
+    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSender, token);
 }
 
 std::pair<Transaction, BigNumber>
 BlockIndex::getLastTxByReceiver(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.toString(), SearchEnum::TxParam::UserReceiver, token);
+    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserReceiver, token);
 }
 
 std::pair<Transaction, BigNumber>
 BlockIndex::getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.toString(), SearchEnum::TxParam::UserSenderOrReceiver, token);
+    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
 std::pair<Transaction, BigNumber>
 BlockIndex::getLastTxBySenderOrReceiverAndToken(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.toString(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
+    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
 std::pair<Transaction, BigNumber>
 BlockIndex::getLastTxByApprover(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.toString(), SearchEnum::TxParam::UserApprover, token);
+    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserApprover, token);
 }
 
 std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(
@@ -263,27 +263,27 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSenderOrReceiverOrToken: {
-                if (tx.sender().toString() == data || tx.receiver().toString() == data)
+                if (tx.sender().to_string() == data || tx.receiver().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
             case SearchEnum::TxParam::UserSender: {
-                if (tx.sender().toString() == data)
+                if (tx.sender().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (tx.receiver().toString() == data)
+                if (tx.receiver().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if (tx.sender().toString() == data || tx.receiver().toString() == data)
+                if (tx.sender().to_string() == data || tx.receiver().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (tx.approver().toString() == data)
+                if (tx.approver().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
@@ -346,21 +346,21 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
                 continue;
             switch (param) {
             case SearchEnum::TxParam::UserSender: {
-                if (BigNumber(tx.sender().toString()) == id && tx.token() == token) {
+                if (BigNumber(tx.sender().to_string()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::UserReceiver: {
-                if (BigNumber(tx.receiver().toString()) == id && tx.token() == token) {
+                if (BigNumber(tx.receiver().to_string()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
                 break;
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if ((BigNumber(tx.sender().toString()) == id || BigNumber(tx.receiver().toString()) == id)
+                if ((BigNumber(tx.sender().to_string()) == id || BigNumber(tx.receiver().to_string()) == id)
                     && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
@@ -368,7 +368,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
                 break;
             }
             case SearchEnum::TxParam::UserApprover: {
-                if (BigNumber(tx.approver().toString()) == id && tx.token() == token) {
+                if (BigNumber(tx.approver().to_string()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -394,18 +394,19 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
     return currentTxs;
 }
 
-QString BlockIndex::buildFilePath(const BigNumber &id) const {
-    BigNumber section      = this->calcSection(id);
-    QString   pathToFolder = getFolderPath() + "/" + section.toQByteArray();
+std::string BlockIndex::buildFilePath(const BigNumber &id) const {
+    BigNumber   section        = this->calcSection(id);
+    std::string pathToFolder   = getFolderPath() + "/" + section.to_string();
+    auto        pathToFolderQt = QString::fromStdString(pathToFolder);
 
-    QDir dir(pathToFolder);
+    QDir dir(pathToFolderQt);
     if (!dir.exists()) {
         qDebug() << "[BlockIndex] Creating dir:" << pathToFolder;
         dir = QDir();
-        dir.mkpath(pathToFolder);
+        dir.mkpath(pathToFolderQt);
     }
 
-    return pathToFolder + "/" + id.toQByteArray();
+    return pathToFolder + "/" + id.to_string();
 }
 
 void BlockIndex::calculationCountBlock() {
@@ -436,7 +437,7 @@ void BlockIndex::calculationCountBlock() {
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
-    QString path = buildFilePath(id);
+    QString path = QString::fromStdString(buildFilePath(id));
 
     QFile file(path);
     if (file.exists()) {
@@ -469,13 +470,13 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
     if (newBlock.isGenesisBlock()) {
         GenesisBlock block = bl.getGenesisBlock()->get();
 
-        db.createTable(Config::DataStorage::GenesisBlockTableCreate);
-        db.createTable(Config::DataStorage::RowGenesisBlockTableCreate);
-        db.createTable(Config::DataStorage::SignBlockTableCreate);
+        db.create_table(Config::DataStorage::GenesisBlockTableCreate);
+        db.create_table(Config::DataStorage::RowGenesisBlockTableCreate);
+        db.create_table(Config::DataStorage::SignBlockTableCreate);
 
         DbRow row;
         row.insert({ "type", block.getTypeStr() });
-        row.insert({ "id", block.getIndex().toString() });
+        row.insert({ "id", block.getIndex().to_string() });
         row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
         row.insert({ "data", block.getDataMessagePack() });
         row.insert({ "prevHash", block.getPrevHash() });
@@ -487,9 +488,9 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         for (const auto &[key, row] : std::as_const(rows)) {
             const auto &[actorId, tokenId] = key;
             DbRow rowRow;
-            rowRow.insert({ "actorId", actorId.toString() });
-            rowRow.insert({ "state", row.state.toString() });
-            rowRow.insert({ "token", tokenId.toString() });
+            rowRow.insert({ "actorId", actorId.to_string() });
+            rowRow.insert({ "state", row.state.to_string() });
+            rowRow.insert({ "token", tokenId.to_string() });
             rowRow.insert({ "type", QByteArray::number(row.type).toStdString() });
             db.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
         }
@@ -497,7 +498,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         auto signatures = block.signatures();
         for (const auto &[actorId, sign] : std::as_const(signatures)) {
             DbRow rowRow;
-            rowRow.insert({ "actorId", actorId.toString() });
+            rowRow.insert({ "actorId", actorId.to_string() });
             rowRow.insert({ "signature", ByteArray(sign).toBase64() });
             rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
             db.insert(Config::DataStorage::SignTable, rowRow);
@@ -510,7 +511,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             this->lastSavedId = id;
         }
 
-        if (id < this->firstSavedId || firstSavedId.isEmpty()) {
+        if (id < this->firstSavedId || firstSavedId == -1) {
             qDebug() << "[BlockIndex] First saved id is updated from" << firstSavedId << "to" << id;
             this->firstSavedId = id;
         }
@@ -519,13 +520,13 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
     } else {
         Block block = bl.getBlock()->get();
 
-        db.createTable(Config::DataStorage::BlockTableCreate);
-        db.createTable(Config::DataStorage::TxBlockTableCreate);
-        db.createTable(Config::DataStorage::SignBlockTableCreate);
+        db.create_table(Config::DataStorage::BlockTableCreate);
+        db.create_table(Config::DataStorage::TxBlockTableCreate);
+        db.create_table(Config::DataStorage::SignBlockTableCreate);
         DbRow row;
 
         row.insert({ "type", block.getTypeStr() });
-        row.insert({ "id", block.getIndex().toString() });
+        row.insert({ "id", block.getIndex().to_string() });
         row.insert({ "date", std::to_string(block.getDate()) });
         row.insert({ "data", block.getDataMessagePack() });
         row.insert({ "prevHash", block.getPrevHash() });
@@ -536,17 +537,17 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         for (const auto &tmp : std::as_const(rows)) {
             DbRow rowRow;
             rowRow.insert({ "type", std::to_string(std::to_underlying(tmp.type())) });
-            rowRow.insert({ "sender", tmp.sender().toString() });
-            rowRow.insert({ "receiver", tmp.receiver().toString() });
-            rowRow.insert({ "amount", tmp.amount().toString() });
+            rowRow.insert({ "sender", tmp.sender().to_string() });
+            rowRow.insert({ "receiver", tmp.receiver().to_string() });
+            rowRow.insert({ "amount", tmp.amount().to_string() });
             rowRow.insert({ "date", std::to_string(tmp.date()) });
-            rowRow.insert({ "token", tmp.token().toString() });
+            rowRow.insert({ "token", tmp.token().to_string() });
             rowRow.insert({ "data", tmp.data() });
-            rowRow.insert({ "prevBlock", tmp.prevBlock().toString() });
+            rowRow.insert({ "prevBlock", tmp.prevBlock().to_string() });
             rowRow.insert({ "hash", tmp.hash() });
-            rowRow.insert({ "approver", tmp.approver().toString() });
+            rowRow.insert({ "approver", tmp.approver().to_string() });
             rowRow.insert({ "signature", ByteArray(tmp.signature()).toBase64() });
-            rowRow.insert({ "producer", tmp.producer().toString() });
+            rowRow.insert({ "producer", tmp.producer().to_string() });
 
             bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
             if (txInserted)
@@ -556,7 +557,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         auto signatures = block.signatures();
         for (const auto &[actorId, sign] : std::as_const(signatures)) {
             DbRow rowRow;
-            rowRow.insert({ "actorId", actorId.toString() });
+            rowRow.insert({ "actorId", actorId.to_string() });
             rowRow.insert({ "signature", ByteArray(sign).toBase64() });
             rowRow.insert({ "isApprove", "1" /*std::to_string(sign.isApprove)*/ });
             db.insert(Config::DataStorage::SignTable, rowRow);
@@ -571,7 +572,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             this->lastSavedId = id;
         }
 
-        if (id < this->firstSavedId || firstSavedId.isEmpty()) {
+        if (id < this->firstSavedId || firstSavedId == -1) {
             qDebug() << "[BlockIndex] First saved id is updated from" << firstSavedId << "to" << id;
             this->firstSavedId = id;
         }
@@ -581,7 +582,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 }
 
 bool BlockIndex::hasRecordLimit() const {
-    return !this->recordsLimit.isEmpty();
+    return this->recordsLimit != -1;
 }
 
 bool BlockIndex::recordLimitIsReached() const {
@@ -613,7 +614,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
 
     BigNumber currentIdToRemove = id;
 
-    QString pathToFile = buildFilePath(currentIdToRemove);
+    QString pathToFile = QString::fromStdString(buildFilePath(currentIdToRemove));
     // qDebug() << "[BlockIndex] To remove:" << pathToFile;
     QFile file(pathToFile);
 
@@ -649,7 +650,7 @@ void BlockIndex::removeDummyBlocks() {
 
         if (block->getType() == BlockType::Dummy) {
             removeById(block.value());
-            removedForLogs.push_back(block->getIndex().toString());
+            removedForLogs.push_back(block->getIndex().to_string());
         }
     }
 
@@ -659,14 +660,15 @@ void BlockIndex::removeDummyBlocks() {
 }
 
 void BlockIndex::removeAll() {
-    QString folderPath = this->getFolderPath();
+    std::string folderPath = this->getFolderPath();
     qDebug() << "Clearing file index:" << folderPath;
 
-    QDir       folder(folderPath);
+    auto       folderPathQt = QString::fromStdString(folderPath);
+    QDir       folder(folderPathQt);
     const auto folders =
         folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
     for (const QString &section : std::as_const(folders)) {
-        QDir dir(folderPath + QString("/") + section);
+        QDir dir(folderPathQt + QString("/") + section);
         dir.removeRecursively();
     }
 
@@ -678,11 +680,11 @@ void BlockIndex::removeAll() {
     this->countTransactions = 0;
 }
 
-QString BlockIndex::getFolderPath() const {
+std::string BlockIndex::getFolderPath() const {
     return DataStorage::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
 }
 
-QString BlockIndex::getFolderName() const {
+std::string BlockIndex::getFolderName() const {
     return this->folderName;
 }
 
@@ -711,7 +713,7 @@ int BlockIndex::getCountTransactionsInBlocks() const {
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
-    std::string path = buildFilePath(id).toStdString();
+    std::string path = buildFilePath(id);
 
     if (!std::filesystem::exists(path)) {
         // qDebug() << "[BlockIndex] Can't get the file" << path << "(file is not exits)";
@@ -720,15 +722,16 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
 
     DbConnector db(path, m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
 
-    if (!db.open() || db.tableNames().empty()) {
+    if (!db.open() || db.table_names().empty()) {
         return std::unexpected(BlockError::NotExists);
     }
 
-    bool              isGenesis = db.tableNames()[0] == "GenesisBlock";
+    bool isGenesis = db.table_names()[0] == "GenesisBlock";
+
     const std::string blockTable =
         isGenesis ? Config::DataStorage::GenesisBlockTable : Config::DataStorage::BlockTable;
 
-    std::vector<DbRow> res = db.selectAll(blockTable);
+    std::vector<DbRow> res = db.select_all(blockTable);
     if (res.empty()) {
         return std::unexpected(BlockError::NotExists);
     }
@@ -752,7 +755,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     if (isGenesis) {
         std::string prevGenHash = std::move(res[0].at("prevGenHash"));
 
-        std::vector<DbRow> rows = db.selectAll(Config::DataStorage::RowGenesisBlockTable);
+        std::vector<DbRow> rows = db.select_all(Config::DataStorage::RowGenesisBlockTable);
         GenesisDataRows    dataRows;
         for (const auto &row : rows) {
             GenesisDataInfo dRow;
@@ -776,7 +779,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
 
         return BlockVariant(block);
     } else {
-        std::vector<DbRow>    rows = db.selectAll(Config::DataStorage::TxBlockTable);
+        std::vector<DbRow>    rows = db.select_all(Config::DataStorage::TxBlockTable);
         std::set<Transaction> transactions;
 
         for (const auto &tmp : rows) {
@@ -830,7 +833,7 @@ BigNumber BlockIndex::loadFirstId() {
             return files[0];
         });
 
-    if (!firstSavedId.isEmpty()) {
+    if (firstSavedId != -1) {
         qDebug() << "[BlockIndex] loadFirsId: Loaded first saved id:" << firstSavedId;
     } else {
         qDebug() << "[BlockIndex] loadFirsId: First saved id is not loaded";
@@ -846,7 +849,7 @@ BigNumber BlockIndex::loadFileFromSection(
         return BigNumber(file1.toStdString()) < BigNumber(file2.toStdString());
     };
 
-    QDir folder(getFolderPath());
+    QDir folder(QString::fromStdString(getFolderPath()));
 
     // sections
     qDebug() << "[BlockIndex] loadFileFromSection():" << folder.path();
@@ -881,7 +884,7 @@ BigNumber BlockIndex::loadLastId() {
             return files.last();
         });
 
-    if (!lastSavedId.isEmpty()) {
+    if (lastSavedId != -1) {
         qDebug() << "[BlockIndex] Loaded last saved id:" << lastSavedId;
     } else {
         qDebug() << "[BlockIndex] Last saved id is not loaded";

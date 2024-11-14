@@ -20,7 +20,7 @@ HistoricalSql::create(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std
         "data"_json.not_null(),
         "timestamp"_int.not_null(),
         "sign"_blob);
-    db.createTable(history_schema);
+    db.create_table(history_schema);
 
     return chain;
 }
@@ -35,7 +35,7 @@ HistoricalSql::load(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std::
 std::expected<std::string, SqlCreateError> HistoricalSql::create_table(const DbSchema &schema) {
     DbConnector db(file_path);
     db.open();
-    auto res_create = db.createTable(schema);
+    auto res_create = db.create_table(schema);
     db.close();
 
     if (!res_create.has_value()) {
@@ -117,7 +117,7 @@ std::expected<void, SqlCreateError> HistoricalSql::update_where(DbRow &row, cons
 std::expected<void, SqlCreateError> HistoricalSql::delete_where(DbRow &row, const std::string &temp_table) {
     DbConnector db(file_path);
     db.open();
-    auto res_delete = db.deleteRow(temp_table, row);
+    auto res_delete = db.delete_row(temp_table, row);
     db.close();
 
     if (!res_delete) {

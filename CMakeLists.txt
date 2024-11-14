@@ -92,6 +92,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils_base64.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h

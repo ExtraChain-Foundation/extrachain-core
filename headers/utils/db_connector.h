@@ -144,21 +144,20 @@ public:
     bool               open();
     bool               close();
     std::vector<DbRow> select(std::string query, std::string tableName = "", DbRow binds = {});
-    std::vector<DbRow> selectAll(std::string table, int limit = -1);
+    std::vector<DbRow> select_all(std::string table, int limit = -1);
     bool               insert(const std::string &tableName, const DbRow &data);
     bool               replace(const std::string &tableName, const DbRow &data);
     bool               update(const std::string &query);
-    bool               createTable(const std::string &query);
-    std::expected<std::string, SqlCreateError> createTable(const DbSchema &query);
-    bool                                       deleteRow(const std::string &tableName, const DbRow &data);
-    bool                                       deleteTable(const std::string &name);
-    bool                                       tableExists(const std::string &table);
-    bool                                       dropTable(const std::string &table);
+    bool               create_table(const std::string &query);
+    std::expected<std::string, SqlCreateError> create_table(const DbSchema &query);
+    bool                                       delete_row(const std::string &tableName, const DbRow &data);
+    bool                                       table_exists(const std::string &table);
+    bool                                       drop_table(const std::string &table);
     std::uint64_t                              count(const std::string &table, const std::string &where = "");
     std::string                                file() const;
-    bool                                       isOpen() const;
-    std::vector<std::string>                   tableNames();
-    std::vector<DBColumn>                      tableColumns(const std::string &table);
+    bool                                       is_open() const;
+    std::vector<std::string>                   table_names();
+    std::vector<DBColumn>                      table_columns(const std::string &table);
 
 public:
     bool          query(std::string query);
@@ -169,7 +168,7 @@ public:
     sqlite3 *getDb() const;
 
 private:
-    bool implementationPrepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
-    bool implementationInsert(const std::string &tableName, const DbRow &data, bool isReplace);
+    bool implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
+    bool implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace);
 };
 #endif // DB_CONNECTOR_H

@@ -141,9 +141,9 @@ void Transaction::setDate(std::uint64_t value) {
 }
 
 void Transaction::calcHash() {
-    auto hashData = m_sender.toString() + m_receiver.toString() + m_amount.toString(NumeralBase::Hex)
-                    + m_data + std::to_string(m_date) + m_token.toString() + m_prevBlock.toString()
-                    + m_approver.toString() + m_producer.toString();
+    auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex)
+                    + m_data + std::to_string(m_date) + m_token.to_string() + m_prevBlock.to_string()
+                    + m_approver.to_string() + m_producer.to_string();
 
     std::string resultHash = Utils::calcHash(hashData);
     if (!resultHash.empty()) {
@@ -217,17 +217,17 @@ Signature Transaction::signature() const {
 }
 
 bool Transaction::isEmpty() const {
-    return m_sender.isZero() && m_receiver.isZero() && m_amount.isEmpty() && m_data.empty()
-           && m_prevBlock.isEmpty() && m_approver.isZero() && m_hash.empty();
+    return m_sender.is_zero() && m_receiver.is_zero() && m_amount <= 0 && m_data.empty() && m_prevBlock == -1
+           && m_approver.is_zero() && m_hash.empty();
 }
 
 bool Transaction::isBurn() const {
-    return m_sender.isZero() && m_amount.isEmpty() && m_data.empty() && m_prevBlock.isEmpty()
-           && m_approver.isZero() && m_hash.empty();
+    return m_sender.is_zero() && m_amount <= 0 && m_data.empty() && m_prevBlock == -1 && m_approver.is_zero()
+           && m_hash.empty();
 }
 
 bool Transaction::isSigned() const {
-    return !this->m_approver.isZero() && !this->m_signature.empty();
+    return !this->m_approver.is_zero() && !this->m_signature.empty();
 }
 
 bool Transaction::operator==(const Transaction &transaction) const {

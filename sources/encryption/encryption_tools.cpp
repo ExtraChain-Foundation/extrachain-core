@@ -27,7 +27,7 @@ KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt
         crypto_pwhash_MEMLIMIT_INTERACTIVE,
         crypto_pwhash_ALG_DEFAULT);
     if (rst1 != 0) {
-        qFatal("Incorrect getKeyFromPass");
+        eFatal("Incorrect getKeyFromPass");
     }
     // string skey = std::string(key.begin(), key.end());
     // skey.erase(--skey.end());
@@ -36,10 +36,7 @@ KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt
 
 Signature Cryptography::sign(const Bytes &data, const PrivateKey &secret_key) {
     if (data.empty() || Utils::isAllEmpty(secret_key)) {
-        qFatal(
-            "[SecretKey::sign] data or secret is empty. data: %s, secret: %s",
-            data.data(),
-            secret_key.data());
+        eFatal("[SecretKey::sign] data or secret is empty. data: {}, secret: {}", data, secret_key);
     }
 
     Signature sig;
@@ -61,10 +58,7 @@ bool Cryptography::verify(const Bytes &data, const PublicKey &public_key, const 
 
 Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
     if (data.empty() || Utils::isAllEmpty(secret_key)) {
-        qFatal(
-            "[SecretKey::encrypt] data or secret is empty. data: %s, secret: %s",
-            data.data(),
-            secret_key.data());
+        eFatal("[SecretKey::encrypt] data or secret is empty. data: {}, secret: {}", data, secret_key);
     }
 
     unsigned long long enc_size = crypto_secretbox_MACBYTES + data.size();
@@ -87,15 +81,15 @@ Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
 
 Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_key) {
     if (encrypted_data.empty() || Utils::isAllEmpty(secret_key)) {
-        qFatal(
-            "[SecretKey::decrypt] data or secret is empty. data: %s, secret: %s",
-            encrypted_data.data(),
-            secret_key.data());
+        eFatal(
+            "[SecretKey::decrypt] data or secret is empty. data: {}, secret: {}",
+            encrypted_data,
+            secret_key);
     }
 
     const size_t minimum_size = crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES;
     if (encrypted_data.size() < minimum_size) {
-        qFatal("[SecretKey::decrypt] Encrypted data too short");
+        eFatal("[SecretKey::decrypt] Encrypted data too short");
     }
 
     Nonce nonce;
@@ -104,7 +98,7 @@ Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_k
     const Bytes encrypted_message(encrypted_data.begin() + crypto_secretbox_NONCEBYTES, encrypted_data.end());
 
     if (encrypted_message.size() < crypto_secretbox_MACBYTES) {
-        qFatal("[SecretKey::decrypt] Incorrect msg size");
+        eFatal("[SecretKey::decrypt] Incorrect msg size");
     }
 
     Bytes decrypted_message(encrypted_message.size() - crypto_secretbox_MACBYTES);
@@ -157,7 +151,7 @@ Bytes Cryptography::encryptAsymmetric(
     const PublicKey  &public_key,
     const Nonce      &nonce) {
     if (data.empty()) {
-        qFatal("[SecretKey::encryptAsymmetric] data is empty");
+        eFatal("[SecretKey::encryptAsymmetric] data is empty");
     }
 
     Curve25519Key x_secret_key;
@@ -168,7 +162,7 @@ Bytes Cryptography::encryptAsymmetric(
 
     // Подготовка nonce
     Nonce working_nonce;
-    bool isNonceEmpty = Utils::isAllEmpty(nonce);
+    bool  isNonceEmpty = Utils::isAllEmpty(nonce);
     if (!isNonceEmpty) {
         working_nonce = nonce;
     } else {
@@ -205,26 +199,26 @@ Bytes Cryptography::decryptAsymmetric(
     const PublicKey  &public_key,
     const Nonce      &nonce) {
     if (encrypted_data.empty()) {
-        qFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
+        eFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
     }
 
     Nonce working_nonce;
     Bytes encrypted_message;
-    bool isNonceEmpty = Utils::isAllEmpty(nonce);
+    bool  isNonceEmpty = Utils::isAllEmpty(nonce);
 
     if (!isNonceEmpty) {
         working_nonce     = nonce;
         encrypted_message = encrypted_data;
     } else {
         if (encrypted_data.size() < crypto_box_NONCEBYTES) {
-            qFatal("[SecretKey::decryptAsymmetric] Data too short to contain nonce");
+            eFatal("[SecretKey::decryptAsymmetric] Data too short to contain nonce");
         }
         std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, working_nonce.begin());
         encrypted_message = Bytes(encrypted_data.begin() + crypto_box_NONCEBYTES, encrypted_data.end());
     }
 
     if (encrypted_message.size() < crypto_box_MACBYTES) {
-        qFatal("[SecretKey::decryptAsymmetric] Encrypted message too short");
+        eFatal("[SecretKey::decryptAsymmetric] Encrypted message too short");
     }
 
     Curve25519Key x_secret_key;

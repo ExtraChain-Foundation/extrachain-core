@@ -36,9 +36,9 @@ public:
     explicit BlockIndex(const QString &folderName);
     explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
 
-    QString   folderName;                   // set in subclasses
-    int       sectionSize;                  // todo: 0 = use only one folder
-    BigNumber recordsLimit = BigNumber(-1); // -1 = no limit
+    std::string folderName;                   // set in subclasses
+    int         sectionSize;                  // todo: 0 = use only one folder
+    BigNumber   recordsLimit = BigNumber(-1); // -1 = no limit
 
     // current state //
     BigNumber records           = BigNumber(0);
@@ -109,16 +109,16 @@ public:
         int              count = 10,
         const ActorId   &token = ActorId()) const;
 
-    void      removeAll();
-    BigNumber getLastSavedId() const;
-    BigNumber getFirstSavedId() const;
-    BigNumber getRecords() const;
-    BigNumber getCountRealBlocks() const;
-    int       getCountTransactionsInBlocks() const;
-    int       removeById(const BigNumber &id);
-    int       removeById(const BlockVariant &block);
-    void      removeDummyBlocks();
-    QString   buildFilePath(const BigNumber &id) const;
+    void        removeAll();
+    BigNumber   getLastSavedId() const;
+    BigNumber   getFirstSavedId() const;
+    BigNumber   getRecords() const;
+    BigNumber   getCountRealBlocks() const;
+    int         getCountTransactionsInBlocks() const;
+    int         removeById(const BigNumber &id);
+    int         removeById(const BlockVariant &block);
+    void        removeDummyBlocks();
+    std::string buildFilePath(const BigNumber &id) const;
 
     void calculationCountBlock();
 
@@ -135,8 +135,8 @@ private:
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
     bool                                    hasRecordLimit() const;
     bool                                    recordLimitIsReached() const;
-    QString                                 getFolderPath() const;
-    QString                                 getFolderName() const;
+    std::string                             getFolderPath() const;
+    std::string                             getFolderName() const;
     BigNumber                               calcSection(BigNumber id) const;
     std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;

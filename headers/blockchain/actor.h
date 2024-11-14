@@ -54,10 +54,11 @@ public:
     ActorId(const ActorId &other);
     ActorId(ActorId &&other) noexcept;
 
-    QByteArray         toQByteArray() const;
-    QString            toQString() const;
-    const std::string &toString() const;
-    bool               isZero() const;
+    QByteArray toQByteArray() const;
+    QString    toQString() const;
+
+    const std::string &to_string() const;
+    bool               is_zero() const;
 
     auto     operator<=>(const ActorId &) const = default;
     ActorId &operator=(const ActorId &actorId);
@@ -77,13 +78,13 @@ public:
 private:
     void normalize() {
         if (m_id.size() > 20) {
-            qFatal("[ActorId] Not correct size: %zu", m_id.size());
+            eFatal("[ActorId] Not correct size: %zu", m_id.size());
         }
 
         m_id = std::string(20 - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
-            qFatal("[ActorId] Not correct hex: %s", m_id.c_str());
+            eFatal("[ActorId] Not correct hex: %s", m_id.c_str());
             m_id = "00000000000000000000";
         }
     }
@@ -141,14 +142,14 @@ public:
         if (hash.size() >= 20)
             m_id = hash.substr(0, 20);
         else
-            qFatal("[Actor] Create: error size of hash");
+            eFatal("[Actor] Create: error size of hash");
     }
 
     bool empty() const {
         if (m_key.empty())
             return true;
 
-        return m_id.isZero();
+        return m_id.is_zero();
     }
 
     bool operator==(const Actor<T> &other) {
@@ -167,11 +168,11 @@ public:
         return m_type;
     }
 
-    Actor<KeyPublic> convertToPublic() const {
+    Actor<KeyPublic> to_public() const {
         Actor<KeyPublic> actor;
 
         actor.setId(m_id);
-        actor.setPublicKey(m_key.publicKey());
+        actor.set_public_key(m_key.publicKey());
         actor.setType(m_type);
 
         return actor;
@@ -181,13 +182,13 @@ public:
         m_id = id;
     }
 
-    void setSecretKey(const PrivateKey &secretKey, const PublicKey &publicKey) {
+    void set_secret_key(const PrivateKey &secretKey, const PublicKey &publicKey) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(isPrivate);
         m_key = KeyPrivate(secretKey, publicKey);
     }
 
-    void setPublicKey(const PublicKey &key) {
+    void set_public_key(const PublicKey &key) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(!isPrivate);
         m_key = KeyPublic(key);
@@ -205,16 +206,16 @@ public:
 
     QJsonArray toJsonArray() const {
         if (empty()) {
-            qFatal("Why actor empty?");
+            eFatal("Why actor empty?");
         }
 
         QJsonArray array;
-        QString    pub = QString::fromStdString(Utils::bytesEncodeVec(m_key.publicKey()));
+        QString    pub = QString::fromStdString(Utils::to_base64(m_key.publicKey()));
 
         array << m_id.toQString() << int(m_type) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            QString secret = QString::fromStdString(Utils::bytesEncodeVec(m_key.secretKey()));
+            QString secret = QString::fromStdString(Utils::to_base64(m_key.secretKey()));
             array << secret;
         }
 
@@ -223,7 +224,7 @@ public:
 
     static Actor<T> fromJson(const QByteArray &serialized) {
         if (serialized.isEmpty()) {
-            qFatal("[Actor] json is empty");
+            eFatal("[Actor] json is empty");
         }
 
         Actor<T> actor;
@@ -233,11 +234,11 @@ public:
         auto pub = ByteArray::fromBase64(array[2].toString()).toArray<32>();
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
-            actor.setPublicKey(pub);
+            actor.set_public_key(pub);
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
             auto sec = ByteArray::fromBase64(array[3].toString()).toArray<64>();
-            actor.setSecretKey(sec, pub);
+            actor.set_secret_key(sec, pub);
         }
 
         return actor;

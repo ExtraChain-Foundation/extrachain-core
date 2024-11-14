@@ -115,7 +115,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.toString();
+        std::string index_str = m_index.to_string();
         msgpack::type::make_define_array(
             m_type,
             index_str,

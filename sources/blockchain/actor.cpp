@@ -28,11 +28,11 @@ QString ActorId::toQString() const {
     return QString::fromStdString(m_id);
 }
 
-const std::string &ActorId::toString() const {
+const std::string &ActorId::to_string() const {
     return m_id;
 }
 
-bool ActorId::isZero() const {
+bool ActorId::is_zero() const {
     return m_id == "00000000000000000000" || m_id == "";
 }
 
@@ -60,7 +60,7 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
 
 namespace magic {
 std::string custom_magic<ActorId>::read(const ActorId &value) {
-    return value.toString();
+    return value.to_string();
 }
 
 ActorId custom_magic<ActorId>::write(const std::string &value) {

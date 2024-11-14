@@ -21,6 +21,8 @@
 #include "utils/bignumber.h"
 #include <exception>
 
+#include "utils/exc_logs.h"
+
 BigNumberFloat::BigNumberFloat()
     : m_data(0) {
 }
@@ -33,7 +35,7 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase ba
             if (base == NumeralBase::Dec) {
                 this->m_data = cpp_dec_float_exc(bigNumberFloat);
             } else {
-                *this = fromHex(bigNumberFloat);
+                *this = from_hex(bigNumberFloat);
             }
         }
     } catch (std::exception &) {
@@ -104,8 +106,10 @@ BigNumberFloat BigNumberFloat::operator*(long long number) const {
 }
 
 BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) const {
-    if (bigNumberFloat == 0)
-        qFatal("BigNumberFloat: Division by zero");
+    if (bigNumberFloat == 0) {
+        eFatal("BigNumberFloat: Division by zero");
+    }
+
     return BigNumberFloat(m_data / bigNumberFloat.data());
 }
 
@@ -206,16 +210,7 @@ const cpp_dec_float_exc &BigNumberFloat::data() const {
     return m_data;
 }
 
-bool BigNumberFloat::isEmpty() const {
-    return m_data == 0;
-}
-
-QByteArray BigNumberFloat::toQByteArray(NumeralBase numSystem) const {
-    auto res = toString(numSystem);
-    return QByteArray::fromStdString(res);
-}
-
-std::string BigNumberFloat::toString(NumeralBase numSystem) const {
+std::string BigNumberFloat::to_string(NumeralBase numSystem) const {
     if (numSystem == NumeralBase::Dec) {
         std::stringstream ss;
         ss << std::setprecision(float_size) << std::fixed << m_data;
@@ -228,10 +223,10 @@ std::string BigNumberFloat::toString(NumeralBase numSystem) const {
 
         return str;
     } else if (numSystem == NumeralBase::Hex) {
-        std::string str     = toString(NumeralBase::Dec);
+        std::string str     = to_string(NumeralBase::Dec);
         size_t      dot_pos = str.find('.');
         if (dot_pos == std::string::npos)
-            return BigNumber(str, NumeralBase::Dec).toString(NumeralBase::Hex);
+            return BigNumber(str, NumeralBase::Dec).to_string(NumeralBase::Hex);
 
         std::string integer_part    = str.substr(0, dot_pos);
         std::string fractional_part = str.substr(dot_pos + 1);
@@ -242,8 +237,8 @@ std::string BigNumberFloat::toString(NumeralBase numSystem) const {
 
         BigNumber one(integer_part, NumeralBase::Dec);
         BigNumber two(fractional_part, NumeralBase::Dec);
-        return one.toString(NumeralBase::Hex) + "." + std::string(zeros, '0')
-               + two.toString(NumeralBase::Hex);
+        return one.to_string(NumeralBase::Hex) + "." + std::string(zeros, '0')
+               + two.to_string(NumeralBase::Hex);
     } else {
         throw std::invalid_argument("Unsupported base");
     }
@@ -273,7 +268,7 @@ BigNumberFloat::create(const std::string &bigNumberFloat, NumeralBase base) {
             if (base == NumeralBase::Dec) {
                 bn.m_data = cpp_dec_float_exc(bigNumberFloat);
             } else {
-                bn = fromHex(bigNumberFloat);
+                bn = from_hex(bigNumberFloat);
             }
         }
         return bn;
@@ -282,57 +277,7 @@ BigNumberFloat::create(const std::string &bigNumberFloat, NumeralBase base) {
     }
 }
 
-BigNumberFloat BigNumberFloat::random(int n, bool zeroAllowed) {
-    QByteArray str;
-    str.resize(n);
-    str[0] = '0';
-
-    while (str[0] == '0')
-        str[0] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-
-    for (int i = 1; i != n; ++i)
-        str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-
-    BigNumberFloat res(str.toStdString());
-    if (!zeroAllowed && res == 0)
-        return random(n, zeroAllowed);
-    return res;
-}
-
-BigNumberFloat BigNumberFloat::random(int n, const BigNumberFloat &max, bool zeroAllowed) {
-    if (max.toQByteArray(NumeralBase::Hex).length() < n)
-        return BigNumberFloat(0);
-
-    BigNumberFloat result;
-
-    do {
-        result = random(n, zeroAllowed);
-    } while (result >= max);
-    return result;
-}
-
-BigNumberFloat BigNumberFloat::random(BigNumberFloat max, bool zeroAllowed) {
-    QByteArray maxdata = max.toQByteArray();
-    QByteArray b;
-    b.clear();
-    b.fill('f', maxdata.size());
-    BigNumberFloat t(b.toStdString());
-
-    while (t >= max) {
-        int        size = QRandomGenerator::global()->bounded(1, max.toQByteArray().size());
-        QByteArray res;
-        res.clear();
-        for (int i = 0; i < size; i++) {
-            res.append(BigNumberUtils::Chars[QRandomGenerator::global()->bounded(0, 15)]);
-        }
-        t = BigNumberFloat(res.toStdString());
-    }
-    if (!zeroAllowed && t == 0)
-        return random(max, zeroAllowed);
-    return t;
-}
-
-BigNumberFloat BigNumberFloat::fromHex(const std::string &number) {
+BigNumberFloat BigNumberFloat::from_hex(const std::string &number) {
     size_t dot_pos = number.find('.');
     if (dot_pos == std::string::npos) {
         return BigNumberFloat(BigNumber(number));
@@ -346,13 +291,13 @@ BigNumberFloat BigNumberFloat::fromHex(const std::string &number) {
     BigNumber one(integer_part, NumeralBase::Hex);
     BigNumber two(fractional_part, NumeralBase::Hex);
     return BigNumberFloat(
-        one.toString(NumeralBase::Dec) + "." + std::string(zeros, '0') + two.toString(NumeralBase::Dec),
+        one.to_string(NumeralBase::Dec) + "." + std::string(zeros, '0') + two.to_string(NumeralBase::Dec),
         NumeralBase::Dec);
 }
 
 namespace magic {
 std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
-    return value.toString();
+    return value.to_string();
 }
 
 BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {

@@ -51,7 +51,7 @@ bool HistoricalChain::remove(DfsP::EditSegmentMessage msg) {
         DbRow         lastRow = getLastRow();
         std::uint64_t prevNum = std::stoull(lastRow.at(PREV_NUM));
         std::uint64_t num     = std::stoull(lastRow.at(NUM));
-        removed = chainFile.deleteRow(DfsHc::TableNameHC, makeDBRow(num, prevNum, msg.actionType, msg.data));
+        removed = chainFile.delete_row(DfsHc::TableNameHC, makeDBRow(num, prevNum, msg.actionType, msg.data));
     } else {
         DbRow      dbRow   = getRow(msg.data);
         DbRow      nextRow = getNextRow(std::stoi(dbRow.at(NUM)));
@@ -65,7 +65,7 @@ bool HistoricalChain::remove(DfsP::EditSegmentMessage msg) {
             return false;
         }
 
-        removed = chainFile.deleteRow(DfsHc::TableNameHC, dbRow);
+        removed = chainFile.delete_row(DfsHc::TableNameHC, dbRow);
     }
     return removed;
 }
@@ -79,7 +79,7 @@ bool HistoricalChain::revert(DfsP::EditSegmentMessage msg) {
     std::vector<DbRow> editSegmentMessageList = chainFile.select(queryGetListEditSegment, DfsHc::TableNameHC);
 
     for (const DbRow &row : editSegmentMessageList) {
-        if (!chainFile.deleteRow(DfsHc::TableNameHC, row)) {
+        if (!chainFile.delete_row(DfsHc::TableNameHC, row)) {
             reverted = false;
             break;
         }
@@ -150,7 +150,7 @@ bool HistoricalChain::initLocal(
     std::filesystem::path filePath = DfsPath::filePath(actor, fileName);
     if (!std::filesystem::exists(filePath)) {
         return false;
-        qFatal("[Dfs] No file");
+        eFatal("[Dfs] No file");
     }
 
     std::ifstream ifs(filePath, std::ios::binary);

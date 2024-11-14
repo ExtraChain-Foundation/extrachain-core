@@ -35,7 +35,7 @@ struct Approver {
     bool        isApprove = false;
 
     std::string toString() const {
-        auto               actorIdStr = actorId.toString();
+        auto               actorIdStr = actorId.to_string();
         std::ostringstream oss;
         oss << "Approver { "
             << "actor_id: \""
@@ -186,7 +186,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.toString();
+        std::string index_str = m_index.to_string();
         msgpack::type::make_define_array(
             m_type,
             index_str,
@@ -216,7 +216,7 @@ public:
 };
 
 inline bool operator<(const Block &l, const Block &r) {
-    qFatal("Block: incorrect operator<");
+    eFatal("Block: incorrect operator<");
     return l.getIndex() < r.getIndex() || l.dataService() < r.dataService();
 }
 

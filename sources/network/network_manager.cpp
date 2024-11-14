@@ -167,7 +167,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
 void NetworkManager::removeConnection(const QString &identifier) {
     if (identifier.isEmpty())
-        qFatal("Try remove with empty identifier");
+        eFatal("Try remove with empty identifier");
     auto connectionsLocked = *m_connections;
     for (const auto &connection : *connectionsLocked) {
         if (connection->identifier() == identifier)
@@ -278,7 +278,7 @@ void NetworkManager::connectToNode(
         connectToWebSocket(ip.simplified(), port, request, isConstant);
         break;
     case Protocol::Undefined:
-        qFatal("Undefined connectToNode");
+        eFatal("Undefined connectToNode");
     }
 }
 
@@ -363,7 +363,7 @@ void NetworkManager::saveToCache(
     std::ofstream file;
     file.open(NetworkCacheFile, std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
-        qFatal("[NetworkManager/saveToCache] Error open cache file");
+        eFatal("[NetworkManager/saveToCache] Error open cache file");
     }
     auto size             = std::filesystem::file_size(NetworkCacheFile);
     auto typeSendToString = [=](Config::Net::TypeSend ts) -> std::string {
@@ -857,10 +857,10 @@ void NetworkManager::messageReceived(
     default:
         std::string error =
             fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
-        qFatal("%s", error.data());
+        eFatal("%s", error.data());
         break;
     }
-    // } catch (std::exception e) { qFatal("[NetworkManager/messageReceived] Error deserialize"); }
+    // } catch (std::exception e) { eFatal("[NetworkManager/messageReceived] Error deserialize"); }
 }
 
 void NetworkManager::removeWsConnection() {
@@ -957,7 +957,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN = Utils::calcHash(
                               ByteArray(key.publicKey()).toString()
-                                  + node->accountController()->mainActor()->id().toString() + salt,
+                                  + node->accountController()->mainActor()->id().to_string() + salt,
                               Utils::HashEncode::Sha3_512)
                               .substr(0, 64);
 }
@@ -970,7 +970,7 @@ void NetworkManager::onNewWsConnection() {
     qInfo() << "NetworkManager::onNewWsConnection()";
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
-        qFatal("[WS] Error: ws == nulltpr");
+        eFatal("[WS] Error: ws == nulltpr");
 
     bool needToDelete = false;
     if (m_connections->length() >= Network::maxConnections) {

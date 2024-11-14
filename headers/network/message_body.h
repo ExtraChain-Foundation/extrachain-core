@@ -85,7 +85,7 @@ struct SocketIdentifier {
 };
 
 struct CustomMessage {
-    ActorId owner;
+    ActorId     owner;
     std::string data;
 
     MSGPACK_DEFINE(owner, data)
@@ -98,7 +98,7 @@ inline MessageBody make_message(
     const ActorId     &sender,
     std::string        to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
-        qFatal("make message error: incorrect message id size");
+        eFatal("make message error: incorrect message id size");
     }
 
     std::string randomId = Utils::calcHash(

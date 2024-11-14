@@ -42,13 +42,15 @@ PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &h
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::main() const {
-    if (m_main.isZero())
-        qFatal("ExtraUser main error");
+    if (m_main.is_zero()) {
+        eFatal("ExtraUser main error");
+    }
+
     return getActor(m_main);
 }
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::current() const {
-    if (m_current.isZero())
+    if (m_current.is_zero())
         return main();
     return getActor(m_current);
 }
@@ -59,7 +61,7 @@ const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &PrivateProfile::actors() 
 
 bool PrivateProfile::changeCurrent(const ActorId &actorId) {
     if (getActor(actorId)->empty()) {
-        qFatal("Can't find actor");
+        eFatal("Can't find actor");
         std::exit(-123);
     }
     m_current = actorId;
@@ -83,7 +85,7 @@ bool PrivateProfile::renameWallet(const ActorId &actorId, const std::string &wal
 
 const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId &actorId) const {
     if (actorId == ActorId()) {
-        qFatal("Can't get zero actor");
+        eFatal("Can't get zero actor");
     }
 
     for (const auto &actor : std::as_const(m_actors)) {
@@ -98,7 +100,7 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId 
 }
 
 bool PrivateProfile::loaded() {
-    return !m_main.isZero() && !m_actors.empty();
+    return !m_main.is_zero() && !m_actors.empty();
 }
 
 const std::string &PrivateProfile::hash() const {
@@ -134,7 +136,7 @@ void PrivateProfile::save() {
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
     if (file.write(data) == 0)
-        qFatal("Can't write");
+        eFatal("Can't write");
     file.close();
 }
 
@@ -164,10 +166,9 @@ void PrivateProfile::load() {
 }
 
 std::filesystem::path PrivateProfile::path() {
-    return KeyStore::folder + Utils::platformDelimeter() + m_main.toString() + KeyStore::format;
+    return KeyStore::folder + Utils::platformDelimeter() + m_main.to_string() + KeyStore::format;
 }
 
-std::map<ActorId, std::string> PrivateProfile::getWalletNames() const
-{
+std::map<ActorId, std::string> PrivateProfile::getWalletNames() const {
     return walletNames;
 }

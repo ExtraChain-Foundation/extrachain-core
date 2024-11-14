@@ -38,9 +38,9 @@ class EXTRACHAIN_EXPORT ActorIndex : public QObject {
 private:
     ExtraChainNode *node;
 
-    std::uint64_t records = 0;
-    const std::string folderPath = DataStorage::BLOCKCHAIN_INDEX.toStdString() + "/"
-        + DataStorage::ACTOR_INDEX_FOLDER_NAME.toStdString() + '/';
+    std::uint64_t     records = 0;
+    const std::string folderPath =
+        fmt::format("{}/{}/", DataStorage::BLOCKCHAIN_INDEX, DataStorage::ACTOR_INDEX_FOLDER_NAME);
     int16_t SECTION_NAME_SIZE = 2;
     ActorId m_firstId;
 
@@ -60,7 +60,7 @@ private:
      * @param id
      * @return
      */
-    QString buildFilePath(const ActorId &id) const;
+    QString     buildFilePath(const ActorId &id) const;
     std::string actorPath(const ActorId &id) const;
     /**
      * @brief add
@@ -68,7 +68,7 @@ private:
      * @param data
      * @return
      */
-    int add(const ActorId &id, const QByteArray &data);
+    int  add(const ActorId &id, const QByteArray &data);
     void sendGetActorMessage(const ActorId &actorId);
 
 public:
@@ -110,7 +110,7 @@ public:
     QByteArray getById(const ActorId &id) const;
 
     std::size_t getRecords() const;
-    void setFirstId(const ActorId &value);
+    void        setFirstId(const ActorId &value);
     std::string getFolderPath() const;
 
     /**
@@ -123,9 +123,9 @@ public:
      * @param actor
      * @return resultCode, 0 - actor is saved
      */
-    int addActor(const Actor<KeyPublic> &actor);
+    int                  addActor(const Actor<KeyPublic> &actor);
     std::vector<ActorId> allActors();
-    void handleNewAllActors(const std::vector<ActorId> &actors);
+    void                 handleNewAllActors(const std::vector<ActorId> &actors);
 
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);

@@ -14,12 +14,12 @@ QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUp
     QJsonDocument document;
     QJsonArray    array;
 
-    if (actorId.isZero() && savedActorId.isZero()) {
+    if (actorId.is_zero() && savedActorId.is_zero()) {
         qDebug() << "actor id and saved actor id are empty.";
         return document;
     }
 
-    if (actorId.isZero()) {
+    if (actorId.is_zero()) {
         actorId = savedActorId;
     }
 

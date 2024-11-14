@@ -20,13 +20,6 @@
 #ifndef BIGNUMBER_FLOAT_H
 #define BIGNUMBER_FLOAT_H
 
-#include <QDebug>
-#include <QMetaType>
-#include <QRandomGenerator>
-#include <QString>
-#include <QtCore/QChar>
-#include <QtCore/QString>
-#include <sstream>
 #include <string>
 
 #include "boost/multiprecision/cpp_dec_float.hpp"
@@ -34,11 +27,6 @@
 
 #include "extrachain_global.h"
 #include "utils/bignumber.h"
-
-// namespace BigNumberUtils {
-// const static QList<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-//                                    '2', '3', '4', '5', '6', '7', '8', '9' };
-// }
 
 const int float_size    = 100;
 using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
@@ -95,19 +83,14 @@ public:
 
 public:
     const cpp_dec_float_exc &data() const;
-    bool                     isEmpty() const;
-    QByteArray               toQByteArray(NumeralBase base = NumeralBase::Hex) const;
-    std::string              toString(NumeralBase base = NumeralBase::Hex) const;
+    std::string              to_string(NumeralBase base = NumeralBase::Hex) const;
     BigNumberFloat           pow(unsigned long number);
     // BigNumberFloat sqrt(unsigned long number = 2) const;
     BigNumberFloat abs() const;
 
     static std::expected<BigNumberFloat, BigNumberError>
                           create(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
-    static BigNumberFloat random(int n, bool zeroAllowed = true);
-    static BigNumberFloat random(int n, const BigNumberFloat &max, bool zeroAllowed = true);
-    static BigNumberFloat random(BigNumberFloat max, bool zeroAllowed = true);
-    static BigNumberFloat fromHex(const std::string &number);
+    static BigNumberFloat from_hex(const std::string &number);
 
     std::strong_ordering operator<=>(const BigNumberFloat &other) const {
         if (m_data < other.m_data)
@@ -135,7 +118,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = toString();
+        std::string num = to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }

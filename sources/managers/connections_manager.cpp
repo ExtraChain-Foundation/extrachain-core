@@ -30,14 +30,14 @@ bool ConnectionsManager::createTable() {
     dbConnector.open();
     bool createdTableConnnections = false;
 
-    if (dbConnector.selectAll(ConnectionsTableName).empty()) {
+    if (dbConnector.select_all(ConnectionsTableName).empty()) {
         static const std::string CreateTableQuery = fmt::format("CREATE TABLE IF NOT EXISTS {}("
                                                                 "hash        TEXT             NOT NULL, "
                                                                 "address     TEXT             NOT NULL, "
                                                                 "port        TEXT             NOT NULL, "
                                                                 "active      TEXT             NOT NULL);",
                                                                 ConnectionsTableName);
-        createdTableConnnections = dbConnector.createTable(CreateTableQuery);
+        createdTableConnnections = dbConnector.create_table(CreateTableQuery);
     }
     dbConnector.close();
     return createdTableConnnections;
@@ -48,7 +48,7 @@ bool ConnectionsManager::createActivityTable()
     dbActivity.open();
     bool createdTableActivity = false;
 
-    if (dbActivity.selectAll(ActivityTableName).empty()) {
+    if (dbActivity.select_all(ActivityTableName).empty()) {
         static const std::string CreateTableQuery = fmt::format("CREATE TABLE IF NOT EXISTS {}("
                                                                 "hash          TEXT          NOT NULL, "
                                                                 "timeactivity  TEXT          NOT NULL, "
@@ -56,7 +56,7 @@ bool ConnectionsManager::createActivityTable()
                                                                 "score         TEXT          NOT NULL);",
                                                                 ActivityTableName);
 
-        createdTableActivity = dbActivity.createTable(CreateTableQuery);
+        createdTableActivity = dbActivity.create_table(CreateTableQuery);
     }
     dbActivity.close();
     return createdTableActivity;
@@ -106,7 +106,7 @@ bool ConnectionsManager::insertActivity(const std::string hash, const Dfs::Packe
 void ConnectionsManager::loadRecords() {
     dbConnector.open();
 
-    const auto rows = dbConnector.selectAll(ConnectionsTableName);
+    const auto rows = dbConnector.select_all(ConnectionsTableName);
     if (!rows.empty()) {
         for (const auto &row : rows) {
             Connection connection = decryptConnection(row);
@@ -120,7 +120,7 @@ void ConnectionsManager::loadRecords() {
 void ConnectionsManager::loadActivityRecords()
 {
     dbActivity.open();
-    const auto rows = dbActivity.selectAll(ActivityTableName);
+    const auto rows = dbActivity.select_all(ActivityTableName);
     if (!rows.empty()) {
         for (const auto &row : rows) {
             auto act = decryptActivity(row);

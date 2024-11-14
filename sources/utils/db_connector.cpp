@@ -87,7 +87,7 @@ QString DbConnector::sqlite_version() {
 }
 
 bool DbConnector::open() {
-    if (isOpen()) {
+    if (is_open()) {
         eFatal("[DBConnector] Double open");
         return false;
     }
@@ -140,7 +140,7 @@ bool DbConnector::close() {
 
 std::vector<DbRow> DbConnector::select(std::string query, std::string tableName, DbRow binds) {
     // std::pair with status?
-    if (!isOpen()) {
+    if (!is_open()) {
         eFatal("[DBConnector] Database not open");
     }
 
@@ -151,7 +151,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
 
     if (!binds.empty()) {
         dbmutex.unlock();
-        if (!implementationPrepare(tableName, binds, stmt)) {
+        if (!implementation_prepare(tableName, binds, stmt)) {
             eWarning("[DBConnector] Select bind error");
             return {};
         }
@@ -211,40 +211,40 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     return res;
 }
 
-std::vector<DbRow> DbConnector::selectAll(std::string table, int limit) {
+std::vector<DbRow> DbConnector::select_all(std::string table, int limit) {
     std::string query =
         fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
     return select(query);
 }
 
 bool DbConnector::insert(const std::string &tableName, const DbRow &data) {
-    return this->implementationInsert(tableName, data, false);
+    return this->implementation_insert(tableName, data, false);
 }
 
 bool DbConnector::replace(const std::string &tableName, const DbRow &data) {
-    return this->implementationInsert(tableName, data, true);
+    return this->implementation_insert(tableName, data, true);
 }
 
 bool DbConnector::update(const std::string &query) {
     return this->query(query);
 }
 
-bool DbConnector::createTable(const std::string &query) {
+bool DbConnector::create_table(const std::string &query) {
     QString queryTemp = QString::fromStdString(query).replace(QRegularExpression("\\s+"), " ");
     return this->query(queryTemp.toStdString());
 }
 
-std::expected<std::string, SqlCreateError> DbConnector::createTable(const DbSchema &query) {
+std::expected<std::string, SqlCreateError> DbConnector::create_table(const DbSchema &query) {
     auto sql = query.to_sql();
     if (!sql.has_value())
         return sql;
 
-    createTable(sql.value());
+    create_table(sql.value());
     return sql;
 }
 
-bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
-    if (!isOpen()) {
+bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
+    if (!is_open()) {
         eFatal("[DBConnector] Database not open");
     }
 
@@ -268,7 +268,7 @@ bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
     int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 
     dbmutex.unlock();
-    if (!implementationPrepare(tableName, data, stmt)) {
+    if (!implementation_prepare(tableName, data, stmt)) {
         eWarning("[DBConnector] Delete row. Bind failed: {}", sqlite3_errmsg(db));
         eWarning("{}(false): {}", file(), query);
         sqlite3_finalize(stmt);
@@ -301,18 +301,13 @@ bool DbConnector::deleteRow(const std::string &tableName, const DbRow &data) {
     return true;
 }
 
-bool DbConnector::deleteTable(const std::string &name) {
-    std::string query = fmt::format("DROP TABLE {};", name);
-    return this->query(query);
-}
-
-bool DbConnector::tableExists(const std::string &table) {
+bool DbConnector::table_exists(const std::string &table) {
     std::string query =
         fmt::format("SELECT name FROM sqlite_master WHERE type='table' AND name='{}';", table);
     return select(query).size() > 0;
 }
 
-bool DbConnector::dropTable(const std::string &table) {
+bool DbConnector::drop_table(const std::string &table) {
     return query(fmt::format("DROP TABLE IF EXISTS {}", table));
 }
 
@@ -334,11 +329,11 @@ std::string DbConnector::file() const {
     return m_file;
 }
 
-bool DbConnector::isOpen() const {
+bool DbConnector::is_open() const {
     return m_open;
 }
 
-std::vector<std::string> DbConnector::tableNames() {
+std::vector<std::string> DbConnector::table_names() {
     std::vector<std::string> res;
     auto selectResult = select("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
 
@@ -349,7 +344,7 @@ std::vector<std::string> DbConnector::tableNames() {
     return res;
 }
 
-std::vector<DBColumn> DbConnector::tableColumns(const std::string &table) {
+std::vector<DBColumn> DbConnector::table_columns(const std::string &table) {
     auto sel = select("PRAGMA table_info('" + table + "')");
     if (sel.size() == 0)
         return {};
@@ -362,7 +357,7 @@ std::vector<DBColumn> DbConnector::tableColumns(const std::string &table) {
 }
 
 bool DbConnector::query(std::string query) {
-    if (!isOpen()) {
+    if (!is_open()) {
         eFatal("[DBConnector] Database not open");
     }
 
@@ -384,15 +379,15 @@ bool DbConnector::query(std::string query) {
 }
 
 QJsonObject DbConnector::toJsonObject() {
-    if (!isOpen()) {
-        qFatal("[DBConnector] Database not open");
+    if (!is_open()) {
+        eFatal("[DBConnector] Database not open");
     }
 
     QJsonObject json;
 
-    const auto tables = tableNames();
+    const auto tables = table_names();
     for (const auto &table : tables) {
-        auto result = selectAll(table);
+        auto result = select_all(table);
 
         QJsonArray array;
         for (const auto &row : result) {
@@ -419,9 +414,12 @@ sqlite3 *DbConnector::getDb() const {
     return db;
 }
 
-bool DbConnector::implementationPrepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt) {
+bool DbConnector::implementation_prepare(
+    const std::string &tableName,
+    const DbRow       &data,
+    sqlite3_stmt      *stmt) {
     int  rc;
-    auto columns  = tableColumns(tableName);
+    auto columns  = table_columns(tableName);
     int  fieldNum = 1;
 
     for (auto &el : data) {
@@ -464,8 +462,8 @@ bool DbConnector::implementationPrepare(const std::string &tableName, const DbRo
     return true;
 }
 
-bool DbConnector::implementationInsert(const std::string &tableName, const DbRow &data, bool isReplace) {
-    if (!isOpen()) {
+bool DbConnector::implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace) {
+    if (!is_open()) {
         eFatal("[DBConnector] Database not open");
     }
 
@@ -493,7 +491,7 @@ bool DbConnector::implementationInsert(const std::string &tableName, const DbRow
     int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 
     dbmutex.unlock();
-    if (!implementationPrepare(tableName, data, stmt)) {
+    if (!implementation_prepare(tableName, data, stmt)) {
         eWarning("[DBConnector] ImplementationInsert: Bind failed: {}", sqlite3_errmsg(db));
         eWarning("[DBConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);

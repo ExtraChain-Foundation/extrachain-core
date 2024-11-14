@@ -34,8 +34,8 @@
 #include <optional>
 #include <memory>
 #include "magic_enum.hpp"
-#include "cpp-base64/base64.h"
-#include "utils/exc_logs.h"
+#include "utils/exc_utils_base64.h"
+// #include "utils/exc_logs.h"
 
 template <>
 struct fmt::formatter<boost::json::object> : fmt::ostream_formatter { };
@@ -216,7 +216,7 @@ namespace detail {
             auto        is_empty = std::ranges::all_of(raw, [&value](const auto& x) {
                 return x == '\0';
             });
-            return '"' + (is_empty ? "empty" : base64_encode(raw)) + '"';
+            return '"' + (is_empty ? "empty" : Utils::to_base64(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
             if constexpr (is_associative_container<T>::value) {
                 std::string result = "{ ";
@@ -297,12 +297,12 @@ namespace detail {
     template <std::size_t N>
     boost::json::value array_uint8_to_json(const std::array<uint8_t, N>& arr) {
         std::string raw(reinterpret_cast<const char*>(arr.data()), N);
-        return boost::json::value(base64_encode(raw));
+        return boost::json::value(Utils::to_base64(raw));
     }
 
     template <std::size_t N>
     std::array<uint8_t, N> array_uint8_from_json(const boost::json::value& json) {
-        std::string            decoded = base64_decode(json.as_string());
+        std::string            decoded = Utils::from_base64<std::string>(json.as_string().c_str());
         std::array<uint8_t, N> result {};
         std::size_t            copy_size = std::min<std::size_t>(N, decoded.size());
         std::memcpy(result.data(), decoded.data(), copy_size);

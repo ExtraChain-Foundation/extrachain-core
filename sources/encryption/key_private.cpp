@@ -80,7 +80,7 @@ void KeyPrivate::encryptFile(const std::filesystem::path &input, const std::file
     std::ofstream out(output, std::ios::binary);
 
     if (!in || !out) {
-        qFatal("[encryptFile] Cannot open files");
+        eFatal("[encryptFile] Cannot open files");
     }
 
     Bytes buffer(DfsB::encSectionSize);
@@ -98,7 +98,7 @@ void KeyPrivate::decryptFile(const std::filesystem::path &input, const std::file
     std::ofstream out(output, std::ios::binary);
 
     if (!in || !out) {
-        qFatal("[decryptFile] Cannot open files");
+        eFatal("[decryptFile] Cannot open files");
     }
 
     uint32_t size;

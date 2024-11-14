@@ -230,7 +230,7 @@ std::expected<BlockVariant, BlockError>
 Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     qDebug() << "Creating genesis block";
 
-    if (blockIndex.getLastSavedId().isEmpty() || blockIndex.getRecords() == 0) {
+    if (blockIndex.getLastSavedId() == -1 || blockIndex.getRecords() == 0) {
         return std::unexpected(BlockError::EmptyBlockchain);
     }
 
@@ -290,12 +290,9 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     // genesis.addRows(dataRows);
     GenesisDataInfo gdi;
     gdi.state = BigNumberFloat(0);
-    gdi.type = DataStorage::DataRowType::Universal;
-    genesis.addRow(
-        ActorId(),
-        ActorId(),
-        gdi);
-    genesis.addData(actor->id().toString());
+    gdi.type  = DataStorage::DataRowType::Universal;
+    genesis.addRow(ActorId(), ActorId(), gdi);
+    genesis.addData(actor->id().to_string());
     genesis.sign(actor);
     return BlockVariant(genesis);
 }
@@ -405,10 +402,10 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
         return;
 
     if (block.dataService().size() > 1 || block.dataService().empty())
-        qFatal("Incorrect first genesis");
+        eFatal("Incorrect first genesis");
 
     auto firstId = ActorId(*block.dataService().begin());
-    if (!firstId.isZero())
+    if (!firstId.is_zero())
         node->actorIndex()->setFirstId(firstId);
 }
 
@@ -419,7 +416,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     const auto blockId = block.getIndex();
     if (block.isGenesisBlock() && !Blockchain::isGenesisId(blockId)) {
         qDebug() << "[Blockchain] Incorrect genesis";
-        // qFatal("Incorrect genesis");
+        // eFatal("Incorrect genesis");
         return std::unexpected(BlockError::Invalid);
     }
 
@@ -497,7 +494,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         emit updateLastTransactionList();
     }
 
-    qDebug() << "[Blockchain] Block" << blockId << "is added |" << blockType;
+    eLog("[Blockchain] Block {} is added, {}", blockId, blockType);
 
     if (blockId > 0 && blockId % Dfs::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
@@ -835,7 +832,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
             // reward check
             if (tx.isRewardTransaction()) {
                 auto approverId = tx.approver();
-                if (targetSender == ActorId() && !approverId.isZero()) {
+                if (targetSender == ActorId() && !approverId.is_zero()) {
                     auto approver = node->actorIndex()->getActor(approverId);
                     bool res      = tx.verify(approver);
                     if (res) {
@@ -871,11 +868,11 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
     }
 
     Actor<KeyPublic> senderActor;
-    if (!targetSender.isZero())
+    if (!targetSender.is_zero())
         senderActor = node->actorIndex()->getActor(targetSender);
     Actor<KeyPublic> receiverActor;
 
-    if (!targetReceiver.isZero())
+    if (!targetReceiver.is_zero())
         receiverActor = node->actorIndex()->getActor(targetReceiver);
 
     if (tx.amount() == 0) {
@@ -896,11 +893,11 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
     }
 
     // if receiver is not exist
-    if (senderActor.empty() && !targetSender.isZero()) {
+    if (senderActor.empty() && !targetSender.is_zero()) {
         return TransactionProveError::SenderNotExists;
     }
 
-    if (receiverActor.empty() && !targetReceiver.isZero()) {
+    if (receiverActor.empty() && !targetReceiver.is_zero()) {
         return TransactionProveError::ReceiverNotExists;
     }
 
@@ -909,9 +906,9 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
     }
 
     // special conditions: receiver is null - coins burning
-    if (targetSender.isZero()) {
+    if (targetSender.is_zero()) {
         Actor<KeyPublic> producerActor;
-        if (!tx.producer().isZero())
+        if (!tx.producer().is_zero())
             producerActor = node->actorIndex()->getActor(tx.producer());
         else {
             // return TransactionProveError::ZeroProducer;
@@ -933,7 +930,7 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
     //    }
 
     // special conditions: receiver is null - coins burning, contract creation
-    if (targetReceiver.isZero()) {
+    if (targetReceiver.is_zero()) {
         qDebug() << "target received is empty";
 
         // Transaction provedTx(tx);
@@ -998,5 +995,5 @@ BlockIndex &Blockchain::getBlockIndex() {
 
 void Blockchain::removeAll() {
     this->blockIndex.removeAll();
-    QFile(DataStorage::TMP_GENESIS_BLOCK).remove();
+    QFile(QString::fromStdString(DataStorage::TMP_GENESIS_BLOCK)).remove();
 }

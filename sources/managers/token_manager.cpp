@@ -17,7 +17,7 @@ TokenManager::TokenManager(ExtraChainNode *node)
     bool        isDbOpened = db.open();
 
     if (isDbOpened)
-        db.createTable(Token::tokenTableCreate);
+        db.create_table(Token::tokenTableCreate);
 }
 
 bool TokenManager::isContract(const QString &pathFile) {
@@ -73,7 +73,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
         qWarning() << "Database doesn't opened.";
         return map;
     }
-    auto resultSelect = db.selectAll(Token::tokenTableName);
+    auto resultSelect = db.select_all(Token::tokenTableName);
     for (auto &t : resultSelect) {
         auto tokenId = t.at("actorId").c_str();
         auto ticker  = t.at("ticker").c_str();
@@ -176,8 +176,8 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     QString actorId      = QString(actor.id().toQString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 
-    auto tokenData = TokenData { .token  = actor.id().toString(),
-                                 .owner  = owner.toString(),
+    auto tokenData = TokenData { .token  = actor.id().to_string(),
+                                 .owner  = owner.to_string(),
                                  .count  = count,
                                  .name   = name,
                                  .ticker = ticker,

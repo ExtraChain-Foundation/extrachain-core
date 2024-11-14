@@ -102,8 +102,7 @@ PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermis
     const QString &userId   = msg.userId.c_str();
     const QString &fileHash = msg.fileHash.c_str();
 
-    Permission permFilePermission =
-        getHighestPermission(actor.id().toString().c_str(), PermissionFileName);
+    Permission permFilePermission = getHighestPermission(actor.id().to_string().c_str(), PermissionFileName);
 
     if (permFilePermission == Read || permFilePermission == Write || permFilePermission == Delete
         || permFilePermission == Edit) {
@@ -112,7 +111,7 @@ PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermis
         return targetFilePermission;
     }
 
-    qDebug() << __FUNCTION__ << " Actor " << actor.id().toString().c_str()
+    qDebug() << __FUNCTION__ << " Actor " << actor.id().to_string().c_str()
              << " has no permission to read the Permissions file";
     return permFilePermission;
 }

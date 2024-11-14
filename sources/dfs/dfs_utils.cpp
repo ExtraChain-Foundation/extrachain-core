@@ -13,9 +13,10 @@ std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db,
 }
 
 std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
-    if (!db.isOpen()) {
-        qFatal("DB not opened");
+    if (!db.is_open()) {
+        eFatal("Database not opened");
     }
+
     auto        result       = db.select(Dfs::Tables::filesTableLast);
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
@@ -29,14 +30,14 @@ DbConnector Dfs::Tables::ActorDirFile::actorDbConnector(const ActorId &actorId) 
 }
 
 std::filesystem::path Dfs::Tables::ActorDirFile::actorDbPath(const ActorId &actorId) {
-    std::string path = DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.toString()
+    std::string path = DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string()
                        + Utils::platformDelimeter() + DfsB::fsMapName;
     return path;
 }
 
 std::filesystem::path
 Dfs::Tables::ActorDirFile::storjDbPath(const ActorId &actorId, const std::string &storjName) {
-    std::string path = DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.toString()
+    std::string path = DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string()
                        + Utils::platformDelimeter() + storjName;
     return path;
 }
@@ -44,7 +45,7 @@ Dfs::Tables::ActorDirFile::storjDbPath(const ActorId &actorId, const std::string
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError>
 Dfs::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t lastModified) {
     auto db = actorDbConnector(actorId);
-    if (!db.isOpen()) {
+    if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
@@ -66,7 +67,7 @@ Dfs::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t last
 std::expected<Dfs::DirRow, Dfs::DfsError>
 Dfs::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &fileId) {
     auto db = actorDbConnector(actorId);
-    if (!db.isOpen()) {
+    if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
@@ -89,7 +90,7 @@ Dfs::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &
 bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow) {
     auto dirFile = actorDbConnector(actorId);
 
-    if (!dirFile.isOpen()) {
+    if (!dirFile.is_open()) {
         return false;
     }
 
@@ -109,7 +110,7 @@ bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow
 bool Dfs::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::vector<DirRow> &dirRows) {
     auto dirFile = actorDbConnector(actorId);
 
-    if (!dirFile.isOpen()) {
+    if (!dirFile.is_open()) {
         return false;
     }
 
@@ -141,18 +142,18 @@ std::filesystem::path Dfs::Path::convertPathToPlatform(const std::filesystem::pa
 }
 
 std::filesystem::path Dfs::Path::filePath(const ActorId &actorId, const std::string &fileName) {
-    return DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.toString() + Utils::platformDelimeter()
+    return DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string() + Utils::platformDelimeter()
            + fileName;
 }
 
 std::filesystem::path Dfs::Path::actorPath(const ActorId &actorId) {
-    return DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.toString();
+    return DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string();
 }
 
 int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     auto db = actorDbConnector(actorId);
-    if (!db.isOpen()) {
-        qFatal("DB Error");
+    if (!db.is_open()) {
+        eFatal("Database error");
         return 0;
     }
 
@@ -168,8 +169,8 @@ std::uint64_t
 Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const std::string &storjName) {
     DbConnector db(storjDbPath(actorId, storjName).string());
     db.open();
-    if (!db.isOpen()) {
-        qFatal("DB Error");
+    if (!db.is_open()) {
+        eFatal("Database error");
         return 0;
     }
 

@@ -14,8 +14,7 @@ FragmentStorage::FragmentStorage(ActorId actorId, std::string fileId, std::strin
 }
 
 FragmentStorage::FragmentStorage(Dfs::Packets::SegmentMessage segmentMessage)
-    : storageFile(
-          DfsPath::filePath(segmentMessage.actorId, segmentMessage.fileId).string() + DfsF::Extension)
+    : storageFile(DfsPath::filePath(segmentMessage.actorId, segmentMessage.fileId).string() + DfsF::Extension)
     , actorId(segmentMessage.actorId)
     , fileId(segmentMessage.fileId)
     , hash(segmentMessage.hash) {
@@ -91,7 +90,7 @@ bool FragmentStorage::removeFragment(DfsP::DeleteSegmentMessage msg) {
     std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DbRow frag = array[0];
-        storageFile.deleteRow(DfsF::TableNameFragments, frag);
+        storageFile.delete_row(DfsF::TableNameFragments, frag);
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
 
         HistoricalChain          historicalChain(storageFile.file(), filePath.string());
@@ -117,7 +116,7 @@ DfsP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
         fragment.offset                = pos;
         fragment.data                  = extract(filePath, pos, std::stoull(fragMap.at("size")));
-        fragment.actorId               = this->actorId.toString();
+        fragment.actorId               = this->actorId.to_string();
         fragment.hash                  = this->fileId;
         return fragment;
     }
@@ -137,7 +136,7 @@ Dfs::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) 
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
         fragment.offset                = std::stoull(fragMap.at("pos"));
         fragment.data    = extract(filePath, std::stoull(fragMap.at("pos")), std::stoull(fragMap.at("size")));
-        fragment.actorId = this->actorId.toString();
+        fragment.actorId = this->actorId.to_string();
         fragment.hash    = fragMap.at("fragHash");
     }
     return fragment;
@@ -145,7 +144,7 @@ Dfs::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) 
 
 bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
     if (data.empty()) {
-        qFatal("Where I took a wrong turn");
+        eFatal("Where I took a wrong turn");
     }
 
     std::uint64_t      endPos   = pos + data.length();
@@ -443,7 +442,7 @@ bool FragmentStorage::checkRenameFile(const Dfs::Packets::EditSegmentMessage &ms
 
     hash                            = msg.newHash;
     std::string           pathDelim = Utils::platformDelimeter();
-    std::filesystem::path path      = DfsB::fsActrRoot + pathDelim + msg.actorId.toString() + pathDelim;
+    std::filesystem::path path      = DfsB::fsActrRoot + pathDelim + msg.actorId.to_string() + pathDelim;
     std::filesystem::rename(path / std::string(msg.hash), path / std::string(msg.newHash));
     return std::filesystem::exists(path / std::string(msg.newHash));
 }

@@ -78,7 +78,7 @@ Block Block::operator=(const Block &block) {
 
 void Block::calcHash() {
     SHA3        sha3(SHA3::Bits::Bits512);
-    std::string index = m_index.toString(NumeralBase::Hex);
+    std::string index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -95,7 +95,7 @@ void Block::calcHash() {
 
 void Block::setType(BlockType value) {
     if (value == BlockType::Genesis) {
-        qFatal("Block: try to set not data type");
+        eFatal("Block: try to set not data type");
     }
 
     m_type = value;
@@ -107,7 +107,7 @@ void Block::setType(const std::string &value) {
     } else if (value == "dummy") {
         m_type = BlockType::Dummy;
     } else {
-        qFatal("Block: try to set not data type");
+        eFatal("Block: try to set not data type");
     }
 }
 
@@ -201,7 +201,7 @@ std::string Block::toString() const {
     oss << "Block { "
         << "type: " << Utils::enumFullName(m_type) << ", "
         << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.toString() << " (" << m_index.toString(NumeralBase::Dec) << "), "
+        << "index: " << m_index.to_string() << " (" << m_index.to_string(NumeralBase::Dec) << "), "
         << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
         << "prev_hash: '"
         << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
@@ -240,7 +240,7 @@ const Signatures &Block::signatures() const {
 
 const Transactions &Block::transactions() const {
     if (m_type == BlockType::Genesis) {
-        qFatal("GenesisBlock: try to use transactions");
+        eFatal("GenesisBlock: try to use transactions");
     }
 
     return m_transactions;

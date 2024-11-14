@@ -61,24 +61,24 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     if (json.isEmpty()) {
         qDebug() << QString("[Socket] First message:%1").arg(message);
         closeSocket();
-        qFatal("[Socket] Can't check first message");
+        eFatal("[Socket] Can't check first message");
         return false;
     }
 
-    auto version               = json["version"].toString();
-    m_identifier               = json["identifier"].toString();
-    m_sendType                 = SendType(json["sendType"].toInt());
-    ActorId jsonFirstId        = ActorId(json["firstId"].toString().toStdString());
-    ActorId currentFirstId     = node->actorIndex()->firstId();
-    bool    isFirstIdsContains = currentFirstId == jsonFirstId;
-    bool    somethingEmpty     = jsonFirstId.isZero() || currentFirstId.isZero();
+    auto version                  = json["version"].toString();
+    m_identifier                  = json["identifier"].toString();
+    m_sendType                    = SendType(json["sendType"].toInt());
+    ActorId    jsonFirstId        = ActorId(json["firstId"].toString().toStdString());
+    ActorId    currentFirstId     = node->actorIndex()->firstId();
+    bool       isFirstIdsContains = currentFirstId == jsonFirstId;
+    bool       somethingEmpty     = jsonFirstId.is_zero() || currentFirstId.is_zero();
     QJsonArray connectionsArr     = json["connections"].toArray();
 
     qDebug() << QString("[Socket] First message:%1 | Current first:%2")
                     .arg(json.toJson())
                     .arg(currentFirstId.toQString());
 
-    if (currentFirstId.isZero() && !jsonFirstId.isZero()) { // TODO: remove hack
+    if (currentFirstId.is_zero() && !jsonFirstId.is_zero()) { // TODO: remove hack
         node->actorIndex()->setFirstId(jsonFirstId);
     }
 
@@ -101,8 +101,8 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
         return false;
     }
 
-    bool  flag        = false;
-    auto  connectionsLocked = *node->network()->connections();
+    bool flag              = false;
+    auto connectionsLocked = *node->network()->connections();
     std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&flag, this](SocketService *el) {
         flag = flag || (this != el && el->identifier() == m_identifier);
     });
@@ -153,7 +153,7 @@ QByteArray SocketService::generateFirstMessage() {
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
     if (pub.empty())
-        qFatal("Socket encrypt error");
+        eFatal("Socket encrypt error");
 
     auto result = ByteArray(priv.encrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
     m_bytesOutgoing += result.length();
@@ -162,7 +162,7 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (pub.empty())
-        qFatal("Socket decrypt error");
+        eFatal("Socket decrypt error");
 
     auto result = ByteArray(priv.decrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
     if (result.isEmpty())

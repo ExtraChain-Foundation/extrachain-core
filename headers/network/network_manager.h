@@ -49,8 +49,8 @@ private:
     };
 
     std::unordered_map<std::string, TrafficStats>
-    m_trafficStats;     // Container for storing traffic of each connection
-    std::shared_mutex m_mutex; // Mutex for thread safety in Singleton instance access
+                      m_trafficStats; // Container for storing traffic of each connection
+    std::shared_mutex m_mutex;        // Mutex for thread safety in Singleton instance access
 
     // Private constructor to prevent instantiation
     CalculateTraffic() {
@@ -94,8 +94,7 @@ struct NetworkReconnect {
     bool operator<(const NetworkReconnect& other) const {
         if (ip < other.ip)
             return true;
-        if (ip == other.ip)
-        {
+        if (ip == other.ip) {
             if (port < other.port)
                 return true;
             if (port == other.port)
@@ -185,7 +184,7 @@ private:
 
 public:
     SafePtr<QList<SocketService*>> connections() const;
-    bool                         serverStatus(Network::Protocol protocol) const;
+    bool                           serverStatus(Network::Protocol protocol) const;
 
 public slots:
     void removeConnection(const QString& identifier);
@@ -262,7 +261,7 @@ public:
     void sendFromCache();
     bool isActiveConnectionExists();
 
-    void messageReceived(const std::string& message, const std::string &ip, const std::string& identifier);
+    void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
 
     QString foundCurrentIdentifier(QString ip, quint16 port);
 
@@ -274,7 +273,7 @@ public:
         std::string           to_message_id = "",
         Config::Net::TypeSend typeSend      = Config::Net::TypeSend::All) {
         if (status == MessageStatus::Response && to_message_id.empty()) {
-            qFatal("[Network] Send message error: empty message id for response message");
+            eFatal("[Network] Send message error: empty message id for response message");
         }
         if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
             qDebug()
@@ -283,12 +282,12 @@ public:
         }
 
         if (node->accountController()->empty()) {
-            // qFatal("Can't send");
+            // eFatal("Can't send");
             return "";
         }
 
         auto&       mainActor = node->accountController()->mainActor();
-        MessageBody message   =
+        MessageBody message =
             make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
         auto        serialized = message.serialize();
         auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
@@ -296,11 +295,11 @@ public:
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];
             //            if (receiver_identifier.empty())
-            //                qFatal("Network send message error: receiver_identifier is empty");
+            //                eFatal("Network send message error: receiver_identifier is empty");
             // m_messages.erase(to_message_id);
         }
 
-        #ifdef QT_DEBUG
+#ifdef QT_DEBUG
         if (Network::networkDebug) {
             msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object        deserialized = oh.get();
@@ -313,7 +312,7 @@ public:
                     (std::stringstream() << deserialized).str())
                 .c_str();
         }
-        #endif
+#endif
 
         this->sendMessage(serialized + sign, typeSend, receiver_identifier, type, status);
 

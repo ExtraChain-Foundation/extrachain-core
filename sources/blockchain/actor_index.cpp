@@ -30,18 +30,18 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     , node(node) {
     DbConnector db(folderPath + "actors");
     bool        isDbOpen   = db.open();
-    bool        isDbCreate = db.createTable(Config::DataStorage::actorsTableCreate);
+    bool        isDbCreate = db.create_table(Config::DataStorage::actorsTableCreate);
 
-    if (!isDbOpen || !isDbCreate)
-        qFatal(
-            "%s",
-            QString("db for actors (open: %1, create: %2)").arg(isDbOpen, isDbCreate).toStdString().c_str());
+    if (!isDbOpen || !isDbCreate) {
+        eFatal("db for actors (open: {}, create: {})", isDbOpen, isDbCreate);
+    }
 
     records = db.count("Actors");
     qDebug() << "[ActorIndex] Count:" << records;
 }
+
 Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
-    if (id.isZero()) {
+    if (id.is_zero()) {
         qDebug() << "[ActorIndex] Error: try get actor with id =" << id;
         return Actor<KeyPublic>();
     }
@@ -89,8 +89,8 @@ bool ActorIndex::validateTx(const Transaction &tx) {
 void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messageId) {
     // receive id
     // create response message
-    if (actorId.isZero())
-        qFatal("handleGetActor: empty actor");
+    if (actorId.is_zero())
+        eFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
         node->network()->send_message(
@@ -194,18 +194,18 @@ QString ActorIndex::buildFilePath(const ActorId &id) const {
 }
 
 std::string ActorIndex::actorPath(const ActorId &id) const {
-    const std::string &idStd = id.toString();
+    const std::string &idStd = id.to_string();
     return folderPath + idStd.substr(idStd.length() - SECTION_NAME_SIZE) + '/' + idStd;
 }
 
 void ActorIndex::setFirstId(const ActorId &value) {
-    if (!m_firstId.isZero()) {
+    if (!m_firstId.is_zero()) {
         if (firstId() != value) {
             auto message = QString("Another FirstId: %1 != %2")
                                .arg(firstId().toQString())
                                .arg(value.toQString())
                                .toStdString();
-            qFatal("%s", message.c_str());
+            eFatal("%s", message.c_str());
         }
         return;
     }
@@ -220,7 +220,7 @@ std::size_t ActorIndex::getRecords() const {
 
 int ActorIndex::add(const ActorId &id, const QByteArray &data) {
     // if (id <= 1000)
-    //     qFatal("Try to add actor with id %s", id.toByteArray().constData());
+    //     eFatal("Try to add actor with id %s", id.toByteArray().constData());
 
     QString path = buildFilePath(id);
     QFile   file(path);
@@ -244,11 +244,11 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 }
 
 void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
-    if (actorId.isZero()) {
-        qFatal("Can't get actor by zero id");
+    if (actorId.is_zero()) {
+        eFatal("Can't get actor by zero id");
     }
 
-    node->network()->send_message(actorId.toString(), MessageType::Actor, MessageStatus::Request);
+    node->network()->send_message(actorId.to_string(), MessageType::Actor, MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -266,7 +266,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 
 int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
     int  result  = this->add(actor.id(), actor.toJson());
-    auto actorId = actor.id().toString();
+    auto actorId = actor.id().to_string();
 
     if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
         this->records++;
@@ -276,7 +276,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
             Config::DataStorage::actorsTable,
             { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
-            qFatal("db actor insert error");
+            eFatal("db actor insert error");
 
         node->dfs()->initializeActor(actor.id());
 
