@@ -32,10 +32,11 @@
 #include <QtNetwork/QNetworkAddressEntry>
 
 #include "extrachain_global.h"
-#include "cpp-base64/base64.h"
-#include "utils/bignumber_float.h"
-#include <msgpack.hpp>
 #include "utils/exc_logs.h"
+#include "utils/bignumber_float.h"
+
+#include <msgpack.hpp>
+#include "exc_msgpack_describe.h"
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/join.hpp>
@@ -54,17 +55,9 @@
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
+#include "utils/exc_utils_base64.h"
+
 #define FORMAT_ENUM(E)                                                                                       \
-    template <>                                                                                              \
-    struct fmt::formatter<E> : formatter<string_view> {                                                      \
-        template <typename FormatContext>                                                                    \
-        auto format(E Enum, FormatContext &ctx) const {                                                      \
-            static_assert(std::is_enum_v<E>);                                                                \
-            string_view enum_name  = magic_enum::enum_type_name<E>();                                        \
-            string_view value_name = magic_enum::enum_name(Enum);                                            \
-            return formatter<string_view>::format(fmt::format("{}::{}", enum_name, value_name), ctx);        \
-        }                                                                                                    \
-    };                                                                                                       \
     inline QDebug operator<<(QDebug debug, const E &value) {                                                 \
         QDebugStateSaver saver(debug);                                                                       \
         debug.nospace().noquote() << magic_enum::enum_type_name<E>()                                         \
@@ -178,7 +171,7 @@ public:
     }
 
     static ByteArray fromBase64(const std::string &encoded) {
-        return ByteArray(base64_decode(encoded));
+        return ByteArray(Utils::from_base64(encoded));
     }
 
     static ByteArray fromBase64(const QString &encoded) {
@@ -186,7 +179,7 @@ public:
     }
 
     std::string toBase64() const {
-        return base64_encode(toString());
+        return Utils::to_base64(toString());
     }
 
     QString toBase64QString() const {
@@ -350,7 +343,7 @@ namespace Net {
 } // namespace Net
 
 namespace ExtraCoin {
-    static const uint64_t totalSupply = 300000000;
+    static const std::uint64_t totalSupply = 300000000;
 } // namespace ExtraCoin
 } // namespace Config
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
@@ -358,10 +351,10 @@ FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
-static const int FILE_NOT_EXISTS = 0;
+static const int FILE_NOT_EXISTS     = 0;
 static const int FILE_ALREADY_EXISTS = 101;
 static const int FILE_IS_NOT_OPENED  = 102;
-static const int UNDEFINED  = 103;
+static const int UNDEFINED           = 103;
 
 // Blocks
 // static const int BLOCK_IS_NOT_VALID = 201;
@@ -389,17 +382,16 @@ bool isEmpty(std::string_view str_view);
 namespace MessagePack {
 template <class T>
 std::string serialize(const T &t) {
-    std::stringstream ss;
-    msgpack::pack(ss, t);
-    ss.seekg(0);
-    return ss.str();
+    msgpack::sbuffer buffer;
+    msgpack::pack(buffer, t);
+    return std::string(buffer.data(), buffer.size());
 }
 
 template <class T, class StringContainer>
 T deserialize(const StringContainer &data, std::size_t size = 0) {
     if (Serialization::isEmpty(data)) {
         qDebug() << "[MessagePack] Empty deserialize" << typeid(T).name();
-        qFatal("[MessagePack] Empty deserialize");
+        eFatal("[MessagePack] Empty deserialize");
         return T();
     }
 
@@ -414,7 +406,7 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 
     auto qt_bytes = QByteArray::fromStdString(data.data());
     qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
-    qFatal("[MessagePack] Incorrect deserialize");
+    eFatal("[MessagePack] Incorrect deserialize");
     return T();
 }
 
@@ -482,14 +474,14 @@ static const std::string tokenTableCreate =
     "color         TEXT  NOT NULL, "
     "smart         TEXT  NOT NULL);";
 namespace Fields {
-    static const std::string actorId = "actorId";
-    static const std::string name = "name";
-    static const std::string ticker = "ticker";
-    static const std::string count = "count";
-    static const std::string owner = "owner";
-    static const std::string color = "color";
-    static const std::string smart = "smart";
-    static const std::vector<std::string> fields = { name, ticker, count, owner, color, smart };
+    static const std::string              actorId = "actorId";
+    static const std::string              name    = "name";
+    static const std::string              ticker  = "ticker";
+    static const std::string              count   = "count";
+    static const std::string              owner   = "owner";
+    static const std::string              color   = "color";
+    static const std::string              smart   = "smart";
+    static const std::vector<std::string> fields  = { name, ticker, count, owner, color, smart };
 }
 }
 
@@ -497,15 +489,15 @@ namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
 const static int              ReconnectInterval = 5000;
 
-static uint64_t currentDateSecs() {
+static std::uint64_t currentDateSecs() {
     using namespace std::chrono;
-    uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return secs;
 }
 
-static uint64_t currentDateMs() {
+static std::uint64_t currentDateMs() {
     using namespace std::chrono;
-    uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
     return ms;
 }
 
@@ -514,10 +506,10 @@ bool vector_contains(const std::vector<T> &vec, const T &element) {
     return std::find(vec.begin(), vec.end(), element) != vec.end();
 }
 
-EXTRACHAIN_EXPORT QString extrachainVersion();
+EXTRACHAIN_EXPORT std::string extrachainVersion();
 EXTRACHAIN_EXPORT std::string sodiumVersion();
-EXTRACHAIN_EXPORT QString     boostVersion();
-EXTRACHAIN_EXPORT QString     boostAsioVersion();
+EXTRACHAIN_EXPORT std::string boostVersion();
+EXTRACHAIN_EXPORT std::string boostAsioVersion();
 
 enum PrintDebug {
     Off = 0,
@@ -625,19 +617,7 @@ std::string hexStringToByte(const std::string &data);
 std::string bytesEncodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
 std::string bytesDecodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
 
-template <typename Container>
-std::string bytesEncodeVec(const Container &data, HashEncode encode = HashEncode::Base64) {
-    return base64_encode(std::string(reinterpret_cast<const char *>(data.data()), data.size()));
-}
-
-template <size_t N>
-std::array<uint8_t, N> bytesDecodeVec(const std::string &data, HashEncode encode = HashEncode::Base64) {
-    auto decoded = base64_decode(data);
-
-    std::array<uint8_t, N> result {};
-    std::copy_n(decoded.data(), std::min(N, decoded.size()), result.begin());
-    return result;
-}
+std::string generate_random_hex(size_t length);
 
 template <typename T>
 concept Container = std::ranges::range<T>;
@@ -712,16 +692,16 @@ EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 
 
 namespace DataStorage {
 // Main blockchain folder
-static const QString BLOCKCHAIN = "blockchain";
+static const std::string BLOCKCHAIN = "blockchain";
 
 // Temporary folder
-static const QString TMP_FOLDER        = "tmp";
-static const QString TMP_GENESIS_BLOCK = "tmp/genesis_block";
+static const std::string TMP_FOLDER        = "tmp";
+static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
 
 // Folder with blocks
-static const QString BLOCKCHAIN_INDEX        = "blockchain/index";
-static const QString ACTOR_INDEX_FOLDER_NAME = "actors";
-static const QString BLOCK_INDEX_FOLDER_NAME = "blocks";
+static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
+static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
+static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
 
 // Dfs
 static const int DATA_OFFSET = 512;

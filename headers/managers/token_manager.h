@@ -4,7 +4,7 @@
 #include <QDebug>
 #include <QObject>
 
-#include "datastorage/actor.h"
+#include "blockchain/actor.h"
 #include "utils/db_connector.h"
 
 class ExtraChainNode;
@@ -31,7 +31,7 @@ struct TokenData {
     }
 
     QJsonDocument toJsonDocument();
-    DBRow         toDBRow();
+    DbRow         toDBRow();
 };
 
 enum class CreateTokenError {

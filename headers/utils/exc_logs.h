@@ -37,12 +37,15 @@
     #include <crtdbg.h>
 #endif
 
+#include "utils/exc_logs_filter.h"
+
 enum class LogLevel {
     Debug,
     Info,
     Warning,
     Critical,
-    Fatal
+    Fatal,
+    Success
 };
 
 class Logger {
@@ -52,6 +55,10 @@ class Logger {
     bool              file_output_enabled = true;
     const std::string logs_directory      = "logs";
     std::thread::id   main_thread_id;
+
+    FileFilter file_filter;
+    bool       filter_enabled = false;
+    LogModule  active_modules = LogModule::All;
 
     static std::string create_log_filename() {
         auto    now   = std::chrono::system_clock::now();
@@ -89,6 +96,7 @@ public:
         main_thread_id = std::this_thread::get_id();
         open_log_file();
     }
+
     ~Logger() {
         if (log_file.is_open())
             log_file.close();
@@ -97,8 +105,62 @@ public:
     void set_debug(bool enabled) {
         debug_enabled = enabled;
     }
+
     bool is_debug() const {
         return debug_enabled;
+    }
+
+    void enable_filter(bool enable = true) {
+        filter_enabled = enable;
+    }
+
+    void setInverseMode(bool inverse) {
+        file_filter.setInverseMode(inverse);
+    }
+
+    void set_active_modules(LogModule modules) {
+        active_modules = modules;
+    }
+
+    void add_active_module(LogModule module) {
+        active_modules = active_modules | module;
+    }
+
+    void addExcludePattern(std::string_view pattern) {
+        file_filter.addExcludePattern(pattern);
+    }
+
+    void clearExcludePatterns() {
+        file_filter.clearExcludePatterns();
+    }
+
+    void addCustomPattern(std::string_view pattern) {
+        file_filter.addCustomPattern(pattern);
+    }
+
+    void clearCustomPatterns() {
+        file_filter.clearCustomPatterns();
+    }
+
+    bool should_log(std::string_view file) const {
+        if (!filter_enabled)
+            return true;
+
+        size_t           pos      = file.find_last_of("/\\");
+        std::string_view filename = (pos == std::string_view::npos) ? file : file.substr(pos + 1);
+
+        // First check custom patterns if any exist
+        if (!file_filter.getCustomPatterns().empty()) {
+            return file_filter.matchesCustomPatterns(filename) ^ file_filter.is_inverse_mode();
+        }
+
+        // If no custom patterns, use module filtering
+        LogModule file_module = file_filter.determineModule(filename);
+        if (active_modules == LogModule::All) {
+            return !file_filter.is_inverse_mode(); // true for normal mode, false for inverse
+        }
+
+        return (static_cast<int>(file_module & active_modules) != 0) ^ file_filter.is_inverse_mode();
     }
 
     void set_file_output(bool enabled) {
@@ -199,6 +261,7 @@ inline bool should_log(LogLevel level) {
     case LogLevel::Debug:
     case LogLevel::Warning:
     case LogLevel::Critical:
+    case LogLevel::Success:
         return Logger::instance().is_debug();
     default:
         return false;
@@ -217,6 +280,8 @@ inline fmt::text_style get_level_style(LogLevel level) {
         return fmt::fg(fmt::color::orange_red);
     case LogLevel::Fatal:
         return fmt::emphasis::bold | fmt::fg(fmt::color::red);
+    case LogLevel::Success:
+        return fmt::fg(fmt::color::green);
     default:
         return fmt::text_style();
     }
@@ -234,6 +299,8 @@ inline std::string_view get_level_name(LogLevel level) {
         return "Critical";
     case LogLevel::Fatal:
         return "Fatal";
+    case LogLevel::Success:
+        return "Success";
     default:
         return "Unknown";
     }
@@ -242,10 +309,14 @@ inline std::string_view get_level_name(LogLevel level) {
 template <typename... Args>
 void println_impl(
     LogLevel                    level,
-    const std::source_location& loc,
+    std::string_view            file,
+    uint32_t                    line,
     fmt::format_string<Args...> format_str,
     Args&&... args) {
     if (!should_log(level))
+        return;
+
+    if (!Logger::instance().should_log(file))
         return;
 
     std::string message    = fmt::format(format_str, std::forward<Args>(args)...);
@@ -258,8 +329,8 @@ void println_impl(
             stdout,
             "{} [file:/{}:{}] [{}] {}\n",
             get_current_time(),
-            get_filename(loc.file_name()),
-            loc.line(),
+            get_filename(file),
+            line,
             get_thread_id(),
             message);
     } else {
@@ -269,11 +340,25 @@ void println_impl(
             "{} [{}] [file:/{}:{}] [{}] {}\n",
             get_current_time(),
             level_name,
-            get_filename(loc.file_name()),
-            loc.line(),
+            get_filename(file),
+            line,
             get_thread_id(),
             message);
     }
+
+#if defined(Q_OS_WIN)
+    if (IsDebuggerPresent()) {
+        auto log = fmt::format(
+            "{} [file:/{}:{}] [{}] {}\n",
+            get_current_time(),
+            get_filename(file),
+            line,
+            get_thread_id(),
+            message);
+        OutputDebugStringA(log.c_str());
+        // OutputDebugStringA("\n");
+    }
+#endif
 
     // File output
     if (Logger::instance().is_file_output()) {
@@ -282,8 +367,8 @@ void println_impl(
             file_message = fmt::format(
                 "{} [file:/{}:{}] [{}] {}\n",
                 get_full_time(),
-                get_filename(loc.file_name()),
-                loc.line(),
+                get_filename(file),
+                line,
                 get_thread_id(),
                 message);
         } else {
@@ -291,8 +376,8 @@ void println_impl(
                 "{} [{}] [file:/{}:{}] [{}] {}\n",
                 get_full_time(),
                 level_name,
-                get_filename(loc.file_name()),
-                loc.line(),
+                get_filename(file),
+                line,
                 get_thread_id(),
                 message);
         }
@@ -300,6 +385,16 @@ void println_impl(
     }
 
     fflush(stdout);
+}
+
+// source_location wrapper
+template <typename... Args>
+void println_impl(
+    LogLevel                    level,
+    const std::source_location& loc,
+    fmt::format_string<Args...> format_str,
+    Args&&... args) {
+    println_impl(level, loc.file_name(), loc.line(), format_str, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
@@ -326,7 +421,10 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 #define eWarning(...) ::detail::println_impl(LogLevel::Warning, std::source_location::current(), __VA_ARGS__)
 #define eCritical(...)                                                                                       \
     ::detail::println_impl(LogLevel::Critical, std::source_location::current(), __VA_ARGS__)
-#define eFatal(...) ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
-#define eLog(...)   eDebug(__VA_ARGS__)
+#define eFatal(...)   ::detail::fatal_impl(std::source_location::current(), __VA_ARGS__)
+#define eSuccess(...) ::detail::println_impl(LogLevel::Success, std::source_location::current(), __VA_ARGS__)
+#define eLog(...)     eDebug(__VA_ARGS__)
+
+#include "utils/exc_logs_extra.h"
 
 #endif // EXC_LOGS_H

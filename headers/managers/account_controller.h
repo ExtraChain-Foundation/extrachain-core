@@ -22,8 +22,8 @@
 
 #include <QDebug>
 
-#include "datastorage/actor.h"
-#include "datastorage/private_profile.h"
+#include "blockchain/actor.h"
+#include "blockchain/private_profile.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;

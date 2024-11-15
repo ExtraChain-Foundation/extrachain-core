@@ -7,7 +7,7 @@ WebSocketService::WebSocketService(
     const bool      isConstant,
     const bool      needToDelete)
     : SocketService(node, parent) {
-    m_isConstant = isConstant;
+    m_isConstant   = isConstant;
     m_needToDelete = needToDelete;
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
@@ -38,7 +38,7 @@ bool WebSocketService::isActive() const {
 
 void WebSocketService::open(const QString &ip, quint16 port) {
     if (m_ws->isValid()) {
-        qFatal("[WS] Already opened");
+        eFatal("[WS] Already opened");
     } else {
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         qDebug() << "[WS] Open" << url;
@@ -80,7 +80,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 
         pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
         if (pub.empty()) { // or incorrect
-            qFatal("Incorrect public key in socket");
+            eFatal("Incorrect public key in socket");
         }
 
         QJsonObject jsonAnswer;
@@ -89,16 +89,18 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         jsonAnswer["pub"]              = ByteArray(priv.publicKey()).toBase64QString();
 
         auto firstMessage  = generateFirstMessage();
-        auto prepared     = prepareSendMessage(firstMessage);
+        auto prepared      = prepareSendMessage(firstMessage);
         jsonAnswer["data"] = ByteArray(prepared).toBase64QString();
 
         QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
 
         m_activated = true;
-        QTimer::singleShot(1000, [this] {
-            qDebug() << "[Socket] Emit activation after timeout:" << this << ip() << protocol();
+        m_timer.setSingleShot(true);
+        connect(&m_timer, &QTimer::timeout, this, [this] {
+            eLog("[Socket] Emit activation after timeout: {} {} {}", fmt::ptr(this), ip(), protocol());
             emit activated();
         });
+        m_timer.start(1000);
 
         m_ws->sendTextMessage(result);
         m_ws->flush();
@@ -133,13 +135,13 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
     if (!m_activated)
-        qFatal("[WS] Binary: not activated");
+        eFatal("[WS] Binary: not activated");
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), m_ip.toStdString(), m_identifier.toStdString());
     } else {
-        qFatal("[WS] Messsage is empty after prepare");
+        eFatal("[WS] Messsage is empty after prepare");
     }
 }
 
@@ -149,7 +151,7 @@ void WebSocketService::sendMessage(const QByteArray &data) {
         return;
     }
     if (data.isEmpty())
-        qFatal("[WS] Error send size");
+        eFatal("[WS] Error send size");
 
     emit sendMessageInternal(data);
 }

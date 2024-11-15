@@ -1,8 +1,8 @@
 #ifndef ISOCKETSERVICE_H
 #define ISOCKETSERVICE_H
 
-#include "enc/key_private.h"
-#include "enc/key_public.h"
+#include "encryption/key_private.h"
+#include "encryption/key_public.h"
 #include "utils/exc_utils.h"
 
 class ExtraChainNode;

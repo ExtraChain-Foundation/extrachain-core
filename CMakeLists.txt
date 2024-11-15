@@ -22,11 +22,13 @@ endif()
 message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTEND_VARIANT} | build: ${CMAKE_BUILD_TYPE}")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    message("Use flags")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpedantic -Werror=return-type -Werror=implicit-fallthrough")
     if (UNIX)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     endif (UNIX)
+endif()
+if(MSVC)
+    # add_compile_options(/W4 /analyze)
 endif()
 
 
@@ -45,36 +47,35 @@ set(EXTRACHAIN_CORE_INCLUDES
     )
 
 set(EXTRACHAIN_CORE_SOURCES
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/dfs_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/fragment_storage.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/historical_chain.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/actor.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/blockchain.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/genesis_block.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/block_variant.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/actorindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/index/blockindex.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/transaction.h
-#    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/reward_transaction.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/dfs/permission_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/datastorage/private_profile.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/enc/enc_tools.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_private.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/enc/key_public.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_sql.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/genesis_block.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_variant.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_index.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/connections_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/cache_balance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/transaction_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/cache_balance_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
-    # ${CMAKE_CURRENT_LIST_DIR}/headers/managers/restApiServerManager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_service.h
@@ -89,33 +90,37 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/dfs_utils.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_utils_base64.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/dfs_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/fragment_storage.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/historical_chain.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/actor.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/blockchain.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/genesis_block.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/block_variant.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/actorindex.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/index/blockindex.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/transaction.cpp
-#    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/reward_transaction.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/dfs/permission_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/datastorage/private_profile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/enc/enc_tools.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_private.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/enc/key_public.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_sql.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/genesis_block.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_variant.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/private_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/cache_balance_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/connections_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
@@ -123,10 +128,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/transaction_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/cache_balance_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
-    # ${CMAKE_CURRENT_LIST_DIR}/sources/managers/restApiServerManager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
@@ -137,8 +140,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     )

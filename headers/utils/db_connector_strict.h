@@ -24,22 +24,24 @@
 #include "sqlite3.h"
 #include "boost/describe.hpp"
 
-class DBConnectorStrict : public DBConnector {
+class DBConnectorStrict : public DbConnector {
 public:
-    explicit DBConnectorStrict(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular) : DBConnector(filePath, type) {
+    explicit DBConnectorStrict(const std::string& filePath, DbConnectorType type = DbConnectorType::Regular)
+        : DbConnector(filePath, type) {
     }
-    DBConnectorStrict(DBConnectorStrict &&rhs) : DBConnector(std::move(rhs)) {
+    DBConnectorStrict(DBConnectorStrict&& rhs)
+        : DbConnector(std::move(rhs)) {
     }
-    ~DBConnectorStrict()   =default;
+    ~DBConnectorStrict() = default;
 
-    DBConnectorStrict(const DBConnectorStrict&) = delete;
+    DBConnectorStrict(const DBConnectorStrict&)            = delete;
     DBConnectorStrict& operator=(const DBConnectorStrict&) = delete;
-    DBConnectorStrict& operator=(DBConnectorStrict&&) = delete;
+    DBConnectorStrict& operator=(DBConnectorStrict&&)      = delete;
 
-    template<typename T>
+    template <typename T>
     bool createTableStrict(const std::string& tableName, bool ifNotExists = true) {
-        if (!isOpen()) {
-            qFatal("[DBConnector] Database not open");
+        if (!is_open()) {
+            eFatal("[DBConnector] Database not open");
         }
 
         if constexpr (!boost::describe::has_describe_members<T>::value) {
@@ -47,9 +49,8 @@ public:
             return false;
         }
 
-        std::string query = fmt::format("CREATE TABLE {}{} (",
-                                        ifNotExists ? "IF NOT EXISTS " : "",
-                                        tableName);
+        std::string query =
+            fmt::format("CREATE TABLE {}{} (", ifNotExists ? "IF NOT EXISTS " : "", tableName);
 
         bool isFirst = true;
         boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
@@ -65,27 +66,21 @@ public:
                 std::string sqlType;
                 if constexpr (std::is_same_v<FieldType, std::string>) {
                     sqlType = "TEXT";
-                }
-                else if constexpr (std::is_same_v<FieldType, int> ||
-                                   std::is_same_v<FieldType, bool> ||
-                                   std::is_same_v<FieldType, char> ||
-                                   std::is_same_v<FieldType, short> ||
-                                   std::is_same_v<FieldType, unsigned short> ||
-                                   std::is_same_v<FieldType, unsigned int>) {
+                } else if constexpr (
+                    std::is_same_v<FieldType, int> || std::is_same_v<FieldType, bool>
+                    || std::is_same_v<FieldType, char> || std::is_same_v<FieldType, short>
+                    || std::is_same_v<FieldType, unsigned short> || std::is_same_v<FieldType, unsigned int>) {
                     sqlType = "INT";
-                }
-                else if constexpr (std::is_same_v<FieldType, long long> ||
-                                   std::is_same_v<FieldType, unsigned long long>) {
+                } else if constexpr (
+                    std::is_same_v<FieldType, long long> || std::is_same_v<FieldType, unsigned long long>) {
                     sqlType = "INTEGER";
-                }
-                else if constexpr (std::is_floating_point_v<FieldType>) {
+                } else if constexpr (std::is_floating_point_v<FieldType>) {
                     sqlType = "REAL";
-                }
-                else if constexpr (magic::is_uint8_array<FieldType>::value ||
-                                   std::is_same_v<FieldType, std::vector<uint8_t>>) {
+                } else if constexpr (
+                    magic::is_uint8_array<FieldType>::value
+                    || std::is_same_v<FieldType, std::vector<uint8_t>>) {
                     sqlType = "BLOB";
-                }
-                else {
+                } else {
                     sqlType = "TEXT";
                 }
 
@@ -96,7 +91,7 @@ public:
 
         dbmutex.lock();
         char* errMsg = nullptr;
-        int rc = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
+        int   rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
 
         if (rc != SQLITE_OK) {
             qDebug() << "[DBConnector] CreateTableStrict failed:" << (errMsg ? errMsg : "unknown error");
@@ -116,99 +111,96 @@ public:
         return true;
     }
 
-
-    template<typename T>
+    template <typename T>
     bool insertStrict(const std::string& tableName, const T& data) {
         return this->implementationInsertStrict(tableName, data, false);
     }
 
-    template<typename T>
+    template <typename T>
     bool replaceStrict(const std::string& tableName, const T& data) {
         return this->implementationInsertStrict(tableName, data, true);
     }
 
 private:
-
-    template<typename T>
+    template <typename T>
     bool implementationPrepareStrict(const std::string& tableName, const T& data, sqlite3_stmt* stmt) {
         if constexpr (!boost::describe::has_describe_members<T>::value) {
             return false;
         }
 
-        auto columns = tableColumns(tableName);
-        int fieldNum = 1;
-        bool success = true;
+        auto columns  = table_columns(tableName);
+        int  fieldNum = 1;
+        bool success  = true;
 
-        boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-            [&](auto D) {
-                if (!success) {
-                    qDebug() << "WGY";
-                    return;
-                }
+        boost::mp11::mp_for_each<
+            boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
+            if (!success) {
+                qDebug() << "WGY";
+                return;
+            }
 
-                std::string fieldName = magic::detail::clean_field_name(D.name);
+            std::string fieldName = magic::detail::clean_field_name(D.name);
 
-                auto it = std::find_if(columns.begin(), columns.end(),
-                                       [&fieldName](const DBColumn& column) {
-                                           return column.name == fieldName;
-                                       });
-
-                if (it == columns.end()) {
-                    qDebug() << "[DBConnector] ImplementationPrepareStrict: Column not found:" << fieldName.c_str();
-                    success = false;
-                    return;
-                }
-
-                const auto& value = magic::invoke_member(data, D.pointer);
-                qDebug () << fieldName << value;
-                int rc;
-
-                if constexpr (std::is_same_v<std::decay_t<decltype(value)>, std::string>) {
-                    qDebug() << typeid(value).name() << value << value.size() << value.length();
-                    rc = sqlite3_bind_text(stmt, fieldNum,
-                                           value.c_str(),
-                                           int(value.length()),
-                                           SQLITE_TRANSIENT);
-                }
-                else if constexpr (std::is_integral_v<std::decay_t<decltype(value)>>) {
-                    if (it->type == "INT") {
-                        rc = sqlite3_bind_int(stmt, fieldNum, static_cast<int>(value));
-                    } else if (it->type == "INTEGER") {
-                        rc = sqlite3_bind_int64(stmt, fieldNum, static_cast<sqlite3_int64>(value));
-                    } else {
-                        success = false;
-                        return;
-                    }
-                }
-                else if constexpr (std::is_floating_point_v<std::decay_t<decltype(value)>>) {
-                    if (it->type == "REAL" || it->type == "NUMERIC") {
-                        rc = sqlite3_bind_double(stmt, fieldNum, static_cast<double>(value));
-                    } else {
-                        success = false;
-                        return;
-                    }
-                }
-                else if constexpr (magic::is_uint8_array<std::decay_t<decltype(value)>>::value ||
-                                   std::is_same_v<std::decay_t<decltype(value)>, std::vector<uint8_t>>) {
-                    if (it->type == "BLOB") {
-                        rc = sqlite3_bind_blob(stmt, fieldNum, value.data(), int(value.size()), SQLITE_TRANSIENT);
-                    } else {
-                        success = false;
-                        return;
-                    }
-                }
-                else {
-                    std::string serialized = magic::magic(value);
-                    rc = sqlite3_bind_text(stmt, fieldNum, serialized.c_str(), int(serialized.size()), SQLITE_STATIC);
-                }
-
-                if (rc != SQLITE_OK) {
-                    success = false;
-                    return;
-                }
-
-                fieldNum++;
+            auto it = std::find_if(columns.begin(), columns.end(), [&fieldName](const DBColumn& column) {
+                return column.name == fieldName;
             });
+
+            if (it == columns.end()) {
+                qDebug() << "[DBConnector] ImplementationPrepareStrict: Column not found:"
+                         << fieldName.c_str();
+                success = false;
+                return;
+            }
+
+            const auto& value = magic::invoke_member(data, D.pointer);
+            qDebug() << fieldName << value;
+            int rc;
+
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, std::string>) {
+                qDebug() << typeid(value).name() << value << value.size() << value.length();
+                rc = sqlite3_bind_text(stmt, fieldNum, value.c_str(), int(value.length()), SQLITE_TRANSIENT);
+            } else if constexpr (std::is_integral_v<std::decay_t<decltype(value)>>) {
+                if (it->type == "INT") {
+                    rc = sqlite3_bind_int(stmt, fieldNum, static_cast<int>(value));
+                } else if (it->type == "INTEGER") {
+                    rc = sqlite3_bind_int64(stmt, fieldNum, static_cast<sqlite3_int64>(value));
+                } else {
+                    success = false;
+                    return;
+                }
+            } else if constexpr (std::is_floating_point_v<std::decay_t<decltype(value)>>) {
+                if (it->type == "REAL" || it->type == "NUMERIC") {
+                    rc = sqlite3_bind_double(stmt, fieldNum, static_cast<double>(value));
+                } else {
+                    success = false;
+                    return;
+                }
+            } else if constexpr (
+                magic::is_uint8_array<std::decay_t<decltype(value)>>::value
+                || std::is_same_v<std::decay_t<decltype(value)>, std::vector<uint8_t>>) {
+                if (it->type == "BLOB") {
+                    rc = sqlite3_bind_blob(stmt, fieldNum, value.data(), int(value.size()), SQLITE_TRANSIENT);
+                } else {
+                    success = false;
+                    return;
+                }
+            } else {
+                std::string serialized = magic::magic(value);
+                rc                     = sqlite3_bind_text(
+                    stmt,
+                    fieldNum,
+                    serialized.c_str(),
+                    int(serialized.size()),
+                    SQLITE_STATIC);
+            }
+
+            if (rc != SQLITE_OK) {
+                success = false;
+                return;
+            }
+
+            fieldNum++;
+        });
 
         if (!success) {
             sqlite3_finalize(stmt);
@@ -218,10 +210,10 @@ private:
         return true;
     }
 
-    template<typename T>
+    template <typename T>
     bool implementationInsertStrict(const std::string& tableName, const T& data, bool isReplace = false) {
-        if (!isOpen()) {
-            qFatal("[DBConnector] Database not open");
+        if (!is_open()) {
+            eFatal("[DBConnector] Database not open");
         }
 
         if constexpr (!boost::describe::has_describe_members<T>::value) {
@@ -236,7 +228,8 @@ private:
             });
 
         if (fields.empty()) {
-            qDebug() << "[DBConnector]" << file().c_str() << "(false): [ImplementationInsertStrict] No fields found";
+            qDebug() << "[DBConnector]" << file().c_str()
+                     << "(false): [ImplementationInsertStrict] No fields found";
             return false;
         }
 
@@ -246,7 +239,7 @@ private:
         }
 
         std::string queryType = isReplace ? "REPLACE" : "IGNORE";
-        std::string query = fmt::format("INSERT OR {} INTO {} ", queryType, tableName);
+        std::string query     = fmt::format("INSERT OR {} INTO {} ", queryType, tableName);
 
         std::string fieldsStr;
         std::string values;
@@ -263,7 +256,7 @@ private:
 
         dbmutex.lock();
         sqlite3_stmt* stmt = NULL;
-        int rc = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+        int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
         dbmutex.unlock();
 
         if (rc != SQLITE_OK) {

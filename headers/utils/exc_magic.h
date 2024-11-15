@@ -31,11 +31,16 @@
 #include <string>
 #include <vector>
 #include <array>
-
-#include "utils/exc_logs.h"
+#include <optional>
+#include <memory>
 #include "magic_enum.hpp"
-#include "cpp-base64/base64.h"
+#include "utils/exc_utils_base64.h"
+// #include "utils/exc_logs.h"
 
+template <>
+struct fmt::formatter<boost::json::object> : fmt::ostream_formatter { };
+template <>
+struct fmt::formatter<boost::json::array> : fmt::ostream_formatter { };
 template <>
 struct fmt::formatter<boost::json::value> : fmt::ostream_formatter { };
 
@@ -45,6 +50,39 @@ template <typename T>
 std::string magic(const T& obj);
 
 // Type traits
+template <typename T>
+struct is_optional : std::false_type { };
+
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type { };
+
+template <typename T>
+inline constexpr bool is_optional_v = is_optional<T>::value;
+
+template <typename T>
+struct is_shared_ptr : std::false_type { };
+
+template <typename T>
+struct is_shared_ptr<std::shared_ptr<T>> : std::true_type { };
+
+template <typename T>
+inline constexpr bool is_shared_ptr_v = is_shared_ptr<T>::value;
+
+template <typename T>
+struct is_unique_ptr : std::false_type { };
+
+template <typename T>
+struct is_unique_ptr<std::unique_ptr<T>> : std::true_type { };
+
+template <typename T>
+inline constexpr bool is_unique_ptr_v = is_unique_ptr<T>::value;
+
+template <typename T>
+struct is_smart_ptr : std::bool_constant<is_shared_ptr_v<T> || is_unique_ptr_v<T>> { };
+
+template <typename T>
+inline constexpr bool is_smart_ptr_v = is_smart_ptr<T>::value;
+
 template <typename T, typename = void>
 struct is_container : std::false_type { };
 
@@ -87,6 +125,16 @@ struct custom_magic {
     static std::string read(const T& value) {
         if constexpr (boost::describe::has_describe_members<T>::value) {
             return magic(value);
+        } else if constexpr (is_optional<T>::value) {
+            if (!value.has_value()) {
+                return "null";
+            }
+            return read(value.value());
+        } else if constexpr (is_smart_ptr_v<T>) {
+            if (!value) {
+                return "null";
+            }
+            return read(*value);
         } else {
             std::ostringstream oss;
             oss << value;
@@ -100,7 +148,7 @@ struct custom_magic<std::vector<uint8_t>>;
 
 // Member access
 template <typename T, typename M>
-auto invoke_member(const T& obj, M member) {
+auto& invoke_member(const T& obj, M member) {
     if constexpr (std::is_member_function_pointer_v<M>) {
         return (obj.*member)();
     } else {
@@ -140,7 +188,20 @@ namespace detail {
 
     template <typename T>
     std::string to_string(const T& value) {
-        if constexpr (std::is_same_v<T, std::string>) {
+        if constexpr (is_unique_ptr_v<T>) {
+            if (!value)
+                return "null";
+            return to_string(*value);
+        } else if constexpr (is_shared_ptr_v<T>) {
+            if (!value)
+                return "null";
+            return to_string(*value);
+        } else if constexpr (is_optional<T>::value) {
+            if (!value.has_value()) {
+                return "null";
+            }
+            return to_string(value.value());
+        } else if constexpr (std::is_same_v<T, std::string>) {
             return '"' + value + '"';
         } else if constexpr (std::is_enum_v<T>) {
             if constexpr (std::is_scoped_enum_v<T>) {
@@ -155,7 +216,7 @@ namespace detail {
             auto        is_empty = std::ranges::all_of(raw, [&value](const auto& x) {
                 return x == '\0';
             });
-            return '"' + (is_empty ? "empty" : base64_encode(raw)) + '"';
+            return '"' + (is_empty ? "empty" : Utils::to_base64(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
             if constexpr (is_associative_container<T>::value) {
                 std::string result = "{ ";
@@ -236,21 +297,29 @@ namespace detail {
     template <std::size_t N>
     boost::json::value array_uint8_to_json(const std::array<uint8_t, N>& arr) {
         std::string raw(reinterpret_cast<const char*>(arr.data()), N);
-        return boost::json::value(base64_encode(raw));
+        return boost::json::value(Utils::to_base64(raw));
     }
 
     template <std::size_t N>
     std::array<uint8_t, N> array_uint8_from_json(const boost::json::value& json) {
-        std::string            decoded = base64_decode(json.as_string());
+        std::string            decoded = Utils::from_base64<std::string>(json.as_string().c_str());
         std::array<uint8_t, N> result {};
-        std::size_t            copy_size = std::min(N, decoded.size());
+        std::size_t            copy_size = std::min<std::size_t>(N, decoded.size());
         std::memcpy(result.data(), decoded.data(), copy_size);
         return result;
     }
 
     template <typename T>
     boost::json::value to_json_impl(const T& obj) {
-        if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
+        if constexpr (magic::is_unique_ptr_v<T>) {
+            if (!obj)
+                return boost::json::value(nullptr);
+            return to_json(*obj);
+        } else if constexpr (magic::is_shared_ptr_v<T>) {
+            if (!obj)
+                return boost::json::value(nullptr);
+            return to_json(*obj);
+        } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
             return boost::json::value(obj);
         } else if constexpr (std::is_enum_v<T>) {
             return boost::json::value(static_cast<std::underlying_type_t<T>>(obj));
@@ -290,8 +359,25 @@ namespace detail {
     template <typename T>
     T from_json_impl(const boost::json::value& json) {
         // eInfo("JSON: {} {} {}", typeid(T).name(), json, std::string(magic_enum::enum_name(json.kind())));
-        if constexpr (std::is_arithmetic_v<T>) {
+
+        if constexpr (magic::is_shared_ptr_v<T>) {
+            if (json.is_null()) {
+                return nullptr;
+            }
+            return std::make_shared<typename T::element_type>(from_json<typename T::element_type>(json));
+        } else if constexpr (magic::is_unique_ptr_v<T>) {
+            if (json.is_null())
+                return nullptr;
+            return std::make_unique<typename T::element_type>(from_json<typename T::element_type>(json));
+        } else if constexpr (magic::is_optional<T>::value) {
+            if (json.is_null()) {
+                return std::nullopt;
+            }
+            return std::make_optional(from_json<typename T::value_type>(json));
+        } else if constexpr (std::is_arithmetic_v<T>) {
             if constexpr (std::is_integral_v<T>) {
+                if (json.is_bool())
+                    return json.as_bool();
                 return json.is_uint64() ? json.as_uint64() : json.as_int64();
             }
             return json.as_double();
@@ -336,8 +422,9 @@ namespace detail {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                         auto it = obj.find(magic::detail::clean_field_name(D.name));
                         if (it != obj.end()) {
-                            using MemberType = std::remove_reference_t<decltype(result.*D.pointer)>;
                             // eInfo("JSON: Parsing for {}", D.name);
+
+                            using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
                             result.*D.pointer = from_json<MemberType>(it->value());
                         }
                     }
@@ -364,15 +451,15 @@ T from_json(const boost::json::value& json) {
 } // namespace json_convert
 
 // Macros for adding magic support
-#define MAKE_MAGICAL(ClassName)                                                                              \
+#define MAKE_MAGICAL_OPERATORS(ClassName)                                                                    \
     inline std::ostream& operator<<(std::ostream& os, const ClassName& obj) {                                \
         return os << magic::magic(obj);                                                                      \
     }                                                                                                        \
     inline QDebug operator<<(QDebug debug, const ClassName& obj) {                                           \
         return debug << magic::magic(obj).c_str();                                                           \
-    }                                                                                                        \
-    template <>                                                                                              \
-    struct fmt::formatter<ClassName> : fmt::ostream_formatter { };
+    }
+
+#define MAKE_MAGICAL(ClassName) MAKE_MAGICAL_OPERATORS(ClassName)
 
 #define MAKE_CUSTOM_MAGICAL(ClassName)                                                                       \
     namespace magic {                                                                                        \
@@ -384,18 +471,20 @@ T from_json(const boost::json::value& json) {
     }                                                                                                        \
     MAKE_MAGICAL(ClassName)
 
-namespace magic {
-template <>
-struct custom_magic<std::vector<uint8_t>> {
-    static std::string read(const std::vector<uint8_t>& value) {
-        return "...";
+template <typename T>
+struct fmt::formatter<
+    T,
+    std::enable_if_t<
+        boost::describe::has_describe_members<T>::value || json_convert::has_custom_magic_v<T>,
+        char>> {
+    constexpr auto parse(format_parse_context& ctx) const {
+        return ctx.begin();
     }
 
-    static std::vector<uint8_t> write(const std::string& value) {
-        return std::vector<uint8_t>();
+    template <typename FormatContext>
+    auto format(const T& obj, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{}", magic::magic(obj));
     }
 };
-}
-MAKE_MAGICAL(std::vector<uint8_t>)
 
 #endif // EXC_MAGIC_HPP

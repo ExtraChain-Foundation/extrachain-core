@@ -29,7 +29,7 @@
 #include <QObject>
 #include <QTimer>
 
-#include "datastorage/transaction.h"
+#include "blockchain/transaction.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 
@@ -99,7 +99,7 @@ private:
     bool                   started               = false;
     bool                   isClientApplication   = false;
     bool                   allowRunRestApiServer = false;
-    uint64_t               blockCount;
+    std::uint64_t               blockCount;
     std::vector<BigNumber> resiveCounts;
     VpnFunctionClearType   m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
@@ -156,7 +156,7 @@ public:
 
     void createNetworkIdentifier();
 
-    uint64_t getBlockCount() const;
+    std::uint64_t getBlockCount() const;
 
     void            InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager*   tokenManager() const;

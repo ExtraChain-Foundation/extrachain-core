@@ -22,58 +22,54 @@
 
 #include <boost/describe.hpp>
 #include <msgpack.hpp>
-#include <type_traits>
 
 namespace msgpack_describe {
 
-template<typename T, typename = void>
-struct is_described : std::false_type {};
-
-template<typename T>
-struct is_described<T, std::void_t<
-                           decltype(boost::describe::describe_members<T, boost::describe::mod_public>())
-                           >> : std::true_type {};
-
-template<typename Stream, typename T>
+template <typename Stream, typename T>
 void pack_described(msgpack::packer<Stream>& packer, const T& value) {
-    using members = boost::describe::describe_members<T, boost::describe::mod_public>;
+    using members      = boost::describe::describe_members<T, boost::describe::mod_any_access>;
     constexpr size_t N = boost::mp11::mp_size<members>::value;
-
     packer.pack_array(N);
-
     boost::mp11::mp_for_each<members>([&](auto D) {
-        packer.pack(value.*D.pointer);
-    });
-}
-
-template<typename T>
-void unpack_described(const msgpack::object& obj, T& value) {
-    using members = boost::describe::describe_members<T, boost::describe::mod_public>;
-    constexpr size_t N = boost::mp11::mp_size<members>::value;
-
-    if (obj.type != msgpack::type::ARRAY || obj.via.array.size != N) {
-        throw msgpack::type_error();
-    }
-
-    size_t idx = 0;
-    boost::mp11::mp_for_each<members>([&](auto D) {
-        if (idx < obj.via.array.size) {
-            const auto& item = obj.via.array.ptr[idx++];
-            using member_type = std::remove_reference_t<decltype(value.*D.pointer)>;
-            member_type temp;
-            item.convert(temp);
-            value.*D.pointer = std::move(temp);
+        if constexpr (std::is_enum_v<std::remove_reference_t<decltype(value.*D.pointer)>>) {
+            packer.pack(std::to_underlying(value.*D.pointer));
+        } else {
+            packer.pack(value.*D.pointer);
         }
     });
 }
-} // namespace msgpack_describe
+
+template <typename T>
+void unpack_described(const msgpack::object& obj, T& value) {
+    using members      = boost::describe::describe_members<T, boost::describe::mod_any_access>;
+    constexpr size_t N = boost::mp11::mp_size<members>::value;
+    if (obj.type != msgpack::type::ARRAY || obj.via.array.size != N) {
+        throw msgpack::type_error();
+    }
+    size_t idx = 0;
+    boost::mp11::mp_for_each<members>([&](auto D) {
+        if (idx < obj.via.array.size) {
+            const auto& item  = obj.via.array.ptr[idx++];
+            using member_type = std::remove_reference_t<decltype(value.*D.pointer)>;
+            if constexpr (std::is_enum_v<member_type>) {
+                std::underlying_type_t<member_type> temp;
+                item.convert(temp);
+                value.*D.pointer = static_cast<member_type>(temp);
+            } else {
+                member_type temp;
+                item.convert(temp);
+                value.*D.pointer = std::move(temp);
+            }
+        }
+    });
+}
+}
 
 namespace msgpack {
 MSGPACK_API_VERSION_NAMESPACE(MSGPACK_DEFAULT_API_NS) {
     namespace adaptor {
-
         template <typename T>
-        struct pack<T, typename std::enable_if<msgpack_describe::is_described<T>::value>::type> {
+        struct pack<T, typename std::enable_if<boost::describe::has_describe_members<T>::value>::type> {
             template <typename Stream>
             msgpack::packer<Stream>& operator()(msgpack::packer<Stream>& o, const T& v) const {
                 msgpack_describe::pack_described(o, v);
@@ -82,15 +78,14 @@ MSGPACK_API_VERSION_NAMESPACE(MSGPACK_DEFAULT_API_NS) {
         };
 
         template <typename T>
-        struct convert<T, typename std::enable_if<msgpack_describe::is_described<T>::value>::type> {
+        struct convert<T, typename std::enable_if<boost::describe::has_describe_members<T>::value>::type> {
             msgpack::object const& operator()(msgpack::object const& o, T& v) const {
                 msgpack_describe::unpack_described(o, v);
                 return o;
             }
         };
-
-    } // namespace adaptor
+    }
 }
-} // namespace msgpack
+}
 
 #endif // EXC_MSGPACK_DESCRIBE_H

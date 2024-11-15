@@ -39,10 +39,10 @@
 #include "boost/version.hpp"
 
 #include "cpp-base64/base64.cpp"
-#include "enc/enc_tools.h"
+#include "encryption/encryption_tools.h"
 #include "managers/data_mining_manager.h"
 #include "sha3.h"
-#include "utils/dfs_utils.h"
+#include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
@@ -57,7 +57,7 @@ std::string Utils::calcHash(const std::string &data, HashEncode encode) {
         break;
     }
     case HashEncode::Base64: {
-        res = base64_encode(data);
+        res = Utils::to_base64(data);
         break;
     }
     case HashEncode::Hex: {
@@ -186,13 +186,14 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     int res = num.toInt();
     return res;
 }
+
 void Utils::rootMerkleHash(
     std::vector<std::string>      &listHashes,
     std::vector<MerkleDataBlocks> &branchesTree,
     const bool                     isHahsing,
     std::string                   &result) {
     if (listHashes.empty()) {
-        qFatal("Root merkle hash: list is empty");
+        eFatal("Root merkle hash: list is empty");
     };
     const auto       splittedList = splitListIntoPair(listHashes, isHahsing);
     MerkleDataBlocks merkleBlocks;
@@ -274,6 +275,7 @@ void Utils::hashingElements(std::vector<std::string> &vector) {
 std::string Utils::merkleFormula(const std::string &hash1, const std::string &hash2) {
     return Utils::calcHash(hash1 + hash2);
 }
+
 std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
     QFile file(QString::fromStdWString(fileName.wstring()));
     if (file.open(QFile::ReadOnly)) {
@@ -285,7 +287,7 @@ std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEn
         return sha3.getHash();
     }
 
-    qFatal("Utils::calcHashForFile");
+    eFatal("Utils::calcHashForFile");
     qDebug() << "[Utils] Calc hash for file: can't open file" << fileName.c_str();
     return "";
 }
@@ -420,7 +422,7 @@ void Utils::wipeDataFiles() {
     QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DFSB::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
     QFile(".settings").remove();
@@ -509,7 +511,7 @@ std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        return base64_encode(data);
+        return Utils::to_base64(data);
     case HashEncode::Hex:
         break;
     case HashEncode::Sha3_512:
@@ -522,7 +524,7 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
     std::string res;
     switch (encode) {
     case HashEncode::Base64:
-        return base64_decode(data);
+        return Utils::from_base64(data);
     case HashEncode::Hex:
         break;
     case HashEncode::Sha3_512:
@@ -531,14 +533,30 @@ std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode enco
     return res;
 }
 
+std::string Utils::generate_random_hex(size_t length) {
+    std::random_device              rd;
+    std::mt19937                    gen(rd());
+    std::uniform_int_distribution<> dis(0, 15);
+
+    std::string result;
+    result.reserve(length);
+
+    static const char hex[] = "0123456789abcdef";
+    for (size_t i = 0; i < length; i++) {
+        result += hex[dis(gen)];
+    }
+
+    return result;
+}
+
 QString Utils::detectCompiler() {
 #ifdef __clang__
     #if __clang_major__ < 11
         #error "Clang must be version 11 or higher"
     #endif
 #elif __GNUC__
-    #if __GNUC__ < 11
-        #error "GCC must be version 11 or higher"
+    #if __GNUC__ < 12
+        #error "GCC must be version 12 or higher"
     #endif
 #elif _MSC_VER && !__INTEL_COMPILER
 #else
@@ -661,7 +679,7 @@ void Utils::benchmark(std::function<void()> func, int count) {
     }
 }
 
-QString Utils::extrachainVersion() {
+std::string Utils::extrachainVersion() {
     return EXTRACHAIN_VERSION;
 }
 
@@ -669,14 +687,14 @@ std::string Utils::sodiumVersion() {
     return sodium_version_string();
 }
 
-QString Utils::boostVersion() {
+std::string Utils::boostVersion() {
     int major = BOOST_VERSION / 100000;
     int minor = BOOST_VERSION / 100 % 1000;
     int patch = BOOST_VERSION % 100;
-    return QString("%1.%2.%3").arg(major).arg(minor).arg(patch);
+    return fmt::format("{}.{}.{}", major, minor, patch);
 }
 
-[[maybe_unused]] QString Utils::boostAsioVersion() {
+[[maybe_unused]] std::string Utils::boostAsioVersion() {
     return "";
 }
 
@@ -692,10 +710,19 @@ std::string Utils::platformDelimeter() {
 
 boost::json::value Utils::stringToJsonValue(const std::string &value, const std::type_info &target_type) {
     if (value.empty()) {
-        return boost::json::value();
+        return boost::json::value(nullptr);
     }
 
     std::string type_name = boost::core::demangle(target_type.name());
+
+    if (type_name.find("optional") != std::string::npos) {
+        size_t start = type_name.find('<');
+        size_t end   = type_name.find('>');
+        if (start != std::string::npos && end != std::string::npos) {
+            std::string inner_type = type_name.substr(start + 1, end - start - 1);
+            return stringToJsonValue(value, typeid(inner_type));
+        }
+    }
 
     if (type_name.find("string") != std::string::npos) {
         return boost::json::value(std::string(value));

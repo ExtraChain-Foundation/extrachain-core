@@ -18,8 +18,8 @@
  */
 
 #include "managers/data_mining_manager.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/dfs/dfs_controller.h"
+#include "blockchain/blockchain.h"
+#include "dfs/dfs_controller.h"
 #include "managers/transaction_manager.h"
 #include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
@@ -121,9 +121,9 @@ void DataMiningManager::requestCoinReward() {
     const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
     auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
 
-    auto requestReward = DFS::Reward::RequestReward { .Actor              = actor->id().toStdString(),
+    auto requestReward = Dfs::Reward::RequestReward { .Actor              = actor->id(),
                                                       .DataStoredSize     = node->dfs()->sizeTaken(),
-                                                      .TypeFunctioningObj = DFS::Reward::Base,
+                                                      .TypeFunctioningObj = Dfs::Reward::Base,
                                                       .RewardAmount       = calculateRewardAmount(),
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
@@ -162,7 +162,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
 }
 
 BigNumberFloat
-DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &requestReward) const {
+DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         // qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
         //          << requestReward.BytesSent << node->dfs()->totalDfsSize();
@@ -184,7 +184,7 @@ DataMiningManager::calculateRewardAmount(const DFS::Reward::RequestReward &reque
         + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
 }
 
-void DataMiningManager::sendCoinsReward(const DFS::Reward::RequestReward &requestReward) {
+void DataMiningManager::sendCoinsReward(const Dfs::Reward::RequestReward &requestReward) {
     if ((calculateRewardAmount(requestReward) - requestReward.RewardAmount) <= 100) {
         Transaction transaction;
         transaction.setSender(ActorId());

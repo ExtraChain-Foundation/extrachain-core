@@ -35,6 +35,7 @@ public:
     LogsManager();
 
     static void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg);
+    static void anotherMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg);
     static void on();
     static void off();
     static void onConsole();

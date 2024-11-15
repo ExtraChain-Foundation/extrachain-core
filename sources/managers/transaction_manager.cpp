@@ -24,7 +24,7 @@
 
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "datastorage/blockchain.h"
+#include "blockchain/blockchain.h"
 #include "network/network_manager.h"
 
 std::set<Transaction> TransactionManager::getReceivedTxList() const {
@@ -53,7 +53,7 @@ void TransactionManager::addTransactionNetwork(const Transaction &tx) {
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
     // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
     m_pendingTxList.insert(tx);
-    emit addToCache(tx.receiver().toStdString(), tx);
+    emit addToCache(tx.receiver().to_string(), tx);
 }
 
 // Block making
@@ -76,11 +76,13 @@ void TransactionManager::makeBlock() {
     }
 
     if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-        qDebug() << "[Blockchain] Last block:" << lastBlock->getIndex()
-                 << "| last real:" << lastRealBlock->getIndex() << "|" << lastRealBlock->getType();
+        eLog(
+            "[Blockchain] Last block: {}, last real: {}, type: {}",
+            lastBlock->getIndex(),
+            lastRealBlock->getIndex(),
+            lastRealBlock->getType());
     } else {
-        qDebug() << "[Blockchain] Last block:" << lastRealBlock->getIndex() << "|"
-                 << lastRealBlock->getType();
+        eLog("[Blockchain] Last block: {}, type: {}", lastRealBlock->getIndex(), lastRealBlock->getType());
     }
 
     if (!node->network()->isActiveConnectionExists()) {
@@ -94,8 +96,10 @@ void TransactionManager::makeBlock() {
 
     auto maybeGenesisId = lastBlock->getIndex() + 1;
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
-        qDebug().noquote() << "[Blockchain] Create genesis block" << maybeGenesisId
-                           << "| dec:" << maybeGenesisId.toStdString(NumeralBase::Dec);
+        eLog(
+            "[Blockchain] Create genesis block {}, dec: {}",
+            maybeGenesisId,
+            maybeGenesisId.to_string(NumeralBase::Dec));
         const auto actor   = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
@@ -119,7 +123,7 @@ void TransactionManager::makeBlock() {
         Block dummyBlock = Block();
         dummyBlock.setType(BlockType::Dummy);
         dummyBlock.setPrev(lastBlock.value());
-        dummyBlock.addData(lastRealBlock->getIndex().toStdString());
+        dummyBlock.addData(lastRealBlock->getIndex().to_string());
         auto dummyBlockVariant = BlockVariant(dummyBlock);
         node->blockchain()->signBlock(dummyBlockVariant);
         node->blockchain()->sendBlock(dummyBlockVariant);

@@ -22,9 +22,9 @@ public:
     // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
-    QWebSocket *socket() const;
-    bool isActive() const override;
-    void open(const QString &ip, quint16 port);
+    QWebSocket     *socket() const;
+    bool            isActive() const override;
+    void            open(const QString &ip, quint16 port);
     virtual QString protocolString() const override {
         return "WebSocket";
     }
@@ -58,6 +58,8 @@ private:
     void handshake();
 
     QWebSocket *m_ws = nullptr;
+
+    QTimer m_timer;
 };
 
 #endif // WEBSOCKETSERVICE_H

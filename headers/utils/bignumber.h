@@ -20,26 +20,19 @@
 #ifndef BIGNUMBER_H
 #define BIGNUMBER_H
 
-#include <QDebug>
-#include <QMetaType>
-#include <QRandomGenerator>
-#include <QString>
-#include <QtCore/QChar>
-#include <QtCore/QString>
-#include <sstream>
 #include <string>
 #include <expected>
 
 #include "boost/multiprecision/cpp_int.hpp"
 #include "msgpack.hpp"
-#include "utils/exc_magic.h"
 
+#include "utils/exc_magic.h"
 #include "extrachain_global.h"
 
 #ifdef QT_DEBUG
     #define UPDATE_DEBUG()                                                                                   \
-        qdata    = toStdString(NumeralBase::Hex);                                                            \
-        qdataDec = toStdString(NumeralBase::Dec);
+        qdata    = to_string(NumeralBase::Hex);                                                              \
+        qdataDec = to_string(NumeralBase::Dec);
 #else
     #define UPDATE_DEBUG()
 #endif
@@ -117,47 +110,24 @@ public:
 
 public:
     const boost::multiprecision::cpp_int &data() const;
-    bool                                  isEmpty() const;
-    QByteArray                            toByteArray(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string                           toStdString(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::string                           toZeroStdString(int size) const;
+    bool                                  is_empty() const;
+    std::string                           to_string(NumeralBase numSystem = NumeralBase::Hex) const;
     BigNumber                             pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
 
     static std::expected<BigNumber, BigNumberError>
-                     create(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
-    static BigNumber random(int n, bool zeroAllowed = true);
-    static BigNumber random(int n, const BigNumber &max, bool zeroAllowed = true);
-    static BigNumber random(BigNumber max, bool zeroAllowed = true);
+    create(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
 
-    std::strong_ordering operator<=>(const BigNumber &other) const {
-        if (m_data < other.m_data)
-            return std::strong_ordering::less;
-        if (m_data > other.m_data)
-            return std::strong_ordering::greater;
-        return std::strong_ordering::equal;
-    }
+    std::strong_ordering operator<=>(const BigNumber &other) const;
+    std::strong_ordering operator<=>(const int &other) const;
 
-    std::strong_ordering operator<=>(const int &other) const {
-        if (m_data < other)
-            return std::strong_ordering::less;
-        if (m_data > other)
-            return std::strong_ordering::greater;
-        return std::strong_ordering::equal;
-    }
-
-    bool operator==(const BigNumber &other) const {
-        return m_data == other.m_data;
-    }
-
-    bool operator==(const int &other) const {
-        return m_data == other;
-    }
+    bool operator==(const BigNumber &other) const;
+    bool operator==(const int &other) const;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = toStdString();
+        std::string num = to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }
@@ -167,10 +137,6 @@ public:
         *this           = BigNumber(num);
     }
 };
-
-inline size_t qHash(const BigNumber &key, size_t seed) {
-    return qHash(key, seed);
-}
 
 MAKE_CUSTOM_MAGICAL(BigNumber)
 

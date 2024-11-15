@@ -20,8 +20,8 @@
 #ifndef METATYPES_H
 #define METATYPES_H
 
-#include "datastorage/blockchain.h"
-#include "datastorage/contract.h"
+#include "blockchain/blockchain.h"
+#include "blockchain/contract.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 

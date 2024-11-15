@@ -18,7 +18,11 @@
  */
 
 #include "utils/bignumber.h"
+
 #include <exception>
+#include <random>
+
+#include "utils/exc_logs.h"
 
 using boost::multiprecision::cpp_int;
 
@@ -28,7 +32,7 @@ BigNumber::BigNumber()
 
 BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
     if (bigNumber == "inf")
-        qFatal("BigNumber: infinity");
+        eFatal("BigNumber: infinity");
     try {
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);
@@ -239,17 +243,7 @@ const cpp_int &BigNumber::data() const {
     return m_data;
 }
 
-bool BigNumber::isEmpty() const // TODO
-{
-    return m_data == -1;
-}
-
-QByteArray BigNumber::toByteArray(NumeralBase numSystem) const {
-    auto res = toStdString(numSystem);
-    return res.c_str();
-}
-
-std::string BigNumber::toStdString(NumeralBase numSystem) const {
+std::string BigNumber::to_string(NumeralBase numSystem) const {
     if (numSystem == NumeralBase::Dec) {
         return m_data.str();
     } else {
@@ -262,14 +256,6 @@ std::string BigNumber::toStdString(NumeralBase numSystem) const {
             return "-" + ss.str();
         }
     }
-}
-
-std::string BigNumber::toZeroStdString(int size) const {
-    auto number = this->toStdString();
-    if (size <= number.length())
-        return number;
-    number.insert(0, size - number.size(), '0');
-    return number;
 }
 
 BigNumber BigNumber::pow(unsigned long number) {
@@ -310,59 +296,33 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
     }
 }
 
-BigNumber BigNumber::random(int n, bool zeroAllowed) {
-    QByteArray str;
-    str.resize(n);
-    str[0] = '0';
-
-    while (str[0] == '0')
-        str[0] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-
-    for (int i = 1; i != n; ++i)
-        str[i] = BigNumberUtils::Chars[QRandomGenerator::global()->bounded(16)];
-
-    BigNumber res(str.toStdString());
-    if (!zeroAllowed && res == 0)
-        return random(n, zeroAllowed);
-    return res;
+std::strong_ordering BigNumber::operator<=>(const int &other) const {
+    if (m_data < other)
+        return std::strong_ordering::less;
+    if (m_data > other)
+        return std::strong_ordering::greater;
+    return std::strong_ordering::equal;
 }
 
-BigNumber BigNumber::random(int n, const BigNumber &max, bool zeroAllowed) {
-    if (max.toByteArray(NumeralBase::Hex).length() < n)
-        return BigNumber(0);
-
-    BigNumber result;
-
-    do {
-        result = random(n, zeroAllowed);
-    } while (result >= max);
-    return result;
+std::strong_ordering BigNumber::operator<=>(const BigNumber &other) const {
+    if (m_data < other.m_data)
+        return std::strong_ordering::less;
+    if (m_data > other.m_data)
+        return std::strong_ordering::greater;
+    return std::strong_ordering::equal;
 }
 
-BigNumber BigNumber::random(BigNumber max, bool zeroAllowed) {
-    QByteArray maxdata = max.toByteArray();
-    QByteArray b;
-    b.clear();
-    b.fill('f', maxdata.size());
-    BigNumber t(b.toStdString());
+bool BigNumber::operator==(const BigNumber &other) const {
+    return m_data == other.m_data;
+}
 
-    while (t >= max) {
-        int        size = QRandomGenerator::global()->bounded(1, max.toByteArray().size());
-        QByteArray res;
-        res.clear();
-        for (int i = 0; i < size; i++) {
-            res.append(BigNumberUtils::Chars[QRandomGenerator::global()->bounded(0, 15)]);
-        }
-        t = BigNumber(res.toStdString());
-    }
-    if (!zeroAllowed && t == 0)
-        return random(max, zeroAllowed);
-    return t;
+bool BigNumber::operator==(const int &other) const {
+    return m_data == other;
 }
 
 namespace magic {
 std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-    return value.toStdString();
+    return value.to_string();
 }
 
 BigNumber custom_magic<BigNumber>::write(const std::string &value) {

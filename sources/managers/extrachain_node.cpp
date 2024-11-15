@@ -22,15 +22,15 @@
 #include <QJsonObject>
 #include <sodium/core.h>
 
-#include "datastorage/actor.h"
-#include "datastorage/block.h"
-#include "datastorage/block_variant.h"
-#include "datastorage/blockchain.h"
-#include "datastorage/dfs/dfs_controller.h"
-// #include "datastorage/dfs/permission_manager.h"
-#include "datastorage/index/actorindex.h"
-#include "datastorage/transaction.h"
-#include "enc/enc_tools.h"
+#include "blockchain/actor.h"
+#include "blockchain/block.h"
+#include "blockchain/block_variant.h"
+#include "blockchain/blockchain.h"
+#include "dfs/dfs_controller.h"
+// #include "dfs/permission_manager.h"
+#include "blockchain/actor_index.h"
+#include "blockchain/transaction.h"
+#include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
@@ -79,6 +79,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+    Logger::instance().set_debug(true);
 }
 
 void ExtraChainNode::process() {
@@ -86,7 +87,7 @@ void ExtraChainNode::process() {
     if (!singleton)
         singleton = true;
     else
-        qFatal("Two instances of Node");
+        eFatal("Two instances of Node");
 
     if (sodium_init() != 0) {
         qDebug() << "Encryption init error";
@@ -101,7 +102,7 @@ void ExtraChainNode::process() {
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
     m_dmm                = new DataMiningManager(this);
-    auto key             = actorIndex()->firstId().toByteArray();
+    auto key             = actorIndex()->firstId().toQByteArray();
     auto address         = "12.12.12.12";
     auto port            = "1212";
     m_connectionsManager = new ConnectionsManager(address, port, key, this);
@@ -120,7 +121,7 @@ void ExtraChainNode::process() {
     emit NodeInitialised();
 }
 
-uint64_t ExtraChainNode::getBlockCount() const {
+std::uint64_t ExtraChainNode::getBlockCount() const {
     return blockCount;
 }
 
@@ -140,11 +141,11 @@ void ExtraChainNode::cleanUp() {
 
 bool ExtraChainNode::createNewNetwork(const std::string& login, const std::string& password) {
     if (!QDir("keystore/profile").isEmpty()) {
-        qInfo() << "Cannot create a new network: existing profile data found";
+        eInfo("Cannot create a new network: existing profile data found");
         return false;
     }
 
-    qDebug() << "[Node] Create network with login" << login;
+    eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calcHash(login + password);
     auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
     m_actorIndex->setFirstId(first.id());
@@ -159,6 +160,44 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
         m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
     }
 
+    using namespace sqlite::literals;
+
+    auto tokens = DbSchema("tokens");
+    tokens.add_columns(
+        "tokenId"_text.primary_key(),
+        "name"_text.not_null().unique(),
+        "ticker"_text.not_null().unique(),
+        "count"_text.not_null(),
+        "owner"_text.not_null(), // perm: field for author actor id
+        "color"_text.not_null(),
+        "smart"_text);
+
+    if (tokens.validation_error()) {
+        eCritical("Token database not correct: {}", tokens.validation_error().value());
+        Utils::wipeDataFiles();
+        return false;
+    }
+
+    auto storeRes = m_dfs->storeDatabase(first.id(), "tokens", tokens);
+    if (!storeRes.has_value()) {
+        eCritical("Can't create token cache database, because {}", storeRes.error());
+        Utils::wipeDataFiles();
+        return false;
+    }
+
+    auto tokenId = ActorId().to_string();
+
+    // DbRow for tokens
+    DbRow tokensRow = { { "tokenId", tokenId },
+                        { "name", "ExtraChain" },
+                        { "ticker", "EXC" },
+                        { "count", "0" },
+                        { "owner", first.id().to_string() },
+                        { "color", "#111111" },
+                        { "smart", "" } };
+    m_dfs->databaseInsert(storeRes->actorId, storeRes->fileId, tokensRow);
+
+    eSuccess("[Node] New network created");
     return true;
 }
 
@@ -217,7 +256,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    qWarning() << fmt::format("Attempting to create: {}  from user [{}]", tx, actor->id().toStdString());
+    qWarning() << fmt::format("Attempting to create: {}  from user [{}]", tx, actor->id().to_string());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->getLastRealBlock();
@@ -235,7 +274,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     // 3) sign transaction
     tx.sign(actor);
-    qDebug() << "[Transaction] Send" << tx.amount().toStdString(NumeralBase::Dec) << "to" << tx.receiver();
+    qDebug() << "[Transaction] Send" << tx.amount().to_string(NumeralBase::Dec) << "to" << tx.receiver();
 
     return tx;
 }
@@ -307,7 +346,7 @@ bool ExtraChainNode::importUser(
     file.write(ByteArray(profileBytesEncrypted).toQByteArray());
     file.close();
 
-    m_accountController->addToProfileList(profile["main"].toString().toStdString());
+    m_accountController->addToProfileList(ActorId(profile["main"].toString().toStdString()));
 
     return true;
 }
@@ -322,12 +361,12 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     }
 
     auto actor = m_accountController->currentProfile().getActor(sender);
-    if (amount.isEmpty()) {
+    if (amount <= 0) {
         qWarning() << "Can not create tx without amount";
         return std::unexpected(TransactionError::ZeroAmount);
     }
 
-    if (receiver.isZero() && !amount.isEmpty()) {
+    if (receiver.is_zero() && amount > 0) {
         if (!actor->empty()) {
             Transaction tx(actor->id(), receiver, amount);
             tx.setToken(token);
@@ -335,7 +374,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             qDebug() << fmt::format("Attempting to create: {} from user {}", tx, actor->id());
 
             tx.sign(actor);
-            qDebug() << "[Transaction] Send tx" << tx.amount().toStdString(NumeralBase::Dec) << "to"
+            qDebug() << "[Transaction] Send tx" << tx.amount().to_string(NumeralBase::Dec) << "to"
                      << tx.receiver();
             auto createdTx = this->createTransaction(tx);
             return createdTx;
@@ -356,7 +395,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         return this->createTransaction(tx);
     } else {
         qWarning() << QString("Can not create tx to [%1]. There no current user")
-                          .arg(QString(receiver.toByteArray()));
+                          .arg(QString(receiver.toQByteArray()));
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -404,7 +443,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections()->length() > 0) {
         ActorId actorId = m_accountController->mainActor()->id();
 
-        if (!actorId.isZero())
+        if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
     }
 }
@@ -412,7 +451,10 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(BigNumber::random(64).toStdString()).c_str());
+    file.write(Utils::calcHash(
+                   std::to_string(QDateTime::currentSecsSinceEpoch())
+                   + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                   .c_str());
     file.flush();
     file.close();
 }
@@ -421,7 +463,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
     auto firstId = m_actorIndex->firstId();
-    if (firstId.isZero())
+    if (firstId.is_zero())
         return;
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
@@ -458,7 +500,7 @@ void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
         std::string ip   = m_networkManager->localIp().toStdString();
         std::string port = QString::number(m_networkManager->wsPort).toStdString();
         blockCount       = m_connectionsManager->getActivityScore(Connection { ip, port, true })
-                     / (std::stoi(middleCount.toStdString()) * 2);
+                     / (std::stoi(middleCount.to_string()) * 2);
     }
 }
 
@@ -531,14 +573,13 @@ void ExtraChainNode::connectSignals() {
         &TokenManager::sendToken,
         this,
         [=, this](const ActorId& actorId, const QString& pathToJson) {
-            auto actor = m_accountController->currentProfile().getActor(actorId);
-            m_dfs->addLocalFile(
-                actor,
+            m_dfs->storeFile(
+                actorId,
                 pathToJson.toStdString(),
-                "contract/token-description.json",
-                DFS::Encryption::Public);
+                "contract",
+                "token-description.json",
+                Dfs::Encryption::Public);
         });
-    connect(m_dfs, &DfsController::checkIsContract, m_tokenManager, &TokenManager::checkIsContract);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -546,9 +587,11 @@ void ExtraChainNode::prepareFolders() {
     qDebug() << "Working directory:" << QDir::currentPath();
 
     QDir().mkpath(QString::fromStdString(KeyStore::folder));
-    QDir().mkpath(DataStorage::TMP_FOLDER);
-    QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME);
-    QDir().mkpath(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME);
+    QDir().mkpath(QString::fromStdString(DataStorage::TMP_FOLDER));
+    QDir().mkpath(
+        QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME));
+    QDir().mkpath(
+        QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::folder_tokens));
 
@@ -558,7 +601,7 @@ void ExtraChainNode::prepareFolders() {
 
 void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
-    DFSP::RequestDfsSize msg { actorId.toStdString() };
+    DfsP::RequestDfsSize msg { .actorId = actorId };
 
     m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
 }

@@ -78,6 +78,7 @@ public:
 
         m_ptr   = other.m_ptr;
         m_mutex = other.m_mutex;
+        return *this;
     }
 
     SafePtr& operator=(SafePtr&&) = default;
