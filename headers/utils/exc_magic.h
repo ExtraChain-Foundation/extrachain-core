@@ -319,6 +319,10 @@ namespace detail {
             if (!obj)
                 return boost::json::value(nullptr);
             return to_json(*obj);
+        } else if constexpr (magic::is_optional<T>::value) {
+            if (!obj.has_value())
+                return boost::json::value(nullptr);
+            return to_json(obj.value());
         } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
             return boost::json::value(obj);
         } else if constexpr (std::is_enum_v<T>) {
@@ -329,13 +333,19 @@ namespace detail {
             if constexpr (magic::is_associative_container<T>::value) {
                 boost::json::object result;
                 for (const auto& pair : obj) {
-                    result[to_json(pair.first).as_string()] = to_json(pair.second);
+                    auto value = to_json(pair.second);
+                    if (!value.is_null()) {
+                        result[to_json(pair.first).as_string()] = value;
+                    }
                 }
                 return result;
             } else {
                 boost::json::array result;
                 for (const auto& item : obj) {
-                    result.push_back(to_json(item));
+                    auto value = to_json(item);
+                    if (!value.is_null()) {
+                        result.push_back(value);
+                    }
                 }
                 return result;
             }
@@ -344,8 +354,10 @@ namespace detail {
             boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
                 [&](auto D) {
                     if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        result[magic::detail::clean_field_name(D.name)] =
-                            to_json(magic::invoke_member(obj, D.pointer));
+                        auto value = to_json(magic::invoke_member(obj, D.pointer));
+                        if (!value.is_null()) {
+                            result[magic::detail::clean_field_name(D.name)] = value;
+                        }
                     }
                 });
             return result;
