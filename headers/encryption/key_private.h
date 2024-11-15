@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef KEY_PRIVATE_H
-#define KEY_PRIVATE_H
+#pragma once
 
 #include <QDebug>
 
@@ -78,5 +77,3 @@ public:
 };
 
 MAKE_MAGICAL(KeyPrivate)
-
-#endif // KEY_PRIVATE_H

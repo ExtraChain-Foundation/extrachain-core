@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef FILE_FILTER_HPP
-#define FILE_FILTER_HPP
+#pragma once
 
 #include <string>
 #include <string_view>
@@ -240,5 +239,3 @@ public:
         return m_custom_patterns;
     }
 };
-
-#endif // FILE_FILTER_HPP

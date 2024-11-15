@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXC_LOGS_EXTRA_H
-#define EXC_LOGS_EXTRA_H
+#pragma once
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
@@ -235,5 +234,3 @@ struct fmt::formatter<QUrl> {
         return fmt::format_to(ctx.out(), "{}", url.toString().toStdString());
     }
 };
-
-#endif // EXC_LOGS_EXTRA_H

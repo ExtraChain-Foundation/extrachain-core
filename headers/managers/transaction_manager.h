@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TRANSACTION_MANAGER_H
-#define TRANSACTION_MANAGER_H
+#pragma once
 
 #include <QByteArray>
 #include <QDebug>
@@ -75,5 +74,3 @@ signals:
     void addToCache(std::string actor, Transaction tx);
     void addTransaction(const Transaction &tx);
 };
-
-#endif // TRANSACTION_MANAGER_H

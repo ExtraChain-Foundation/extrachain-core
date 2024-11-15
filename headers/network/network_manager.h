@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef NETWORK_MANAGER_H
-#define NETWORK_MANAGER_H
+#pragma once
 
 #include <QTimer>
 #include <QtCore/QMutex>
@@ -342,5 +341,3 @@ signals:
 
     friend class DfsNetworkManager;
 };
-
-#endif // NETWORK_MANAGER_H

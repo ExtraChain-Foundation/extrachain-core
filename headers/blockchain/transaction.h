@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TRANSACTION_H
-#define TRANSACTION_H
+#pragma once
 
 #include "blockchain/actor.h"
 #include "utils/bignumber.h"
@@ -177,5 +176,3 @@ public:
 };
 
 MAKE_MAGICAL(Transaction)
-
-#endif // TRANSACTION_H

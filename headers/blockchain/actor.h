@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef ACTOR_H
-#define ACTOR_H
+#pragma once
 
 #include <QDebug>
 #include <QJsonArray>
@@ -250,5 +249,3 @@ public:
 
 MAKE_MAGICAL(Actor<KeyPrivate>)
 MAKE_MAGICAL(Actor<KeyPublic>)
-
-#endif // ACTOR_H

@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef BLOCKCHAIN_H
-#define BLOCKCHAIN_H
+#pragma once
 
 #include "blockchain/actor.h"
 #include "blockchain/block.h"
@@ -283,5 +282,3 @@ public slots:
     void syncResponse(const BigNumber fromBlock, const std::string &messageId);
     void process();
 };
-
-#endif // BLOCKCHAIN_H

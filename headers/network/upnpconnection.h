@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef UPNPCONNECTION_H
-#define UPNPCONNECTION_H
+#pragma once
 
 #include <QDateTime>
 #include <QHostAddress>
@@ -97,5 +96,3 @@ signals:
     void extAddressExtracted();
     void upnpError(QString message);
 };
-
-#endif // UPNPCONNECTION_H

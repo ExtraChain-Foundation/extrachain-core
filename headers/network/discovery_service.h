@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DISCOVERY_SERVICE_H
-#define DISCOVERY_SERVICE_H
+#pragma once
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -87,4 +86,3 @@ signals:
      */
     void finished();
 };
-#endif // DISCOVERY_SERVICE_H

@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DB_CONNECTOR_STRICT_H
-#define DB_CONNECTOR_STRICT_H
+#pragma once
 
 #include "utils/db_connector.h"
 #include "sqlite3.h"
@@ -297,5 +296,3 @@ private:
         return true;
     }
 };
-
-#endif // DB_CONNECTOR_STRICT_H

@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef ACTOR_INDEX_H
-#define ACTOR_INDEX_H
+#pragma once
 
 #include "extrachain_global.h"
 
@@ -132,5 +131,3 @@ public:
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const std::string &messageId);
 };
-
-#endif // ACTOR_INDEX_H

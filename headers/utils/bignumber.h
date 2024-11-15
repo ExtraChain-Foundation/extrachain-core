@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef BIGNUMBER_H
-#define BIGNUMBER_H
+#pragma once
 
 #include <string>
 #include <expected>
@@ -139,5 +138,3 @@ public:
 };
 
 MAKE_CUSTOM_MAGICAL(BigNumber)
-
-#endif // BIGNUMBER_H

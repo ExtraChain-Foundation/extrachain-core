@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef CONTRACT_H
-#define CONTRACT_H
+#pragma once
+
 /*
 #include "datastorage/actor.h"
 #include "datastorage/block.h"
@@ -120,4 +120,3 @@ public:
     const QList<QByteArray> deserialize(const QByteArray &serialized) const;
 };
 */
-#endif // CONTRACT_H

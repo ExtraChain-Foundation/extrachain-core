@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef ACCOUNT_CONTROLLER_H
-#define ACCOUNT_CONTROLLER_H
+#pragma once
 
 #include <QDebug>
 
@@ -81,5 +80,3 @@ private:
     std::vector<PrivateProfile> m_profiles;
     ActorId m_currentProfile;
 };
-
-#endif // ACCOUNT_CONTROLLER_H

@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DATA_MINING_MANAGER_H
-#define DATA_MINING_MANAGER_H
+#pragma once
 
 #include <string>
 #include <QObject>
@@ -65,5 +64,3 @@ public:
 
 private:
 };
-
-#endif // DATA_MINING_MANAGER_H

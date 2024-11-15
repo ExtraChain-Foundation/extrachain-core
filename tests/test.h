@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TEST_H
-#define TEST_H
+#pragma once
 
 #include "managers/extrachain_node.h"
 
@@ -58,5 +57,3 @@ public slots:
     void start() {
     }
 };
-
-#endif // TEST_H

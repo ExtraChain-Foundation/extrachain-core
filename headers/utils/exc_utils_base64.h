@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef UTILS_BASE64_H
-#define UTILS_BASE64_H
+#pragma once
 
 #include <string>
 #include "cpp-base64/base64.h"
@@ -65,5 +64,3 @@ Container from_base64(const std::string &input) {
     return Container(decoded.begin(), decoded.end());
 }
 } // namespace Utils
-
-#endif // UTILS_BASE64_H

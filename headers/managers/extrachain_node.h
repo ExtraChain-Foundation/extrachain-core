@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXTRACHAIN_NODE_H
-#define EXTRACHAIN_NODE_H
+#pragma once
 
 #include <memory>
 #include <functional>
@@ -208,4 +207,3 @@ public slots:
     void cleanUp();
     void process();
 };
-#endif // EXTRACHAIN_NODE_H

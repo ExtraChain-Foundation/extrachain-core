@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXC_MAGIC_HPP
-#define EXC_MAGIC_HPP
+#pragma once
 
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
@@ -498,5 +497,3 @@ struct fmt::formatter<
         return fmt::format_to(ctx.out(), "{}", magic::magic(obj));
     }
 };
-
-#endif // EXC_MAGIC_HPP

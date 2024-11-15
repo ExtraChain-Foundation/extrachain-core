@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef GENESIS_BLOCK_H
-#define GENESIS_BLOCK_H
+#pragma once
 
 #include "blockchain/block.h"
 
@@ -149,5 +148,3 @@ inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
            && l.dataService() == r.dataService() && l.dataRows() == r.dataRows();
 }
-
-#endif // GENESIS_BLOCK_H

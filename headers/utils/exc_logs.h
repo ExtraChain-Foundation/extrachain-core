@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXC_LOGS_H
-#define EXC_LOGS_H
+#pragma once
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -426,5 +425,3 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 #define eLog(...)     eDebug(__VA_ARGS__)
 
 #include "utils/exc_logs_extra.h"
-
-#endif // EXC_LOGS_H

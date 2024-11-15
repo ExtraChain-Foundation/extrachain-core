@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef METATYPES_H
-#define METATYPES_H
+#pragma once
 
 #include "blockchain/blockchain.h"
 #include "blockchain/contract.h"
@@ -57,5 +56,3 @@ void registerMetaTypes() {
     qRegisterMetaType<Network::Protocol>();
     qRegisterMetaType<Network::SocketServiceError>();
 }
-
-#endif

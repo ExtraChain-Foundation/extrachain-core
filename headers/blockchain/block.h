@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef MEMBLOCK_H
-#define MEMBLOCK_H
+#pragma once
 
 #include "actor.h"
 #include "blockchain/transaction.h"
@@ -233,5 +232,3 @@ inline bool operator==(const Block &l, const Block &r) {
 }
 
 QDebug operator<<(QDebug debug, const Block &block);
-
-#endif // MEMBLOCK_H

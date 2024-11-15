@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef PRIVATE_PROFILE_H
-#define PRIVATE_PROFILE_H
+#pragma once
 
 #include "blockchain/actor.h"
 
@@ -52,5 +51,3 @@ private:
     std::vector<std::shared_ptr<Actor<KeyPrivate>>> m_actors;
     std::map<ActorId, std::string>                  walletNames;
 };
-
-#endif // PRIVATE_PROFILE_H

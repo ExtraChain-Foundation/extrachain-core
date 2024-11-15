@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXTRACHAIN_GLOBAL_H
-#define EXTRACHAIN_GLOBAL_H
+#pragma once
 
 #include <QtCore/qglobal.h>
 
@@ -31,5 +30,3 @@
 #else
     #define EXTRACHAIN_EXPORT
 #endif
-
-#endif // EXTRACHAIN_GLOBAL_H

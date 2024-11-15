@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef UTILS_H
-#define UTILS_H
+#pragma once
 
 #include <sstream>
 #include <string>
@@ -759,5 +758,3 @@ QDebug operator<<(QDebug d, const Notification &n);
     QElapsedTimer name;                                                                                      \
     name.start();
 #define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
-
-#endif // UTILS_H

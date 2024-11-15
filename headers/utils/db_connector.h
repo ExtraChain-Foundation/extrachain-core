@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DB_CONNECTOR_H
-#define DB_CONNECTOR_H
+#pragma once
 
 #include <algorithm>
 #include <unordered_map>
@@ -171,4 +170,3 @@ private:
     bool implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
     bool implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace);
 };
-#endif // DB_CONNECTOR_H

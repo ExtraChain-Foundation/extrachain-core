@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef BIGNUMBER_FLOAT_H
-#define BIGNUMBER_FLOAT_H
+#pragma once
 
 #include <string>
 
@@ -134,5 +133,3 @@ inline size_t qHash(const BigNumberFloat &key, size_t seed) {
 }
 
 MAKE_CUSTOM_MAGICAL(BigNumberFloat)
-
-#endif // BIGNUMBER_FLOAT_H

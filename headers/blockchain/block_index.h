@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef BLOCK_INDEX_H
-#define BLOCK_INDEX_H
+#pragma once
 
 #include <list>
 
@@ -147,5 +146,3 @@ private:
 
     BigNumber loadLastId();
 };
-
-#endif // BLOCK_INDEX_H

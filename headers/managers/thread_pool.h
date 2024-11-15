@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef THREAD_POOL_H
-#define THREAD_POOL_H
+#pragma once
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -86,5 +85,3 @@ private:
     static bool             isFirst;
     static QList<QThread *> threads;
 };
-
-#endif // THREAD_POOL_H

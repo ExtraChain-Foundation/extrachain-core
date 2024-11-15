@@ -1,4 +1,4 @@
-    /*
+/*
  * ExtraChain Core
  * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
  *
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef LOGSMANAGER_H
-#define LOGSMANAGER_H
+#pragma once
 
 #include "extrachain_global.h"
 #include "utils/variant_model.h"
@@ -50,17 +49,17 @@ public:
     static void print(const std::string& log);
     static void setDebugLogs(bool debugLogs);
 
-    static bool toConsole;
-    static bool toFile;
-    static bool toModel;
-    static bool antiFilter;
-    static bool debugLogs;
+    static bool         toConsole;
+    static bool         toFile;
+    static bool         toModel;
+    static bool         antiFilter;
+    static bool         debugLogs;
     static VariantModel logs;
-    static QString currentThread;
+    static QString      currentThread;
 
     static QStringList filesFilter;
-    static void setFilesFilter(const QStringList& value);
-    static void setAntiFilter(bool value);
+    static void        setFilesFilter(const QStringList& value);
+    static void        setAntiFilter(bool value);
 
 signals:
     void makeLogSignal(const QString& file, int line, const QString& function, const QString& msg);
@@ -84,5 +83,3 @@ struct UnicodedStream : QTextStream {
         return static_cast<UnicodedStream&>(*this << QString(ptr));
     }
 };
-
-#endif // LOGSMANAGER_H
