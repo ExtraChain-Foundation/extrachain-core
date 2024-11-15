@@ -29,12 +29,12 @@
 
 // #define ENABLE_SQLITE_TRUE_LOGS
 
-DbConnector::DbConnector(const std::string &filePath, DBConnectorType type) {
+DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
     if (filePath.empty()) {
         eFatal("[DBConnector] Empty file name");
     }
 
-    if (type == DBConnectorType::Compressed) {
+    if (type == DbConnectorType::Compressed) {
         m_type       = type;
         this->m_file = filePath + ".temp"; // TODO: + random str?
 
@@ -55,11 +55,11 @@ DbConnector::DbConnector(const std::string &filePath, DBConnectorType type) {
     this->m_file = filePath;
 }
 
-DbConnector::DbConnector(const std::filesystem::path &filePath, DBConnectorType type)
+DbConnector::DbConnector(const std::filesystem::path &filePath, DbConnectorType type)
     : DbConnector(filePath.string(), type) {
 }
 
-DbConnector::DbConnector(const char *filePath, DBConnectorType type)
+DbConnector::DbConnector(const char *filePath, DbConnectorType type)
     : DbConnector(std::string(filePath), type) {
 }
 
@@ -121,7 +121,7 @@ bool DbConnector::close() {
     } else {
         m_open = false;
 
-        if (m_type == DBConnectorType::Compressed) {
+        if (m_type == DbConnectorType::Compressed) {
             QFile file(m_file.c_str());
             if (!file.open(QFile::ReadOnly)) {
                 eFatal("Can't open db file");

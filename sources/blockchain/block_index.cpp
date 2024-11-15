@@ -460,7 +460,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
     DbConnector db(
         path.toStdString(),
-        m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
+        m_blockCompress ? DbConnectorType::Compressed : DbConnectorType::Regular);
 
     auto bl = newBlock;
     if (!db.open()) {
@@ -720,7 +720,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
         return std::unexpected(BlockError::NotExists);
     }
 
-    DbConnector db(path, m_blockCompress ? DBConnectorType::Compressed : DBConnectorType::Regular);
+    DbConnector db(path, m_blockCompress ? DbConnectorType::Compressed : DbConnectorType::Regular);
 
     if (!db.open() || db.table_names().empty()) {
         return std::unexpected(BlockError::NotExists);

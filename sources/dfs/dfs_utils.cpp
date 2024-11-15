@@ -54,7 +54,7 @@ Dfs::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t last
         db.select(fmt::format("SELECT * FROM {} WHERE lastModified >= {}", TableName, lastModified));
 
     for (auto &row : actrDirData) {
-        auto dirRow = Utils::fromDbRow<Dfs::DirRow>(row);
+        auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
         if (dirRow.has_value()) {
             dirRow->actorId = actorId;
             dirRows.push_back(dirRow.value());
@@ -77,7 +77,7 @@ Dfs::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &
     }
 
     auto &row    = rows[0];
-    auto  dirRow = Utils::fromDbRow<Dfs::DirRow>(row);
+    auto  dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
 
     if (!dirRow.has_value()) {
         return std::unexpected(Dfs::DfsError::DirValueNotExists);
@@ -101,7 +101,7 @@ bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow
     dirRow.lastModified = currentSecs;
     dirRow.fileIdPrev   = fileIdPrev;
 
-    auto dirRowDb = Utils::toDbRow(dirRow);
+    auto dirRowDb = Utils::to_dbrow(dirRow);
     bool res      = dirFile.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
 
     return res;
@@ -119,7 +119,7 @@ bool Dfs::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::ve
             continue;
         }
 
-        auto dirRowDb = Utils::toDbRow(dirRow);
+        auto dirRowDb = Utils::to_dbrow(dirRow);
         dirFile.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
     }
 

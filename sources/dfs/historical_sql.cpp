@@ -53,7 +53,7 @@ std::expected<std::string, SqlCreateError> HistoricalSql::create_table(const DbS
 
     DbConnector history(this->history_path);
     history.open();
-    auto dbRow = Utils::toDbRow(history_row);
+    auto dbRow = Utils::to_dbrow(history_row);
     history.insert("historical_chain", dbRow);
     history.close();
 
@@ -81,7 +81,7 @@ std::expected<void, SqlCreateError> HistoricalSql::insert_into(DbRow &row, const
                                        .sign      = Signature() };
     historicalRowSign(history_row);
 
-    history.insert("historical_chain", Utils::toDbRow(history_row));
+    history.insert("historical_chain", Utils::to_dbrow(history_row));
     history.close();
 
     return {};
@@ -108,7 +108,7 @@ std::expected<void, SqlCreateError> HistoricalSql::update_where(DbRow &row, cons
                                        .sign      = Signature() };
     historicalRowSign(history_row);
 
-    history.insert("historical_chain", Utils::toDbRow(history_row));
+    history.insert("historical_chain", Utils::to_dbrow(history_row));
     history.close();
 
     return {};
@@ -135,7 +135,7 @@ std::expected<void, SqlCreateError> HistoricalSql::delete_where(DbRow &row, cons
                                        .sign      = Signature() };
     historicalRowSign(history_row);
 
-    history.insert("historical_chain", Utils::toDbRow(history_row));
+    history.insert("historical_chain", Utils::to_dbrow(history_row));
     history.close();
 
     return {};

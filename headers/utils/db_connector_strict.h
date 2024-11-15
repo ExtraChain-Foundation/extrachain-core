@@ -26,7 +26,7 @@
 
 class DBConnectorStrict : public DbConnector {
 public:
-    explicit DBConnectorStrict(const std::string& filePath, DBConnectorType type = DBConnectorType::Regular)
+    explicit DBConnectorStrict(const std::string& filePath, DbConnectorType type = DbConnectorType::Regular)
         : DbConnector(filePath, type) {
     }
     DBConnectorStrict(DBConnectorStrict&& rhs)

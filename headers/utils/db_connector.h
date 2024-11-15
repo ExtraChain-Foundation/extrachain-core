@@ -47,7 +47,7 @@ using DbRow = std::unordered_map<std::string, std::string>;
 
 namespace Utils {
 template <typename T>
-DbRow toDbRow(const T &obj) {
+DbRow to_dbrow(const T &obj) {
     auto  json = Json::serializeValue(obj);
     DbRow result;
     for (const auto &field : json.as_object()) {
@@ -64,7 +64,7 @@ DbRow toDbRow(const T &obj) {
 }
 
 template <typename T>
-std::expected<T, Utils::ParseError> fromDbRow(const DbRow &map) {
+std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
     try {
         using namespace boost::mp11;
 
@@ -114,11 +114,11 @@ struct DBColumn {
     }
 };
 
-enum class DBConnectorType {
+enum class DbConnectorType {
     Regular,
     Compressed
 };
-FORMAT_ENUM(DBConnectorType)
+FORMAT_ENUM(DbConnectorType)
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
@@ -127,14 +127,14 @@ protected:
     std::string     m_file;
     bool            m_open = false;
     sqlite3        *db     = nullptr;
-    DBConnectorType m_type = DBConnectorType::Regular;
+    DbConnectorType m_type = DbConnectorType::Regular;
 
 public:
-    explicit DbConnector(const std::string &filePath, DBConnectorType type = DBConnectorType::Regular);
+    explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(
         const std::filesystem::path &filePath,
-        DBConnectorType              type = DBConnectorType::Regular);
-    explicit DbConnector(const char *filePath, DBConnectorType type = DBConnectorType::Regular);
+        DbConnectorType              type = DbConnectorType::Regular);
+    explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);
     DbConnector(DbConnector &&db);
     ~DbConnector();
 

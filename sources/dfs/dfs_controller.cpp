@@ -333,7 +333,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
 
-    DbRow dirRowDb  = Utils::toDbRow(dirRow);
+    DbRow dirRowDb  = Utils::to_dbrow(dirRow);
     bool  insertRes = actrDirFile.replace(DfsT::ActorDirFile::TableName, dirRowDb);
 
     if (!insertRes) {
@@ -1246,7 +1246,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     actrDirFile.close();
 
     DbRow dirRowDb  = actrDirData[0];
-    auto  dirRowExp = Utils::fromDbRow<Dfs::DirRow>(dirRowDb);
+    auto  dirRowExp = Utils::from_dbrow<Dfs::DirRow>(dirRowDb);
     if (!dirRowExp.has_value()) {
         return "expected !has_value()";
     }
