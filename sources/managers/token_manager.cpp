@@ -13,11 +13,11 @@ TokenManager::TokenManager(ExtraChainNode *node)
     : node(node)
     , QObject(node) {
     initializeTokenArray();
-    DbConnector db(Token::db_tokens_path);
+    DbConnector db(Token::DB_TOKENS_PATH);
     bool        isDbOpened = db.open();
 
     if (isDbOpened)
-        db.create_table(Token::tokenTableCreate);
+        db.create_table(Token::TOKEN_TABLE_CREATE);
 }
 
 bool TokenManager::isContract(const QString &pathFile) {
@@ -67,13 +67,13 @@ bool TokenManager::isValidTicker(const std::string &ticker) {
 
 QMap<QString, QString> TokenManager::mapTokens() {
     QMap<QString, QString> map = { { ActorId().toQString(), "ExC" } };
-    DbConnector            db(Token::db_tokens_path);
+    DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {
         qWarning() << "Database doesn't opened.";
         return map;
     }
-    auto resultSelect = db.select_all(Token::tokenTableName);
+    auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
     for (auto &t : resultSelect) {
         auto tokenId = t.at("actorId").c_str();
         auto ticker  = t.at("ticker").c_str();
@@ -118,7 +118,7 @@ void TokenManager::initializeTokenArray() {
 }
 
 bool TokenManager::tokenExist(const std::string &nameToken, const std::string &tickerToken) {
-    DbConnector db(Token::db_tokens_path);
+    DbConnector db(Token::DB_TOKENS_PATH);
     bool        isDbOpen = db.open();
 
     if (!isDbOpen) {
@@ -126,7 +126,7 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
     }
 
     auto countRow = db.count(
-        Token::tokenTableName,
+        Token::TOKEN_TABLE_NAME,
         fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
     qDebug() << "[TokenManager] Name: count row:" << countRow;
     return countRow > 0;
@@ -184,12 +184,12 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
                                  .color  = color,
                                  .smart  = "" };
 
-    DbConnector db(Token::db_tokens_path);
+    DbConnector db(Token::DB_TOKENS_PATH);
     bool        isDbOpen = db.open();
     if (isDbOpen) {
         DbRow rowRow = tokenData.toDBRow();
 
-        const bool inserted = db.insert(Token::tokenTableName, rowRow);
+        const bool inserted = db.insert(Token::TOKEN_TABLE_NAME, rowRow);
         qDebug() << "Inserted token into db:" << (inserted ? "success" : "failed") << ".";
     }
 
@@ -240,10 +240,10 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
 
             const bool resultTokenExist = tokenExist(name, ticker);
             if (!resultTokenExist) {
-                DbConnector db(Token::db_tokens_path);
+                DbConnector db(Token::DB_TOKENS_PATH);
                 bool        isDbOpen = db.open();
                 if (isDbOpen) {
-                    const bool inserted = db.insert(Token::tokenTableName, rowRow);
+                    const bool inserted = db.insert(Token::TOKEN_TABLE_NAME, rowRow);
                     qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
                     emit newToken();
                 }

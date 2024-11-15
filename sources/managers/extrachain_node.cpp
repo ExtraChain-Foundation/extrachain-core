@@ -593,7 +593,7 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(
         QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
-    QDir().mkpath(QString::fromStdString(Token::folder_tokens));
+    QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
