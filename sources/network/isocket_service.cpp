@@ -55,6 +55,14 @@ void SocketService::setConstant(bool isConstant) {
     m_isConstant = isConstant;
 }
 
+bool SocketService::isVPN() const {
+    return m_isConstant.load();
+}
+
+void SocketService::setVPN(bool isVPN) {
+    m_isVPN = isVPN;
+}
+
 bool SocketService::checkFirstMessage(const QString &message, const bool canUseConnection) {
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
