@@ -38,10 +38,10 @@ struct VPNConfigStorage {
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
 
     std::atomic_bool                           vpnIsClient = false;
-    std::vector<std::string>                   vpnFileAddedHash;
+    std::vector<std::string>                   vpnFileAddedFileId;
     SafePtr<std::map<std::string, VPNWorkers>> vpnUuidToVPNWorkers;
     std::optional<NetworkVPNType>              vpnConnectedType;
-    std::string                                vpnLocalizationFileHash;
+    std::string                                vpnLocalizationFileId;
 };
 
 #endif // VPN_TYPES_H

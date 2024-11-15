@@ -32,6 +32,8 @@ public:
     int bytesIncoming() const;
     bool                      isConstant() const;
     void                      setConstant(bool isConstant);
+    bool                      isVPN() const;
+    void                      setVPN(bool isVPN);
 
 public:
     virtual void sendMessage(const QByteArray &data) = 0;
@@ -66,6 +68,7 @@ protected:
     int m_bytesCompressed = 0;
     SendType m_sendType = SendType::All;
     std::atomic_bool m_isConstant      = false;
+    std::atomic_bool m_isVPN           = false;
     // ActorId subNetwork;
 
     KeyPrivate priv;
