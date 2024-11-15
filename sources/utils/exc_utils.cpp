@@ -95,10 +95,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c) {
     return v;
 }
 
-QString KeyStore::makeKeyFileName(QString name) {
-    return name + KEY_TYPE;
-}
-
 int Utils::compare(const QByteArray &one, const QByteArray &two) {
     if (one.size() > two.size()) {
         return one.size() - two.size();

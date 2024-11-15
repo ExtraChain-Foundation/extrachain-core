@@ -341,11 +341,8 @@ namespace Net {
         Focused
     };
 } // namespace Net
-
-namespace ExtraCoin {
-    static const std::uint64_t totalSupply = 300000000;
-} // namespace ExtraCoin
 } // namespace Config
+
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 FORMAT_ENUM(Config::Net::TypeSend)
 
@@ -411,7 +408,7 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
 }
 
 template <class T>
-std::vector<std::string> serializeContainer(std::vector<T> &list) {
+std::vector<std::string> serialize_container(std::vector<T> &list) {
     std::vector<std::string> result;
     for (const auto &item : list) {
         result.push_back(serialize(item));
@@ -420,7 +417,7 @@ std::vector<std::string> serializeContainer(std::vector<T> &list) {
 }
 
 template <class T>
-std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer) {
+std::vector<T> deserialize_container(const std::vector<std::string> dataContainer) {
     std::vector<T> result;
 
     for (const auto &data : dataContainer) {
@@ -433,14 +430,14 @@ std::vector<T> deserializeContainer(const std::vector<std::string> dataContainer
 
 namespace Json {
 template <typename T>
-boost::json::value serializeValue(const T &t) {
+boost::json::value serialize_value(const T &t) {
     auto json = json_convert::to_json(t);
     return json;
 }
 
 template <typename T>
 std::string serialize(const T &t) {
-    auto json     = serializeValue(t);
+    auto json     = serialize_value(t);
     auto json_str = boost::json::serialize(json);
     return json_str;
 }
@@ -459,12 +456,12 @@ std::expected<T, std::string> deserialize(const std::string &json_str) {
 } // namespace Json
 
 namespace Token {
-static const auto        MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
-static const std::string folder_tokens   = "tokens";
-static const std::string db_tokens       = "tokens";
-static const std::string tokenTableName  = "tokens";
-static const std::string db_tokens_path  = fmt::format("{}/{}", folder_tokens, db_tokens);
-static const std::string tokenTableCreate =
+static const auto        MAX_TOKEN_COUNT  = BigNumberFloat("1000000000000");
+static const std::string FOLDER_TOKENS    = "tokens";
+static const std::string DB_TOKENS        = "tokens";
+static const std::string TOKEN_TABLE_NAME = "tokens";
+static const std::string DB_TOKENS_PATH   = fmt::format("{}/{}", FOLDER_TOKENS, DB_TOKENS);
+static const std::string TOKEN_TABLE_CREATE =
     "CREATE TABLE IF NOT EXISTS tokens("
     "actorId       TEXT  PRIMARY KEY NOT NULL, "
     "name          TEXT  NOT NULL, "
@@ -487,7 +484,7 @@ namespace Fields {
 
 namespace Utils {
 EXTRACHAIN_EXPORT std::string platformDelimeter();
-const static int              ReconnectInterval = 5000;
+const static int              RECONNECT_INTERVAL = 5000;
 
 static std::uint64_t currentDateSecs() {
     using namespace std::chrono;
@@ -712,20 +709,12 @@ enum DataRowType {
 } // namespace DataStorage
 MSGPACK_ADD_ENUM(DataStorage::DataRowType)
 
-namespace Token {
-static const std::string EXTRACHAIN_TOKEN = "";
-}
-
 namespace KeyStore {
 // To store user private/public keys
 static const std::string folder   = "keystore";
 static const std::string format   = ".profile";
 static const std::string profiles = "profiles";
 static const std::string encrypt  = "encrypt";
-
-// TODO: remove
-static const QString KEY_TYPE = ".key";
-QString              makeKeyFileName(QString name);
 }
 
 namespace SearchEnum {
@@ -747,64 +736,6 @@ enum class TxParam {
     Data,
     Null
 };
-
-[[maybe_unused]] static QString toString(BlockParam param) {
-    switch (param) {
-    case BlockParam::Id:
-        return "Id";
-    case BlockParam::Data:
-        return "Data";
-    case BlockParam::Hash:
-        return "Hash";
-    default:
-        return QString();
-    }
-}
-
-[[maybe_unused]] static BlockParam fromStringBlockParam(QByteArray s) {
-    if (s == "Id")
-        return BlockParam::Id;
-    if (s == "Data")
-        return BlockParam::Data;
-    if (s == "Hash")
-        return BlockParam::Hash;
-    return BlockParam::Null;
-}
-
-[[maybe_unused]] static QString toString(TxParam param) {
-    switch (param) {
-    case TxParam::UserSender:
-        return "UserSender";
-    case TxParam::UserReceiver:
-        return "UserReceiver";
-    case TxParam::UserApprover:
-        return "UserApprover";
-    case TxParam::UserSenderOrReceiver:
-        return "UserSenderOrReceiver";
-    case TxParam::User:
-        return "User";
-    case TxParam::Hash:
-        return "Hash";
-    default:
-        return QString();
-    }
-}
-
-[[maybe_unused]] static TxParam fromStringTxParam(QByteArray s) {
-    if (s == "User")
-        return TxParam::User;
-    if (s == "UserApprover")
-        return TxParam::UserApprover;
-    if (s == "UserReceiver")
-        return TxParam::UserReceiver;
-    if (s == "UserSender")
-        return TxParam::UserSender;
-    if (s == "UserSenderOrReceiver")
-        return TxParam::UserSenderOrReceiver;
-    if (s == "Hash")
-        return TxParam::Hash;
-    return TxParam::Null;
-}
 } // namespace SearchEnum
 
 struct EXTRACHAIN_EXPORT Notification {

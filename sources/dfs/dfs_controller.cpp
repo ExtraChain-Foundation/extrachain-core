@@ -1170,7 +1170,7 @@ void DfsController::verifyFiles(
             file.verified = true;
         }
     }
-    std::vector<std::string> serializedData = MessagePack::serializeContainer(fileList);
+    std::vector<std::string> serializedData = MessagePack::serialize_container(fileList);
     node->network()->send_message(
         serializedData,
         MessageType::DfsVerifyList,

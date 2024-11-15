@@ -213,6 +213,13 @@ public:
             .msgpack_unpack(msgpack_o);
         m_index = BigNumber(index_str);
     }
+
+    BOOST_DESCRIBE_CLASS(
+        Block,
+        (),
+        (),
+        (),
+        (m_index, m_type, m_date, m_dataService, m_hash, m_prevHash, m_signatures, m_transactions))
 };
 
 inline bool operator<(const Block &l, const Block &r) {

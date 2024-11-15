@@ -48,7 +48,7 @@ using DbRow = std::unordered_map<std::string, std::string>;
 namespace Utils {
 template <typename T>
 DbRow to_dbrow(const T &obj) {
-    auto  json = Json::serializeValue(obj);
+    auto  json = Json::serialize_value(obj);
     DbRow result;
     for (const auto &field : json.as_object()) {
         const auto &value = field.value();
