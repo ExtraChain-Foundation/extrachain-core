@@ -122,7 +122,10 @@ enum class FsError {
     ValidationError,
     DirectoryTraversalError,
     IoError,
-    AccessDenied
+    AccessDenied,
+    SymlinkFound,
+    ParentNotFound,
+    ParentNotDirectory
 };
 
 class DirectoryIterator;
@@ -146,6 +149,26 @@ public:
 #else
             auto fs_path = std::filesystem::path(normalized).lexically_normal();
 #endif
+            // Check symlinks along the path
+            auto current = fs_path;
+            while (!current.empty()) {
+                if (std::filesystem::is_symlink(current)) {
+                    return std::unexpected(FsError::SymlinkFound);
+                }
+                current = current.parent_path();
+            }
+
+            // Check parent directory
+            auto parent = fs_path.parent_path();
+            if (!parent.empty()) {
+                if (!std::filesystem::exists(parent)) {
+                    return std::unexpected(FsError::ParentNotFound);
+                }
+                if (!std::filesystem::is_directory(parent)) {
+                    return std::unexpected(FsError::ParentNotDirectory);
+                }
+            }
+
             return FsPath(std::filesystem::weakly_canonical(fs_path));
         } catch (const std::exception& e) {
             eCritical("Failed to process path: {}", e.what());
@@ -345,6 +368,7 @@ public:
     bool operator==(const FsPath& other) const {
         return m_path == other.m_path;
     }
+
     bool operator!=(const FsPath& other) const {
         return !(*this == other);
     }
