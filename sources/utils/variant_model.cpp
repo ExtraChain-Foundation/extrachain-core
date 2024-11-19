@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-﻿#include "utils/variant_model.h"
-
+#include "utils/variant_model.h"
 #include <QDebug>
 
 VariantModel::VariantModel(QAbstractListModel *parent, const QList<QByteArray> &list)
@@ -141,9 +140,9 @@ void VariantModel::appendFromJson(const QString &fileName) {
         return;
 
     if (file.open(QFile::ReadOnly)) {
-        QString json = file.readAll();
-        auto doc = QJsonDocument::fromJson(json.toUtf8());
-        auto var = doc.toVariant().toMap();
+        QString json    = file.readAll();
+        auto    doc     = QJsonDocument::fromJson(json.toUtf8());
+        auto    var     = doc.toVariant().toMap();
         var["alphabet"] = "";
         append(var);
     }
@@ -158,9 +157,9 @@ void VariantModel::insertFromJson(int index, const QString &fileName) {
         return;
 
     if (file.open(QFile::ReadOnly)) {
-        QString json = file.readAll();
-        auto doc = QJsonDocument::fromJson(json.toUtf8());
-        auto var = doc.toVariant().toMap();
+        QString json    = file.readAll();
+        auto    doc     = QJsonDocument::fromJson(json.toUtf8());
+        auto    var     = doc.toVariant().toMap();
         var["alphabet"] = "";
         insert(index, var);
     }
@@ -169,12 +168,12 @@ void VariantModel::insertFromJson(int index, const QString &fileName) {
 }
 
 QVariantMap VariantModel::loadJson(const QString &fileName) {
-    QFile file(fileName);
+    QFile       file(fileName);
     QVariantMap map;
 
     if (file.open(QFile::ReadOnly)) {
         QString json = file.readAll();
-        map = QJsonDocument::fromJson(json.toUtf8()).toVariant().toMap();
+        map          = QJsonDocument::fromJson(json.toUtf8()).toVariant().toMap();
         file.close();
     }
 

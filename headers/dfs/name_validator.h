@@ -39,32 +39,25 @@ public:
 
     struct ValidationError {
         ErrorCode code;
-        size_t position;
+        size_t    position;
     };
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    validate(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> validate(std::string_view name) noexcept;
 
 private:
-    static constexpr size_t MAX_NAME_LENGTH = 255;
-    static constexpr std::array<char, 9> INVALID_CHARS = {
-        '<', '>', ':', '"', '/', '\\', '|', '?', '*'
-    };
+    static constexpr size_t              MAX_NAME_LENGTH = 255;
+    static constexpr std::array<char, 9> INVALID_CHARS   = { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
 
     static constexpr std::array<std::string_view, 22> RESERVED_NAMES = {
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        "CON",  "PRN",  "AUX",  "NUL",  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+        "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
     };
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_empty(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_empty(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_length(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_length(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_null_byte(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_null_byte(std::string_view name) noexcept;
 
     [[nodiscard]] static std::expected<void, ValidationError>
     check_invalid_chars(std::string_view name) noexcept;
@@ -80,4 +73,25 @@ private:
 
     [[nodiscard]] static std::expected<void, ValidationError>
     check_reserved_name(std::string_view name) noexcept;
+};
+
+class PathValidator {
+public:
+    enum class ErrorCode {
+        EmptyPath,
+        TooLong,
+        InvalidName,
+        EmptyComponent
+    };
+
+    struct ValidationError {
+        ErrorCode                                     code;
+        size_t                                        position;
+        std::optional<NameValidator::ValidationError> name_error;
+    };
+
+    [[nodiscard]] static std::expected<void, ValidationError> validate(std::string_view path) noexcept;
+
+private:
+    static constexpr size_t MAX_PATH_LENGTH = 4096;
 };
