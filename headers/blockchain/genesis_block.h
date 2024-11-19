@@ -40,6 +40,7 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
      * @brief MessagePack serialization definition
      */
     MSGPACK_DEFINE(actorId, tokenId)
+    BOOST_DESCRIBE_CLASS(GenesisDataActor, (), (), (), (actorId, tokenId))
 };
 
 /**
@@ -57,6 +58,7 @@ struct EXTRACHAIN_EXPORT GenesisDataInfo {
      * @brief MessagePack serialization definition
      */
     MSGPACK_DEFINE(state, type)
+    BOOST_DESCRIBE_CLASS(GenesisDataInfo, (), (), (), (state, type))
 };
 
 /**
@@ -142,6 +144,8 @@ public:
             .msgpack_unpack(msgpack_o);
         m_index = BigNumber(index_str);
     }
+
+    BOOST_DESCRIBE_CLASS(GenesisBlock, (Block), (), (), (m_prevGenHash, m_dataRows))
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {

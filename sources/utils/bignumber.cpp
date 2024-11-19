@@ -322,7 +322,7 @@ bool BigNumber::operator==(const int &other) const {
 
 namespace magic {
 std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-    return value.to_string();
+    return value.to_string(NumeralBase::Hex);
 }
 
 BigNumber custom_magic<BigNumber>::write(const std::string &value) {

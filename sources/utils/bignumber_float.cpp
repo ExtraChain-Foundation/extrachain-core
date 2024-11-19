@@ -297,7 +297,7 @@ BigNumberFloat BigNumberFloat::from_hex(const std::string &number) {
 
 namespace magic {
 std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
-    return value.to_string();
+    return value.to_string(NumeralBase::Hex);
 }
 
 BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {

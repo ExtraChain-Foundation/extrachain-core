@@ -217,6 +217,13 @@ namespace detail {
             });
             return '"' + (is_empty ? "empty" : Utils::to_base64(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
+            if (value.empty()) {
+                if constexpr (is_associative_container<T>::value)
+                    return "{}";
+                else
+                    return "[]";
+            }
+
             if constexpr (is_associative_container<T>::value) {
                 std::string result = "{ ";
                 bool        first  = true;
@@ -252,16 +259,17 @@ std::string magic(const T& obj) {
         result += " { ";
         bool first = true;
 
-        boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-            [&](auto D) {
-                if constexpr (!std::is_same_v<decltype(D), custom_magic_tag>) {
-                    if (!first)
-                        result += ", ";
-                    result += detail::clean_field_name(D.name) + ": "
-                              + detail::to_string(invoke_member(obj, D.pointer));
-                    first = false;
-                }
-            });
+        boost::mp11::mp_for_each<boost::describe::describe_members<
+            T,
+            boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+            if constexpr (!std::is_same_v<decltype(D), custom_magic_tag>) {
+                if (!first)
+                    result += ", ";
+                result += detail::clean_field_name(D.name) + ": "
+                          + detail::to_string(invoke_member(obj, D.pointer));
+                first = false;
+            }
+        });
 
         return result + " }";
     } else {
@@ -350,15 +358,16 @@ namespace detail {
             }
         } else if constexpr (boost::describe::has_describe_members<T>::value) {
             boost::json::object result;
-            boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        auto value = to_json(magic::invoke_member(obj, D.pointer));
-                        if (!value.is_null()) {
-                            result[magic::detail::clean_field_name(D.name)] = value;
-                        }
+            boost::mp11::mp_for_each<boost::describe::describe_members<
+                T,
+                boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    auto value = to_json(magic::invoke_member(obj, D.pointer));
+                    if (!value.is_null()) {
+                        result[magic::detail::clean_field_name(D.name)] = value;
                     }
-                });
+                }
+            });
             return result;
         } else if constexpr (has_custom_magic_v<T>) {
             return boost::json::value(magic::custom_magic<T>::read(obj));
@@ -428,18 +437,19 @@ namespace detail {
         } else if constexpr (boost::describe::has_describe_members<T>::value) {
             T           result {};
             const auto& obj = json.as_object();
-            boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        auto it = obj.find(magic::detail::clean_field_name(D.name));
-                        if (it != obj.end()) {
-                            // eInfo("JSON: Parsing for {}", D.name);
+            boost::mp11::mp_for_each<boost::describe::describe_members<
+                T,
+                boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    auto it = obj.find(magic::detail::clean_field_name(D.name));
+                    if (it != obj.end()) {
+                        // eInfo("JSON: Parsing for {}", D.name);
 
-                            using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
-                            result.*D.pointer = from_json<MemberType>(it->value());
-                        }
+                        using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
+                        result.*D.pointer = from_json<MemberType>(it->value());
                     }
-                });
+                }
+            });
             return result;
         } else if constexpr (has_custom_magic_v<T>) {
             return magic::custom_magic<T>::write(json.as_string().c_str());
