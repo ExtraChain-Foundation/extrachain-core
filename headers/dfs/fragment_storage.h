@@ -1,5 +1,23 @@
-#ifndef FRAGMENT_STORAGE_H
-#define FRAGMENT_STORAGE_H
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#pragma once
 
 #include "extrachain_global.h"
 #include "utils/db_connector.h"
@@ -72,5 +90,3 @@ signals:
     void compliteFile(const std::string& fileName);
     void requestNextFragment(const DfsP::RequestFileSegmentMessage&);
 };
-
-#endif // FRAGMENT_STORAGE_H

@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXC_MAGIC_HPP
-#define EXC_MAGIC_HPP
+#pragma once
 
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
@@ -218,6 +217,13 @@ namespace detail {
             });
             return '"' + (is_empty ? "empty" : Utils::to_base64(raw)) + '"';
         } else if constexpr (is_container<T>::value) {
+            if (value.empty()) {
+                if constexpr (is_associative_container<T>::value)
+                    return "{}";
+                else
+                    return "[]";
+            }
+
             if constexpr (is_associative_container<T>::value) {
                 std::string result = "{ ";
                 bool        first  = true;
@@ -253,16 +259,17 @@ std::string magic(const T& obj) {
         result += " { ";
         bool first = true;
 
-        boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-            [&](auto D) {
-                if constexpr (!std::is_same_v<decltype(D), custom_magic_tag>) {
-                    if (!first)
-                        result += ", ";
-                    result += detail::clean_field_name(D.name) + ": "
-                              + detail::to_string(invoke_member(obj, D.pointer));
-                    first = false;
-                }
-            });
+        boost::mp11::mp_for_each<boost::describe::describe_members<
+            T,
+            boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+            if constexpr (!std::is_same_v<decltype(D), custom_magic_tag>) {
+                if (!first)
+                    result += ", ";
+                result += detail::clean_field_name(D.name) + ": "
+                          + detail::to_string(invoke_member(obj, D.pointer));
+                first = false;
+            }
+        });
 
         return result + " }";
     } else {
@@ -319,6 +326,10 @@ namespace detail {
             if (!obj)
                 return boost::json::value(nullptr);
             return to_json(*obj);
+        } else if constexpr (magic::is_optional<T>::value) {
+            if (!obj.has_value())
+                return boost::json::value(nullptr);
+            return to_json(obj.value());
         } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
             return boost::json::value(obj);
         } else if constexpr (std::is_enum_v<T>) {
@@ -329,25 +340,34 @@ namespace detail {
             if constexpr (magic::is_associative_container<T>::value) {
                 boost::json::object result;
                 for (const auto& pair : obj) {
-                    result[to_json(pair.first).as_string()] = to_json(pair.second);
+                    auto value = to_json(pair.second);
+                    if (!value.is_null()) {
+                        result[to_json(pair.first).as_string()] = value;
+                    }
                 }
                 return result;
             } else {
                 boost::json::array result;
                 for (const auto& item : obj) {
-                    result.push_back(to_json(item));
+                    auto value = to_json(item);
+                    if (!value.is_null()) {
+                        result.push_back(value);
+                    }
                 }
                 return result;
             }
         } else if constexpr (boost::describe::has_describe_members<T>::value) {
             boost::json::object result;
-            boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        result[magic::detail::clean_field_name(D.name)] =
-                            to_json(magic::invoke_member(obj, D.pointer));
+            boost::mp11::mp_for_each<boost::describe::describe_members<
+                T,
+                boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    auto value = to_json(magic::invoke_member(obj, D.pointer));
+                    if (!value.is_null()) {
+                        result[magic::detail::clean_field_name(D.name)] = value;
                     }
-                });
+                }
+            });
             return result;
         } else if constexpr (has_custom_magic_v<T>) {
             return boost::json::value(magic::custom_magic<T>::read(obj));
@@ -417,18 +437,19 @@ namespace detail {
         } else if constexpr (boost::describe::has_describe_members<T>::value) {
             T           result {};
             const auto& obj = json.as_object();
-            boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-                [&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        auto it = obj.find(magic::detail::clean_field_name(D.name));
-                        if (it != obj.end()) {
-                            // eInfo("JSON: Parsing for {}", D.name);
+            boost::mp11::mp_for_each<boost::describe::describe_members<
+                T,
+                boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    auto it = obj.find(magic::detail::clean_field_name(D.name));
+                    if (it != obj.end()) {
+                        // eInfo("JSON: Parsing for {}", D.name);
 
-                            using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
-                            result.*D.pointer = from_json<MemberType>(it->value());
-                        }
+                        using MemberType  = std::remove_reference_t<decltype(result.*D.pointer)>;
+                        result.*D.pointer = from_json<MemberType>(it->value());
                     }
-                });
+                }
+            });
             return result;
         } else if constexpr (has_custom_magic_v<T>) {
             return magic::custom_magic<T>::write(json.as_string().c_str());
@@ -486,5 +507,3 @@ struct fmt::formatter<
         return fmt::format_to(ctx.out(), "{}", magic::magic(obj));
     }
 };
-
-#endif // EXC_MAGIC_HPP

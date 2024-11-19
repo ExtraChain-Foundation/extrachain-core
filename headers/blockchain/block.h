@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef MEMBLOCK_H
-#define MEMBLOCK_H
+#pragma once
 
 #include "actor.h"
 #include "blockchain/transaction.h"
@@ -213,6 +212,13 @@ public:
             .msgpack_unpack(msgpack_o);
         m_index = BigNumber(index_str);
     }
+
+    BOOST_DESCRIBE_CLASS(
+        Block,
+        (),
+        (),
+        (),
+        (m_index, m_type, m_date, m_dataService, m_hash, m_prevHash, m_signatures, m_transactions))
 };
 
 inline bool operator<(const Block &l, const Block &r) {
@@ -226,5 +232,3 @@ inline bool operator==(const Block &l, const Block &r) {
 }
 
 QDebug operator<<(QDebug debug, const Block &block);
-
-#endif // MEMBLOCK_H

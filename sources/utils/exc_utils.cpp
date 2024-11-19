@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -93,10 +93,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c) {
     if (start != end)
         v.emplace_back(start, end);
     return v;
-}
-
-QString KeyStore::makeKeyFileName(QString name) {
-    return name + KEY_TYPE;
 }
 
 int Utils::compare(const QByteArray &one, const QByteArray &two) {

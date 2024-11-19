@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef GENESIS_BLOCK_H
-#define GENESIS_BLOCK_H
+#pragma once
 
 #include "blockchain/block.h"
 
@@ -41,6 +40,7 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
      * @brief MessagePack serialization definition
      */
     MSGPACK_DEFINE(actorId, tokenId)
+    BOOST_DESCRIBE_CLASS(GenesisDataActor, (), (), (), (actorId, tokenId))
 };
 
 /**
@@ -58,6 +58,7 @@ struct EXTRACHAIN_EXPORT GenesisDataInfo {
      * @brief MessagePack serialization definition
      */
     MSGPACK_DEFINE(state, type)
+    BOOST_DESCRIBE_CLASS(GenesisDataInfo, (), (), (), (state, type))
 };
 
 /**
@@ -143,11 +144,11 @@ public:
             .msgpack_unpack(msgpack_o);
         m_index = BigNumber(index_str);
     }
+
+    BOOST_DESCRIBE_CLASS(GenesisBlock, (Block), (), (), (m_prevGenHash, m_dataRows))
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
            && l.dataService() == r.dataService() && l.dataRows() == r.dataRows();
 }
-
-#endif // GENESIS_BLOCK_H

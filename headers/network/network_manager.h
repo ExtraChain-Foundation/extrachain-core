@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef NETWORK_MANAGER_H
-#define NETWORK_MANAGER_H
+#pragma once
 
 #include <QTimer>
 #include <QtCore/QMutex>
@@ -342,5 +341,3 @@ signals:
 
     friend class DfsNetworkManager;
 };
-
-#endif // NETWORK_MANAGER_H

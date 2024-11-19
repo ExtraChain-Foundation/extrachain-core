@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DB_CONNECTOR_H
-#define DB_CONNECTOR_H
+#pragma once
 
 #include <algorithm>
 #include <unordered_map>
@@ -48,7 +47,7 @@ using DbRow = std::unordered_map<std::string, std::string>;
 namespace Utils {
 template <typename T>
 DbRow to_dbrow(const T &obj) {
-    auto  json = Json::serializeValue(obj);
+    auto  json = Json::serialize_value(obj);
     DbRow result;
     for (const auto &field : json.as_object()) {
         const auto &value = field.value();
@@ -171,4 +170,3 @@ private:
     bool implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
     bool implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace);
 };
-#endif // DB_CONNECTOR_H

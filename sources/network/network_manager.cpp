@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -75,7 +75,7 @@ void NetworkManager::process() {
     if (!node->isClientApp())
         return;
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
-    m_reconnectTimer->start(Utils::ReconnectInterval);
+    m_reconnectTimer->start(Utils::RECONNECT_INTERVAL);
 }
 
 void NetworkManager::reconnection() {
@@ -575,7 +575,7 @@ void NetworkManager::messageReceived(
 
             if (!ips.empty()) {
                 node->network()->send_message(
-                    MessagePack::serializeContainer(ips),
+                    MessagePack::serialize_container(ips),
                     MessageType::ShareConnections,
                     MessageStatus::Response,
                     messageId,
@@ -584,7 +584,7 @@ void NetworkManager::messageReceived(
         } else if (status == MessageStatus::Response) {
             qInfo() << "Achieved ShareConnections(Response)" << messageId;
             auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            auto ips      = MessagePack::deserializeContainer<std::string>(ipsInput);
+            auto ips      = MessagePack::deserialize_container<std::string>(ipsInput);
             for (const auto &item : ips) {
                 bool canConnect        = true;
                 auto connectionsLocked = *m_connections;
@@ -722,7 +722,7 @@ void NetworkManager::messageReceived(
             std::vector<std::string> listMessage =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserializeContainer<DfsP::VerifyFileMessage>(listMessage);
+                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
             node->dfs()->verifyFiles(listVerifiedMessage, messageId);
             break;
         }
@@ -730,7 +730,7 @@ void NetworkManager::messageReceived(
             std::vector<std::string> listMessage =
                 MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserializeContainer<DfsP::VerifyFileMessage>(listMessage);
+                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
             float percentVerified = node->dfs()->percentVerified(listVerifiedMessage);
             break;
         }

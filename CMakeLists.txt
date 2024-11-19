@@ -54,6 +54,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_template.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fs_path.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h

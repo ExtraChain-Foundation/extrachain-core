@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef DB_CONNECTOR_STRICT_H
-#define DB_CONNECTOR_STRICT_H
+#pragma once
 
 #include "utils/db_connector.h"
 #include "sqlite3.h"
@@ -297,5 +296,3 @@ private:
         return true;
     }
 };
-
-#endif // DB_CONNECTOR_STRICT_H

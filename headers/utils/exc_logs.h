@@ -1,6 +1,6 @@
 /*
  * ExtraChain Core
- * Copyright (C) 2020 ExtraChain Foundation <extrachain@gmail.com>
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
  *
  * This library is free software; you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published
@@ -17,8 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef EXC_LOGS_H
-#define EXC_LOGS_H
+#pragma once
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -426,5 +425,3 @@ fatal_impl(const std::source_location& loc, fmt::format_string<Args...> format_s
 #define eLog(...)     eDebug(__VA_ARGS__)
 
 #include "utils/exc_logs_extra.h"
-
-#endif // EXC_LOGS_H
