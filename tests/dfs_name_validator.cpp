@@ -56,19 +56,19 @@ private:
             bool position_matches = error.position == test.expected_position;
 
             if (error_matches && position_matches) {
-                eInfo("PASS: Invalid name '{}' - error code {} at position {}",
+                eInfo("PASS: Invalid name '{}': error code {} at position {}",
                       test.name, static_cast<int>(error.code), error.position);
                 ++passed_tests;
                 return;
             }
 
-            eWarning("FAIL: Name '{}' - Expected error {} at position {}, got {} at position {}",
+            eWarning("FAIL: Name '{}': Expected error {} at position {}, got {} at position {}",
                      test.name, static_cast<int>(test.expected_error), test.expected_position,
                      static_cast<int>(error.code), error.position);
             return;
         }
 
-        eWarning("FAIL: Name '{}' - Expected {}, but got {}",
+        eWarning("FAIL: Name '{}': Expected {}, but got {}",
                  test.name,
                  test.should_pass ? "success" : "failure",
                  test.should_pass ? "failure" : "success");

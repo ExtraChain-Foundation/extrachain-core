@@ -117,7 +117,7 @@ void Block::setPrev(const BlockVariant &prev) {
         this->m_index    = BigNumber("0");
         this->m_prevHash = Utils::calcHash("0 index");
     } else {
-        // eLog("[Block] Construction block. Previous block id:  {}", prev->getIndex());
+        // eLog("[Block] Construction block. Previous block id: {}", prev->getIndex());
         this->m_index    = prev.getIndex() + 1;
         this->m_prevHash = prev.getHash();
     }

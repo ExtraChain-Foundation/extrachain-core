@@ -209,10 +209,6 @@ void ExtraChainNode::start() {
     }
 }
 
-void ExtraChainNode::showMessage(QString from, QString message) {
-    eLog("{}   {}", from, message);
-}
-
 // void ExtraChainNode::connectResolveManager() {
 //    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
 //    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
@@ -246,29 +242,29 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     }
 
     if (tx.isEmpty() && !tx.isBurn()) {
-        eWarning("{}", fmt::format("Can not create: {}. Transaction is empty", tx));
+        eWarning("Can not create: {}. Transaction is empty", tx);
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
     auto actor = m_accountController->currentWallet();
     if (actor->empty()) {
-        eWarning("{}", fmt::format("Can not create: {}. There no current user", tx));
+        eWarning("Can not create: {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    eWarning("{}", fmt::format("Attempting to create: {}  from user {}", tx, actor->id().to_string()));
+    eWarning("Attempting to create {} from user {}", tx, actor->id().to_string());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->getLastRealBlock();
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-        eWarning("{}", fmt::format("Can not create: {}. There is no last block in blockchain", tx));
+        eWarning("Can not create: {}. There is no last block in blockchain", tx);
         return std::unexpected(TransactionError::NoLastBlock);
     }
     tx.setPrevBlock(lastRealBlock->getIndex());
 
     // 2) check coin availability
     if (blockchain()->getUserBalance(actor->id(), tx.token()) < tx.amount()) {
-        eWarning("{}", fmt::format("Can not create: {}. There is not enough coins/tokens in wallet", tx));
+        eWarning("Can not create: {}. There is not enough coins/tokens in wallet", tx);
         return std::unexpected(TransactionError::InsufficientFunds);
     }
 
@@ -292,7 +288,7 @@ ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, Actor
     tx.setToken(token);
 
     if (actor->empty()) {
-        eWarning("{}", fmt::format("Can not create {}. There no current user", tx));
+        eWarning("Can not create {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
@@ -371,7 +367,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
             Transaction tx(actor->id(), receiver, amount);
             tx.setToken(token);
 
-            eLog("{}", fmt::format("Attempting to create: {} from user {}", tx, actor->id()));
+            eLog("Attempting to create: {} from user {}", tx, actor->id());
 
             tx.sign(actor);
             eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
@@ -393,8 +389,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         //                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     } else {
-        eWarning("{}", QString("Can not create tx to [%1]. There no current user")
-                          .arg(QString(receiver.toQByteArray())));
+        eWarning("Can not create tx to '{}'. There no current user", receiver.toQByteArray());
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 

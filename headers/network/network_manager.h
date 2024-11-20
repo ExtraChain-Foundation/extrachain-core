@@ -104,13 +104,13 @@ struct NetworkReconnect {
     }
 
     static NetworkReconnect fromWsConnection(const DfsP::WSConnection& wsConnection) {
-        return NetworkReconnect{ .ip = QString::fromStdString(wsConnection.address),
-                                 .port = static_cast<quint16>(wsConnection.port),
-                                 .protocol = Network::Protocol::WebSocket };
+        return NetworkReconnect { .ip       = QString::fromStdString(wsConnection.address),
+                                  .port     = static_cast<quint16>(wsConnection.port),
+                                  .protocol = Network::Protocol::WebSocket };
     }
 
     void print() const {
-        eLog("ip:  {} port: {}", ip, port);
+        eLog("[NetworkReconnect] ip: {}, port: {}", ip, port);
     }
 };
 
@@ -140,34 +140,34 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
-    bool                   reservedActorListUse = false;
-    bool                   active               = false;
-    bool                   shouldRequest        = false;
-    std::unique_ptr<UPNPConnection>        upnpDis;
-    std::unique_ptr<UPNPConnection>        upnpNet;
-    QMap<std::string, int> msgHashList = {};
+    bool                            reservedActorListUse = false;
+    bool                            active               = false;
+    bool                            shouldRequest        = false;
+    std::unique_ptr<UPNPConnection> upnpDis;
+    std::unique_ptr<UPNPConnection> upnpNet;
+    QMap<std::string, int>          msgHashList = {};
 
-    ExtraChainNode*                        node;
-    std::shared_ptr<QNetworkAddressEntry>  local;
-    QWebSocketServer*      wsServer = nullptr;
+    ExtraChainNode*                              node;
+    std::shared_ptr<QNetworkAddressEntry>        local;
+    QWebSocketServer*                            wsServer = nullptr;
     SafePtr<QList<SocketService*>>               m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
-    NetworkStatus          m_networkStatus;
+    NetworkStatus                                m_networkStatus;
 
-    std::map<std::string, std::string>           m_messages;
-    std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;
-    std::map<std::string, MessageIdDataReceived> m_messages_received;
-    QTimer*                                      m_reconnectTimer;
-    CalculateTraffic*                            calculateTraffic;
+    std::map<std::string, std::string>                           m_messages;
+    std::map<std::string, MessageIdDataWaiting>                  m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived>                 m_messages_received;
+    QTimer*                                                      m_reconnectTimer;
+    CalculateTraffic*                                            calculateTraffic;
     SafePtr<std::map<std::string, std::pair<std::string, bool>>> m_receivedMessageId;
-    std::set<ActorId>                            m_customPool;
+    std::set<ActorId>                                            m_customPool;
 
     std::string m_networkHashForVPN;
 
 public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
-    void localInizialization();
+    void                        localInizialization();
     std::pair<QString, QString> getPublicIPAndCountry();
     bool                        removeOneConnection();
 
@@ -239,11 +239,12 @@ private slots:
 public:
     QString localIp(); // TODO: remove
 
-    void sendMessage(const std::string&    serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier,
-                     MessageType           type_info = MessageType::Unknown,
-                     MessageStatus         status_info = MessageStatus::NoStatus);
+    void sendMessage(
+        const std::string&    serialized_message,
+        Config::Net::TypeSend typeSend,
+        const std::string&    receiver_identifier,
+        MessageType           type_info   = MessageType::Unknown,
+        MessageStatus         status_info = MessageStatus::NoStatus);
 
     void saveCustomMessage(const std::string& messageId, const std::string& identifier);
 

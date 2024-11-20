@@ -94,7 +94,7 @@ void DiscoveryService::recieveMsg() {
         // QString sender = QHostAddress(datagram.senderAddress().toIPv4Address()).toString();
         QJsonDocument doc = QJsonDocument::fromJson(datagram.data());
         int prt = doc.object().value("netPort").toString().toInt();
-        eLog("DISCOVERY SERVICE: port {}", prt);
+        eLog("[DiscoveryService] port {}", prt);
         emit ClientDiscovered(datagram.senderAddress(), static_cast<quint16>(prt));
         return;
     }

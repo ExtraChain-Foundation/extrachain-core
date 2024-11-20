@@ -39,7 +39,7 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase ba
             }
         }
     } catch (std::exception &) {
-        eLog("Incorrect BigNumberFloat value: {}", bigNumberFloat.c_str());
+        eLog("Incorrect BigNumberFloat value: {}", bigNumberFloat);
         assert(false);
     }
 

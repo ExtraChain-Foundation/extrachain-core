@@ -86,7 +86,7 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
     if (json.isEmpty()) {
-        eLog("{}", QString("[Socket] First message:%1").arg(message));
+        eLog("[Socket] First message: '{}'", message);
         closeSocket();
         eFatal("[Socket] Can't check first message");
         return false;

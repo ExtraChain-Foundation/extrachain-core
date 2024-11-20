@@ -64,7 +64,10 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
         Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            eWarning("Can not validate block {} : There no actor {} in local storage", block.getIndex(), actorId);
+            eWarning(
+                "Can not validate block {}. There no actor {} in local storage",
+                block.getIndex(),
+                actorId);
             continue;
         }
 
@@ -78,7 +81,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
 bool ActorIndex::validateTx(const Transaction &tx) {
     Actor<KeyPublic> actor = this->getActor(tx.approver());
     if (actor.empty()) {
-        eWarning("Can not validate tx {} : There no actor {}  in local storage", tx.hash().c_str(), tx.approver());
+        eWarning("Can not validate tx {}. There no actor {} in local storage", tx.hash(), tx.approver());
         return false;
     }
     return tx.verify(actor);

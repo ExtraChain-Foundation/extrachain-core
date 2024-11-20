@@ -412,7 +412,7 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
     std::vector<std::string> reslist;
     boost::algorithm::split(templist, serialized, boost::algorithm::is_any_of("|"));
     if (templist.empty()) {
-        eLog("decerialize error - empty list after split");
+        eLog("deserialize error: empty list after split");
     }
     for (int i = 0; i < templist.size(); i++) {
         reslist.push_back(Utils::bytesDecodeStdString(templist.at(i)));

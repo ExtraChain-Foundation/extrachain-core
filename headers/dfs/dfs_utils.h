@@ -320,7 +320,7 @@ namespace Fragments {
         std::list<std::pair<int, int>> fragmentPositionList;
 
         void print() const {
-            eLog("actor: {}, file hash: {}, path: {} ]", actor, fileHash.c_str(), filePath.c_str());
+            eLog("[Fragment] actor: {}, file hash: {}, path: {}", actor, fileHash, filePath);
             for (const auto& pair : fragmentPositionList) {
                 eLog("{} {}", pair.first, pair.second);
             }

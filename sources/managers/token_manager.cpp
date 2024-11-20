@@ -43,7 +43,7 @@ TokenManager::TokenManager(ExtraChainNode *node)
 bool TokenManager::isContract(const QString &pathFile) {
     QFile file(pathFile);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        eLog("Can not open file  {}", pathFile);
+        eLog("Can not open file {}", pathFile);
         return false;
     }
 
@@ -90,7 +90,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {
-        eWarning("Database doesn't opened.");
+        eWarning("Database doesn't opened");
         return map;
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
@@ -274,7 +274,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 bool        isDbOpen = db.open();
                 if (isDbOpen) {
                     const bool inserted = db.insert(Token::TOKEN_TABLE_NAME, rowRow);
-                    eLog("Inserted token into db - {}", (inserted ? "success" : "failed"));
+                    eLog("Inserted token into db: {}", (inserted ? "success" : "failed"));
                     emit newToken();
                 }
             }

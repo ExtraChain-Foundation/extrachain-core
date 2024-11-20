@@ -64,7 +64,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
 
     auto name_res = NameValidator::validate(visualName);
     if (!name_res.has_value()) {
-        eLog("[Dfs] Can't load file - invalid name");
+        eLog("[Dfs] Can't load file: invalid name");
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
@@ -130,7 +130,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
         std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
         if (fileHash == dfsFileHash) {
-            eWarning("[Dfs] File already in DFS");
+            eWarning("[Dfs] File already in dfs");
             return std::unexpected(Dfs::DfsError::AlreadyExists);
         }
     }
@@ -360,7 +360,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
             actrDirFile.file().c_str(),
             DfsT::ActorDirFile::TableName.c_str());
         eLog("{}", errorStr);
-        eFatal("Error 2: {}", errorStr.c_str());
+        eFatal("Error 2: {}", errorStr);
         return "";
     }
     actrDirFile.close();
@@ -390,7 +390,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     insertToFiles(dirRow);
     emit added(dirRow);
 
-    eLog("[DFS] File {}/{} was added", dirRow.actorId, dirRow.fileId);
+    eLog("[Dfs] File {}/{} was added", dirRow.actorId, dirRow.fileId);
 
     return dirRow.fileId;
 }
@@ -426,7 +426,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 
 bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
     // if (msg.actor != node.accountController()->mainActor()->id().toStdString()) {
-    //     eLog("[Dfs] Remove file - file has been removed");
+    //     eLog("[Dfs] Remove file: file has been removed");
     //     return false;
     // }
     std::string message = fmt::format(
@@ -497,7 +497,7 @@ bool DfsController::renameFile(
 }
 
 std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
-    eLog("[Dfs] Edit file: {}", msg.hash.c_str());
+    eLog("[Dfs] Edit file: {}", msg.hash);
     std::string           pathDelim = Utils::platformDelimeter();
     std::string           actorPath = DfsB::fsActrRoot + pathDelim + msg.actorId.to_string() + pathDelim;
     std::string           actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
@@ -528,7 +528,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
 }
 
 // void DfsController::addListFiles(const QStringList &files) {
-//     eLog("Files add in thread id: [ {} ] {}", QThread::currentThreadId(), files.size());
+//     eLog("Files add in thread id: {} {}", QThread::currentThreadId(), files.size());
 //     const auto     actor = node->accountController()->mainActor();
 //     ThreadAddFiles addFilesThread(this, actor, files);
 //     connect(&addFilesThread, &ThreadAddFiles::added, this,
@@ -540,11 +540,11 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
 
 //     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
 //             [&](DFSP::AddFileMessage msg, MessageType messageType) {
-//                 eLog("send file:  {}", msg.FileName.c_str());
+//                 eLog("send file: {}", msg.FileName);
 //                 node->network()->send_message(msg, MessageType::DfsAddFile);
 //             });
 //     connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
-//         eLog("{}", error.c_str());
+//         eLog("{}");
 //         emit resultAddFile(QString::fromStdString(error), QString::fromStdString(fileName));
 //     });
 //     addFilesThread.start();
@@ -702,7 +702,7 @@ void DfsController::exportFile(
     }
 
     if (actorId.is_zero()) {
-        eLog("[Dfs] Path or actorId hadn't been found. Please check in parameters.");
+        eLog("[Dfs] Path or actorId hadn't been found. Please check in parameters");
         return;
     }
 
@@ -1177,7 +1177,7 @@ void DfsController::verifyFiles(
         // check file exist
         std::filesystem::path realFilePath = DfsPath::filePath(file.actorId, file.fileId);
         if (!std::filesystem::exists(realFilePath)) {
-            eLog("File by path {} doesn't exist.", realFilePath);
+            eLog("File by path {} doesn't exist", realFilePath);
             continue;
         }
         std::string fileHash = Utils::calcHashForFile(realFilePath);

@@ -95,12 +95,12 @@ private:
     TokenManager*       m_tokenManager       = nullptr;
     QTimer*             timer                = nullptr;
 
-    bool                   started               = false;
-    bool                   isClientApplication   = false;
-    bool                   allowRunRestApiServer = false;
+    bool                        started               = false;
+    bool                        isClientApplication   = false;
+    bool                        allowRunRestApiServer = false;
     std::uint64_t               blockCount;
-    std::vector<BigNumber> resiveCounts;
-    VpnFunctionClearType   m_vpnClearFunc = nullptr;
+    std::vector<BigNumber>      resiveCounts;
+    VpnFunctionClearType        m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
 
 public:
@@ -157,9 +157,9 @@ public:
 
     std::uint64_t getBlockCount() const;
 
-    void            InitVPN(VpnFunctionClearType vpnClearFun);
-    TokenManager*   tokenManager() const;
-    bool            isRaccoon;
+    void          InitVPN(VpnFunctionClearType vpnClearFun);
+    TokenManager* tokenManager() const;
+    bool          isRaccoon;
 
     VPNConfigStorage vpnConfigStorage;
 
@@ -168,7 +168,6 @@ private:
 
     friend class ExtraChainNodeWrapper;
 
-    void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */

@@ -79,7 +79,7 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
-    eLog("Count reconnections {}", m_reconnectionsToIdentifier->size());
+    eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
     auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it)
@@ -87,7 +87,7 @@ void NetworkManager::reconnection() {
 }
 
 void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
-    eLog("Reconnect socket:  {} {}", connectInfo.ip, connectInfo.port);
+    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
     auto connectionsLocked = *m_connections;
     for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
         if ((*it)->identifier() == identifier) {
@@ -266,7 +266,11 @@ void NetworkManager::connectToNode(
         return;
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
-    eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
+    eLog(
+        "[NetworkManager] Connect to {}, protocol: {}, port: {}",
+        ip,
+        Utils::enum_value_name(protocol),
+        port);
     // m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
@@ -520,7 +524,7 @@ void NetworkManager::messageReceived(
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eInfo("Achieved CUSTOM. MessageID: {} | SenderID: {}", messageId, mb.sender_id);
+        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, mb.sender_id);
 
         auto receivedMessageIdLocked = *m_receivedMessageId;
         auto res = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
@@ -528,7 +532,7 @@ void NetworkManager::messageReceived(
             if (res.first->second.second && status == MessageStatus::Response) {
                 auto identifier = res.first->second.first;
 
-                eInfo("Custom Response package forwarded further {} {}", messageId, identifier);
+                eSuccess("Custom Response package forwarded further {} {}", messageId, identifier);
 
                 auto        mainActor = node->accountController()->mainActor();
                 MessageBody message =
@@ -707,7 +711,7 @@ void NetworkManager::messageReceived(
     }
     case MessageType::DfsSendingFileDone: { // TODO
         auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        eLog("[Dfs] File done: {} {}", actorId, fileHash.c_str());
+        eLog("[Dfs] File done: {} {}", actorId, fileHash);
         break;
     }
 
@@ -905,7 +909,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
 }
 
 void NetworkManager::localInizialization() {
-    eLog("Doesn't find service. Start find local service.");
+    eLog("Doesn't find service. Start find local service");
     connect(&m_networkStatus, &NetworkStatus::statusChanged, [](NetworkStatus::Status status) {
         eLog("[NetworkStatus] {}", status);
     });
@@ -1099,7 +1103,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
         if (parseError.error != QJsonParseError::NoError)
             throw std::runtime_error("Failed to parse JSON:" + parseError.errorString().toStdString());
         if (!jsonDoc.isObject())
-            throw std::runtime_error("JSON is not an object.");
+            throw std::runtime_error("JSON is not an object");
 
         QJsonObject jsonObj = jsonDoc.object();
 
@@ -1111,7 +1115,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
         eCritical("Get public ip error: {}", error.what());
         return {};
     } catch (...) {
-        eCritical("Get public ip error unknown.");
+        eCritical("Get public ip error unknown");
         return {};
     }
 }

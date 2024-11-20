@@ -126,7 +126,7 @@ char *extrachain_version() {
 }
 
 void extrachain_wipe() {
-    eLog("Wipe...");
+    eLog("Wipe all data");
     Utils::wipeDataFiles();
 }
 

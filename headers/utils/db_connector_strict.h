@@ -40,11 +40,11 @@ public:
     template <typename T>
     bool createTableStrict(const std::string& tableName, bool ifNotExists = true) {
         if (!is_open()) {
-            eFatal("[DBConnector] Database not open");
+            eFatal("[DbConnector] Database not open");
         }
 
         if constexpr (!boost::describe::has_describe_members<T>::value) {
-            eLog("[DBConnector] CreateTableStrict: Type is not described with BOOST_DESCRIBE_STRUCT");
+            eLog("[DbConnector] CreateTableStrict: Type is not described with BOOST_DESCRIBE_STRUCT");
             return false;
         }
 
@@ -93,7 +93,7 @@ public:
         int   rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
 
         if (rc != SQLITE_OK) {
-            eLog("[DBConnector] CreateTableStrict failed: {}", (errMsg ? errMsg : "unknown error"));
+            eLog("[DbConnector] CreateTableStrict failed: {}", (errMsg ? errMsg : "unknown error"));
             eLog("{} (false): {}", file().c_str(), query.c_str());
             if (errMsg) {
                 sqlite3_free(errMsg);
@@ -134,7 +134,6 @@ private:
         boost::mp11::mp_for_each<
             boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
             if (!success) {
-                eLog("WGY");
                 return;
             }
 
@@ -145,7 +144,7 @@ private:
             });
 
             if (it == columns.end()) {
-                eLog("[DBConnector] ImplementationPrepareStrict: Column not found: {}", fieldName.c_str());
+                eLog("[DbConnector] ImplementationPrepareStrict: Column not found: {}", fieldName);
                 success = false;
                 return;
             }
@@ -211,11 +210,11 @@ private:
     template <typename T>
     bool implementationInsertStrict(const std::string& tableName, const T& data, bool isReplace = false) {
         if (!is_open()) {
-            eFatal("[DBConnector] Database not open");
+            eFatal("[DbConnector] Database not open");
         }
 
         if constexpr (!boost::describe::has_describe_members<T>::value) {
-            eLog("[DBConnector] InsertStrict: Type is not described with BOOST_DESCRIBE_STRUCT");
+            eLog("[DbConnector] InsertStrict: Type is not described with BOOST_DESCRIBE_STRUCT");
             return false;
         }
 
@@ -226,13 +225,13 @@ private:
             });
 
         if (fields.empty()) {
-            eLog("[DBConnector] {} (false): [ImplementationInsertStrict] No fields found", file().c_str());
+            eLog("[DbConnector] {} (false): [ImplementationInsertStrict] No fields found", file());
             return false;
         }
 
-        eLog("[DBConnector] Fields:");
+        eLog("[DbConnector] Fields:");
         for (const auto& field : fields) {
-            eLog("{}", field.c_str());
+            eLog("{}", field);
         }
 
         std::string queryType = isReplace ? "REPLACE" : "IGNORE";
@@ -249,28 +248,28 @@ private:
 
         query += fmt::format("({}) VALUES ({})", fieldsStr, values);
 
-        eLog("[DBConnector] Generated query: {}", query.c_str());
+        eLog("[DbConnector] Generated query: {}", query);
 
         dbmutex.lock();
         sqlite3_stmt* stmt = NULL;
-        int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+        int           rc   = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);
         dbmutex.unlock();
 
         if (rc != SQLITE_OK) {
-            eLog("[DBConnector] Prepare error: {}", sqlite3_errmsg(db));
+            eLog("[DbConnector] Prepare error: {}", sqlite3_errmsg(db));
         }
 
         if (!implementationPrepareStrict(tableName, data, stmt)) {
-            eLog("[DBConnector] ImplementationInsertStrict: Bind failed: {}", sqlite3_errmsg(db));
-            eLog("{} (false): {}", file().c_str(), query.c_str());
+            eLog("[DbConnector] ImplementationInsertStrict: Bind failed: {}", sqlite3_errmsg(db));
+            eLog("{} (false): {}", file(), query);
             sqlite3_finalize(stmt);
             return false;
         }
 
         dbmutex.lock();
         if (rc != SQLITE_OK) {
-            eLog().nospace() << file().c_str() << "(false):" << query.c_str();
-            eLog("[DBConnector] ImplementationInsertStrict: prepare failed: {}", sqlite3_errmsg(db));
+            eLog().nospace() << file() << "(false):" << query;
+            eLog("[DbConnector] ImplementationInsertStrict: prepare failed: {}", sqlite3_errmsg(db));
             sqlite3_finalize(stmt);
             dbmutex.unlock();
             return false;
@@ -278,15 +277,15 @@ private:
 
         rc = sqlite3_step(stmt);
         if (rc != SQLITE_DONE) {
-            eLog("[DBConnector] ImplementationInsertStrict: Execution failed:  {}", sqlite3_errmsg(db));
-            eLog("{} (false): {}", file().c_str(), query.c_str());
+            eLog("[DbConnector] ImplementationInsertStrict: Execution failed: {}", sqlite3_errmsg(db));
+            eLog("{} (false): {}", file(), query);
             sqlite3_finalize(stmt);
             dbmutex.unlock();
             return false;
         }
 
 #ifdef ENABLE_SQLITE_TRUE_LOGS
-        eLog("{} (true): {}", file().c_str(), query.c_str());
+        eLog("{} (true): {}", file(), query);
 #endif
 
         sqlite3_finalize(stmt);

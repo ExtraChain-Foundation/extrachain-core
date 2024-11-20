@@ -31,7 +31,7 @@ PermissionManager::~PermissionManager() {
 }
 
 bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
-    //    eLog("{} DB initialization", __FUNCTION__);
+    //    eLog("{} Database initialization", __FUNCTION__);
 
     //    createDirectory(actor);
 
@@ -42,7 +42,7 @@ bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
 
     //    if (!m_db.open(permissionFilePath.toStdString()))
     //    {
-    //        eLog("{} Can't open the permission DB", __FUNCTION__);
+    //        eLog("{} Can't open the permission database", __FUNCTION__);
     //        QCoreApplication::exit(DBOpenError);
     //    }
 
@@ -60,7 +60,7 @@ bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
 
     //    if(dbExists)
     //    {
-    //        eLog("{}  Delete legacy table", __FUNCTION__);
+    //        eLog("{} Delete legacy table", __FUNCTION__);
 
     //        if(getHighestPermission(actor.idStd().c_str(), PermissionFileName) != Permission::Edit)
     //        {
@@ -130,7 +130,10 @@ PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermis
         return targetFilePermission;
     }
 
-    eLog("{} Actor {} has no permission to read the Permissions file", __FUNCTION__, actor.id().to_string().c_str());
+    eLog(
+        "{} Actor {} has no permission to read the Permissions file",
+        __FUNCTION__,
+        actor.id().to_string().c_str());
     return permFilePermission;
 }
 
@@ -152,7 +155,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //    Permission userPermission = getPermission(actor, { userId.toStdString(), fileHash.toStdString() });
 
     //    if (userPermission == newPermission) {
-    //        eLog("{} User  {}  already has correct permission", __FUNCTION__, userId);
+    //        eLog("{} User {} already has correct permission", __FUNCTION__, userId);
     //        return true;
     //    }
 
@@ -161,18 +164,19 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //    // Delete file from the DB
     //    if (newPermission == Permission::NoPermission) {
     //        if (!(actorPermission == Delete || actorPermission == Edit)) {
-    //            eLog("{} Actor {} has no permission to change the Permissions file", __FUNCTION__, actor.idStd().c_str()
+    //            eLog("{} Actor {} has no permission to change the Permissions file", __FUNCTION__,
+    //            actor.idStd().c_str()
     //);
     //            return false;
     //        }
 
     //        if (currentPermissionRow.empty()) {
-    //            eLog("{} Permission already deleted from the DB", __FUNCTION__);
+    //            eLog("{} Permission already deleted from the database", __FUNCTION__);
     //            return true;
     //        }
 
     //        if (!m_db.deleteRow(Config::DataStorage::permissionTable, currentPermissionRow)) {
-    //            eLog("{}  Delete DB entry failure.", __FUNCTION__);
+    //            eLog("{} Delete database entry failure", __FUNCTION__);
     //            return false;
     //        }
     //    }
@@ -183,14 +187,15 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //        actor.key().sign(QByteArray::fromStdString(newPermissionStr)).toStdString();
 
     //    if (!(actorPermission == Write || actorPermission == Edit)) {
-    //        eLog("{}  Actor  {}  has no permission to change the Permissions file", __FUNCTION__, actor.idStd().c_str()
+    //        eLog("{} Actor {} has no permission to change the Permissions file", __FUNCTION__,
+    //        actor.idStd().c_str()
     //);
     //        return false;
     //    }
 
     //    // Create new DB entry
     //    if (currentPermissionRow.empty()) {
-    //        eLog("{} Add new entry to the Permissions: User  {} {} {}", __FUNCTION__, userId, ", file "
+    //        eLog("{} Add new entry to the Permissions: User {} {} {}", __FUNCTION__, userId, ", file "
     //, fileHash);
 
     //        const auto &signature = actor.key().sign(QByteArray::fromStdString(newPermissionStr));
@@ -217,7 +222,7 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     //                .str();
 
     //        if (!m_db.update(updateQuery)) {
-    //            eLog("{}  Update quefy failure:  {}", __FUNCTION__, updateQuery.c_str());
+    //            eLog("{} Update quefy failure: {}", __FUNCTION__, updateQuery);
     //            return false;
     //        }
     //    }
@@ -239,7 +244,7 @@ PermissionManager::getUserPermission(const QString &userId, const QString &fileH
 
     //    if (currentPermission != Permission::Read && currentPermission != Permission::Write
     //        && currentPermission != Permission::Delete && currentPermission != Permission::Edit) {
-    //        eLog("{}  Invalid permission value ' {} '", __FUNCTION__, currentPermissionStr);
+    //        eLog("{} Invalid permission value: {}", __FUNCTION__, currentPermissionStr);
     //        return Permission::NoPermission;
     //    }
 
@@ -252,7 +257,7 @@ PermissionManager::getUserPermission(const QString &userId, const QString &fileH
 
 //    QString targetDirPath = makeServiceDirPath(actor);
 //    if (!QDir().mkpath(targetDirPath)) {
-//        eLog("DFSController: createDirectory: DFS actor dir create error: {}", targetDirPath);
+//        eLog("DfsController: createDirectory: Dfs actor dir create error: {}", targetDirPath);
 //        return QString();
 //    }
 
@@ -289,13 +294,13 @@ DbRow PermissionManager::makeDBRow(
 
 //    const auto &rowList = m_db.select(selectQuery);
 //    if (rowList.size() > 1) {
-//        eLog("{} Invalid DB content, entry can't be duplicated", __FUNCTION__);
+//        eLog("{} Invalid database content, entry can't be duplicated", __FUNCTION__);
 //        QCoreApplication::exit(DBPermissionEntryDuplicate);
 //    } else if (rowList.size() == 1) {
 //        return rowList[0];
 //    }
 
-//    eLog("{} User {} has no access to the file  {}", __FUNCTION__, userId, fileHash);
+//    eLog("{} User {} has no access to the file {}", __FUNCTION__, userId, fileHash);
 
 //    return DBRow();
 //}

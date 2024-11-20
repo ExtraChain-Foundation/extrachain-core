@@ -92,9 +92,9 @@ public:
             return false;
         }
         outputFile.write(encryptedData);
-        eLog("WD before: {}", writeData.size());
+        eLog("writeData before: {}", writeData.size());
         writeData = encryptedData.toStdString();
-        eLog("WD after: {}", writeData.size());
+        eLog("writeData after: {}", writeData.size());
 
         return true;
     }
@@ -127,9 +127,9 @@ public:
         std::string data = Serialization::serialize(encryptedList);
 
         Keystore keystore(key.toStdString(), data, autologinHash);
-        eLog("Write to:  {}", QString("%1%2").arg(namefileExport).arg(folderEncryptExt));
+        eLog("Write to: {}{}", namefileExport, folderEncryptExt);
         QString outputFilePathForFolder = QDir(outputFolderPath).filePath(QString("%1%2").arg(namefileExport).arg(folderEncryptExt));
-        eLog("Export to file -  {}", outputFilePathForFolder);
+        eLog("Export to file: {}", outputFilePathForFolder);
 
         QFile outputFile(outputFilePathForFolder);
         if (!outputFile.open(QIODevice::WriteOnly)) {
@@ -147,7 +147,7 @@ public:
 
         eLog("Size of keystore: {}", QByteArray::fromStdString(keystore.serialize()).size());
         QByteArray encryptedData = inputFile.readAll();
-        eLog("Size of ecrypted data:  {}", encryptedData.size());
+        eLog("Size of ecrypted data: {}", encryptedData.size());
 
                // Remove files
         foreach (QFileInfo item, tmpEncryptFolder.entryInfoList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {

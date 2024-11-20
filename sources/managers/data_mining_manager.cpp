@@ -62,11 +62,12 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     BigNumberFloat blockAmount = node->blockchain()->getRecords();
     BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
 
-    eLog("circulativeSupply {} blockAmount {} dataAmountStoredInNetwork {} dataAmountStored {} coef {}", circulativeSupply, blockAmount, dataAmountStoredInNetwork, state.DataAmountStored, state.Coefficient);
+    eLog("circulativeSupply {} blockAmount {} dataAmountStoredInNetwork {} dataAmountStored {} coef {}",
+circulativeSupply, blockAmount, dataAmountStoredInNetwork, state.DataAmountStored, state.Coefficient);
 
     BigNumberFloat result = calculateCoins(BigNumberFloat(state.DataAmountStored), dataAmountStoredInNetwork,
                                            circulativeSupply, blockAmount, state.Coefficient);
-    eLog("result:  {}", result);
+    eLog("result: {}", result);
 
     Transaction rewardTx;
     rewardTx.setAmount(result);
@@ -162,7 +163,8 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
 BigNumberFloat
 DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
-        // eLog("{} {} {}", "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
+        // eLog("{} {} {}", "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total
+        // dfs:"
         //, requestReward.BytesSent, node->dfs()->totalDfsSize());
         return BigNumberFloat(0);
     }
