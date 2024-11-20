@@ -22,15 +22,13 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <type_traits>
-#include <utility>
 
 #include <msgpack.hpp>
 
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
-#include "utils/bignumber.h"
-#include "utils/exc_utils.h"
+// #include "utils/exc_utils.h"
 
 /**
  * Acting entity.
@@ -75,15 +73,15 @@ public:
 
 private:
     void normalize() {
-        if (m_id.size() > 20) {
+        if (m_id.size() > DataStorage::ACTOR_SIZE) {
             eFatal("[ActorId] Not correct size: %zu", m_id.size());
         }
 
-        m_id = std::string(20 - m_id.length(), '0') + m_id;
+        m_id = std::string(DataStorage::ACTOR_SIZE - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
             eFatal("[ActorId] Not correct hex: {}", m_id);
-            m_id = "00000000000000000000";
+            m_id = "0000000000000000000000000000000000000000";
         }
     }
 
@@ -137,8 +135,8 @@ public:
         auto        publicKey = this->m_key.publicKey();
         std::string hash      = Utils::calcHash(ByteArray(publicKey).toString(), Utils::HashEncode::Sha3_512);
 
-        if (hash.size() >= 20)
-            m_id = hash.substr(0, 20);
+        if (hash.size() >= DataStorage::ACTOR_SIZE)
+            m_id = hash.substr(0, DataStorage::ACTOR_SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }

@@ -675,6 +675,7 @@ EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 
 
 namespace DataStorage {
 // Main blockchain folder
+static const int         ACTOR_SIZE = 40;
 static const std::string BLOCKCHAIN = "blockchain";
 
 // Temporary folder
