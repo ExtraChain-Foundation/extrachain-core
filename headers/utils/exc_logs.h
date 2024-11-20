@@ -36,7 +36,12 @@
     #include <crtdbg.h>
 #endif
 
+#ifdef __ANDROID__
+    #include <android/log.h>
+#endif
+
 #include "utils/exc_logs_filter.h"
+#include "utils/fs_path.h"
 
 enum class LogLevel {
     Debug,
@@ -76,9 +81,26 @@ class Logger {
     }
 
     void ensure_logs_directory() {
-        std::filesystem::path dir_path(logs_directory);
-        if (!std::filesystem::exists(dir_path)) {
-            std::filesystem::create_directory(dir_path);
+        auto path = FsPath::create(logs_directory);
+        if (!path) {
+            fmt::println("Failed to create logs files: {}", std::to_underlying(path.error()));
+            return;
+        }
+
+        auto exists = path->exists();
+        if (!exists.has_value()) {
+            fmt::println("Failed to check directory existence: {}", static_cast<int>(exists.error()));
+            return;
+        }
+
+        if (exists.value()) {
+            return;
+        }
+
+        std::error_code ec;
+        std::filesystem::create_directory(path->native(), ec);
+        if (ec) {
+            fmt::println("Failed to create logs directory: {}", ec.message());
         }
     }
 
@@ -177,12 +199,16 @@ public:
         return file_output_enabled;
     }
 
-    bool write_to_file(const std::string& message) {
+    bool write_to_file(std::string_view message) {
         if (!file_output_enabled || !log_file.is_open())
             return false;
-        log_file << message;
+        log_file.write(message.data(), message.size());
         log_file.flush();
         return true;
+    }
+
+    bool write_to_file(const std::string& message) {
+        return write_to_file(std::string_view(message));
     }
 
     bool is_main_thread() const {
@@ -312,78 +338,68 @@ void println_impl(
     uint32_t                    line,
     fmt::format_string<Args...> format_str,
     Args&&... args) {
-    if (!should_log(level))
+    if (!should_log(level) || !Logger::instance().should_log(file))
         return;
 
-    if (!Logger::instance().should_log(file))
-        return;
+    thread_local fmt::memory_buffer log_buffer;
+    thread_local fmt::memory_buffer msg_buffer;
 
-    std::string message    = fmt::format(format_str, std::forward<Args>(args)...);
-    auto        style      = get_level_style(level);
-    auto        level_name = get_level_name(level);
+    log_buffer.clear();
+    msg_buffer.clear();
 
-    // Console output
-    if (level_name.empty()) {
-        fmt::print(
-            stdout,
-            "{} [file:/{}:{}] [{}] {}\n",
-            get_current_time(),
-            get_filename(file),
-            line,
-            get_thread_id(),
-            message);
-    } else {
-        fmt::print(
-            stdout,
-            style,
-            "{} [{}] [file:/{}:{}] [{}] {}\n",
-            get_current_time(),
-            level_name,
-            get_filename(file),
-            line,
-            get_thread_id(),
-            message);
-    }
+    // Format message
+    fmt::format_to(std::back_inserter(msg_buffer), format_str, std::forward<Args>(args)...);
 
-#if defined(Q_OS_WIN)
+    // Format base log
+    const auto level_name = get_level_name(level);
+    const bool has_level  = !level_name.empty();
+
+    fmt::format_to(
+        std::back_inserter(log_buffer),
+        "{}{}{}{} [file:/{}:{}] [{}] {}",
+        get_current_time(),
+        has_level ? " [" : "",
+        has_level ? level_name : "",
+        has_level ? "]" : "",
+        get_filename(file),
+        line,
+        get_thread_id(),
+        fmt::string_view(msg_buffer.data(), msg_buffer.size()));
+
+    // Write to all outputs
+    auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
+
+#ifdef __ANDROID__
+    int android_priority = level == LogLevel::Debug      ? ANDROID_LOG_DEBUG
+                           : level == LogLevel::Info     ? ANDROID_LOG_INFO
+                           : level == LogLevel::Warning  ? ANDROID_LOG_WARN
+                           : level == LogLevel::Critical ? ANDROID_LOG_ERROR
+                           : level == LogLevel::Fatal    ? ANDROID_LOG_FATAL
+                                                         : ANDROID_LOG_INFO;
+    __android_log_print(
+        android_priority,
+        "ExtraChain",
+        "%.*s",
+        static_cast<int>(log_buffer.size()),
+        log_buffer.data());
+#else
+    // Console with color
+    fmt::print(stdout, get_level_style(level), "{}\n", log_view);
+    fflush(stdout);
+
+    #ifdef _WIN32
     if (IsDebuggerPresent()) {
-        auto log = fmt::format(
-            "{} [file:/{}:{}] [{}] {}\n",
-            get_current_time(),
-            get_filename(file),
-            line,
-            get_thread_id(),
-            message);
-        OutputDebugStringA(log.c_str());
-        // OutputDebugStringA("\n");
+        log_buffer.push_back('\n');
+        OutputDebugStringA(log_buffer.data());
     }
+    #endif
 #endif
 
-    // File output
     if (Logger::instance().is_file_output()) {
-        std::string file_message;
-        if (level_name.empty()) {
-            file_message = fmt::format(
-                "{} [file:/{}:{}] [{}] {}\n",
-                get_full_time(),
-                get_filename(file),
-                line,
-                get_thread_id(),
-                message);
-        } else {
-            file_message = fmt::format(
-                "{} [{}] [file:/{}:{}] [{}] {}\n",
-                get_full_time(),
-                level_name,
-                get_filename(file),
-                line,
-                get_thread_id(),
-                message);
-        }
-        Logger::instance().write_to_file(file_message);
+        msg_buffer.clear();
+        fmt::format_to(std::back_inserter(msg_buffer), "{} {}\n", get_full_time(), log_view);
+        Logger::instance().write_to_file(std::string_view(msg_buffer.data(), msg_buffer.size()));
     }
-
-    fflush(stdout);
 }
 
 // source_location wrapper

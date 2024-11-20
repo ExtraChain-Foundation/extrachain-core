@@ -428,15 +428,17 @@ void Utils::wipeDataFiles() {
     QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
+    QDir("encrypt").removeRecursively();
+    QDir("tokens").removeRecursively();
     QFile(".settings").remove();
     QFile(".auth_hash").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
-    QString dataName = Utils::dataDir();
-    QDir(dataName).removeRecursively();
-    QDir().mkpath(dataName);
+    // QString dataName = Utils::dataDir();
+    // QDir(dataName).removeRecursively();
+    // QDir().mkpath(dataName);
 
     QString shareFolder =
         QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
