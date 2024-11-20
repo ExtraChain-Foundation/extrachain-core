@@ -150,7 +150,7 @@ private:
     ExtraChainNode*                              node;
     std::shared_ptr<QNetworkAddressEntry>        local;
     QWebSocketServer*                            wsServer = nullptr;
-    SafePtr<QList<SocketService*>>               m_connections;
+    SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
 
@@ -182,7 +182,7 @@ private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
 public:
-    SafePtr<QList<SocketService*>> connections() const;
+    SafePtr<std::set<SocketService*>> connections() const;
     bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
 
 public slots:

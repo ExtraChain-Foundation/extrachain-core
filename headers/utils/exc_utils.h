@@ -689,7 +689,7 @@ static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
 // Dfs
 static const int DATA_OFFSET = 512;
 
-enum DataRowType {
+enum class DataRowType {
     Universal,
 };
 } // namespace DataStorage

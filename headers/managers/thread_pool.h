@@ -57,7 +57,7 @@ public:
         if (isFirst) {
             eLog("[ThreadPool] Connected with qApp");
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
-                eLog("[ThreadPool] Threads count:", threads.size());
+                eLog("[ThreadPool] Threads count: {}", threads.size());
 
                 for (QThread *thread : threads) {
                     eLog("[ThreadPool] Remove thread {}", fmt::ptr(thread));

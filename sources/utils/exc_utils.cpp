@@ -32,6 +32,7 @@
 
 #include <string>
 #include <string_view>
+#include <random>
 
 #include <sodium.h>
 
@@ -594,9 +595,9 @@ QString Utils::detectCompiler() {
 }
 
 QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
-    const auto          allInterfaces = QNetworkInterface::allInterfaces();
-    const QHostAddress &localhost     = QHostAddress(QHostAddress::LocalHost);
-    QList<QHostAddress> localIpNotConnect;
+    const auto                allInterfaces = QNetworkInterface::allInterfaces();
+    const QHostAddress       &localhost     = QHostAddress(QHostAddress::LocalHost);
+    std::vector<QHostAddress> localIpNotConnect;
 
     for (const QNetworkInterface &networkInterface : allInterfaces) {
         const auto entries = networkInterface.addressEntries();
@@ -607,7 +608,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
                     eLog("[FindLocalIp] Find local ip candidate: {}", networkInterface);
                 }
 
-                localIpNotConnect.append(address.ip());
+                localIpNotConnect.push_back(address.ip());
             }
         }
     }
@@ -633,7 +634,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
                     continue;
             }
 
-            if (localIpNotConnect.contains(entry.ip())) {
+            if (Utils::vector_contains(localIpNotConnect, entry.ip())) {
                 QString name = networkInterface.name();
 
                 if (name.left(2) == "vm")

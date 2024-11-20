@@ -141,8 +141,8 @@ private:
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
     BigNumber                               loadFirstId();
     BigNumber                               loadFileFromSection(
-                                      std::function<QString(const QStringList &folders)> getFolder,
-                                      std::function<QString(const QStringList &files)>   getFile);
+                                      std::function<std::string(const std::vector<std::string> &folders)> getFolder,
+                                      std::function<std::string(const std::vector<std::string> &files)>   getFile);
 
     BigNumber loadLastId();
 };

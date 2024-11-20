@@ -344,7 +344,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     auto mergedVariant = BlockVariant(merged.value());
-    // eLog("me {}", mergedVariant); // TODO: block log
+    eLog("me {}", mergedVariant);
     this->replaceBlock(mergedVariant);
 
     return mergedVariant;
@@ -712,7 +712,7 @@ void Blockchain::showBlockchain() const {
     eLog("[Blockchain] Show blockchain:");
 
     auto genBlock = blockIndex.getLastGenesisBlock();
-    // eLog("Last genesis: {}", genBlock); // TODO: block log
+    // eLog("Last genesis: {}", genBlock);
 
     int i = 0;
 

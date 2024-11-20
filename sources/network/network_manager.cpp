@@ -25,6 +25,7 @@
 #include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
+#include "utils/exc_logs.h"
 
 #include <filesystem>
 #include <fstream>
@@ -32,7 +33,7 @@
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
-SafePtr<QList<SocketService *>> NetworkManager::connections() const {
+SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
     return m_connections;
 }
 
@@ -135,13 +136,13 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
     {
         auto connectionsLocked = *m_connections;
         if (!connectionsLocked->contains(service))
-            connectionsLocked->append(service);
+            connectionsLocked->insert(service);
     }
     connect(service, &WebSocketService::shareConnections, this, [&](const QJsonArray connectionsArr) {
         eLog("shareConnections {}", QJsonDocument(connectionsArr).toJson(QJsonDocument::Compact));
         auto initIP = node->getInitPublicIPAndCountry().first;
 
-        if (m_connections->length() >= Network::maxConnections) {
+        if (m_connections->size() >= Network::maxConnections) {
             eLog("shareConnections ignored by max connections limit");
             return;
         }
@@ -176,7 +177,7 @@ void NetworkManager::removeConnection(const QString &identifier) {
 }
 
 NetworkManager::~NetworkManager() {
-    eLog("[NetworkManager] Finish him with {} connections", m_connections->length());
+    eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
     auto connectionsLocked = *m_connections;
     for (const auto &connection : *connectionsLocked) {
@@ -255,7 +256,7 @@ void NetworkManager::connectToNode(
     Network::Protocol protocol,
     const bool        request,
     const bool        isConstant) {
-    if (m_connections->length() >= Network::maxConnections) {
+    if (m_connections->size() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
@@ -451,7 +452,7 @@ void NetworkManager::sendFromCache() {
 
 bool NetworkManager::isActiveConnectionExists() {
     auto connectionsLocked = *m_connections;
-    if (connectionsLocked->isEmpty())
+    if (connectionsLocked->empty())
         return false;
 
     for (const auto &el : *connectionsLocked) {
@@ -471,7 +472,7 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     if (it == msgHashList.end())
         msgHashList.insert(hashMsg, value);
     else {
-        if (msgHashList.find(hashMsg).value() == m_connections->length() - 1) {
+        if (msgHashList.find(hashMsg).value() == m_connections->size() - 1) {
             msgHashList.remove(hashMsg);
             flag_result = false;
         } else {
@@ -869,7 +870,7 @@ void NetworkManager::removeWsConnection() {
         return;
 
     auto connection = qobject_cast<SocketService *>(QObject::sender());
-    auto removed    = m_connections->removeAll(connection);
+    auto removed    = m_connections->erase(connection);
     eLog("[WS] Removed {}", fmt::ptr(connection));
     //    m_reconnections.remove(NetworkReconnect {
     //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
@@ -974,7 +975,7 @@ void NetworkManager::onNewWsConnection() {
         eFatal("[WS] Error: ws == nulltpr");
 
     bool needToDelete = false;
-    if (m_connections->length() >= Network::maxConnections) {
+    if (m_connections->size() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog(
                 "[NetworkManager] Can't connect from WS server because the maximum number of "

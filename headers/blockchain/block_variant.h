@@ -26,16 +26,9 @@
 
 class BlockVariant {
 public:
-    explicit BlockVariant(std::variant<Block, GenesisBlock> block)
-        : m_block(std::move(block)) {
-    }
-
-    explicit BlockVariant(Block block)
-        : m_block(std::move(block)) {
-    }
-    explicit BlockVariant(GenesisBlock block)
-        : m_block(std::move(block)) {
-    }
+    explicit BlockVariant(std::variant<Block, GenesisBlock> block);
+    explicit BlockVariant(Block block);
+    explicit BlockVariant(GenesisBlock block);
 
     bool isEmpty() const;
 

@@ -213,7 +213,7 @@ struct fmt::formatter<QVariantMap> {
         for (auto it = m.begin(); it != m.end(); ++it) {
             if (it != m.begin())
                 fmt::format_to(ctx.out(), ", ");
-            fmt::format_to(ctx.out(), "\"{}\": {}", it.key().toStdString(), it.value());
+            fmt::format_to(ctx.out(), "{}: {}", it.key().toStdString(), it.value());
         }
         return fmt::format_to(ctx.out(), " }}");
     }

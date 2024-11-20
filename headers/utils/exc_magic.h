@@ -134,9 +134,7 @@ struct custom_magic {
             }
             return read(*value);
         } else {
-            std::ostringstream oss;
-            oss << value;
-            return oss.str();
+            return fmt::format("{}", value);
         }
     }
 };

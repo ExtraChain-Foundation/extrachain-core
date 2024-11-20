@@ -29,25 +29,25 @@ class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
 public:
     enum CriticalErrors {
-        RootDirCreateError = -2,
+        RootDirCreateError  = -2,
         ActorDirCreateError = -3,
 
-        DBOpenError = -4,
-        DBCreateTableError = -5,
+        DBOpenError                = -4,
+        DBCreateTableError         = -5,
         DBPermissionEntryDuplicate = -6,
         NotSupportedPermission
     };
 
     enum Permission {
-        Read = 0,
-        Write = 1,  // Add new entry
+        Read   = 0,
+        Write  = 1, // Add new entry
         Delete = 2, // Delete any entry
-        Edit = 3,   // Write and Delete permissions
+        Edit   = 3, // Write and Delete permissions
 
         NoPermission = 4
     };
 
-    QStringList permissions { "Read", "Write", "Delete", "Edit", "NoPermission" };
+    std::vector<std::string> permissions { "Read", "Write", "Delete", "Edit", "NoPermission" };
 
     struct GetPermissionMsg;
     struct SetPermissionMsg;
@@ -59,15 +59,18 @@ public:
     bool initPermissionDB(const Actor<KeyPrivate> &actor);
 
     Permission getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg &msg);
-    bool setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg &msg);
+    bool       setPermission(const Actor<KeyPrivate> &actor, const SetPermissionMsg &msg);
 
 private:
     //    QString createDirectory(const Actor<KeyPrivate> &actor);
     //    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
     //    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
 
-    DbRow makeDBRow(const QString &fileHash, const Permission permission, const QString &userId,
-                    const QString &signature);
+    DbRow makeDBRow(
+        const QString   &fileHash,
+        const Permission permission,
+        const QString   &userId,
+        const QString   &signature);
     //    DBRow findDBRow(const QString & userId, const QString & fileHash);
 
     Permission getUserPermission(const QString &userId, const QString &fileHash);

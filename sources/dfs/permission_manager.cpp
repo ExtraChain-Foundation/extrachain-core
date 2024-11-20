@@ -280,7 +280,7 @@ DbRow PermissionManager::makeDBRow(
     const QString   &userId,
     const QString   &signature) {
     return { { "fileHash", fileHash.toStdString() },
-             { "permission", permissions[permission].toStdString() },
+             { "permission", permissions[permission] },
              { "userId", userId.toStdString() },
              { "signature", signature.toStdString() } };
 }

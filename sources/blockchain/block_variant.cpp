@@ -19,6 +19,18 @@
 
 #include "blockchain/block_variant.h"
 
+BlockVariant::BlockVariant(std::variant<Block, GenesisBlock> block)
+    : m_block(std::move(block)) {
+}
+
+BlockVariant::BlockVariant(Block block)
+    : m_block(std::move(block)) {
+}
+
+BlockVariant::BlockVariant(GenesisBlock block)
+    : m_block(std::move(block)) {
+}
+
 bool BlockVariant::isEmpty() const {
     return std::visit(
         [](const auto& b) {

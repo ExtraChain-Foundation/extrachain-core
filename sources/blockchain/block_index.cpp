@@ -491,7 +491,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             rowRow.insert({ "actorId", actorId.to_string() });
             rowRow.insert({ "state", row.state.to_string() });
             rowRow.insert({ "token", tokenId.to_string() });
-            rowRow.insert({ "type", QByteArray::number(row.type).toStdString() });
+            rowRow.insert({ "type", std::to_string(std::to_underlying(row.type)) });
             db.insert(Config::DataStorage::RowGenesisBlockTable, rowRow);
         }
 
@@ -826,10 +826,10 @@ std::expected<BlockVariant, BlockError> BlockIndex::getById(const BigNumber &id)
 
 BigNumber BlockIndex::loadFirstId() {
     BigNumber firstSavedId = loadFileFromSection(
-        [](const QStringList &folders) {
+        [](const std::vector<std::string> &folders) {
             return folders[0];
         },
-        [](const QStringList &files) {
+        [](const std::vector<std::string> &files) {
             return files[0];
         });
 
@@ -843,8 +843,8 @@ BigNumber BlockIndex::loadFirstId() {
 }
 
 BigNumber BlockIndex::loadFileFromSection(
-    std::function<QString(const QStringList &folders)> getFolder,
-    std::function<QString(const QStringList &files)>   getFile) {
+    std::function<std::string(const std::vector<std::string> &folders)> getFolder,
+    std::function<std::string(const std::vector<std::string> &files)>   getFile) {
     auto asBigNumComparator = [](const QString &file1, const QString &file2) {
         return BigNumber(file1.toStdString()) < BigNumber(file2.toStdString());
     };
@@ -854,12 +854,20 @@ BigNumber BlockIndex::loadFileFromSection(
     // sections
     eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
     QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
+
     if (list.isEmpty()) {
         eLog("[BlockIndex] loadFileFromSection(): folder.entryList: empty");
         return BigNumber();
     }
+
     std::sort(list.begin(), list.end(), asBigNumComparator);
-    folder.cd(getFolder(list)); // go to section
+    std::vector<std::string> list_stl;
+    list_stl.reserve(list.size());
+
+    for (const QString &str : list) {
+        list_stl.push_back(str.toStdString());
+    }
+    folder.cd(getFolder(list_stl).c_str()); // go to section
 
     // files in sections
     eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
@@ -870,17 +878,18 @@ BigNumber BlockIndex::loadFileFromSection(
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
-    eLog("[BlockIndex] loadFileFromSection(): lastId: {}", (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString())));
-    return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString());
+    auto file = BigNumber(getFile(list_stl));
+    eLog("[BlockIndex] loadFileFromSection(): lastId: {}", (list.isEmpty() ? BigNumber() : file));
+    return list.isEmpty() ? BigNumber() : file;
 }
 
 BigNumber BlockIndex::loadLastId() {
     BigNumber lastSavedId = loadFileFromSection(
-        [](const QStringList &folders) {
-            return folders.last();
+        [](const std::vector<std::string> &folders) {
+            return folders.back();
         },
-        [](const QStringList &files) {
-            return files.last();
+        [](const std::vector<std::string> &files) {
+            return files.back();
         });
 
     if (lastSavedId != -1) {
