@@ -39,11 +39,11 @@ BlockIndex::BlockIndex() {
 BlockIndex::BlockIndex(const BigNumber &recordsLimit)
     : BlockIndex() {
     this->recordsLimit = recordsLimit;
-    qDebug() << "[BlockIndex] constructor: recordLimits - " << recordsLimit;
+    eLog("[BlockIndex] constructor: recordLimits: {}", recordsLimit);
 }
 
 BlockIndex::BlockIndex(const QString &folderName) {
-    qDebug() << "[BlockIndex] constructor: folder name - " << folderName;
+    eLog("[BlockIndex] constructor: folder name: {}", folderName);
 }
 
 BlockIndex::BlockIndex(const QString &folderName, const BigNumber &recordsLimit)
@@ -78,7 +78,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastBlock() const {
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastRealBlock() const {
     BigNumber id = this->lastSavedId;
-    // qDebug() << "[BlockIndex] Last real block:" << this->lastSavedId;
+    // eLog("[BlockIndex] Last real block: {}", this->lastSavedId);
     while (id >= getFirstSavedId()) {
         auto block = this->getBlockById(id);
 
@@ -99,7 +99,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const Bi
         auto block = this->getGenesisBlockById(id);
 
         if (block.has_value() && !block->isEmpty()) {
-            // qDebug() << "[BlockIndex]" << block->getIndex() << "block found";
+            // eLog("[BlockIndex] {} block found", block->getIndex());
             return block.value();
         }
 
@@ -130,7 +130,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber
         return block;
     }
 
-    // qDebug() << "[BlockIndex]" << id << "not exists, maybe past dummy?";
+    // eLog("[BlockIndex] {} not exists, maybe past dummy?", id);
     return std::unexpected(BlockError::NotExists);
 }
 
@@ -238,7 +238,7 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(
     BigNumber records = getRecords();
 
     if (records == 0) {
-        qDebug() << "[BlockIndex] There no tx's in block index";
+        eLog("[BlockIndex] There no tx's in block index");
         return { Transaction(), BigNumber("-1") };
     }
 
@@ -319,7 +319,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
     BigNumber             records = getRecords();
 
     if (records == 0) {
-        qDebug() << "[BlockIndex] There no tx's in block index";
+        eLog("[BlockIndex] There no tx's in block index");
         return currentTxs;
     }
 
@@ -327,7 +327,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
     int       currentCount = 0;
 
     while (lastBlockId >= getFirstSavedId()) {
-        // qDebug() << count << currentCount << (count < currentCount);
+        // eLog("{} {}", count, currentCount);
 
         if (count < currentCount)
             break;
@@ -389,7 +389,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(
         --lastBlockId;
     }
 
-    // qDebug() << "currentTxs" << currentTxs.length();
+    // eLog("currentTxs {}", currentTxs.length());
 
     return currentTxs;
 }
@@ -401,7 +401,7 @@ std::string BlockIndex::buildFilePath(const BigNumber &id) const {
 
     QDir dir(pathToFolderQt);
     if (!dir.exists()) {
-        qDebug() << "[BlockIndex] Creating dir:" << pathToFolder;
+        eLog("[BlockIndex] Creating dir: {}", pathToFolder);
         dir = QDir();
         dir.mkpath(pathToFolderQt);
     }
@@ -411,16 +411,16 @@ std::string BlockIndex::buildFilePath(const BigNumber &id) const {
 
 void BlockIndex::calculationCountBlock() {
     BigNumber id = this->lastSavedId;
-    qDebug() << "[BlockIndex] getLastBlock: last saved id:" << this->lastSavedId;
+    eLog("[BlockIndex] getLastBlock: last saved id: {}", this->lastSavedId);
 
     while (id >= firstSavedId) {
         auto block = this->getBlockById(id);
 
         if (block.has_value() && !block->isEmpty()) {
             if (block->getType() == BlockType::Data) {
-                // qDebug() << "[BlockIndex] Block by index" << block.getIndex() << "is real";
+                // eLog("[BlockIndex] Block by index {} is real", block.getIndex());
                 realBlockRecords++;
-                // qDebug() << "[BlockIndex] Count real blocks:" << realBlockRecords;
+                // eLog("[BlockIndex] Count real blocks: {}", realBlockRecords);
             }
 
             if (block->isBlock() && block->getType() == BlockType::Dummy) {
@@ -433,7 +433,7 @@ void BlockIndex::calculationCountBlock() {
         --id;
     }
 
-    qDebug() << "[BlockIndex] Count records:" << records << "";
+    eLog("[BlockIndex] Count records: {} ", records);
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
@@ -512,7 +512,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
-            qDebug() << "[BlockIndex] First saved id is updated from" << firstSavedId << "to" << id;
+            eLog("[BlockIndex] First saved id is updated from {} to {}", firstSavedId, id);
             this->firstSavedId = id;
         }
 
@@ -573,7 +573,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
-            qDebug() << "[BlockIndex] First saved id is updated from" << firstSavedId << "to" << id;
+            eLog("[BlockIndex] First saved id is updated from {} to {}", firstSavedId, id);
             this->firstSavedId = id;
         }
 
@@ -605,7 +605,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
     auto      countTxInBlock = block.transactions().size();
 
     if (block.getType() != BlockType::Dummy) {
-        qDebug() << "[BlockIndex] Removing block with id" << id << block.getType();
+        eLog("[BlockIndex] Removing block with id {} {}", id, block.getType());
     }
 
     // if (id < firstSavedId) {
@@ -615,7 +615,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
     BigNumber currentIdToRemove = id;
 
     QString pathToFile = QString::fromStdString(buildFilePath(currentIdToRemove));
-    // qDebug() << "[BlockIndex] To remove:" << pathToFile;
+    // eLog("[BlockIndex] To remove: {}", pathToFile);
     QFile file(pathToFile);
 
     if (file.exists() && !file.isOpen()) {
@@ -655,13 +655,13 @@ void BlockIndex::removeDummyBlocks() {
     }
 
     if (!removedForLogs.empty()) {
-        qDebug() << "[BlockIndex] Remove dummy blocks:" << removedForLogs;
+        eLog("[BlockIndex] Remove dummy blocks: {}", removedForLogs);
     }
 }
 
 void BlockIndex::removeAll() {
     std::string folderPath = this->getFolderPath();
-    qDebug() << "Clearing file index:" << folderPath;
+    eLog("Clearing file index: {}", folderPath);
 
     auto       folderPathQt = QString::fromStdString(folderPath);
     QDir       folder(folderPathQt);
@@ -716,7 +716,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     std::string path = buildFilePath(id);
 
     if (!std::filesystem::exists(path)) {
-        // qDebug() << "[BlockIndex] Can't get the file" << path << "(file is not exits)";
+        // eLog("[BlockIndex] Can't get the file {} (file is not exits)", path);
         return std::unexpected(BlockError::NotExists);
     }
 
@@ -834,9 +834,9 @@ BigNumber BlockIndex::loadFirstId() {
         });
 
     if (firstSavedId != -1) {
-        qDebug() << "[BlockIndex] loadFirsId: Loaded first saved id:" << firstSavedId;
+        eLog("[BlockIndex] loadFirsId: Loaded first saved id: {}", firstSavedId);
     } else {
-        qDebug() << "[BlockIndex] loadFirsId: First saved id is not loaded";
+        eLog("[BlockIndex] loadFirsId: First saved id is not loaded");
     }
 
     return firstSavedId;
@@ -852,26 +852,25 @@ BigNumber BlockIndex::loadFileFromSection(
     QDir folder(QString::fromStdString(getFolderPath()));
 
     // sections
-    qDebug() << "[BlockIndex] loadFileFromSection():" << folder.path();
+    eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
     QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty()) {
-        qDebug() << "[BlockIndex] loadFileFromSection(): folder.entryList: empty";
+        eLog("[BlockIndex] loadFileFromSection(): folder.entryList: empty");
         return BigNumber();
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
     folder.cd(getFolder(list)); // go to section
 
     // files in sections
-    qDebug() << "[BlockIndex] loadFileFromSection():" << folder.path();
+    eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
     list = folder.entryList(QDir::Filter::Files | QDir::Filter::NoDotAndDotDot);
     if (list.isEmpty()) {
-        qDebug() << "[BlockIndex] loadFileFromSection(): folder.entryList->folder.entryList: empty";
+        eLog("[BlockIndex] loadFileFromSection(): folder.entryList->folder.entryList: empty");
         return BigNumber();
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
-    qDebug() << "[BlockIndex] loadFileFromSection(): lastId -"
-             << (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString()));
+    eLog("[BlockIndex] loadFileFromSection(): lastId: {}", (list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString())));
     return list.isEmpty() ? BigNumber() : BigNumber(getFile(list).toStdString());
 }
 
@@ -885,9 +884,9 @@ BigNumber BlockIndex::loadLastId() {
         });
 
     if (lastSavedId != -1) {
-        qDebug() << "[BlockIndex] Loaded last saved id:" << lastSavedId;
+        eLog("[BlockIndex] Loaded last saved id: {}", lastSavedId);
     } else {
-        qDebug() << "[BlockIndex] Last saved id is not loaded";
+        eLog("[BlockIndex] Last saved id is not loaded");
     }
     return lastSavedId;
 }

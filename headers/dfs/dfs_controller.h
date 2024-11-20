@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 
-#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QObject>

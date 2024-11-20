@@ -25,14 +25,13 @@
 #include <boost/json.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <QDebug>
 #include <type_traits>
 #include <string>
 #include <vector>
 #include <array>
 #include <optional>
 #include <memory>
-#include "magic_enum.hpp"
+#include "magic_enum/magic_enum.hpp"
 #include "utils/exc_utils_base64.h"
 // #include "utils/exc_logs.h"
 
@@ -472,16 +471,6 @@ T from_json(const boost::json::value& json) {
 } // namespace json_convert
 
 // Macros for adding magic support
-#define MAKE_MAGICAL_OPERATORS(ClassName)                                                                    \
-    inline std::ostream& operator<<(std::ostream& os, const ClassName& obj) {                                \
-        return os << magic::magic(obj);                                                                      \
-    }                                                                                                        \
-    inline QDebug operator<<(QDebug debug, const ClassName& obj) {                                           \
-        return debug << magic::magic(obj).c_str();                                                           \
-    }
-
-#define MAKE_MAGICAL(ClassName) MAKE_MAGICAL_OPERATORS(ClassName)
-
 #define MAKE_CUSTOM_MAGICAL(ClassName)                                                                       \
     namespace magic {                                                                                        \
         template <>                                                                                          \
@@ -489,8 +478,7 @@ T from_json(const boost::json::value& json) {
             static std::string read(const ClassName& value);                                                 \
             static ClassName   write(const std::string& value);                                              \
         };                                                                                                   \
-    }                                                                                                        \
-    MAKE_MAGICAL(ClassName)
+    }
 
 template <typename T>
 struct fmt::formatter<

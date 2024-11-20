@@ -41,7 +41,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     addToProfileList(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
-    qDebug() << "[Accounts] Created new profile:" << actor.id();
+    eLog("[Accounts] Created new profile: {}", actor.id());
 
     node->start(); // TODO: remove
 
@@ -171,7 +171,7 @@ const std::shared_ptr<Actor<KeyPrivate>> AccountController::currentWallet() cons
 void AccountController::clear() {
     m_profiles.clear();
     m_currentProfile = ActorId();
-    qDebug() << "[AccountController] Cleared";
+    eLog("[AccountController] Cleared");
 }
 
 std::vector<ActorId> AccountController::profilesList() {

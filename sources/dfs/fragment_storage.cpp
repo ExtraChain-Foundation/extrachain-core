@@ -495,7 +495,7 @@ void FragmentWriter::run() {
     std::uint64_t fileSize        = dirRow.size;
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
-        qDebug() << "[Dfs] File is complite";
+        eLog("[Dfs] File is complite");
         emit compliteFile(m_msg.fileId);
         return;
     }
@@ -506,12 +506,12 @@ void FragmentWriter::run() {
     emit downloadProgress(m_msg.actorId, m_msg.fileId, double(m_msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (m_msg.hash == Utils::calcHashForFile(fileName)) {
-            qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+            eLog("[Dfs] File {} done", fileName);
             emit eraseFromFiles(m_msg);
             emit downloadedFile(dirRow);
             emit sendFile(m_msg.actorId, m_msg.fileId);
             //            fs.initHistoricalChain();
-            qDebug() << "File " << fileName.c_str() << " downloaded";
+            eLog("File {} downloaded", fileName);
         } else {
             emit requestFile(m_msg.actorId, m_msg.fileId);
         }

@@ -58,7 +58,7 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransaction(const Transaction &tx) {
-    qDebug() << "[TransactionManager] Add transaction:" << tx;
+    eLog("[TransactionManager] Add transaction: {}", tx);
 
     // if (tx.isEmpty())
     //     return;
@@ -66,7 +66,7 @@ void TransactionManager::addTransaction(const Transaction &tx) {
 }
 
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
-    qDebug() << "addProvedTransaction";
+    eLog("addProvedTransaction");
     if (std::find(pendingTxs.begin(), pendingTxs.end(), tx) != pendingTxs.end() || pendingTxs.empty()) {
         pendingTxs.push_back(tx);
         emit addToCache(tx.getReceiver().toStdString(), tx);
@@ -103,12 +103,12 @@ void TransactionManager::addUnapprovedHash(QByteArray txHash) {
 }
 
 void TransactionManager::addVerifiedTx(Transaction tx) {
-    qDebug() << QString("Adding tx[%1] to pending list").arg(tx.toString());
+    eLog("{}", QString("Adding tx[%1] to pending list").arg(tx.toString()));
     pendingTxs.push_back(tx);
 }
 
 void TransactionManager::runMakeAndProveBlockTimers() {
-    qDebug() << "start timer:";
+    eLog("start timer:");
     blockCreationTimer.start();
     proveTimer.start();
 }
@@ -132,7 +132,7 @@ void TransactionManager::makeBlock() {
     if (pendingTxs.empty()) {
         // if (lastRealBlock.isEmpty())
             lastRealBlock = blockchain->getBlockIndex().getLastRealBlockById();
-        // qDebug() << lastRealBlock.getIndex() << lastRealBlock.getType();
+        // eLog("{} {}", lastRealBlock.getIndex(), lastRealBlock.getType());
         if (lastRealBlock.isEmpty()) {
             return;
         }

@@ -35,15 +35,14 @@ DfsController::DfsController(ExtraChainNode *node)
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
     // loadBytesLimit();
-    qDebug() << fmt::format("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable())
-                    .c_str();
+    eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
     if (!node->accountController()->empty())
         requestDirFileAllActors();
 }
 
 DfsController::~DfsController() {
-    qInfo("DfsController::~DfsController()");
+    eInfo("DfsController::~DfsController()");
 }
 
 void DfsController::initializeActor(const ActorId &actorId) {
@@ -326,11 +325,11 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
 
     if (loadBytes) {
         if (std::filesystem::exists(realFilePath)) {
-            qDebug() << "[Dfs] File already exists"; // temp: not correct, add calc file
+            eLog("[Dfs] File already exists"); // temp: not correct, add calc file
             return dirRow.fileId;
         }
         if (!writeAvailable(dirRow.size)) {
-            qDebug() << "[Dfs] Storage full";
+            eLog("[Dfs] Storage full");
             eFatal("[Dfs] Storage full");
             return dirRow.fileId;
         }
@@ -360,7 +359,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
             "[Dfs] addFile: insert failed:{} {}",
             actrDirFile.file().c_str(),
             DfsT::ActorDirFile::TableName.c_str());
-        qDebug() << errorStr;
+        eLog("{}", errorStr);
         eFatal("Error 2: {}", errorStr.c_str());
         return "";
     }
@@ -427,7 +426,7 @@ std::string DfsController::getFileFromStorage(ActorId owner, std::string fileNam
 
 bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
     // if (msg.actor != node.accountController()->mainActor()->id().toStdString()) {
-    //     qDebug() << "[Dfs] Remove file - file has been removed";
+    //     eLog("[Dfs] Remove file - file has been removed");
     //     return false;
     // }
     std::string message = fmt::format(
@@ -435,7 +434,7 @@ bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
         msg.fileId,
         msg.actorId,
         node->accountController()->mainActor()->id().to_string());
-    qDebug() << message;
+    eLog("{}", message);
 
     auto dirRow = Dfs::Tables::ActorDirFile::getDirRow(msg.actorId, msg.fileId);
     if (!dirRow.has_value()) {
@@ -448,7 +447,7 @@ bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
     {
         QFile file(QString::fromStdString(path));
         if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            qDebug() << "Could not open VPN localization file:" << file.errorString();
+            eLog("Could not open VPN localization file: {}", file.errorString());
         } else {
             QTextStream          in(&file);
             QString              oneLine = in.readLine();
@@ -467,7 +466,7 @@ bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
         (removedFile ? "removed" : "not removed"),
         path,
         removeStorjFile ? "removed" : "not removed");
-    qDebug() << message;
+    eLog("{}", message);
 
     emit removed(dirRow.value());
     return removedFile;
@@ -498,7 +497,7 @@ bool DfsController::renameFile(
 }
 
 std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
-    qDebug() << "[Dfs] Edit file:" << msg.hash.c_str();
+    eLog("[Dfs] Edit file: {}", msg.hash.c_str());
     std::string           pathDelim = Utils::platformDelimeter();
     std::string           actorPath = DfsB::fsActrRoot + pathDelim + msg.actorId.to_string() + pathDelim;
     std::string           actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
@@ -510,7 +509,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
     std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
 
     if (actrDirData.empty()) {
-        qDebug() << "[Dfs] editFile: Skipped because of empty result";
+        eLog("[Dfs] editFile: Skipped because of empty result");
         eFatal("[Dfs] editFile: Skipped because of empty result: actrDirData || localDirData empty");
         return "";
     }
@@ -519,7 +518,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
         const auto errorStr = fmt::format(
             "[Dfs] editFile: Query select failed: Query result has unsupported size:{}",
             actrDirData.size());
-        qDebug() << QString::fromStdString(errorStr);
+        eLog("{}", QString::fromStdString(errorStr));
         eFatal("Error 4: {}", errorStr);
         return "";
     }
@@ -529,7 +528,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
 }
 
 // void DfsController::addListFiles(const QStringList &files) {
-//     qDebug() << "Files add in thread id: [" << QThread::currentThreadId() << "]" << files.size();
+//     eLog("Files add in thread id: [ {} ] {}", QThread::currentThreadId(), files.size());
 //     const auto     actor = node->accountController()->mainActor();
 //     ThreadAddFiles addFilesThread(this, actor, files);
 //     connect(&addFilesThread, &ThreadAddFiles::added, this,
@@ -541,11 +540,11 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
 
 //     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
 //             [&](DFSP::AddFileMessage msg, MessageType messageType) {
-//                 qDebug() << "send file: " << msg.FileName.c_str();
+//                 eLog("send file:  {}", msg.FileName.c_str());
 //                 node->network()->send_message(msg, MessageType::DfsAddFile);
 //             });
 //     connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
-//         qDebug() << error.c_str();
+//         eLog("{}", error.c_str());
 //         emit resultAddFile(QString::fromStdString(error), QString::fromStdString(fileName));
 //     });
 //     addFilesThread.start();
@@ -703,7 +702,7 @@ void DfsController::exportFile(
     }
 
     if (actorId.is_zero()) {
-        qDebug() << "[Dfs] Path or actorId hadn't been found. Please check in parameters.";
+        eLog("[Dfs] Path or actorId hadn't been found. Please check in parameters.");
         return;
     }
 
@@ -735,10 +734,7 @@ void DfsController::exportFile(
                             }
                         }
                     }
-                    qDebug() << fmt::format(
-                        "File \"{}\" of actor \"{}\" extracted\n",
-                        dirRow.visualPath(),
-                        actorId);
+                    eLog("File {} of actor {} extracted", dirRow.visualPath(), actorId);
                     return true;
                 }
                 return false;
@@ -948,7 +944,7 @@ void DfsController::sendDirData(
 }
 
 void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows) {
-    qDebug() << "[Dfs] addDirData result:" << dirRows.size();
+    eLog("[Dfs] addDirData result: {}", dirRows.size());
     bool res = DfsT::ActorDirFile::addDirRows(actorId, dirRows);
     m_dirRows.insert(std::end(m_dirRows), std::begin(dirRows), std::end(dirRows));
 
@@ -960,7 +956,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
-    qDebug() << fileName.c_str();
+    eLog("{}", fileName);
     if (fileName.empty())
         return;
 
@@ -1012,7 +1008,7 @@ void DfsController::requestFileSegment(const Dfs::DirRow &row) {
 }
 
 void DfsController::beginFetchNextFile() {
-    qDebug() << "begin fetch next file";
+    eLog("begin fetch next file");
 
     if (m_dirRows.empty())
         return;
@@ -1025,7 +1021,7 @@ void DfsController::beginFetchNextFile() {
 }
 
 void DfsController::requestNextFragment(const Dfs::Packets::RequestFileSegmentMessage &msg) {
-    qDebug() << "request next fragment";
+    eLog("request next fragment");
     node->network()->send_message(msg, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 }
 
@@ -1090,7 +1086,7 @@ void DfsController::fetchFragments(Dfs::Packets::RequestFileSegmentMessage &msg,
                 data += extractFragment(fmapTarget, totalOffset, DfsB::sectionSize);
                 totalOffset += DfsB::sectionSize;
                 limitSectionSize += DfsB::sectionSize;
-                qDebug() << "progress: [" << (double(totalOffset) / double(fileSize) * 100) << "%]";
+                eLog("progress: {}%", (double(totalOffset) / double(fileSize) * 100));
                 emit uploadProgress(msg.actorId, msg.fileId, double(totalOffset) / double(fileSize) * 100);
             } else {
                 lastFragment = true;
@@ -1143,7 +1139,7 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
             data += std::move(extractFragment(fmapTarget, totalOffset, DfsB::sectionSize));
             totalOffset += DfsB::sectionSize;
             limitSectionSize += DfsB::sectionSize;
-            qDebug() << "progress: [" << (double(totalOffset) / double(fileSize) * 100) << "%]";
+            eLog("progress: {}%", (double(totalOffset) / double(fileSize) * 100));
             emit uploadProgress(msg.actorId, msg.fileId, double(totalOffset) / double(fileSize) * 100);
         } else {
             lastFragment = true;
@@ -1181,7 +1177,7 @@ void DfsController::verifyFiles(
         // check file exist
         std::filesystem::path realFilePath = DfsPath::filePath(file.actorId, file.fileId);
         if (!std::filesystem::exists(realFilePath)) {
-            qDebug() << "File by path" << realFilePath.c_str() << "doesn't exist.";
+            eLog("File by path {} doesn't exist.", realFilePath);
             continue;
         }
         std::string fileHash = Utils::calcHashForFile(realFilePath);
@@ -1276,7 +1272,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
         m_compliteFiles.push_back(msg.fileId);
-        qDebug() << "[Dfs] File is complite";
+        eLog("[Dfs] File is complite");
         return "";
     }
 
@@ -1286,7 +1282,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     emit downloadProgress(msg.actorId, msg.fileId, double(msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
         if (msg.hash == Utils::calcHashForFile(fileName)) {
-            qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+            eLog("[Dfs] File {} done", fileName);
             auto dirRow = files.at({ msg.actorId, msg.fileId });
             files.erase({ msg.actorId, msg.fileId });
             emit downloaded(dirRow);
@@ -1303,7 +1299,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
 }
 
 void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
-    qDebug() << "add segment. Thread: [" << QThread::currentThreadId() << "]";
+    eLog("add segment. Thread: {}", QThread::currentThreadId());
     FragmentWriter fw(msg, m_compliteFiles);
 
     connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
@@ -1346,14 +1342,15 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
     std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.fileId);
 
     if (actrDirData.empty()) {
-        qDebug() << "[Dfs] editFile: Skipped because of empty result";
+        eLog("[Dfs] editFile: Skipped because of empty result");
         eFatal("Error: actrDirData.empty() || localDirData.empty() in delete");
         return "";
     }
 
     if (actrDirData.size() > 2) {
-        qDebug() << "[Dfs] editFile: Query select failed: Query result has unsupported size:"
-                 << actrDirData.size();
+        eLog(
+            "[Dfs] editFile: Query select failed: Query result has unsupported size: {}",
+            actrDirData.size());
         eFatal("Error 1");
         return "";
     }

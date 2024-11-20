@@ -19,13 +19,13 @@
 
 #include "network/network_status.h"
 
-#include <QDebug>
+#include "utils/exc_logs.h"
 
 NetworkStatus::NetworkStatus(QObject *parent)
     : QObject(parent) {
     auto networkInfo = QNetworkInformation::instance();
     if (networkInfo == nullptr) {
-        qDebug() << "[NetworkStatus] Can't detect network status";
+        eLog("[NetworkStatus] Can't detect network status");
         setNetworkStatus(Status::Unknown);
         return;
     }

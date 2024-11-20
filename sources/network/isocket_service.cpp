@@ -86,7 +86,7 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     auto json = QJsonDocument::fromJson(message.toLatin1());
 
     if (json.isEmpty()) {
-        qDebug() << QString("[Socket] First message:%1").arg(message);
+        eLog("{}", QString("[Socket] First message:%1").arg(message));
         closeSocket();
         eFatal("[Socket] Can't check first message");
         return false;
@@ -101,22 +101,23 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     bool       somethingEmpty     = jsonFirstId.is_zero() || currentFirstId.is_zero();
     QJsonArray connectionsArr     = json["connections"].toArray();
 
-    qDebug() << QString("[Socket] First message:%1 | Current first:%2")
-                    .arg(json.toJson())
-                    .arg(currentFirstId.toQString());
+    eLog(
+        "[Socket] First message: {} | Current first: {}",
+        json.toJson(QJsonDocument::Compact),
+        currentFirstId);
 
     if (currentFirstId.is_zero() && !jsonFirstId.is_zero()) { // TODO: remove hack
         node->actorIndex()->setFirstId(jsonFirstId);
     }
 
     if (version != EXTRACHAIN_VERSION) {
-        qDebug() << "[Socket] Close, because version incompatible" << EXTRACHAIN_VERSION;
+        eLog("[Socket] Close, because version incompatible {}", EXTRACHAIN_VERSION);
         emit error(Network::SocketServiceError::IncompatibleVersion, version);
         closeSocket();
     }
 
     if (!(somethingEmpty || isFirstIdsContains)) {
-        qDebug() << "[Socket] Close, because network incompatible";
+        eLog("[Socket] Close, because network incompatible");
         emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toQString());
         closeSocket();
         return false;
@@ -136,19 +137,19 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
 
     if (flag) {
         emit error(Network::SocketServiceError::DuplicateIdentifier, "");
-        qDebug() << "[Socket] Duplicate identifier";
+        eLog("[Socket] Duplicate identifier");
         closeSocket();
         return false;
     }
 
     if (canUseConnection) {
-        qDebug() << "[Socket] Activated" << this << ip() << protocol();
+        eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
         m_activated = true;
         emit activated();
         emit shareConnections(connectionsArr);
         return true;
     } else {
-        qDebug() << "[Socket] Ignored as external node don't have enough slots." << this << protocol();
+        eLog("[Socket] Ignored as external node don't have enough slots. {} {}", fmt::ptr(this), protocol());
         m_activated    = false;
         m_needToDelete = true;
         return false;

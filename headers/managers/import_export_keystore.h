@@ -92,18 +92,18 @@ public:
             return false;
         }
         outputFile.write(encryptedData);
-        qDebug() << "WD before: [" << writeData.size() << "].";
+        eLog("WD before: {}", writeData.size());
         writeData = encryptedData.toStdString();
-        qDebug() << "WD after: [" << writeData.size() << "].";
+        eLog("WD after: {}", writeData.size());
 
         return true;
     }
 
     bool encryptFolder(const QString &folderPath, const QString &outputFolderPath, const QString &namefileExport, const QByteArray &key, const std::string &autologinHash) {
-        qDebug() << "Export folder - " << folderPath;
-        qDebug() << "Output folder - " << outputFolderPath;
-        qDebug() << "By key - " << key;
-        qDebug() << "Hash - " << QString::fromStdString(autologinHash);
+        eLog("Export folder: {}", folderPath);
+        eLog("Output folder: {}", outputFolderPath);
+        eLog("By key: {}", key);
+        eLog("Hash: {}", QString::fromStdString(autologinHash));
 
         QDir dir(folderPath);
         QDir tmpEncryptFolder(QDir(QString::fromStdString("encrypt")));
@@ -120,20 +120,20 @@ public:
                 return false;
             }
             encryptedList.push_back(encryptData.serialize());
-            qDebug() << "Size of encryptedList" << encryptedList.size();
+            eLog("Size of encryptedList: {}", encryptedList.size());
         }
 
-        qDebug() << "start create one file";
+        eLog("Start create one file");
         std::string data = Serialization::serialize(encryptedList);
 
         Keystore keystore(key.toStdString(), data, autologinHash);
-        qDebug() << "write to: " << QString("%1%2").arg(namefileExport).arg(folderEncryptExt);
+        eLog("Write to:  {}", QString("%1%2").arg(namefileExport).arg(folderEncryptExt));
         QString outputFilePathForFolder = QDir(outputFolderPath).filePath(QString("%1%2").arg(namefileExport).arg(folderEncryptExt));
-        qDebug() << "Export to file - " << outputFilePathForFolder;
+        eLog("Export to file -  {}", outputFilePathForFolder);
 
         QFile outputFile(outputFilePathForFolder);
         if (!outputFile.open(QIODevice::WriteOnly)) {
-            qDebug() << "File to export folder " << outputFilePathForFolder << " not open";
+            eLog("File to export folder {} not open", outputFilePathForFolder);
             return false;
         }
         outputFile.write(QByteArray::fromStdString(keystore.serialize()));
@@ -145,14 +145,14 @@ public:
             return false;
         }
 
-        qDebug() << "Size of keystore:" << QByteArray::fromStdString(keystore.serialize()).size();
+        eLog("Size of keystore: {}", QByteArray::fromStdString(keystore.serialize()).size());
         QByteArray encryptedData = inputFile.readAll();
-        qDebug() << "Size of ecrypted data: " << encryptedData.size();
+        eLog("Size of ecrypted data:  {}", encryptedData.size());
 
                // Remove files
         foreach (QFileInfo item, tmpEncryptFolder.entryInfoList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::DirsFirst)) {
             if (!item.isDir()) {
-                qDebug() << "Remove file - " << item.fileName();
+                eLog("Remove file: {}", item.fileName());
                 QFile::remove(item.absoluteFilePath());
             }
         }
@@ -186,7 +186,7 @@ public:
         clearDirectory(outputFolderPath);
 
         QString inputFilePath = dir.filePath(filePath);
-        qDebug() << filePath << inputFilePath;
+        eLog("{} {}", filePath, inputFilePath);
 
         QFile inputFile(inputFilePath);
         if (!inputFile.open(QIODevice::ReadOnly)) {
@@ -197,7 +197,7 @@ public:
         QByteArray encryptedData = inputFile.readAll();
         Keystore keystore;
         keystore.deserialize(encryptedData.toStdString());
-        qDebug() << "decrypt folder hash: [" << keystore.autologinHash << "]";
+        eLog("Decrypt folder hash: {}", keystore.autologinHash);
         hash = keystore.autologinHash;
 
         if(keystore.key != key.toStdString()) {
@@ -206,14 +206,14 @@ public:
         }
 
         auto deserializedList = Serialization::deserialize(keystore.data);
-        qDebug() << "count files:" << deserializedList.size();
+        eLog("Count files: {}", deserializedList.size());
         for(auto data : deserializedList) {
             EncryptData decryptData;
             decryptData.deserialize(data);
             auto xorEncryptDecrypted = xorEncryptDecrypt(QByteArray::fromStdString(decryptData.data), key);
             QFile fileData(QDir(outputFolderPath).filePath(QString::fromStdString(decryptData.namefile).chopped(4)));
             if(fileData.open(QIODevice::WriteOnly)) {
-                qDebug() << "file " << fileData.fileName() << " opened";
+                eLog("File {} opened", fileData.fileName());
                 fileData.write(QByteArray(xorEncryptDecrypted));
                 fileData.flush();
                 fileData.close();

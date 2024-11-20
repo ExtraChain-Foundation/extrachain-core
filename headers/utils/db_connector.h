@@ -25,7 +25,6 @@
 #include <vector>
 
 #include <QByteArray>
-#include <QDebug>
 #include <QJsonDocument>
 #include <QMutex>
 
@@ -91,7 +90,7 @@ std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
         }
 
         return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
-            qDebug() << "Json parse error:" << err;
+            eLog("Json parse error: {}", err);
             return Utils::ParseError::Invalid;
         });
     } catch (...) {
@@ -117,7 +116,7 @@ enum class DbConnectorType {
     Regular,
     Compressed
 };
-FORMAT_ENUM(DbConnectorType)
+// FORMAT_ENUM(DbConnectorType)
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 

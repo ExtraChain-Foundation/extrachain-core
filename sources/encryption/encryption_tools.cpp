@@ -90,7 +90,7 @@ Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
         crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data());
 
     if (r != 0) {
-        qDebug() << "[SecretKey::encrypt] Encryption failed";
+        eLog("[SecretKey::encrypt] Encryption failed");
         return Bytes();
     }
 
@@ -130,7 +130,7 @@ Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_k
         secret_key.data());
 
     if (r != 0) {
-        qDebug() << "[SecretKey::decrypt] Decryption failed";
+        eLog("[SecretKey::decrypt] Decryption failed");
         return Bytes();
     }
 
@@ -198,7 +198,7 @@ Bytes Cryptography::encryptAsymmetric(
         x_public_key.data(),
         x_secret_key.data());
     if (res != 0) {
-        qDebug() << "[SecretKey::encryptAsymmetric] Encryption failed";
+        eLog("[SecretKey::encryptAsymmetric] Encryption failed");
         return Bytes {};
     }
 
@@ -256,7 +256,7 @@ Bytes Cryptography::decryptAsymmetric(
         x_public_key.data(),
         x_secret_key.data());
     if (res != 0) {
-        qDebug() << "[SecretKey::decryptAsymmetric] Decryption failed";
+        eLog("[SecretKey::decryptAsymmetric] Decryption failed");
         return Bytes {};
     }
 

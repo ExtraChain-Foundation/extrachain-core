@@ -37,12 +37,12 @@ ExtraChainNode *node;
 QThread *m_thread;
 
 void copy_char(char *&dest, const char *orig, size_t size) {
-    // qDebug() << "[ExtraChainC] From" << orig << size;
+    // eLog("[ExtraChainC] From {} {}", orig, size);
     char *res = new char[size + 1];
     // char *res = (char *)malloc(size);
     memcpy(res, orig, size + 1);
     // res[size] = '\0';
-    // qDebug() << "[ExtraChainC] After" << res << std::string(res).length();
+    // eLog("[ExtraChainC] After {} {}", res, std::string(res).length());
     dest = res;
 }
 
@@ -115,7 +115,7 @@ void extrachain_free_actor_public(ActorPublic *actor_public) {
 }
 
 void so_sleep(unsigned long secs) {
-    qDebug() << "[ExtraChainC] Sleep secs:" << secs;
+    eLog("[ExtraChainC] Sleep secs: {}", secs);
     QThread::sleep(secs);
 }
 
@@ -126,7 +126,7 @@ char *extrachain_version() {
 }
 
 void extrachain_wipe() {
-    qDebug() << "Wipe...";
+    eLog("Wipe...");
     Utils::wipeDataFiles();
 }
 
@@ -160,7 +160,7 @@ void extrachain_init(int argc, char *argv[]) {
     QObject::connect(m_thread, &QThread::finished, app, &QCoreApplication::quit);
     m_thread->start();
     node->start();
-    qDebug() << "[ExtraChainC] Finished extrachain_init";
+    eLog("[ExtraChainC] Finished extrachain_init");
 }
 
 void extrachain_stop() {
@@ -171,7 +171,7 @@ void extrachain_stop() {
 ActorPrivate *extrachain_create_actor(int type) {
     // TODO: add user, wallet functions
     if (type > 2 || type < 0) {
-        qDebug() << "[ExtraChainC] Error type for creation actor";
+        eLog("[ExtraChainC] Error type for creation actor");
         std::exit(0);
     }
 
@@ -185,7 +185,7 @@ ActorPrivate *extrachain_create_actor(int type) {
 void extrachain_auth(char *login, char *password) {
     QString e = login;
     QString p = password;
-    qDebug() << "[ExtraChainC] Auth with" << login << password;
+    eLog("[ExtraChainC] Auth with {} {}", login, password);
     QByteArray hash = Utils::calcKeccak((e + p).toUtf8());
     node->privateProfile()->setHash(hash);
 }

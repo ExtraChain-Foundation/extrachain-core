@@ -18,8 +18,10 @@
  */
 
 #include "dfs/name_validator.h"
+
 #include <algorithm>
-#include <ranges>
+#include <string>
+#include <iterator>
 
 std::expected<void, NameValidator::ValidationError>
 NameValidator::check_empty(std::string_view name) noexcept {

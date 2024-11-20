@@ -103,7 +103,6 @@ public:
      * @return genesis data row list
      */
     const GenesisDataRows &dataRows() const;
-    std::string            toString() const override;
 
 protected:
     void calcHash() override;

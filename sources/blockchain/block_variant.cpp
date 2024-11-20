@@ -104,14 +104,6 @@ const GenesisDataRows& BlockVariant::dataRows() const {
     return rows;
 }
 
-std::string BlockVariant::toString() const {
-    return std::visit(
-        [](const auto& b) {
-            return b.toString();
-        },
-        m_block);
-}
-
 void BlockVariant::setType(BlockType type) {
     std::visit(
         [&type](auto& b) {
@@ -186,14 +178,4 @@ std::optional<std::reference_wrapper<GenesisBlock>> BlockVariant::getGenesisBloc
         return std::ref(*block);
     }
     return std::nullopt;
-}
-
-QDebug operator<<(QDebug debug, const BlockVariant& block) {
-    QDebugStateSaver saver(debug);
-    if (block.isGenesisBlock()) {
-        debug << block.getGenesisBlockConst().value();
-    } else {
-        debug << block.getBlockConst().value();
-    }
-    return debug;
 }

@@ -30,7 +30,7 @@ enum class TransactionType {
     Reward       = 2
 };
 MSGPACK_ADD_ENUM(TransactionType)
-FORMAT_ENUM(TransactionType)
+// FORMAT_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
@@ -41,7 +41,7 @@ enum class TransactionError {
     ZeroAmount
 };
 // MSGPACK_ADD_ENUM(TransactionError)
-FORMAT_ENUM(TransactionError)
+// FORMAT_ENUM(TransactionError)
 
 enum class TransactionProveError {
     NoError,
@@ -61,7 +61,7 @@ enum class TransactionProveError {
     RewardInvalidToken,
     InvalidTokenCount
 };
-FORMAT_ENUM(TransactionProveError)
+// FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
 private:
@@ -174,5 +174,3 @@ public:
          m_signature,
          m_type))
 };
-
-MAKE_MAGICAL(Transaction)

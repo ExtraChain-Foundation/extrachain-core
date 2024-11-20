@@ -42,7 +42,6 @@ struct HistoricalRow {
     Signature              sign;
 };
 BOOST_DESCRIBE_STRUCT(HistoricalRow, (), (id, prevId, operation, data, timestamp, actorId, sign))
-MAKE_MAGICAL(HistoricalRow)
 
 class HistoricalSql {
 private:

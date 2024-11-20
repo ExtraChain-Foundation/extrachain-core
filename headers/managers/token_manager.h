@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
 #include <QObject>
 
 #include "blockchain/actor.h"
@@ -43,8 +42,8 @@ struct TokenData {
                smart == other.smart;
     }
 
-           // Overload the inequality operator
-    bool operator!=(const TokenData& other) const {
+    // Overload the inequality operator
+    bool operator!=(const TokenData &other) const {
         return !(*this == other);
     }
 

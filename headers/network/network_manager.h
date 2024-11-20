@@ -110,7 +110,7 @@ struct NetworkReconnect {
     }
 
     void print() const {
-        qDebug() << "ip: " << ip << "port:" << port;
+        eLog("ip:  {} port: {}", ip, port);
     }
 };
 
@@ -275,8 +275,7 @@ public:
             eFatal("[Network] Send message error: empty message id for response message");
         }
         if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
-            qDebug()
-                << "[Network] Send message warning: incorrect type send for response message, set to focused";
+            eLog("[Network] Send message warning: incorrect type send for response message, set to focused");
             typeSend = Config::Net::TypeSend::Focused;
         }
 
@@ -302,14 +301,13 @@ public:
         if (Network::networkDebug) {
             msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object        deserialized = oh.get();
-            qDebug() << fmt::format(
-                    "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
-                    message.message_type,
-                    message.status,
-                    message.message_id,
-                    typeSend,
-                    (std::stringstream() << deserialized).str())
-                .c_str();
+            eLog(
+                "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                message.message_type,
+                message.status,
+                message.message_id,
+                typeSend,
+                (std::stringstream() << deserialized).str());
         }
 #endif
 

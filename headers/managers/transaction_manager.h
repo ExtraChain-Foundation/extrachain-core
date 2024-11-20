@@ -20,7 +20,6 @@
 #pragma once
 
 #include <QByteArray>
-#include <QDebug>
 #include <QList>
 #include <QObject>
 #include <QThread>

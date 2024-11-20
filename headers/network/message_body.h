@@ -75,7 +75,7 @@ enum class MessageType {
     Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)
-FORMAT_ENUM(MessageType)
+// FORMAT_ENUM(MessageType)
 
 enum class MessageStatus {
     NoStatus,
@@ -83,7 +83,7 @@ enum class MessageStatus {
     Response
 };
 MSGPACK_ADD_ENUM(MessageStatus)
-FORMAT_ENUM(MessageStatus)
+// FORMAT_ENUM(MessageStatus)
 
 struct MessageBody {
     MessageType   message_type;

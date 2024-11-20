@@ -28,6 +28,7 @@
 
 #include <QJsonObject>
 #include <QMutex>
+#include <QThread>
 
 #ifdef Q_OS_ANDROID
     #include <android/log.h>

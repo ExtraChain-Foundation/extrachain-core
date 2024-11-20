@@ -24,7 +24,6 @@
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
-#include <QDebug>
 #include <QString>
 
 // Block comparison result
@@ -52,15 +51,13 @@ struct Approver {
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
 
-QDebug operator<<(QDebug debug, const Approver &approvers);
-
 enum class BlockType {
     Data,
     Genesis,
     Dummy,
 };
 MSGPACK_ADD_ENUM(BlockType)
-FORMAT_ENUM(BlockType)
+// FORMAT_ENUM(BlockType)
 
 enum class BlockError {
     Unknown,
@@ -74,7 +71,7 @@ enum class BlockError {
     CantMerge,
     MergeEqual
 };
-FORMAT_ENUM(BlockError)
+// FORMAT_ENUM(BlockError)
 
 enum class BlockSignError {
     NoError,
@@ -82,7 +79,7 @@ enum class BlockSignError {
     NoActorSignature,
     EmptySignatures
 };
-FORMAT_ENUM(BlockSignError)
+// FORMAT_ENUM(BlockSignError)
 
 class BlockVariant;
 using Signatures   = std::map<ActorId, Signature>;
@@ -147,11 +144,10 @@ public:
     void           sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     BlockSignError verify(const Actor<KeyPublic> &actor) const;
 
-    bool                equals(const Block &block) const;
-    bool                isEmpty() const;
-    virtual std::string toString() const;
-    bool                operator<(const Block &other);
-    bool                isApprover(const ActorId &) const;
+    bool equals(const Block &block) const;
+    bool isEmpty() const;
+    bool operator<(const Block &other);
+    bool isApprover(const ActorId &) const;
 
 public:
     void                         setPrevHash(const std::string &value);
@@ -230,5 +226,3 @@ inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
            && l.dataService() == r.dataService() && l.transactions() == r.transactions();
 }
-
-QDebug operator<<(QDebug debug, const Block &block);

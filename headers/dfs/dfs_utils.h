@@ -174,8 +174,6 @@ BOOST_DESCRIBE_STRUCT(
      state,
      sign))
 
-MAKE_MAGICAL_OPERATORS(DirRow)
-
 namespace Packets {
     struct ResponseDfsSize {
         ActorId     actorId;
@@ -322,11 +320,9 @@ namespace Fragments {
         std::list<std::pair<int, int>> fragmentPositionList;
 
         void print() const {
-            qDebug() << "actor: [" << actor << "]"
-                     << "fileHash" << fileHash.c_str() << "]"
-                     << "filePath" << filePath.c_str() << "]";
+            eLog("actor: {}, file hash: {}, path: {} ]", actor, fileHash.c_str(), filePath.c_str());
             for (const auto& pair : fragmentPositionList) {
-                qDebug() << pair.first << pair.second;
+                eLog("{} {}", pair.first, pair.second);
             }
         }
 
@@ -471,12 +467,12 @@ namespace DfsHc   = Dfs::Historical;
 namespace DfsB    = Dfs::Basic;
 namespace DfsPath = Dfs::Path;
 
-FORMAT_ENUM(Dfs::DfsError)
-FORMAT_ENUM(Dfs::FileType)
-FORMAT_ENUM(Dfs::FileState)
-FORMAT_ENUM(Dfs::Encryption)
-FORMAT_ENUM(Dfs::Packets::SegmentMessageType)
-FORMAT_ENUM(Dfs::Reward::TypeFunctioning)
+// FORMAT_ENUM(Dfs::DfsError)
+// FORMAT_ENUM(Dfs::FileType)
+// FORMAT_ENUM(Dfs::FileState)
+// FORMAT_ENUM(Dfs::Encryption)
+// FORMAT_ENUM(Dfs::Packets::SegmentMessageType)
+// FORMAT_ENUM(Dfs::Reward::TypeFunctioning)
 
 MSGPACK_ADD_ENUM(Dfs::FileType)
 MSGPACK_ADD_ENUM(Dfs::FileState)

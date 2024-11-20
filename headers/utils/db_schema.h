@@ -206,7 +206,6 @@ private:
          m_default_value,
          m_checks))
 };
-MAKE_MAGICAL(DbColumn)
 
 class DbSchema {
 public:
@@ -236,7 +235,6 @@ private:
 
     BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns))
 };
-MAKE_MAGICAL(DbSchema)
 
 namespace sqlite::literals {
 DbColumn operator""_int(const char* name, size_t);

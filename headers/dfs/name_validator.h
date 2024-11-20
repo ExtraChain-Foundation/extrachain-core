@@ -22,6 +22,7 @@
 #include <string_view>
 #include <array>
 #include <expected>
+#include <optional>
 
 class NameValidator {
 public:

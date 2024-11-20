@@ -19,8 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
-
 #include "blockchain/actor.h"
 #include "blockchain/private_profile.h"
 #include "utils/autologinhash.h"

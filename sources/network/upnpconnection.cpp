@@ -19,6 +19,8 @@
 
 #include "network/upnpconnection.h"
 
+#include "utils/exc_logs.h"
+
 QHostAddress UPNPConnection::getExternalAddress() const {
     return externalAddress;
 }
@@ -29,13 +31,13 @@ int UPNPConnection::getPort() {
 
 UPNPConnection::UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent)
     : QObject(parent) {
-    conn_state = State::NotOpened;
+    conn_state   = State::NotOpened;
     localAddress = local;
-    waitTime = 1000;
-    udp_socket = new QUdpSocket();
-    http_socket = new QNetworkAccessManager();
-    http_reply = nullptr;
-    timer = new QTimer(this);
+    waitTime     = 1000;
+    udp_socket   = new QUdpSocket();
+    http_socket  = new QNetworkAccessManager();
+    http_reply   = nullptr;
+    timer        = new QTimer(this);
     udp_socket->bind(localAddress->ip(), 1900);
     QObject::connect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
@@ -185,7 +187,7 @@ void UPNPConnection::getHttp() {
     QObject::disconnect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
     QObject::disconnect(http_reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
                         SLOT(getHttpError(QNetworkReply::NetworkError)));
-    qDebug() << "UPnP Reply:" << reply;
+    eLog("UPnP Reply: {}", reply);
     if (!reply.contains("UPnPError")) {
         if (reply.contains("<NewExternalIPAddress>")) {
             extractExternalIP(reply);
@@ -193,7 +195,7 @@ void UPNPConnection::getHttp() {
         if (reply.contains("AddPortMappingResponse")) {
             conn_state = State::Opened;
             // udp_socket->close();
-            qDebug() << "UPNP emit success() ";
+            eLog("UPNP emit success() ");
             emit success();
         }
         if (reply.contains("DeletePortMappingResponse")) {

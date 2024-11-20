@@ -49,20 +49,12 @@
 #include <fmt/ranges.h>
 
 #include "utils/exc_magic.h"
-#include <magic_enum.hpp>
-#include <magic_enum_iostream.hpp>
+#include <magic_enum/magic_enum.hpp>
+#include <magic_enum/magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
 
 #include "utils/exc_utils_base64.h"
-
-#define FORMAT_ENUM(E)                                                                                       \
-    inline QDebug operator<<(QDebug debug, const E &value) {                                                 \
-        QDebugStateSaver saver(debug);                                                                       \
-        debug.nospace().noquote() << magic_enum::enum_type_name<E>()                                         \
-                                  << "::" << magic_enum::enum_name(value);                                   \
-        return debug;                                                                                        \
-    }
 
 class ByteArray {
 public:
@@ -233,11 +225,6 @@ Q_ENUM_NS(SocketServiceError)
 } // namespace Network
 
 namespace Config {
-
-// Message pattern for qDebug (see
-// http://doc.qt.io/qt-5/qtglobal.html#qSetMessagePattern)
-// const QString MESSAGE_PATTERN = "[%{time h:mm:ss.zzz}][%{function}][%{type}]: %{message}";
-
 const int NECESSARY_SAME_TX = 1;
 
 namespace DataStorage {
@@ -343,7 +330,7 @@ namespace Net {
 } // namespace Config
 
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
-FORMAT_ENUM(Config::Net::TypeSend)
+// FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
 // IO
@@ -386,7 +373,7 @@ std::string serialize(const T &t) {
 template <class T, class StringContainer>
 T deserialize(const StringContainer &data, std::size_t size = 0) {
     if (Serialization::isEmpty(data)) {
-        qDebug() << "[MessagePack] Empty deserialize" << typeid(T).name();
+        eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
         eFatal("[MessagePack] Empty deserialize");
         return T();
     }
@@ -397,11 +384,11 @@ T deserialize(const StringContainer &data, std::size_t size = 0) {
         auto                   t            = deserialized.as<T>();
         return t;
     } catch (std::exception &e) {
-        qDebug() << e.what();
+        eLog("{}", e.what());
     }
 
     auto qt_bytes = QByteArray::fromStdString(data.data());
-    qDebug() << "[MessagePack] Incorrect deserialize for" << qt_bytes.toBase64() << qt_bytes;
+    eLog("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
     eFatal("[MessagePack] Incorrect deserialize");
     return T();
 }
@@ -448,7 +435,7 @@ std::expected<T, std::string> deserialize(const std::string &json_str) {
         auto restored = json_convert::from_json<T>(parsed);
         return restored;
     } catch (const std::exception &e) {
-        qDebug() << "Json deserialize error:" << e.what();
+        eLog("Json deserialize error: {}", e.what());
         return std::unexpected(e.what());
     }
 }
@@ -534,7 +521,7 @@ static const std::wstring filePrefix = L"file://";
 #endif
 
 template <typename E>
-std::string enumFullName(E value) {
+std::string enum_value_name(E value) {
     return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
 }
 
@@ -752,9 +739,7 @@ struct EXTRACHAIN_EXPORT Notification {
     QByteArray    data = "";
 };
 
-QDebug operator<<(QDebug d, const Notification &n);
-
 #define TIMER_START(name)                                                                                    \
     QElapsedTimer name;                                                                                      \
     name.start();
-#define TIMER_END(name) qDebug() << name.elapsed() << "ms for timer" << #name;
+#define TIMER_END(name) eLog("{} ms for timer {}", name.elapsed(), #name);

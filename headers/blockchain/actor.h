@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <type_traits>
@@ -44,7 +43,7 @@ enum class ActorType {
     Service    = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
-FORMAT_ENUM(ActorType)
+// FORMAT_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
@@ -246,6 +245,3 @@ public:
     MSGPACK_DEFINE(m_id, m_type, m_key)
     BOOST_DESCRIBE_CLASS(Actor, (), (), (), (m_id, m_type, m_key))
 };
-
-MAKE_MAGICAL(Actor<KeyPrivate>)
-MAKE_MAGICAL(Actor<KeyPublic>)

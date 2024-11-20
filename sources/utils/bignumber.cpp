@@ -48,7 +48,7 @@ BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
             }
         }
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
+        eLog("Incorrect BigNumber value: {}", bigNumber.c_str());
         assert(false);
     }
 
@@ -290,7 +290,7 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
         }
         return bn;
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
+        eLog("Incorrect BigNumber value: {}", bigNumber.c_str());
         assert(false);
         return std::unexpected(BigNumberError::InvalidNumber);
     }

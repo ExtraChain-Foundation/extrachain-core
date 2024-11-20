@@ -120,34 +120,3 @@ void GenesisBlock::setType(const std::string &value) {
 std::string GenesisBlock::getPrevGenHash() const {
     return m_prevGenHash;
 }
-
-std::string GenesisBlock::toString() const {
-    std::ostringstream oss;
-
-    oss << "GenesisBlock { "
-        << "type: " << magic_enum::enum_name(m_type) << ", "
-        << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.to_string() << " (" << m_index.to_string(NumeralBase::Dec) << "), "
-        << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
-        << "prev hash: '"
-        << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
-                                           + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
-                                     : m_prevHash)
-               + "', "
-        << "prev gen: '"
-        << (m_prevGenHash.length() > 10
-                ? m_prevGenHash.substr(0, 5) + "..."
-                      + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
-                : m_prevGenHash)
-        << "', "
-        << "hash: '"
-        << (m_hash.length() > 10
-                ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
-                : m_hash)
-        << "', "
-        << "signatures: [" << m_signatures.size() << "], "
-        << "data rows: [" << m_dataRows.size() << "]"
-        << " }";
-
-    return oss.str();
-}

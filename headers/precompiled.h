@@ -124,8 +124,8 @@
     #include <fmt/ranges.h>
     #include <fmt/format.h>
 
-    #include <magic_enum.hpp>
-    #include <magic_enum_iostream.hpp>
+    #include <magic_enum/magic_enum.hpp>
+    #include <magic_enum/magic_enum_iostream.hpp>
 
     #include "cpp-base64/base64.h"
 
