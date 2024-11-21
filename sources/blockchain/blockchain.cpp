@@ -84,8 +84,6 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
 void Blockchain::sync(const BigNumber &from) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
-    if (lastBlock.has_value())
-        removeBlock(lastBlock.value());
     if (fromBlock < 0)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
@@ -451,6 +449,9 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             // if (lastGenesis.has_value())
             //     eLog("lg {}", lastGenesis.value());
             // if (block.getType() != BlockType::Dummy)
+            if (lastRealBlock.has_value())
+                removeBlock(lastRealBlock.value());
+
             sync(blockId - 1); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }

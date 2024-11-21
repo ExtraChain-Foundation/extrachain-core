@@ -52,39 +52,39 @@ public:
             fmt::format("CREATE TABLE {}{} (", ifNotExists ? "IF NOT EXISTS " : "", tableName);
 
         bool isFirst = true;
-        boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-            [&](auto D) {
-                if (!isFirst) {
-                    query += ", ";
-                }
-                isFirst = false;
+        boost::mp11::mp_for_each<boost::describe::describe_members<
+            T,
+            boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
+            if (!isFirst) {
+                query += ", ";
+            }
+            isFirst = false;
 
-                std::string fieldName = magic::detail::clean_field_name(D.name);
-                using FieldType = std::decay_t<decltype(magic::invoke_member(std::declval<T>(), D.pointer))>;
+            std::string fieldName = magic::detail::clean_field_name(D.name);
+            using FieldType = std::decay_t<decltype(magic::invoke_member(std::declval<T>(), D.pointer))>;
 
-                std::string sqlType;
-                if constexpr (std::is_same_v<FieldType, std::string>) {
-                    sqlType = "TEXT";
-                } else if constexpr (
-                    std::is_same_v<FieldType, int> || std::is_same_v<FieldType, bool>
-                    || std::is_same_v<FieldType, char> || std::is_same_v<FieldType, short>
-                    || std::is_same_v<FieldType, unsigned short> || std::is_same_v<FieldType, unsigned int>) {
-                    sqlType = "INT";
-                } else if constexpr (
-                    std::is_same_v<FieldType, long long> || std::is_same_v<FieldType, unsigned long long>) {
-                    sqlType = "INTEGER";
-                } else if constexpr (std::is_floating_point_v<FieldType>) {
-                    sqlType = "REAL";
-                } else if constexpr (
-                    magic::is_uint8_array<FieldType>::value
-                    || std::is_same_v<FieldType, std::vector<uint8_t>>) {
-                    sqlType = "BLOB";
-                } else {
-                    sqlType = "TEXT";
-                }
+            std::string sqlType;
+            if constexpr (std::is_same_v<FieldType, std::string>) {
+                sqlType = "TEXT";
+            } else if constexpr (
+                std::is_same_v<FieldType, int> || std::is_same_v<FieldType, bool>
+                || std::is_same_v<FieldType, char> || std::is_same_v<FieldType, short>
+                || std::is_same_v<FieldType, unsigned short> || std::is_same_v<FieldType, unsigned int>) {
+                sqlType = "INT";
+            } else if constexpr (
+                std::is_same_v<FieldType, long long> || std::is_same_v<FieldType, unsigned long long>) {
+                sqlType = "INTEGER";
+            } else if constexpr (std::is_floating_point_v<FieldType>) {
+                sqlType = "REAL";
+            } else if constexpr (
+                magic::is_uint8_array<FieldType>::value || std::is_same_v<FieldType, std::vector<uint8_t>>) {
+                sqlType = "BLOB";
+            } else {
+                sqlType = "TEXT";
+            }
 
-                query += fmt::format("'{}' {}", fieldName, sqlType);
-            });
+            query += fmt::format("'{}' {}", fieldName, sqlType);
+        });
 
         query += ")";
 
@@ -131,8 +131,9 @@ private:
         int  fieldNum = 1;
         bool success  = true;
 
-        boost::mp11::mp_for_each<
-            boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
+        boost::mp11::mp_for_each<boost::describe::describe_members<
+            T,
+            boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
             if (!success) {
                 return;
             }
@@ -219,10 +220,11 @@ private:
         }
 
         std::vector<std::string> fields;
-        boost::mp11::mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>(
-            [&fields](auto D) {
-                fields.push_back(magic::detail::clean_field_name(D.name));
-            });
+        boost::mp11::mp_for_each<boost::describe::describe_members<
+            T,
+            boost::describe::mod_any_access | boost::describe::mod_inherited>>([&fields](auto D) {
+            fields.push_back(magic::detail::clean_field_name(D.name));
+        });
 
         if (fields.empty()) {
             eLog("[DbConnector] {} (false): [ImplementationInsertStrict] No fields found", file());

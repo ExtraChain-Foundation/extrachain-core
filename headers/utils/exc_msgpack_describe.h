@@ -26,7 +26,8 @@ namespace msgpack_describe {
 
 template <typename Stream, typename T>
 void pack_described(msgpack::packer<Stream>& packer, const T& value) {
-    using members      = boost::describe::describe_members<T, boost::describe::mod_any_access>;
+    using members = boost::describe::
+        describe_members<T, boost::describe::mod_any_access | boost::describe::mod_inherited>;
     constexpr size_t N = boost::mp11::mp_size<members>::value;
     packer.pack_array(N);
     boost::mp11::mp_for_each<members>([&](auto D) {
@@ -40,7 +41,8 @@ void pack_described(msgpack::packer<Stream>& packer, const T& value) {
 
 template <typename T>
 void unpack_described(const msgpack::object& obj, T& value) {
-    using members      = boost::describe::describe_members<T, boost::describe::mod_any_access>;
+    using members = boost::describe::
+        describe_members<T, boost::describe::mod_any_access | boost::describe::mod_inherited>;
     constexpr size_t N = boost::mp11::mp_size<members>::value;
     if (obj.type != msgpack::type::ARRAY || obj.via.array.size != N) {
         throw msgpack::type_error();

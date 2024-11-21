@@ -68,7 +68,9 @@ std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
 
         boost::json::object json;
         for (const auto &[key, value] : map) {
-            mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
+            mp_for_each<boost::describe::describe_members<
+                T,
+                boost::describe::mod_any_access | boost::describe::mod_inherited>>([&](auto D) {
                 if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                     if (key == magic::detail::clean_field_name(D.name)) {
                         using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;

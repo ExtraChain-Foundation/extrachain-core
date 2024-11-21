@@ -113,37 +113,6 @@ public:
     void        setType(BlockType value) override;
     void        setType(const std::string &value) override;
 
-    template <typename Packer>
-    void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.to_string();
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_prevGenHash,
-            m_dataRows)
-            .msgpack_pack(msgpack_pk);
-    }
-    void msgpack_unpack(msgpack::object const &msgpack_o) {
-        std::string index_str;
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_prevGenHash,
-            m_dataRows)
-            .msgpack_unpack(msgpack_o);
-        m_index = BigNumber(index_str);
-    }
-
     BOOST_DESCRIBE_CLASS(GenesisBlock, (Block), (), (), (m_prevGenHash, m_dataRows))
 };
 
