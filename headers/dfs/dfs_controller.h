@@ -77,11 +77,11 @@ public:
         Dfs::Encryption              securityLevel);
 
     std::expected<Dfs::DirRow, Dfs::DfsError>
-    storeDatabase(const ActorId &actorId, const std::string &visualName, const DbSchema &schema);
+    store_database(const ActorId &actorId, const std::string &visualName, const DbSchema &schema);
 
-    ExpectedDirRow databaseInsert(const ActorId &actorId, const std::string &fileId, DbRow row);
-    ExpectedDirRow databaseUpdate(const ActorId &actorId, const std::string &fileId, DbRow row);
-    ExpectedDirRow databaseDelete(const ActorId &actorId, const std::string &fileId, DbRow row);
+    ExpectedDirRow insert_database(const ActorId &actorId, const std::string &fileId, DbRow row);
+    ExpectedDirRow update_database(const ActorId &actorId, const std::string &fileId, DbRow row);
+    ExpectedDirRow delete_database(const ActorId &actorId, const std::string &fileId, DbRow row);
 
     bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile

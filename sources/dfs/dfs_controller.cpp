@@ -187,7 +187,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError>
-DfsController::storeDatabase(const ActorId &actorId, const std::string &visualName, const DbSchema &schema) {
+DfsController::store_database(const ActorId &actorId, const std::string &visualName, const DbSchema &schema) {
     std::string fileId  = createFileIdFromData("db");
     auto        dfsPath = DfsPath::filePath(actorId, fileId);
     auto        actor   = node->accountController()->currentProfile().getActor(actorId);
@@ -230,7 +230,7 @@ DfsController::storeDatabase(const ActorId &actorId, const std::string &visualNa
     return dirRow;
 }
 
-ExpectedDirRow DfsController::databaseInsert(const ActorId &actorId, const std::string &fileId, DbRow row) {
+ExpectedDirRow DfsController::insert_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
     auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
     if (!dirRowExp.has_value()) {
         return dirRowExp;
@@ -251,7 +251,7 @@ ExpectedDirRow DfsController::databaseInsert(const ActorId &actorId, const std::
     return dirRowExp;
 }
 
-ExpectedDirRow DfsController::databaseUpdate(const ActorId &actorId, const std::string &fileId, DbRow row) {
+ExpectedDirRow DfsController::update_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
     auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
     if (!dirRowExp.has_value()) {
         return dirRowExp;
@@ -267,7 +267,7 @@ ExpectedDirRow DfsController::databaseUpdate(const ActorId &actorId, const std::
     return dirRowExp;
 }
 
-ExpectedDirRow DfsController::databaseDelete(const ActorId &actorId, const std::string &fileId, DbRow row) {
+ExpectedDirRow DfsController::delete_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
     auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
     if (!dirRowExp.has_value()) {
         return dirRowExp;

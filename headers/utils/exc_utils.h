@@ -743,4 +743,4 @@ struct EXTRACHAIN_EXPORT Notification {
 #define TIMER_START(name)                                                                                    \
     QElapsedTimer name;                                                                                      \
     name.start();
-#define TIMER_END(name) eLog("{} ms for timer {}", name.elapsed(), #name);
+#define TIMER_END(name) eInfo("{} ms for timer {}", name.elapsed(), #name);
