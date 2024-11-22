@@ -123,11 +123,11 @@ public:
                     using S = std::decay_t<decltype(settings)>;
                     if constexpr (std::is_same_v<S, StringSettings>) {
                         if (settings.min_length || settings.max_length) {
-                            col.check(fmt::format(
-                                "length({}) BETWEEN {} AND {}",
-                                field.name,
-                                settings.min_length.value_or(0),
-                                settings.max_length.value_or(std::numeric_limits<size_t>::max())));
+                            col.check(
+                                fmt::format("length({}) BETWEEN {} AND {}",
+                                            field.name,
+                                            settings.min_length.value_or(0),
+                                            settings.max_length.value_or(std::numeric_limits<size_t>::max())));
                         }
 
                         if (settings.default_value) {
@@ -140,8 +140,7 @@ public:
                             for (const auto& val : *settings.allowed_values) {
                                 quoted.push_back(fmt::format("'{}'", val));
                             }
-                            col.check(
-                                fmt::format("{} IN ({})", field.name, boost::algorithm::join(quoted, ", ")));
+                            col.check(fmt::format("{} IN ({})", field.name, boost::algorithm::join(quoted, ", ")));
                         }
                     } else if constexpr (std::is_same_v<S, NumberSettings>) {
                         std::vector<std::string> conditions;
@@ -162,10 +161,9 @@ public:
                         }
 
                         if (settings.allowed_values && !settings.allowed_values->empty()) {
-                            col.check(fmt::format(
-                                "{} IN ({})",
-                                field.name,
-                                boost::algorithm::join(*settings.allowed_values, ", ")));
+                            col.check(fmt::format("{} IN ({})",
+                                                  field.name,
+                                                  boost::algorithm::join(*settings.allowed_values, ", ")));
                         }
                     } else if constexpr (std::is_same_v<S, JsonSettings>) {
                         if (settings.max_depth) {

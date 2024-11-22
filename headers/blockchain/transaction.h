@@ -30,7 +30,7 @@ enum class TransactionType {
     Reward       = 2
 };
 MSGPACK_ADD_ENUM(TransactionType)
-FORMAT_ENUM(TransactionType)
+// FORMAT_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
@@ -41,7 +41,7 @@ enum class TransactionError {
     ZeroAmount
 };
 // MSGPACK_ADD_ENUM(TransactionError)
-FORMAT_ENUM(TransactionError)
+// FORMAT_ENUM(TransactionError)
 
 enum class TransactionProveError {
     NoError,
@@ -61,7 +61,7 @@ enum class TransactionProveError {
     RewardInvalidToken,
     InvalidTokenCount
 };
-FORMAT_ENUM(TransactionProveError)
+// FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
 private:
@@ -82,19 +82,18 @@ private:
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    void calcHash();
+    void calculate_hash();
 
 public:
     // Construct empty transaction
     Transaction();
 
     // Construct transaction
-    Transaction(
-        const ActorId        &sender,
-        const ActorId        &receiver,
-        const BigNumberFloat &amount,
-        const ActorId        &token = ActorId(),
-        const std::string    &data  = std::string());
+    Transaction(const ActorId        &sender,
+                const ActorId        &receiver,
+                const BigNumberFloat &amount,
+                const ActorId        &token = ActorId(),
+                const std::string    &data  = std::string());
 
     Transaction(const Transaction &other);
 
@@ -142,37 +141,33 @@ public:
     TransactionType type() const;
     virtual void    setType(TransactionType newType);
 
-    MSGPACK_DEFINE(
-        m_sender,
-        m_receiver,
-        m_amount,
-        m_date,
-        m_data,
-        m_token,
-        m_prevBlock,
-        m_hash,
-        m_approver,
-        m_producer,
-        m_signature,
-        m_type)
+    MSGPACK_DEFINE(m_sender,
+                   m_receiver,
+                   m_amount,
+                   m_date,
+                   m_data,
+                   m_token,
+                   m_prevBlock,
+                   m_hash,
+                   m_approver,
+                   m_producer,
+                   m_signature,
+                   m_type)
 
-    BOOST_DESCRIBE_CLASS(
-        Transaction,
-        (),
-        (),
-        (),
-        (m_sender,
-         m_receiver,
-         m_amount,
-         m_date,
-         m_data,
-         m_token,
-         m_prevBlock,
-         m_hash,
-         m_approver,
-         m_producer,
-         m_signature,
-         m_type))
+    BOOST_DESCRIBE_CLASS(Transaction,
+                         (),
+                         (),
+                         (),
+                         (m_sender,
+                          m_receiver,
+                          m_amount,
+                          m_date,
+                          m_data,
+                          m_token,
+                          m_prevBlock,
+                          m_hash,
+                          m_approver,
+                          m_producer,
+                          m_signature,
+                          m_type))
 };
-
-MAKE_MAGICAL(Transaction)

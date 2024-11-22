@@ -124,8 +124,8 @@
     #include <fmt/ranges.h>
     #include <fmt/format.h>
 
-    #include <magic_enum.hpp>
-    #include <magic_enum_iostream.hpp>
+    #include <magic_enum/magic_enum.hpp>
+    #include <magic_enum/magic_enum_iostream.hpp>
 
     #include "cpp-base64/base64.h"
 
@@ -142,7 +142,6 @@
     #include <boost/describe.hpp>
     #include <boost/mp11.hpp>
     #include <boost/json.hpp>
-
 
     #ifdef Q_OS_WINDOWS
         #define UINT32_C(c) (c##ULL)

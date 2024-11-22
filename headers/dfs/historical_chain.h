@@ -41,10 +41,10 @@ public:
     DfsP::EditSegmentMessage getEditSegmentMessage(const int& num);
     DfsP::EditSegmentMessage getLastEditSegmentMessage();
 
-    DfsP::EditSegmentMessage
-    makeEditSegmentMessage(const DfsP::SegmentMessage& msg, const DfsP::SegmentMessageType& smType);
-    DfsP::EditSegmentMessage
-    makeEditSegmentMessage(const DfsP::DeleteSegmentMessage& msg, const DfsP::SegmentMessageType& smType);
+    DfsP::EditSegmentMessage makeEditSegmentMessage(const DfsP::SegmentMessage&     msg,
+                                                    const DfsP::SegmentMessageType& smType);
+    DfsP::EditSegmentMessage makeEditSegmentMessage(const DfsP::DeleteSegmentMessage& msg,
+                                                    const DfsP::SegmentMessageType&   smType);
 
     bool initLocal(const ActorId& actor, const std::string& fileName, const std::string& fileHash);
     bool remove(const ActorId& actor, const std::string& fileHash);

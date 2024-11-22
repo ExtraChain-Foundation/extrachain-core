@@ -149,11 +149,10 @@ public:
     }
 
     template <typename U>
-    DbColumn& between(
-        const U&         lower,
-        const U&         upper,
-        SqlInclusiveness lower_inclusive = SqlInclusiveness::Inclusive,
-        SqlInclusiveness upper_inclusive = SqlInclusiveness::Inclusive) {
+    DbColumn& between(const U&         lower,
+                      const U&         upper,
+                      SqlInclusiveness lower_inclusive = SqlInclusiveness::Inclusive,
+                      SqlInclusiveness upper_inclusive = SqlInclusiveness::Inclusive) {
         Interval<U> interval { Bound<U> { lower, lower_inclusive }, Bound<U> { upper, upper_inclusive } };
 
         if (auto sql = interval.to_sql(m_name); !sql) {
@@ -192,21 +191,19 @@ private:
     std::vector<std::string>      m_checks;
     std::optional<SqlCreateError> m_validation_error;
 
-    BOOST_DESCRIBE_CLASS(
-        DbColumn,
-        (),
-        (),
-        (),
-        (m_name,
-         m_type,
-         m_is_primary_key,
-         m_is_not_null,
-         m_is_unique,
-         m_is_autoincrement,
-         m_default_value,
-         m_checks))
+    BOOST_DESCRIBE_CLASS(DbColumn,
+                         (),
+                         (),
+                         (),
+                         (m_name,
+                          m_type,
+                          m_is_primary_key,
+                          m_is_not_null,
+                          m_is_unique,
+                          m_is_autoincrement,
+                          m_default_value,
+                          m_checks))
 };
-MAKE_MAGICAL(DbColumn)
 
 class DbSchema {
 public:
@@ -236,12 +233,11 @@ private:
 
     BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns))
 };
-MAKE_MAGICAL(DbSchema)
 
 namespace sqlite::literals {
-DbColumn operator""_int(const char* name, size_t);
-DbColumn operator""_real(const char* name, size_t);
-DbColumn operator""_text(const char* name, size_t);
-DbColumn operator""_blob(const char* name, size_t);
-DbColumn operator""_json(const char* name, size_t);
+    DbColumn operator""_int(const char* name, size_t);
+    DbColumn operator""_real(const char* name, size_t);
+    DbColumn operator""_text(const char* name, size_t);
+    DbColumn operator""_blob(const char* name, size_t);
+    DbColumn operator""_json(const char* name, size_t);
 } // namespace sqlite::literals

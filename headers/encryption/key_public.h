@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
 #include <string>
 
 #include <msgpack.hpp>
@@ -53,5 +52,3 @@ public:
     MSGPACK_DEFINE(m_publicKey)
     BOOST_DESCRIBE_CLASS(KeyPublic, (), (), (), (m_publicKey))
 };
-
-MAKE_MAGICAL(KeyPublic)

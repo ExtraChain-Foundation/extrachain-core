@@ -37,12 +37,12 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     }
 
     records = db.count("Actors");
-    qDebug() << "[ActorIndex] Count:" << records;
+    eLog("[ActorIndex] Count: {}", records);
 }
 
 Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     if (id.is_zero()) {
-        qDebug() << "[ActorIndex] Error: try get actor with id =" << id;
+        eWarning("[ActorIndex] Error: try get actor with id: {}", id);
         return Actor<KeyPublic>();
     }
 
@@ -52,7 +52,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
         return actor;
     } else {
         sendGetActorMessage(id);
-        qDebug() << "[ActorIndex] There no actor with id:" << id;
+        eWarning("[ActorIndex] There no actor with id: {}", id);
         return Actor<KeyPublic>();
     }
 }
@@ -64,8 +64,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
         Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            qWarning() << "Can not validate block" << block.getIndex() << ": There no actor" << actorId
-                       << "in local storage";
+            eWarning("Can not validate block {}. There no actor {} in local storage", block.getIndex(), actorId);
             continue;
         }
 
@@ -79,8 +78,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
 bool ActorIndex::validateTx(const Transaction &tx) {
     Actor<KeyPublic> actor = this->getActor(tx.approver());
     if (actor.empty()) {
-        qWarning() << "Can not validate tx" << tx.hash().c_str() << ": There no actor" << tx.approver()
-                   << " in local storage";
+        eWarning("Can not validate tx {}. There no actor {} in local storage", tx.hash(), tx.approver());
         return false;
     }
     return tx.verify(actor);
@@ -93,12 +91,11 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         eFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
-        node->network()->send_message(
-            actor,
-            MessageType::Actor,
-            MessageStatus::Response,
-            messageId,
-            Config::Net::TypeSend::Focused);
+        node->network()->send_message(actor,
+                                      MessageType::Actor,
+                                      MessageStatus::Response,
+                                      messageId,
+                                      Config::Net::TypeSend::Focused);
     } else {
         sendGetActorMessage(actorId);
     }
@@ -111,12 +108,11 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     auto result = allActors();
     result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
     if (!result.empty()) {
-        node->network()->send_message(
-            result,
-            MessageType::ActorAll,
-            MessageStatus::Response,
-            messageId,
-            Config::Net::TypeSend::Focused);
+        node->network()->send_message(result,
+                                      MessageType::ActorAll,
+                                      MessageStatus::Response,
+                                      messageId,
+                                      Config::Net::TypeSend::Focused);
     } else {
         // send empty response
     }
@@ -129,26 +125,26 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     if (!node->accountController()->empty()) {
         node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
 
-        qDebug() << "[ActorIndex] Get all actors request";
+        eLog("[ActorIndex] Get all actors request");
     }
 }
 
 int ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
     switch (addActor(actor)) {
     case 0: {
-        qDebug() << "[ActorIndex] New actor" << actor << "is successfully saved";
+        eLog("[ActorIndex] New actor {} is successfully saved", actor);
         return Errors::FILE_NOT_EXISTS;
     }
     case Errors::FILE_ALREADY_EXISTS: {
-        qDebug() << "[ActorIndex] New actor" << actor << "can't be added: it is already in storage";
+        eLog("[ActorIndex] New actor {} can't be added: it is already in storage", actor);
         return Errors::FILE_ALREADY_EXISTS;
     }
     case Errors::FILE_IS_NOT_OPENED: {
-        qWarning() << "[ActorIndex] Error: new actor" << actor << "is not saved";
+        eWarning("[ActorIndex] Error: new actor {} is not saved", actor);
         return Errors::FILE_IS_NOT_OPENED;
     }
     default: {
-        qWarning() << "[ActorIndex] Error: unexpected return type";
+        eWarning("[ActorIndex] Error: unexpected return type");
         return Errors::UNDEFINED;
     }
     }
@@ -161,12 +157,11 @@ void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
-    qDebug() << "[ActorIndex] Get actor count response:" << this->getRecords();
+    eLog("[ActorIndex] Get actor count response: {}", this->getRecords());
 
-    node->network()->send_message(
-        std::to_string(this->getRecords()),
-        MessageType::ActorCount,
-        MessageStatus::Response);
+    node->network()->send_message(std::to_string(this->getRecords()),
+                                  MessageType::ActorCount,
+                                  MessageStatus::Response);
 }
 
 bool ActorIndex::actorExist(const ActorId &actorId) {
@@ -185,7 +180,7 @@ QString ActorIndex::buildFilePath(const ActorId &id) const {
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {
-        qDebug() << "[ActorIndex] Creating dir:" << pathToFolder;
+        eLog("[ActorIndex] Creating dir: {}", pathToFolder);
         dir = QDir();
         dir.mkpath(pathToFolder);
     }
@@ -206,7 +201,7 @@ void ActorIndex::setFirstId(const ActorId &value) {
         return;
     }
 
-    qDebug() << "[ActorIndex] Save first id:" << value;
+    eLog("[ActorIndex] Save first id: {}", value);
     m_firstId = value;
 }
 
@@ -220,10 +215,10 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
 
     QString path = buildFilePath(id);
     QFile   file(path);
-    qDebug() << "[ActorIndex] Saving the file:" << path;
+    eLog("[ActorIndex] Saving the file: {}", path);
 
     if (file.exists()) {
-        qDebug() << "[ActorIndex] Can't save the file" << path << "(file already exits)";
+        eLog("[ActorIndex] Can't save the file {} (file already exits)", path);
         return Errors::FILE_ALREADY_EXISTS;
     }
 
@@ -235,7 +230,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
         return 0;
     }
 
-    qDebug() << "[ActorIndex] Can't save the file" << path << "(file is not opened)";
+    eLog("[ActorIndex] Can't save the file {} (file is not opened)", path);
     return Errors::FILE_IS_NOT_OPENED;
 }
 
@@ -251,7 +246,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
     QString filePath = QString::fromStdString(actorPath(id));
     QFile   file(filePath);
     if (!file.exists()) {
-        qDebug() << "[ActorIndex] File with path" << filePath << "not found";
+        eLog("[ActorIndex] File with path {} not found", filePath);
         return QByteArray();
     }
     file.open(QIODevice::ReadOnly);
@@ -268,15 +263,14 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         this->records++;
         DbConnector db(folderPath + "actors");
         db.open();
-        bool dbInsert = db.insert(
-            Config::DataStorage::actorsTable,
-            { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
+        bool dbInsert = db.insert(Config::DataStorage::actorsTable,
+                                  { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
             eFatal("db actor insert error");
 
         node->dfs()->initializeActor(actor.id());
 
-        qDebug() << "[ActorIndex] Actor" << actor.id() << "was added";
+        eLog("[ActorIndex] Actor {} was added", actor.id());
         node->network()->send_message(actor, MessageType::NewActor);
     }
 

@@ -29,12 +29,11 @@ DataMiningManager::DataMiningManager(ExtraChainNode *node, QObject *parent)
     this->node = node;
 }
 
-BigNumberFloat DataMiningManager::calculateCoins(
-    BigNumberFloat dataAmountStored,
-    BigNumberFloat dataAmountTotalStoredInNetwork,
-    BigNumberFloat circulativeSupply,
-    BigNumberFloat blockAmount,
-    double         coefficient) {
+BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored,
+                                                 BigNumberFloat dataAmountTotalStoredInNetwork,
+                                                 BigNumberFloat circulativeSupply,
+                                                 BigNumberFloat blockAmount,
+                                                 double         coefficient) {
     if (dataAmountStored == 0 || dataAmountTotalStoredInNetwork == 0 || circulativeSupply == 0
         || blockAmount == 0) {
         return BigNumberFloat();
@@ -45,12 +44,11 @@ BigNumberFloat DataMiningManager::calculateCoins(
 
     if (coinProducedForNode < 1) {
         coefficient *= 2;
-        coinProducedForNode = calculateCoins(
-            dataAmountStored,
-            dataAmountTotalStoredInNetwork,
-            circulativeSupply,
-            blockAmount,
-            coefficient);
+        coinProducedForNode = calculateCoins(dataAmountStored,
+                                             dataAmountTotalStoredInNetwork,
+                                             circulativeSupply,
+                                             blockAmount,
+                                             coefficient);
     }
     return coinProducedForNode;
 }
@@ -62,13 +60,12 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     BigNumberFloat blockAmount = node->blockchain()->getRecords();
     BigNumberFloat dataAmountStoredInNetwork(std::to_string(node->dfs()->totalDfsSize()));
 
-    qDebug() << "circulativeSupply" << circulativeSupply << "blockAmount" << blockAmount
-             << "dataAmountStoredInNetwork" << dataAmountStoredInNetwork << "dataAmountStored"
-             << state.DataAmountStored << "coef" << state.Coefficient;
+    eLog("circulativeSupply {} blockAmount {} dataAmountStoredInNetwork {} dataAmountStored {} coef {}",
+circulativeSupply, blockAmount, dataAmountStoredInNetwork, state.DataAmountStored, state.Coefficient);
 
     BigNumberFloat result = calculateCoins(BigNumberFloat(state.DataAmountStored), dataAmountStoredInNetwork,
                                            circulativeSupply, blockAmount, state.Coefficient);
-    qDebug() << "result: " << result;
+    eLog("result: {}", result);
 
     Transaction rewardTx;
     rewardTx.setAmount(result);
@@ -79,7 +76,7 @@ Transaction DataMiningManager::makeRewardTx(const MessageBody &mb) {
     rewardTx.setPrevBlock(node->blockchain()->getLastRealBlock().getIndex());
     rewardTx.setData(Utils::bytesEncodeStdString(mb.data));
     rewardTx.sign(node->accountController()->mainActor());
-    qDebug() << rewardTx.getTypeTx();
+    eLog("{}", rewardTx.getTypeTx());
     return rewardTx;
 }
 
@@ -107,7 +104,7 @@ DataMiningManager::makeRewardTx(const DFS::Reward::RequestReward &requestReward,
 
 void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
     if (blockIndex % CoinProductionRate == 0) {
-        qDebug() << "Make reward request:" << std::stoi(blockIndex.toStdString(NumeralBase::Dec));
+        eLog("Make reward request: {}", std::stoi(blockIndex.toStdString(NumeralBase::Dec)));
         DFSP::StateMessage stateMessage;
         stateMessage.FarmingActor = node->accountController()->farmingIds()[0].toStdString();
         stateMessage.DataAmountStored = node->dfs()->calculateDataAmountStored();
@@ -118,8 +115,8 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
 */
 
 void DataMiningManager::requestCoinReward() {
-    const std::shared_ptr<Actor<KeyPrivate>> actor = node->accountController()->mainActor();
-    auto totalBytes                                = node->network()->getCalculateTraffic()->totalBytes();
+    const std::shared_ptr<Actor<KeyPrivate>> actor      = node->accountController()->mainActor();
+    auto                                     totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     auto requestReward = Dfs::Reward::RequestReward { .Actor              = actor->id(),
                                                       .DataStoredSize     = node->dfs()->sizeTaken(),
@@ -137,8 +134,8 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
-        // qDebug() << "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
-        //          << totalBytes.first << node->dfs()->totalDfsSize();
+        // eLog("{} {} {}", "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
+        //, totalBytes.first, node->dfs()->totalDfsSize());
         return BigNumberFloat(0);
     }
 
@@ -161,11 +158,11 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
            + (blocksStored / BigNumberFloat(lastIndex) * 100);
 }
 
-BigNumberFloat
-DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
+BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
-        // qDebug() << "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total dfs:"
-        //          << requestReward.BytesSent << node->dfs()->totalDfsSize();
+        // eLog("{} {} {}", "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total
+        // dfs:"
+        //, requestReward.BytesSent, node->dfs()->totalDfsSize());
         return BigNumberFloat(0);
     }
 
@@ -178,10 +175,9 @@ DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &reque
     if (lastIndex == 0)
         return BigNumberFloat(0);
 
-    return (
-        BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-        + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-        + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
+    return (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+            + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+            + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
 }
 
 void DataMiningManager::sendCoinsReward(const Dfs::Reward::RequestReward &requestReward) {

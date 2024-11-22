@@ -24,7 +24,6 @@
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
 #include <QDateTime>
-#include <QDebug>
 #include <QString>
 
 // Block comparison result
@@ -38,8 +37,7 @@ struct Approver {
         std::ostringstream oss;
         oss << "Approver { "
             << "actor_id: \""
-            << actorIdStr.substr(0, 5) + "..."
-                   + actorIdStr.substr(actorIdStr.size() - 5, actorIdStr.size() - 1)
+            << actorIdStr.substr(0, 5) + "..." + actorIdStr.substr(actorIdStr.size() - 5, actorIdStr.size() - 1)
             << "\", "
             << "sign: \"" << (sign.empty() ? "" : sign.substr(0, 8) + "...") << "\", "
             << "is_approve: " << std::boolalpha << isApprove << " }";
@@ -52,15 +50,13 @@ struct Approver {
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
 
-QDebug operator<<(QDebug debug, const Approver &approvers);
-
 enum class BlockType {
     Data,
     Genesis,
     Dummy,
 };
 MSGPACK_ADD_ENUM(BlockType)
-FORMAT_ENUM(BlockType)
+// FORMAT_ENUM(BlockType)
 
 enum class BlockError {
     Unknown,
@@ -74,7 +70,7 @@ enum class BlockError {
     CantMerge,
     MergeEqual
 };
-FORMAT_ENUM(BlockError)
+// FORMAT_ENUM(BlockError)
 
 enum class BlockSignError {
     NoError,
@@ -82,7 +78,7 @@ enum class BlockSignError {
     NoActorSignature,
     EmptySignatures
 };
-FORMAT_ENUM(BlockSignError)
+// FORMAT_ENUM(BlockSignError)
 
 class BlockVariant;
 using Signatures   = std::map<ActorId, Signature>;
@@ -110,15 +106,14 @@ public:
     /**
      * @brief Block
      */
-    Block(
-        std::string           &&type,
-        std::string           &&data,
-        BigNumber               idx,
-        std::uint64_t           date,
-        std::string           &&prevHash,
-        std::string           &&hash,
-        Signatures            &&signatures,
-        std::set<Transaction> &&transactions);
+    Block(std::string           &&type,
+          std::string           &&data,
+          BigNumber               idx,
+          std::uint64_t           date,
+          std::string           &&prevHash,
+          std::string           &&hash,
+          Signatures            &&signatures,
+          std::set<Transaction> &&transactions);
 
     virtual ~Block();
 
@@ -127,7 +122,7 @@ protected:
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    virtual void               calcHash();
+    virtual void               calculate_hash();
     virtual const std::string &getDataForSignature() const;
 
 public:
@@ -147,11 +142,10 @@ public:
     void           sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     BlockSignError verify(const Actor<KeyPublic> &actor) const;
 
-    bool                equals(const Block &block) const;
-    bool                isEmpty() const;
-    virtual std::string toString() const;
-    bool                operator<(const Block &other);
-    bool                isApprover(const ActorId &) const;
+    bool equals(const Block &block) const;
+    bool isEmpty() const;
+    bool operator<(const Block &other);
+    bool isApprover(const ActorId &) const;
 
 public:
     void                         setPrevHash(const std::string &value);
@@ -183,36 +177,6 @@ public:
     void addTransactions(const std::set<Transaction> &transactions);
     void addTransactions(const std::vector<Transaction> &transactions);
 
-    template <typename Packer>
-    void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.to_string();
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_transactions)
-            .msgpack_pack(msgpack_pk);
-    }
-
-    void msgpack_unpack(msgpack::object const &msgpack_o) {
-        std::string index_str;
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_transactions)
-            .msgpack_unpack(msgpack_o);
-        m_index = BigNumber(index_str);
-    }
-
     BOOST_DESCRIBE_CLASS(
         Block,
         (),
@@ -227,8 +191,6 @@ inline bool operator<(const Block &l, const Block &r) {
 }
 
 inline bool operator==(const Block &l, const Block &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-           && l.dataService() == r.dataService() && l.transactions() == r.transactions();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+           && l.transactions() == r.transactions();
 }
-
-QDebug operator<<(QDebug debug, const Block &block);

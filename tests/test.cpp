@@ -50,7 +50,7 @@ private slots:
         QCOMPARE(decrypted, decrypted2);
     }
 
-//    auto key1 =
+    //    auto key1 =
     //        KeyPrivate("0c6b88536b8e82af9080650ee7fc02bc721d6b9dce7b9f31513ddf6611154ad3517a72717814ff418628"
     //                   "b11648731f4ecd16828b52d7752e3af15e1f10991b3a",
     //                   "517a72717814ff418628b11648731f4ecd16828b52d7752e3af15e1f10991b3a");
@@ -62,65 +62,65 @@ private slots:
     //    const QByteArray message = "Something";
     //    auto sign1 = key1.sign(message);
     //    auto sign2 = key2.sign(message);
-    //    qDebug() << "Sign1:" << sign1;
-    //    qDebug() << "Sign2:" << sign2;
+    //    eLog("Sign1: {}", sign1);
+    //    eLog("Sign2: {}", sign2);
 
     //    auto verify1 = key1.verify(message, sign1);
     //    auto verify2 = key2.verify(message, sign2);
     //    auto verify1Test = key1.verify(message, sign2);
     //    auto verify2Test = key2.verify(message, sign1);
-    //    qDebug() << "Verify:" << verify1 << verify2 << verify1Test << verify2Test;
+    //    eLog("Verify: {} {} {} {}", verify1, verify2, verify1Test, verify2Test);
 
     //    auto encrypted = key1.encrypt(message, key2.publicKey());
-    //    qDebug() << "Encrypt:" << encrypted;
+    //    eLog("Encrypt: {}", encrypted);
     //    auto decrypted = key2.decrypt(encrypted, key1.publicKey());
-    //    qDebug() << "Decrypt:" << decrypted;
+    //    eLog("Decrypt: {}", decrypted);
     //    return 0;
     //    KeyPrivate key;
     //    QByteArray data = QByteArray("qweqe").repeated(30000);
-    //    qDebug() << data.size();
+    //    eLog("{}", data.size());
 
     //    while (true) {
     //        QElapsedTimer timer;
     //        timer.start();
     //        for (int i = 0; i != 10000; i++)
     //            key.sign(data);
-    //        qDebug() << timer.elapsed() << "ms";
+    //        eLog("{} ms", timer.elapsed());
     //    }
-    
+
     void bigNumberTest() {
-    //    BigNumber b(1);
-//    b++;
-//    b--;
-//    --b;
-//    ++b;
-//    b = b + 7;
-//    b = b - 4;
-//    b += 4;
-//    b -= 6;
-//    b *= 4;
-//    b = b * 4;
-//    b /= 2;
-//    b = b / 2;
+        //    BigNumber b(1);
+        //    b++;
+        //    b--;
+        //    --b;
+        //    ++b;
+        //    b = b + 7;
+        //    b = b - 4;
+        //    b += 4;
+        //    b -= 6;
+        //    b *= 4;
+        //    b = b * 4;
+        //    b /= 2;
+        //    b = b / 2;
 
-//    int i(1);
-//    i++;
-//    i--;
-//    --i;
-//    ++i;
-//    i = i + 7;
-//    i = i - 4;
-//    i += 4;
-//    i -= 6;
-//    i *= 4;
-//    i = i * 4;
-//    i /= 2;
-//    i = i / 2;
+        //    int i(1);
+        //    i++;
+        //    i--;
+        //    --i;
+        //    ++i;
+        //    i = i + 7;
+        //    i = i - 4;
+        //    i += 4;
+        //    i -= 6;
+        //    i *= 4;
+        //    i = i * 4;
+        //    i /= 2;
+        //    i = i / 2;
 
-//    qDebug() << b.toByteArray(10).toInt() << i;
-//    qDebug() << (b - 5 == i - 5);
+        //    eLog("{} {}", b.toByteArray(10).toInt(), i);
+        //    eLog("{}", (b - 5 == i - 5));
 
-//    return 0;
+        //    return 0;
     }
 
     void createNetwork() {
@@ -128,7 +128,7 @@ private slots:
         QDir().mkdir("test-data");
         QDir::setCurrent("test-data");
         Utils::wipeDataFiles();
-        node = new ExtraChainNode;
+        node           = new ExtraChainNode;
         bool isCreated = node->createNewNetwork("email", "password", "Token", "1000", "#ffffff");
         QVERIFY(isCreated);
     }

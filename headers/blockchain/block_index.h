@@ -88,25 +88,23 @@ public:
     std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash) const;
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data) const;
 
-    std::expected<BlockVariant, BlockError>
-    getBlockByParam(const std::string &id, SearchEnum::BlockParam param) const;
+    std::expected<BlockVariant, BlockError> getBlockByParam(const std::string     &id,
+                                                            SearchEnum::BlockParam param) const;
 
     std::pair<Transaction, BigNumber> getLastTxByHash(const std::string &hash, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxByData(const std::string &data, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxBySender(const ActorId &id, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxByReceiver(const ActorId &id, const TokenId &token) const;
-    std::pair<Transaction, BigNumber>
-    getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const;
-    std::pair<Transaction, BigNumber>
-    getLastTxBySenderOrReceiverAndToken(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiverAndToken(const ActorId &id,
+                                                                          const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxByApprover(const ActorId &id, const TokenId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(
-        const BigNumber &id,
-        BigNumber        from  = BigNumber(-1),
-        int              count = 10,
-        const ActorId   &token = ActorId()) const;
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
+                                                        BigNumber        from  = BigNumber(-1),
+                                                        int              count = 10,
+                                                        const ActorId   &token = ActorId()) const;
 
     void        removeAll();
     BigNumber   getLastSavedId() const;
@@ -122,14 +120,14 @@ public:
     void calculationCountBlock();
 
 private:
-    std::pair<Transaction, BigNumber>
-    getLastTxByParam(const std::string &data, SearchEnum::TxParam param, const TokenId &tokenId) const;
-    std::set<Transaction> getTxsByParamInRow(
-        const BigNumber    &id,
-        SearchEnum::TxParam param,
-        BigNumber           from  = BigNumber(-1),
-        int                 count = 10,
-        ActorId             token = ActorId()) const;
+    std::pair<Transaction, BigNumber> getLastTxByParam(const std::string  &data,
+                                                       SearchEnum::TxParam param,
+                                                       const TokenId      &tokenId) const;
+    std::set<Transaction>             getTxsByParamInRow(const BigNumber    &id,
+                                                         SearchEnum::TxParam param,
+                                                         BigNumber           from  = BigNumber(-1),
+                                                         int                 count = 10,
+                                                         ActorId             token = ActorId()) const;
 
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
     bool                                    hasRecordLimit() const;
@@ -140,9 +138,8 @@ private:
     std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
     BigNumber                               loadFirstId();
-    BigNumber                               loadFileFromSection(
-                                      std::function<QString(const QStringList &folders)> getFolder,
-                                      std::function<QString(const QStringList &files)>   getFile);
+    BigNumber loadFileFromSection(std::function<std::string(const std::vector<std::string> &folders)> getFolder,
+                                  std::function<std::string(const std::vector<std::string> &files)>   getFile);
 
     BigNumber loadLastId();
 };

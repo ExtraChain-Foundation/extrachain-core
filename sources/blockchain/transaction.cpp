@@ -32,15 +32,14 @@ Transaction::Transaction() {
     this->m_hash      = "";
     this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
-    calcHash();
+    calculate_hash();
 }
 
-Transaction::Transaction(
-    const ActorId        &sender,
-    const ActorId        &receiver,
-    const BigNumberFloat &amount,
-    const ActorId        &token,
-    const std::string    &data) {
+Transaction::Transaction(const ActorId        &sender,
+                         const ActorId        &receiver,
+                         const BigNumberFloat &amount,
+                         const ActorId        &token,
+                         const std::string    &data) {
     this->m_sender    = sender;
     this->m_receiver  = receiver;
     this->m_amount    = amount;
@@ -51,7 +50,7 @@ Transaction::Transaction(
     this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
     this->m_token     = token;
-    calcHash();
+    calculate_hash();
 }
 
 Transaction::Transaction(const Transaction &other) {
@@ -67,7 +66,7 @@ Transaction::Transaction(const Transaction &other) {
     this->m_signature = other.m_signature;
     this->m_producer  = other.m_producer;
     this->m_type      = other.m_type;
-    calcHash();
+    calculate_hash();
 }
 
 Transaction::Transaction(Transaction &&other) noexcept {
@@ -83,7 +82,7 @@ Transaction::Transaction(Transaction &&other) noexcept {
     m_signature = std::move(other.m_signature);
     m_producer  = std::move(other.m_producer);
     m_type      = std::move(other.m_type);
-    calcHash();
+    calculate_hash();
 
     other.m_hash = "";
 }
@@ -140,12 +139,12 @@ void Transaction::setDate(std::uint64_t value) {
     m_date = value;
 }
 
-void Transaction::calcHash() {
-    auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex)
-                    + m_data + std::to_string(m_date) + m_token.to_string() + m_prevBlock.to_string()
+void Transaction::calculate_hash() {
+    auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex) + m_data
+                    + std::to_string(m_date) + m_token.to_string() + m_prevBlock.to_string()
                     + m_approver.to_string() + m_producer.to_string();
 
-    std::string resultHash = Utils::calcHash(hashData);
+    std::string resultHash = Utils::calculate_hash(hashData);
     if (!resultHash.empty()) {
         this->m_hash = resultHash;
     }
@@ -161,7 +160,7 @@ void Transaction::setType(TransactionType newType) {
 
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     this->m_approver = actor->id();
-    calcHash();
+    calculate_hash();
     this->m_signature = actor->key().sign(m_hash);
 }
 
@@ -177,7 +176,7 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
 void Transaction::setPrevBlock(const BigNumber &value) {
     this->m_prevBlock = value;
 
-    calcHash();
+    calculate_hash();
 }
 
 ActorId Transaction::sender() const {
@@ -283,7 +282,7 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
         m_signature = std::move(other.m_signature);
         m_producer  = std::move(other.m_producer);
         m_type      = std::move(other.m_type);
-        calcHash();
+        calculate_hash();
 
         other.m_hash = {};
     }

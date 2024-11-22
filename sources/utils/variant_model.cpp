@@ -18,7 +18,7 @@
  */
 
 #include "utils/variant_model.h"
-#include <QDebug>
+#include "utils/exc_logs.h"
 
 VariantModel::VariantModel(QAbstractListModel *parent, const QList<QByteArray> &list)
     : QAbstractListModel(parent) {
@@ -62,7 +62,7 @@ void VariantModel::prepend(const QVariantMap &variant) {
 }
 
 void VariantModel::append(const QVariantMap &variant) {
-    // qDebug() << "append" << variant;
+    eLog("[VariantModel] Append {}", variant);
     insert(m_datas.length(), variant);
 }
 
@@ -113,7 +113,7 @@ void VariantModel::move(int from, int to, int n) {
         || !beginMoveRows(QModelIndex(), from, from + n - 1, QModelIndex(), to > from ? to + 1 : to))
         return;
     if (n > 1 && from + n < to && to + n < m_count) {
-        qDebug() << "n > 1";
+        eLog("[VariantModel] n > 1");
         for (int i = 0; i < n; i++)
             m_datas.move(from + i, to + i);
     } else

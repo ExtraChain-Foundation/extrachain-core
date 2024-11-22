@@ -60,11 +60,10 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(
-        QObject* parent,
-        bool     isClientApp           = false,
-        bool     allowRunRestApiServer = false,
-        bool     isRaccoon             = false);
+    ExtraChainNodeWrapper(QObject* parent,
+                          bool     isClientApp           = false,
+                          bool     allowRunRestApiServer = false,
+                          bool     isRaccoon             = false);
 
     ~ExtraChainNodeWrapper();
 
@@ -95,12 +94,12 @@ private:
     TokenManager*       m_tokenManager       = nullptr;
     QTimer*             timer                = nullptr;
 
-    bool                   started               = false;
-    bool                   isClientApplication   = false;
-    bool                   allowRunRestApiServer = false;
+    bool                        started               = false;
+    bool                        isClientApplication   = false;
+    bool                        allowRunRestApiServer = false;
     std::uint64_t               blockCount;
-    std::vector<BigNumber> resiveCounts;
-    VpnFunctionClearType   m_vpnClearFunc = nullptr;
+    std::vector<BigNumber>      resiveCounts;
+    VpnFunctionClearType        m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
 
 public:
@@ -139,14 +138,17 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    std::expected<Transaction, TransactionError>
-    createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
+    std::expected<Transaction, TransactionError> createTransaction(ActorId        receiver,
+                                                                   BigNumberFloat amount,
+                                                                   ActorId        token);
 
-    std::expected<Transaction, TransactionError>
-    createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
+    std::expected<Transaction, TransactionError> createTransactionFrom(ActorId        sender,
+                                                                       ActorId        receiver,
+                                                                       BigNumberFloat amount,
+                                                                       ActorId        token);
 
-    std::expected<Transaction, TransactionError>
-    sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer);
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction,
+                                                                 const std::shared_ptr<Actor<KeyPrivate>> signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();
@@ -157,9 +159,9 @@ public:
 
     std::uint64_t getBlockCount() const;
 
-    void            InitVPN(VpnFunctionClearType vpnClearFun);
-    TokenManager*   tokenManager() const;
-    bool            isRaccoon;
+    void          InitVPN(VpnFunctionClearType vpnClearFun);
+    TokenManager* tokenManager() const;
+    bool          isRaccoon;
 
     VPNConfigStorage vpnConfigStorage;
 
@@ -168,7 +170,6 @@ private:
 
     friend class ExtraChainNodeWrapper;
 
-    void showMessage(QString from, QString message);
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */

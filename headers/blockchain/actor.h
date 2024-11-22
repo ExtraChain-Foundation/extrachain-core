@@ -19,19 +19,16 @@
 
 #pragma once
 
-#include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <type_traits>
-#include <utility>
 
 #include <msgpack.hpp>
 
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
-#include "utils/bignumber.h"
-#include "utils/exc_utils.h"
+// #include "utils/exc_utils.h"
 
 /**
  * Acting entity.
@@ -44,7 +41,7 @@ enum class ActorType {
     Service    = 2
 };
 MSGPACK_ADD_ENUM(ActorType)
-FORMAT_ENUM(ActorType)
+// FORMAT_ENUM(ActorType)
 
 class EXTRACHAIN_EXPORT ActorId {
 public:
@@ -76,15 +73,15 @@ public:
 
 private:
     void normalize() {
-        if (m_id.size() > 20) {
+        if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
             eFatal("[ActorId] Not correct size: %zu", m_id.size());
         }
 
-        m_id = std::string(20 - m_id.length(), '0') + m_id;
+        m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
-            eFatal("[ActorId] Not correct hex: {}", m_id.c_str());
-            m_id = "00000000000000000000";
+            eFatal("[ActorId] Not correct hex: {}", m_id);
+            m_id = "0000000000000000000000000000000000000000";
         }
     }
 
@@ -97,9 +94,8 @@ using TokenId = ActorId;
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
-    static_assert(
-        (std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-        "Type is not supported. Only Keys are supported");
+    static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
+                  "Type is not supported. Only Keys are supported");
 
 private:
     ActorId   m_id;
@@ -129,17 +125,16 @@ public:
      * @param id
      */
     void create(ActorType type) {
-        static_assert(
-            std::is_same<T, KeyPrivate>::value,
-            "Сannot be created with a public key. Only private is supported");
+        static_assert(std::is_same<T, KeyPrivate>::value,
+                      "Сannot be created with a public key. Only private is supported");
 
         this->m_type = type;
         this->m_key.generate();
         auto        publicKey = this->m_key.publicKey();
-        std::string hash      = Utils::calcHash(ByteArray(publicKey).toString(), Utils::HashEncode::Sha3_512);
+        std::string hash = Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
 
-        if (hash.size() >= 20)
-            m_id = hash.substr(0, 20);
+        if (hash.size() >= BlockchainConst::ACTOR_SIZE)
+            m_id = hash.substr(0, BlockchainConst::ACTOR_SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
@@ -246,6 +241,3 @@ public:
     MSGPACK_DEFINE(m_id, m_type, m_key)
     BOOST_DESCRIBE_CLASS(Actor, (), (), (), (m_id, m_type, m_key))
 };
-
-MAKE_MAGICAL(Actor<KeyPrivate>)
-MAKE_MAGICAL(Actor<KeyPublic>)

@@ -102,11 +102,10 @@ bool FragmentStorage::editFragment(DfsP::EditSegmentMessage msg) {
 }
 
 bool FragmentStorage::removeFragment(DfsP::DeleteSegmentMessage msg) {
-    std::string GetStartFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(msg.offset));
-    std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
+    std::string GetStartFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
+                                                    DfsF::TableNameFragments,
+                                                    std::to_string(msg.offset));
+    std::vector<DbRow> array          = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DbRow frag = array[0];
         storageFile.delete_row(DfsF::TableNameFragments, frag);
@@ -125,11 +124,10 @@ bool FragmentStorage::removeFragment(DfsP::DeleteSegmentMessage msg) {
 DfsP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
     DfsP::SegmentMessage fragment;
 
-    std::string GetStartFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(pos));
-    std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
+    std::string GetStartFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos = {} ORDER BY pos DESC LIMIT 1",
+                                                    DfsF::TableNameFragments,
+                                                    std::to_string(pos));
+    std::vector<DbRow> array          = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DbRow                 fragMap  = array[0];
         std::filesystem::path filePath = DfsPath::filePath(actorId, fileId);
@@ -145,10 +143,10 @@ DfsP::SegmentMessage FragmentStorage::getFragment(std::uint64_t pos) {
 Dfs::Packets::SegmentMessage FragmentStorage::getFragment(std::string fragHash) {
     DfsP::SegmentMessage fragment;
 
-    std::string GetStartFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE fragHash = '{}' ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        fragHash);
+    std::string GetStartFragmentQuery =
+        fmt::format("SELECT * FROM {} WHERE fragHash = '{}' ORDER BY pos DESC LIMIT 1",
+                    DfsF::TableNameFragments,
+                    fragHash);
     std::vector<DbRow> array = storageFile.select(GetStartFragmentQuery);
     if (!array.empty()) {
         DbRow                 fragMap  = array[0];
@@ -168,11 +166,11 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
 
     std::uint64_t      endPos   = pos + data.length();
     auto               filePath = DfsPath::filePath(actorId, fileId);
-    std::vector<DbRow> frags    = storageFile.select(fmt::format(
-        "SELECT * FROM {} WHERE pos + size > {} AND pos < {}",
-        DfsF::TableNameFragments,
-        std::to_string(pos),
-        std::to_string(endPos)));
+    std::vector<DbRow> frags =
+        storageFile.select(fmt::format("SELECT * FROM {} WHERE pos + size > {} AND pos < {}",
+                                       DfsF::TableNameFragments,
+                                       std::to_string(pos),
+                                       std::to_string(endPos)));
 
     for (int i = 0; i < frags.size(); i++) {
         std::uint64_t fragpos    = std::stoull(frags[i].at("pos"));
@@ -199,11 +197,10 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
 
 DbRow FragmentStorage::getPreviousFragment(std::uint64_t number) {
     DbRow       ret;
-    std::string GetPrevFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
-    std::vector<DbRow> array = storageFile.select(GetPrevFragmentQuery);
+    std::string GetPrevFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
+                                                   DfsF::TableNameFragments,
+                                                   std::to_string(number));
+    std::vector<DbRow> array         = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -212,11 +209,10 @@ DbRow FragmentStorage::getPreviousFragment(std::uint64_t number) {
 
 DbRow FragmentStorage::getNextFragment(std::uint64_t number) {
     DbRow       ret;
-    std::string GetNextFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos > {} ORDER BY pos ASC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
-    std::vector<DbRow> array = storageFile.select(GetNextFragmentQuery);
+    std::string GetNextFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos > {} ORDER BY pos ASC LIMIT 1",
+                                                   DfsF::TableNameFragments,
+                                                   std::to_string(number));
+    std::vector<DbRow> array         = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
     }
@@ -225,10 +221,10 @@ DbRow FragmentStorage::getNextFragment(std::uint64_t number) {
 
 DbRow FragmentStorage::getRealPreviousFragment(std::uint64_t number) {
     DbRow       ret;
-    std::string GetPrevFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE storedPos < {} ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
+    std::string GetPrevFragmentQuery =
+        fmt::format("SELECT * FROM {} WHERE storedPos < {} ORDER BY pos DESC LIMIT 1",
+                    DfsF::TableNameFragments,
+                    std::to_string(number));
     std::vector<DbRow> array = storageFile.select(GetPrevFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
@@ -238,10 +234,10 @@ DbRow FragmentStorage::getRealPreviousFragment(std::uint64_t number) {
 
 DbRow FragmentStorage::getRealNextFragment(std::uint64_t number) {
     DbRow       ret;
-    std::string GetNextFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE storedPos > {} ORDER BY pos ASC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
+    std::string GetNextFragmentQuery =
+        fmt::format("SELECT * FROM {} WHERE storedPos > {} ORDER BY pos ASC LIMIT 1",
+                    DfsF::TableNameFragments,
+                    std::to_string(number));
     std::vector<DbRow> array = storageFile.select(GetNextFragmentQuery);
     if (!array.empty()) {
         ret = array[0];
@@ -252,19 +248,17 @@ DbRow FragmentStorage::getRealNextFragment(std::uint64_t number) {
 std::pair<DbRow, DbRow> FragmentStorage::getPrevNextPairFragment(std::uint64_t number) {
     std::vector<DbRow>      res;
     std::pair<DbRow, DbRow> ret;
-    std::string             GetPrevFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
-    res = storageFile.select(GetPrevFragmentQuery);
+    std::string GetPrevFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos < {} ORDER BY pos DESC LIMIT 1",
+                                                   DfsF::TableNameFragments,
+                                                   std::to_string(number));
+    res                              = storageFile.select(GetPrevFragmentQuery);
     if (!res.empty()) {
         ret.first = res[0];
     }
-    std::string GetNextFragmentQuery = fmt::format(
-        "SELECT * FROM {} WHERE pos > {} ORDER BY pos ASC LIMIT 1",
-        DfsF::TableNameFragments,
-        std::to_string(number));
-    res = storageFile.select(GetNextFragmentQuery);
+    std::string GetNextFragmentQuery = fmt::format("SELECT * FROM {} WHERE pos > {} ORDER BY pos ASC LIMIT 1",
+                                                   DfsF::TableNameFragments,
+                                                   std::to_string(number));
+    res                              = storageFile.select(GetNextFragmentQuery);
     if (!res.empty()) {
         ret.second = res[0];
     }
@@ -276,7 +270,7 @@ DbRow FragmentStorage::makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t s
     row.insert({ "pos", std::to_string(msg.offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.data.size()) });
-    row.insert({ "fragHash", Utils::calcHash(msg.data) });
+    row.insert({ "fragHash", Utils::calculate_hash(msg.data) });
     return row;
 }
 
@@ -310,11 +304,10 @@ void FragmentStorage::moveRows(DbRow curRow, std::uint64_t moveSize) {
     if (nextFragment.empty()) {
         return;
     } else {
-        storageFile.update(fmt::format(
-            "UPDATE {} SET storedPos = '{}' WHERE pos = '{}'",
-            DfsF::TableNameFragments,
-            std::to_string(curPos + moveSize),
-            nextFragment["pos"]));
+        storageFile.update(fmt::format("UPDATE {} SET storedPos = '{}' WHERE pos = '{}'",
+                                       DfsF::TableNameFragments,
+                                       std::to_string(curPos + moveSize),
+                                       nextFragment["pos"]));
         moveRows(nextFragment, moveSize);
     }
 }
@@ -339,12 +332,11 @@ std::uint64_t FragmentStorage::write(std::filesystem::path filePath, std::uint64
 
     for (i = pos; i < fz; i = i + DfsB::sectionSize) { // copy old data to new temp file
         if (i + DfsB::sectionSize < fz) {
-            boost::interprocess::mapped_region rightRegion(
-                fmapSource,
-                boost::interprocess::read_write,
-                i,
-                DfsB::sectionSize);
-            char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+            boost::interprocess::mapped_region rightRegion(fmapSource,
+                                                           boost::interprocess::read_write,
+                                                           i,
+                                                           DfsB::sectionSize);
+            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
         } else {
@@ -366,19 +358,15 @@ std::uint64_t FragmentStorage::write(std::filesystem::path filePath, std::uint64
 
         for (i = 0; i < fzres; i = i + DfsB::sectionSize) { // copy new data to old file
             if (i + DfsB::sectionSize < fzres) {
-                boost::interprocess::mapped_region rightRegion(
-                    fmapTarget,
-                    boost::interprocess::read_write,
-                    i,
-                    DfsB::sectionSize);
-                char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+                boost::interprocess::mapped_region rightRegion(fmapTarget,
+                                                               boost::interprocess::read_write,
+                                                               i,
+                                                               DfsB::sectionSize);
+                char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
                 ofsres.write(rr_ptr, rightRegion.get_size());
             } else {
-                boost::interprocess::mapped_region rightRegion(
-                    fmapTarget,
-                    boost::interprocess::read_write,
-                    i);
-                char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+                boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i);
+                char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
                 ofsres.write(rr_ptr, rightRegion.get_size());
             }
         }
@@ -411,12 +399,11 @@ std::uint64_t FragmentStorage::remove(std::filesystem::path filePath, std::uint6
     std::size_t                       i  = 0;
     for (i = pos + size; i < fz; i = i + DfsB::sectionSize) { // copy old data to new temp file
         if (i + DfsB::sectionSize < fz) {
-            boost::interprocess::mapped_region rightRegion(
-                fmapSource,
-                boost::interprocess::read_write,
-                i,
-                DfsB::sectionSize);
-            char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+            boost::interprocess::mapped_region rightRegion(fmapSource,
+                                                           boost::interprocess::read_write,
+                                                           i,
+                                                           DfsB::sectionSize);
+            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofs.write(rr_ptr, rightRegion.get_size());
             ofs.flush();
         } else {
@@ -429,18 +416,17 @@ std::uint64_t FragmentStorage::remove(std::filesystem::path filePath, std::uint6
     ofs.close();
 
     std::filesystem::resize_file(filePath, pos); // cut right side from old file
-    std::ofstream ofsres(filePath.c_str(), std::ios::out | std::ios::app | std::ios::binary);
+    std::ofstream                     ofsres(filePath.c_str(), std::ios::out | std::ios::app | std::ios::binary);
     boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
     std::uint64_t                     fzres = std::filesystem::file_size(tempFilePath);
 
     for (i = 0; i < fzres; i = i + DfsB::sectionSize) { // copy new data to old file
         if (i + DfsB::sectionSize < fzres) {
-            boost::interprocess::mapped_region rightRegion(
-                fmapTarget,
-                boost::interprocess::read_write,
-                i,
-                DfsB::sectionSize);
-            char *rr_ptr = static_cast<char *>(rightRegion.get_address());
+            boost::interprocess::mapped_region rightRegion(fmapTarget,
+                                                           boost::interprocess::read_write,
+                                                           i,
+                                                           DfsB::sectionSize);
+            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
             ofsres.write(rr_ptr, rightRegion.get_size());
         } else {
             boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i);
@@ -466,10 +452,9 @@ bool FragmentStorage::checkRenameFile(const Dfs::Packets::EditSegmentMessage &ms
     return std::filesystem::exists(path / std::string(msg.newHash));
 }
 
-FragmentWriter::FragmentWriter(
-    const Dfs::Packets::SegmentMessage &msg,
-    std::vector<std::string>            compliteFiles,
-    QObject                            *parent)
+FragmentWriter::FragmentWriter(const Dfs::Packets::SegmentMessage &msg,
+                               std::vector<std::string>            compliteFiles,
+                               QObject                            *parent)
     : QThread(parent)
     , m_msg(msg)
     , m_compliteFiles(compliteFiles) {
@@ -495,7 +480,7 @@ void FragmentWriter::run() {
     std::uint64_t fileSize        = dirRow.size;
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {
-        qDebug() << "[Dfs] File is complite";
+        eLog("[Dfs] File is complite");
         emit compliteFile(m_msg.fileId);
         return;
     }
@@ -505,13 +490,13 @@ void FragmentWriter::run() {
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(m_msg.actorId, m_msg.fileId, double(m_msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        if (m_msg.hash == Utils::calcHashForFile(fileName)) {
-            qDebug() << "[Dfs] File" << fileName.c_str() << "done";
+        if (m_msg.hash == Utils::calculate_hash_file(FsPath::create(fileName).value()).value()) {
+            eLog("[Dfs] File {} done", fileName);
             emit eraseFromFiles(m_msg);
             emit downloadedFile(dirRow);
             emit sendFile(m_msg.actorId, m_msg.fileId);
             //            fs.initHistoricalChain();
-            qDebug() << "File " << fileName.c_str() << " downloaded";
+            eLog("File {} downloaded", fileName);
         } else {
             emit requestFile(m_msg.actorId, m_msg.fileId);
         }

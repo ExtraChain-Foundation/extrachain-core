@@ -22,6 +22,7 @@
 #include <string_view>
 #include <array>
 #include <expected>
+#include <optional>
 
 class NameValidator {
 public:
@@ -59,20 +60,16 @@ private:
 
     [[nodiscard]] static std::expected<void, ValidationError> check_null_byte(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_invalid_chars(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_invalid_chars(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_control_chars(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_control_chars(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_boundary_chars(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_boundary_chars(std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_consecutive_dots(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_consecutive_dots(
+        std::string_view name) noexcept;
 
-    [[nodiscard]] static std::expected<void, ValidationError>
-    check_reserved_name(std::string_view name) noexcept;
+    [[nodiscard]] static std::expected<void, ValidationError> check_reserved_name(std::string_view name) noexcept;
 };
 
 class PathValidator {
@@ -81,7 +78,8 @@ public:
         EmptyPath,
         TooLong,
         InvalidName,
-        EmptyComponent
+        EmptyComponent,
+        InvalidDriveLetter
     };
 
     struct ValidationError {

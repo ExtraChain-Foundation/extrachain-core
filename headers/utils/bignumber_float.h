@@ -87,9 +87,9 @@ public:
     // BigNumberFloat sqrt(unsigned long number = 2) const;
     BigNumberFloat abs() const;
 
-    static std::expected<BigNumberFloat, BigNumberError>
-                          create(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
-    static BigNumberFloat from_hex(const std::string &number);
+    static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat,
+                                                                NumeralBase        base = NumeralBase::Hex);
+    static BigNumberFloat                                from_hex(const std::string &number);
 
     std::strong_ordering operator<=>(const BigNumberFloat &other) const {
         if (m_data < other.m_data)

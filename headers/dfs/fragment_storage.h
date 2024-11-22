@@ -56,11 +56,11 @@ private:
     std::pair<DbRow, DbRow> getPrevNextPairFragment(std::uint64_t number);
     DbRow                   makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t storedPos);
     DbRow                   makeFragmentRow(std::uint64_t pos, std::uint64_t storedPos, std::size_t size);
-    std::uint64_t                writeFragment(DfsP::SegmentMessage msg);
+    std::uint64_t           writeFragment(DfsP::SegmentMessage msg);
     void                    moveRows(DbRow curRow, std::uint64_t moveSize);
-    std::uint64_t                write(std::filesystem::path filePath, std::uint64_t pos, std::string data);
+    std::uint64_t           write(std::filesystem::path filePath, std::uint64_t pos, std::string data);
     std::string             extract(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
-    std::uint64_t                remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
+    std::uint64_t           remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size);
     bool                    checkRenameFile(const Dfs::Packets::EditSegmentMessage& msg);
 };
 
@@ -70,10 +70,9 @@ class FragmentWriter : public QThread {
     std::vector<std::string> m_compliteFiles;
 
 public:
-    FragmentWriter(
-        const DfsP::SegmentMessage& msg,
-        std::vector<std::string>    m_compliteFiles,
-        QObject*                    parent = nullptr);
+    FragmentWriter(const DfsP::SegmentMessage& msg,
+                   std::vector<std::string>    m_compliteFiles,
+                   QObject*                    parent = nullptr);
     ~FragmentWriter() {
         quit();
     }

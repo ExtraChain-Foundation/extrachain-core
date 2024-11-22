@@ -34,28 +34,28 @@ class EXTRACHAIN_EXPORT VariantModel : public QAbstractListModel {
 public:
     explicit VariantModel(QAbstractListModel *parent = nullptr, const QList<QByteArray> &list = {});
 
-    int rowCount(const QModelIndex &parent = QModelIndex()) const override;
-    int count() const;
-    void setCount(int count);
+    int                    rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    int                    count() const;
+    void                   setCount(int count);
     QHash<int, QByteArray> roleNames() const override;
-    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
-    bool setData(const QModelIndex &index, const QVariant &value, int role) override;
+    QVariant               data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
+    bool                   setData(const QModelIndex &index, const QVariant &value, int role) override;
 
-    Q_INVOKABLE void prepend(const QVariantMap &variant);
-    Q_INVOKABLE void append(const QVariantMap &variant);
-    Q_INVOKABLE void insert(int index, const QVariantMap &variant);
-    Q_INVOKABLE void inserts(int index, const QVariantList &variant);
-    Q_INVOKABLE void move(int from, int to, int n);
-    Q_INVOKABLE void remove(int index, int count);
-    Q_INVOKABLE void clear();
+    Q_INVOKABLE void        prepend(const QVariantMap &variant);
+    Q_INVOKABLE void        append(const QVariantMap &variant);
+    Q_INVOKABLE void        insert(int index, const QVariantMap &variant);
+    Q_INVOKABLE void        inserts(int index, const QVariantList &variant);
+    Q_INVOKABLE void        move(int from, int to, int n);
+    Q_INVOKABLE void        remove(int index, int count);
+    Q_INVOKABLE void        clear();
     Q_INVOKABLE QVariantMap get(int index);
-    Q_INVOKABLE void set(int indx, const QByteArray &role, const QVariant &value);
+    Q_INVOKABLE void        set(int indx, const QByteArray &role, const QVariant &value);
 
     QList<QByteArray> modelRoles() const;
-    void setModelRoles(const QList<QByteArray> &value);
+    void              setModelRoles(const QList<QByteArray> &value);
 
-    void appendFromJson(const QString &fileName);
-    void insertFromJson(int index, const QString &fileName);
+    void        appendFromJson(const QString &fileName);
+    void        insertFromJson(int index, const QString &fileName);
     QVariantMap loadJson(const QString &fileName);
 
     QList<QVariantMap> &list();
@@ -65,7 +65,7 @@ signals:
 
 private:
     QHash<int, QByteArray> m_roles;
-    QByteArrayList m_modelRoles;
-    QList<QVariantMap> m_datas;
-    int m_count = 0;
+    QByteArrayList         m_modelRoles;
+    QList<QVariantMap>     m_datas;
+    int                    m_count = 0;
 };

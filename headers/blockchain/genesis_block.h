@@ -48,8 +48,8 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
  */
 struct EXTRACHAIN_EXPORT GenesisDataInfo {
     BigNumberFloat state = BigNumberFloat(0); /**< State represented as a big number float, default is 0 */
-    DataStorage::DataRowType type =
-        DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
+    BlockchainConst::DataRowType type =
+        BlockchainConst::DataRowType::Universal; /**< Type of the data row, default is Universal */
 
     auto operator<=>(const GenesisDataInfo &) const = default;
     bool operator==(const GenesisDataInfo &) const  = default;
@@ -80,18 +80,18 @@ public:
     GenesisBlock();
     GenesisBlock(const GenesisBlock &block);
 
-    GenesisBlock(
-        std::string     &&type,
-        std::string     &&data,
-        BigNumber         idx,
-        std::uint64_t     date,
-        std::string     &&prevHash,
-        std::string     &&hash,
-        std::string     &&prevGenHash,
-        Signatures      &&signatures,
-        GenesisDataRows &&dataRows);
+    GenesisBlock(std::string     &&type,
+                 std::string     &&data,
+                 BigNumber         idx,
+                 std::uint64_t     date,
+                 std::string     &&prevHash,
+                 std::string     &&hash,
+                 std::string     &&prevGenHash,
+                 Signatures      &&signatures,
+                 GenesisDataRows &&dataRows);
 
     // Block interface
+
 public:
     void addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataInfo &row);
     void addRows(const GenesisDataRows &dataRows);
@@ -103,10 +103,9 @@ public:
      * @return genesis data row list
      */
     const GenesisDataRows &dataRows() const;
-    std::string            toString() const override;
 
 protected:
-    void calcHash() override;
+    void calculate_hash() override;
 
 public:
     std::string getPrevGenHash() const;
@@ -114,41 +113,10 @@ public:
     void        setType(BlockType value) override;
     void        setType(const std::string &value) override;
 
-    template <typename Packer>
-    void msgpack_pack(Packer &msgpack_pk) const {
-        std::string index_str = m_index.to_string();
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_prevGenHash,
-            m_dataRows)
-            .msgpack_pack(msgpack_pk);
-    }
-    void msgpack_unpack(msgpack::object const &msgpack_o) {
-        std::string index_str;
-        msgpack::type::make_define_array(
-            m_type,
-            index_str,
-            m_date,
-            m_dataService,
-            m_hash,
-            m_prevHash,
-            m_signatures,
-            m_prevGenHash,
-            m_dataRows)
-            .msgpack_unpack(msgpack_o);
-        m_index = BigNumber(index_str);
-    }
-
     BOOST_DESCRIBE_CLASS(GenesisBlock, (Block), (), (), (m_prevGenHash, m_dataRows))
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-           && l.dataService() == r.dataService() && l.dataRows() == r.dataRows();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+           && l.dataRows() == r.dataRows();
 }

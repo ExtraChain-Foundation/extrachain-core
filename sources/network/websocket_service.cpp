@@ -19,23 +19,24 @@
 
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(
-    QWebSocket     *ws,
-    ExtraChainNode *node,
-    QObject        *parent,
-    const bool      isConstant,
-    const bool      needToDelete)
+#include <QJsonObject>
+
+WebSocketService::WebSocketService(QWebSocket     *ws,
+                                   ExtraChainNode *node,
+                                   QObject        *parent,
+                                   const bool      isConstant,
+                                   const bool      needToDelete)
     : SocketService(node, parent) {
     m_isConstant   = isConstant;
     m_needToDelete = needToDelete;
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
-        qDebug() << "[WS] Create new ws";
+        eLog("[WS] Create new ws");
     } else {
         m_ws         = ws;
         this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->m_port = m_ws->peerPort();
-        qDebug() << "[WS] New service:" << m_ip;
+        eLog("[WS] New service: {}", m_ip);
         connections();
     }
 
@@ -43,7 +44,7 @@ WebSocketService::WebSocketService(
 }
 
 WebSocketService::~WebSocketService() {
-    qDebug() << "[WS] I'm socket, i'm death";
+    eLog("[WS] I'm socket, i'm death");
     m_ws->deleteLater();
 }
 
@@ -60,7 +61,7 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         eFatal("[WS] Already opened");
     } else {
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
-        qDebug() << "[WS] Open" << url;
+        eLog("[WS] Open {}", url);
         connections();
         m_ws->open(url);
         m_ip   = m_ws->peerAddress().toString();
@@ -69,7 +70,7 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 }
 
 void WebSocketService::closeSocket() {
-    qDebug() << "[WS] Close socket";
+    eLog("[WS] Close socket");
     m_activated = false;
     if (m_ws->isValid())
         m_ws->close();
@@ -93,9 +94,9 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         m_identifier = json["identifier"].toString();
         auto tempPub = json["pub"].toString();
 
-        qInfo() << QString("[WS] First message key achieved: %1, isConstant: %2")
-                       .arg(json.toJson())
-                       .arg(m_isConstant);
+        eInfo("[WS] First message key achieved: {}, isConstant: {}",
+              json.toJson(QJsonDocument::Compact),
+              m_isConstant);
 
         pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
         if (pub.empty()) { // or incorrect
@@ -136,14 +137,14 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     auto tempPub = json["pub"].toString();
     pub          = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
     if (pub.empty()) {
-        qDebug("Incorrect public key in socket");
+        eLog("Incorrect public key in socket");
         emit error(Network::SocketServiceError::IncorrectPublicKey, "");
         closeSocket();
         return;
     }
 
     auto data = json["data"].toString();
-    qDebug() << "[WS] First message:" << data;
+    eLog("[WS] First message: {}", data);
     auto coded   = ByteArray::fromBase64(data).toQByteArray();
     auto decoded = prepareReceiveMessage(coded);
     checkFirstMessage(decoded, canUseConnection);
@@ -166,7 +167,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
 void WebSocketService::sendMessage(const QByteArray &data) {
     if (!isActive()) {
-        qDebug() << "[WS] Try to send without activation" << data.left(35);
+        eLog("[WS] Try to send without activation {}", data.left(35));
         return;
     }
     if (data.isEmpty())
@@ -188,11 +189,11 @@ void WebSocketService::onConnected() {
     this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->m_port = m_ws->peerPort();
     handshake();
-    qDebug() << "[WS] New service:" << m_ip << port();
+    eLog("[WS] New service: {} {}", m_ip, port());
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
-    qDebug() << "[WS] Socket error:" << error;
+    eLog("[WS] Socket error: {}", Utils::enum_value_name(error));
 
     if (m_ws->state() != QAbstractSocket::ConnectedState)
         closeSocket();

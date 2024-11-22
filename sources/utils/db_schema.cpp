@@ -21,14 +21,13 @@
 
 const std::vector<std::string_view>& SQLValidator::get_reserved_words() {
     static const std::vector<std::string_view> reserved_words = {
-        "ADD",    "ALL",   "ALTER",    "AND",      "ANY",        "AS",     "ASC",      "BETWEEN",
-        "BY",     "CASE",  "CHECK",    "COLUMN",   "CONSTRAINT", "CREATE", "DATABASE", "DEFAULT",
-        "DELETE", "DESC",  "DISTINCT", "DROP",     "EXEC",       "EXISTS", "FOREIGN",  "FROM",
-        "FULL",   "GROUP", "HAVING",   "IN",       "INDEX",      "INNER",  "INSERT",   "INTO",
-        "IS",     "JOIN",  "KEY",      "LEFT",     "LIKE",       "LIMIT",  "NOT",      "NULL",
-        "OR",     "ORDER", "OUTER",    "PRIMARY",  "PROCEDURE",  "RIGHT",  "ROWNUM",   "SELECT",
-        "SET",    "TABLE", "TOP",      "TRUNCATE", "UNION",      "UNIQUE", "UPDATE",   "VALUES",
-        "VIEW",   "WHERE"
+        "ADD",      "ALL",    "ALTER",  "AND",        "ANY",     "AS",       "ASC",      "BETWEEN", "BY",
+        "CASE",     "CHECK",  "COLUMN", "CONSTRAINT", "CREATE",  "DATABASE", "DEFAULT",  "DELETE",  "DESC",
+        "DISTINCT", "DROP",   "EXEC",   "EXISTS",     "FOREIGN", "FROM",     "FULL",     "GROUP",   "HAVING",
+        "IN",       "INDEX",  "INNER",  "INSERT",     "INTO",    "IS",       "JOIN",     "KEY",     "LEFT",
+        "LIKE",     "LIMIT",  "NOT",    "NULL",       "OR",      "ORDER",    "OUTER",    "PRIMARY", "PROCEDURE",
+        "RIGHT",    "ROWNUM", "SELECT", "SET",        "TABLE",   "TOP",      "TRUNCATE", "UNION",   "UNIQUE",
+        "UPDATE",   "VALUES", "VIEW",   "WHERE"
     };
     return reserved_words;
 }
@@ -237,24 +236,24 @@ const std::optional<SqlCreateError>& DbSchema::validation_error() const {
 // SQLite literals implementation
 namespace sqlite::literals {
 
-DbColumn operator""_int(const char* name, size_t) {
-    return DbColumn(name, ColumnType::Integer);
-}
+    DbColumn operator""_int(const char* name, size_t) {
+        return DbColumn(name, ColumnType::Integer);
+    }
 
-DbColumn operator""_real(const char* name, size_t) {
-    return DbColumn(name, ColumnType::Real);
-}
+    DbColumn operator""_real(const char* name, size_t) {
+        return DbColumn(name, ColumnType::Real);
+    }
 
-DbColumn operator""_text(const char* name, size_t) {
-    return DbColumn(name, ColumnType::Text);
-}
+    DbColumn operator""_text(const char* name, size_t) {
+        return DbColumn(name, ColumnType::Text);
+    }
 
-DbColumn operator""_blob(const char* name, size_t) {
-    return DbColumn(name, ColumnType::Blob);
-}
+    DbColumn operator""_blob(const char* name, size_t) {
+        return DbColumn(name, ColumnType::Blob);
+    }
 
-DbColumn operator""_json(const char* name, size_t) {
-    return DbColumn(name, ColumnType::Json);
-}
+    DbColumn operator""_json(const char* name, size_t) {
+        return DbColumn(name, ColumnType::Json);
+    }
 
 } // namespace sqlite::literals

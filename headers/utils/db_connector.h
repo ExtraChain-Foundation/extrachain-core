@@ -25,7 +25,6 @@
 #include <vector>
 
 #include <QByteArray>
-#include <QDebug>
 #include <QJsonDocument>
 #include <QMutex>
 
@@ -45,59 +44,61 @@ static QMutex dbmutex;
 using DbRow = std::unordered_map<std::string, std::string>;
 
 namespace Utils {
-template <typename T>
-DbRow to_dbrow(const T &obj) {
-    auto  json = Json::serialize_value(obj);
-    DbRow result;
-    for (const auto &field : json.as_object()) {
-        const auto &value = field.value();
-        if (value.is_null()) {
-            result[field.key()] = std::string();
-        } else if (value.is_string()) {
-            result[field.key()] = std::string(value.as_string());
-        } else {
-            result[field.key()] = boost::json::serialize(value);
+    template <typename T>
+    DbRow to_dbrow(const T &obj) {
+        auto  json = Json::serialize_value(obj);
+        DbRow result;
+        for (const auto &field : json.as_object()) {
+            const auto &value = field.value();
+            if (value.is_null()) {
+                result[field.key()] = std::string();
+            } else if (value.is_string()) {
+                result[field.key()] = std::string(value.as_string());
+            } else {
+                result[field.key()] = boost::json::serialize(value);
+            }
         }
+        return result;
     }
-    return result;
-}
 
-template <typename T>
-std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
-    try {
-        using namespace boost::mp11;
+    template <typename T>
+    std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
+        try {
+            using namespace boost::mp11;
 
-        boost::json::object json;
-        for (const auto &[key, value] : map) {
-            mp_for_each<boost::describe::describe_members<T, boost::describe::mod_any_access>>([&](auto D) {
-                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                    if (key == magic::detail::clean_field_name(D.name)) {
-                        using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
+            boost::json::object json;
+            for (const auto &[key, value] : map) {
+                mp_for_each<boost::describe::describe_members<T,
+                                                              boost::describe::mod_any_access
+                                                                  | boost::describe::mod_inherited>>([&](auto D) {
+                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                        if (key == magic::detail::clean_field_name(D.name)) {
+                            using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
 
-                        if constexpr (magic::is_optional<MemberType>::value) {
-                            if (value.empty()) {
-                                json[key] = nullptr;
+                            if constexpr (magic::is_optional<MemberType>::value) {
+                                if (value.empty()) {
+                                    json[key] = nullptr;
+                                } else {
+                                    json[key] = stringToJsonValue(value, typeid(MemberType));
+                                }
+                            } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
+                                json[key] = value;
                             } else {
                                 json[key] = stringToJsonValue(value, typeid(MemberType));
                             }
-                        } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
-                            json[key] = value;
-                        } else {
-                            json[key] = stringToJsonValue(value, typeid(MemberType));
                         }
                     }
-                }
-            });
-        }
+                });
+            }
 
-        return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
-            qDebug() << "Json parse error:" << err;
-            return Utils::ParseError::Invalid;
-        });
-    } catch (...) {
-        return std::unexpected(Utils::ParseError::Invalid);
+            return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
+                eLog("Json parse error: {}", err);
+                return Utils::ParseError::Invalid;
+            });
+        } catch (...) {
+            return std::unexpected(Utils::ParseError::Invalid);
+        }
     }
-}
 } // namespace Utils
 
 struct DBColumn {
@@ -108,8 +109,7 @@ struct DBColumn {
     // int primaryKey = -1;
 
     operator QString() const {
-        return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type)
-               + ")";
+        return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type) + ")";
     }
 };
 
@@ -117,7 +117,7 @@ enum class DbConnectorType {
     Regular,
     Compressed
 };
-FORMAT_ENUM(DbConnectorType)
+// FORMAT_ENUM(DbConnectorType)
 
 // TODO: while select, open check in query, std::vector<DBColumn>
 
@@ -130,9 +130,7 @@ protected:
 
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
-    explicit DbConnector(
-        const std::filesystem::path &filePath,
-        DbConnectorType              type = DbConnectorType::Regular);
+    explicit DbConnector(const std::filesystem::path &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);
     DbConnector(DbConnector &&db);
     ~DbConnector();

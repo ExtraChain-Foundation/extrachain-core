@@ -34,25 +34,23 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
     this->m_dataRows    = block.dataRows();
 }
 
-GenesisBlock::GenesisBlock(
-    std::string                                 &&type,
-    std::string                                 &&data,
-    BigNumber                                     idx,
-    std::uint64_t                                 date,
-    std::string                                 &&prevHash,
-    std::string                                 &&hash,
-    std::string                                 &&prevGenHash,
-    Signatures                                  &&signatures,
-    std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
-    : Block(
-          std::move(type),
-          std::move(data),
-          std::move(idx),
-          date,
-          std::move(prevHash),
-          std::move(hash),
-          std::move(signatures),
-          {})
+GenesisBlock::GenesisBlock(std::string                                 &&type,
+                           std::string                                 &&data,
+                           BigNumber                                     idx,
+                           std::uint64_t                                 date,
+                           std::string                                 &&prevHash,
+                           std::string                                 &&hash,
+                           std::string                                 &&prevGenHash,
+                           Signatures                                  &&signatures,
+                           std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
+    : Block(std::move(type),
+            std::move(data),
+            std::move(idx),
+            date,
+            std::move(prevHash),
+            std::move(hash),
+            std::move(signatures),
+            {})
     , m_prevGenHash(std::move(prevGenHash))
     , m_dataRows(std::move(dataRows)) {
     setType(type);
@@ -72,7 +70,7 @@ const std::string &GenesisBlock::getDataForSignature() const {
     return Block::getDataForSignature();
 }
 
-void GenesisBlock::calcHash() {
+void GenesisBlock::calculate_hash() {
     SHA3 sha3(SHA3::Bits::Bits512);
     auto index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
@@ -119,35 +117,4 @@ void GenesisBlock::setType(const std::string &value) {
 
 std::string GenesisBlock::getPrevGenHash() const {
     return m_prevGenHash;
-}
-
-std::string GenesisBlock::toString() const {
-    std::ostringstream oss;
-
-    oss << "GenesisBlock { "
-        << "type: " << magic_enum::enum_name(m_type) << ", "
-        << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.to_string() << " (" << m_index.to_string(NumeralBase::Dec) << "), "
-        << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
-        << "prev hash: '"
-        << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
-                                           + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
-                                     : m_prevHash)
-               + "', "
-        << "prev gen: '"
-        << (m_prevGenHash.length() > 10
-                ? m_prevGenHash.substr(0, 5) + "..."
-                      + m_prevGenHash.substr(m_prevGenHash.size() - 5, m_prevGenHash.size() - 1)
-                : m_prevGenHash)
-        << "', "
-        << "hash: '"
-        << (m_hash.length() > 10
-                ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
-                : m_hash)
-        << "', "
-        << "signatures: [" << m_signatures.size() << "], "
-        << "data rows: [" << m_dataRows.size() << "]"
-        << " }";
-
-    return oss.str();
 }

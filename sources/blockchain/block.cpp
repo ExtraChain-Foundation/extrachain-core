@@ -41,15 +41,14 @@ Block::Block(const Block &block) {
     this->m_transactions = block.m_transactions;
 }
 
-Block::Block(
-    std::string           &&type,
-    std::string           &&data,
-    BigNumber               idx,
-    std::uint64_t           date,
-    std::string           &&prevHash,
-    std::string           &&hash,
-    Signatures            &&signatures,
-    std::set<Transaction> &&transactions)
+Block::Block(std::string           &&type,
+             std::string           &&data,
+             BigNumber               idx,
+             std::uint64_t           date,
+             std::string           &&prevHash,
+             std::string           &&hash,
+             Signatures            &&signatures,
+             std::set<Transaction> &&transactions)
     : m_index(std::move(idx))
     , m_date(date)
     , m_prevHash(std::move(prevHash))
@@ -76,7 +75,7 @@ Block Block::operator=(const Block &block) {
     return *this;
 }
 
-void Block::calcHash() {
+void Block::calculate_hash() {
     SHA3        sha3(SHA3::Bits::Bits512);
     std::string index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
@@ -113,11 +112,11 @@ void Block::setType(const std::string &value) {
 
 void Block::setPrev(const BlockVariant &prev) {
     if (prev.isEmpty()) {
-        // qDebug() << "[Block] Construction first block";
+        // eLog("[Block] Construction first block");
         this->m_index    = BigNumber("0");
-        this->m_prevHash = Utils::calcHash("0 index");
+        this->m_prevHash = Utils::calculate_hash("0 index");
     } else {
-        // qDebug() << "[Block] Construction block. Previous block id: " << prev->getIndex();
+        // eLog("[Block] Construction block. Previous block id: {}", prev->getIndex());
         this->m_index    = prev.getIndex() + 1;
         this->m_prevHash = prev.getHash();
     }
@@ -144,7 +143,7 @@ const std::string &Block::getDataForSignature() const {
 }
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    calcHash();
+    calculate_hash();
     auto sign = actor->key().sign(getDataForSignature());
     this->addSignature(actor->id(), sign, true);
 }
@@ -193,31 +192,6 @@ Transaction Block::getTransactionByHash(std::string hash) const {
         if (tx.hash() == hash)
             return tx;
     return Transaction();
-}
-
-std::string Block::toString() const {
-    std::ostringstream oss;
-
-    oss << "Block { "
-        << "type: " << Utils::enumFullName(m_type) << ", "
-        << "data service: [" << m_dataService.size() << "], "
-        << "index: " << m_index.to_string() << " (" << m_index.to_string(NumeralBase::Dec) << "), "
-        << "date: " << QDateTime::fromMSecsSinceEpoch(m_date).toString().toStdString() << ", "
-        << "prev_hash: '"
-        << (m_prevHash.length() > 10 ? m_prevHash.substr(0, 5) + "..."
-                                           + m_prevHash.substr(m_prevHash.size() - 5, m_prevHash.size() - 1)
-                                     : m_prevHash)
-               + "', "
-        << "hash: '"
-        << (m_hash.length() > 10
-                ? m_hash.substr(0, 5) + "..." + m_hash.substr(m_hash.size() - 5, m_hash.size() - 1)
-                : m_hash)
-        << "', "
-        << "signatures: [" << m_signatures.size() << "], "
-        << "transactions: [" << m_transactions.size() << "]"
-        << " }";
-
-    return oss.str();
 }
 
 bool Block::isEmpty() const {
@@ -316,16 +290,4 @@ void Block::setDataServiceFromMessagePack(const std::string &value) {
     // if (m_dataService.empty())
     // return;
     m_dataService = MessagePack::deserialize<std::set<std::string>>(value);
-}
-
-QDebug operator<<(QDebug debug, const Approver &approver) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << approver.toString();
-    return debug;
-}
-
-QDebug operator<<(QDebug debug, const Block &block) {
-    QDebugStateSaver saver(debug);
-    debug.nospace().noquote() << block.toString();
-    return debug;
 }

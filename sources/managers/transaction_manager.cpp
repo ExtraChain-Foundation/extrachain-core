@@ -46,12 +46,12 @@ void TransactionManager::removeTransaction(int i) {
 }
 
 void TransactionManager::addTransactionNetwork(const Transaction &tx) {
-    // qDebug() << "[TransactionManager] Added to the waiting list:" << tx;
+    // eLog("[TransactionManager] Added to the waiting list: {}", tx);
     m_receivedTxList.insert(tx);
 }
 
 void TransactionManager::addProvedTransaction(const Transaction &tx) {
-    // qDebug() << "[TransactionManager] Add proved transaction:" << tx;
+    // eLog("[TransactionManager] Add proved transaction: {}", tx);
     m_pendingTxList.insert(tx);
     emit addToCache(tx.receiver().to_string(), tx);
 }
@@ -66,27 +66,26 @@ void TransactionManager::makeBlock() {
     auto lastBlock     = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
-        qDebug() << "[TransactionManager] last or real last block is not exists";
+        eLog("[TransactionManager] last or real last block is not exists");
         node->blockchain()->sync();
         return;
     }
     if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
-        qDebug() << "[TransactionManager] last or real last block is empty";
+        eLog("[TransactionManager] last or real last block is empty");
         return;
     }
 
     if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-        eLog(
-            "[Blockchain] Last block: {}, last real: {}, type: {}",
-            lastBlock->getIndex(),
-            lastRealBlock->getIndex(),
-            lastRealBlock->getType());
+        eLog("[Blockchain] Last block: {}, last real: {}, type: {}",
+             lastBlock->getIndex(),
+             lastRealBlock->getIndex(),
+             lastRealBlock->getType());
     } else {
         eLog("[Blockchain] Last block: {}, type: {}", lastRealBlock->getIndex(), lastRealBlock->getType());
     }
 
     if (!node->network()->isActiveConnectionExists()) {
-        // qDebug() << "[TransactionManager] No active connections";
+        // eLog("[TransactionManager] No active connections");
 
         if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
             node->blockchain()->removeDummyBlocks();
@@ -96,10 +95,9 @@ void TransactionManager::makeBlock() {
 
     auto maybeGenesisId = lastBlock->getIndex() + 1;
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
-        eLog(
-            "[Blockchain] Create genesis block {}, dec: {}",
-            maybeGenesisId,
-            maybeGenesisId.to_string(NumeralBase::Dec));
+        eLog("[Blockchain] Create genesis block {}, dec: {}",
+             maybeGenesisId,
+             maybeGenesisId.to_string(NumeralBase::Dec));
         const auto actor   = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
@@ -114,7 +112,7 @@ void TransactionManager::makeBlock() {
         static BigNumber prevDummy = BigNumber(-1);
 
         // if (prevDummy == lastBlock.getIndex() + 1) {
-        //     qDebug() << "[TransactionManager] prevDummy == lastBlock.getIndex() + 1";
+        //     eLog("[TransactionManager] prevDummy == lastBlock.getIndex() + 1");
         //     return;
         // }
 
@@ -151,12 +149,12 @@ void TransactionManager::proveTransactions() {
         TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
-            qDebug() << "[TransactionManager] Transaction approved:" << tx;
-            // qDebug() << "[TransactionManager] Transaction approved!";
+            eLog("[TransactionManager] Transaction approved: {}", tx);
+            // eLog("[TransactionManager] Transaction approved!");
             this->addProvedTransaction(tx);
         } else {
-            qDebug() << "[TransactionManager] Transaction not approved:" << tx << res;
-            // qDebug() << "[TransactionManager] Transaction not approved:" << res;
+            eLog("[TransactionManager] Transaction not approved: {} {}", tx, res);
+            // eLog("[TransactionManager] Transaction not approved: {}", res);
         }
     }
 

@@ -34,7 +34,7 @@ QJsonDocument FileDataManager::getFileTree(ActorId actorId, const bool &shouldUp
     QJsonArray    array;
 
     if (actorId.is_zero() && savedActorId.is_zero()) {
-        qDebug() << "actor id and saved actor id are empty.";
+        eWarning("ActorId and saved ActorId are empty");
         return document;
     }
 
@@ -140,8 +140,7 @@ QJsonObject FileDataManager::getFileDataByName(const std::string &nameFile, cons
     return object;
 }
 
-QJsonDocument
-FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
+QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
     if (shouldUpdateList)
         files = updateFileList(savedActorId);
 

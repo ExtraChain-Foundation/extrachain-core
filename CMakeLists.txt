@@ -40,6 +40,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(msgpack-cxx CONFIG REQUIRED)
+find_package(blake3 CONFIG REQUIRED)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
@@ -55,7 +56,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_template.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fs_path.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
@@ -90,6 +90,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/fs_path.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_connector_strict.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/db_schema.h
@@ -141,6 +142,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/fs_path.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_connector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/db_schema.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
@@ -187,7 +189,7 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 # target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3
     magic_enum::magic_enum unofficial::hash-library
     Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json)
 # extrachainc

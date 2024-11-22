@@ -18,35 +18,35 @@
  */
 
 #include "dfs/name_validator.h"
-#include <algorithm>
-#include <ranges>
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_empty(std::string_view name) noexcept {
+#include <algorithm>
+#include <string>
+#include <iterator>
+
+std::expected<void, NameValidator::ValidationError> NameValidator::check_empty(std::string_view name) noexcept {
     if (name.empty()) {
         return std::unexpected(ValidationError { .code = ErrorCode::EmptyName, .position = 0 });
     }
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_length(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_length(std::string_view name) noexcept {
     if (name.length() > MAX_NAME_LENGTH) {
         return std::unexpected(ValidationError { .code = ErrorCode::TooLong, .position = MAX_NAME_LENGTH });
     }
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_null_byte(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_null_byte(
+    std::string_view name) noexcept {
     if (auto pos = name.find('\0'); pos != std::string_view::npos) {
         return std::unexpected(ValidationError { .code = ErrorCode::NullByte, .position = pos });
     }
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_invalid_chars(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_invalid_chars(
+    std::string_view name) noexcept {
     for (size_t i = 0; i < name.length(); ++i) {
         if (std::ranges::find(INVALID_CHARS, name[i]) != INVALID_CHARS.end()) {
             return std::unexpected(ValidationError { .code = ErrorCode::InvalidChar, .position = i });
@@ -55,8 +55,8 @@ NameValidator::check_invalid_chars(std::string_view name) noexcept {
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_control_chars(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_control_chars(
+    std::string_view name) noexcept {
     for (size_t i = 0; i < name.length(); ++i) {
         if (static_cast<unsigned char>(name[i]) < 32) {
             return std::unexpected(ValidationError { .code = ErrorCode::ControlChar, .position = i });
@@ -65,8 +65,8 @@ NameValidator::check_control_chars(std::string_view name) noexcept {
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_boundary_chars(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_boundary_chars(
+    std::string_view name) noexcept {
     if (name.back() == '.' || name.back() == ' ' || name.front() == ' ') {
         return std::unexpected(
             ValidationError { .code = ErrorCode::TrailingDotSpace, .position = name.length() - 1 });
@@ -74,8 +74,8 @@ NameValidator::check_boundary_chars(std::string_view name) noexcept {
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_consecutive_dots(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_consecutive_dots(
+    std::string_view name) noexcept {
     for (size_t i = 0; i < name.length() - 1; ++i) {
         if (name[i] == '.' && name[i + 1] == '.') {
             return std::unexpected(ValidationError { .code = ErrorCode::ConsecutiveDots, .position = i });
@@ -84,8 +84,8 @@ NameValidator::check_consecutive_dots(std::string_view name) noexcept {
     return {};
 }
 
-std::expected<void, NameValidator::ValidationError>
-NameValidator::check_reserved_name(std::string_view name) noexcept {
+std::expected<void, NameValidator::ValidationError> NameValidator::check_reserved_name(
+    std::string_view name) noexcept {
     std::string upper_name;
     upper_name.reserve(name.size());
     std::transform(name.begin(), name.end(), std::back_inserter(upper_name), [](unsigned char c) {
@@ -93,9 +93,7 @@ NameValidator::check_reserved_name(std::string_view name) noexcept {
     });
 
     auto             dot_pos = upper_name.find('.');
-    std::string_view base_name(
-        upper_name.data(),
-        dot_pos == std::string::npos ? upper_name.length() : dot_pos);
+    std::string_view base_name(upper_name.data(), dot_pos == std::string::npos ? upper_name.length() : dot_pos);
 
     for (const auto& reserved : RESERVED_NAMES) {
         if (base_name == reserved) {
@@ -127,43 +125,52 @@ std::expected<void, NameValidator::ValidationError> NameValidator::validate(std:
 }
 
 std::expected<void, PathValidator::ValidationError> PathValidator::validate(std::string_view path) noexcept {
-    // Check empty path
     if (path.empty()) {
         return std::unexpected(
             ValidationError { .code = ErrorCode::EmptyPath, .position = 0, .name_error = std::nullopt });
     }
 
-    // Check max length
     if (path.length() > MAX_PATH_LENGTH) {
         return std::unexpected(ValidationError { .code       = ErrorCode::TooLong,
                                                  .position   = MAX_PATH_LENGTH,
                                                  .name_error = std::nullopt });
     }
 
-    size_t start = 0;
-    size_t pos   = 0;
+    // Handle Windows drive letter (e.g., "C:")
+    const bool has_drive =
+        path.length() >= 2 && std::isalpha(static_cast<unsigned char>(path[0])) && path[1] == ':';
 
-    // Split path by separators and validate each component
-    while (pos <= path.length()) {
-        if (pos == path.length() || path[pos] == '/' || path[pos] == '\\') {
-            // Skip empty components in the middle of path
-            if (pos > start) {
-                auto component = path.substr(start, pos - start);
-                auto result    = NameValidator::validate(component);
+    if (has_drive && (path.length() == 2 || (path[2] != '/' && path[2] != '\\'))) {
+        return std::unexpected(
+            ValidationError { .code = ErrorCode::InvalidDriveLetter, .position = 2, .name_error = std::nullopt });
+    }
 
-                if (!result) {
-                    return std::unexpected(ValidationError { .code       = ErrorCode::InvalidName,
-                                                             .position   = start,
-                                                             .name_error = result.error() });
-                }
-            } else if (pos != 0) { // Allow empty component only at the start (for absolute paths)
-                return std::unexpected(ValidationError { .code       = ErrorCode::EmptyComponent,
-                                                         .position   = pos,
-                                                         .name_error = std::nullopt });
-            }
-            start = pos + 1;
+    const size_t start_pos       = has_drive ? 2 : 0;
+    size_t       component_start = start_pos;
+
+    for (size_t i = start_pos; i <= path.length(); ++i) {
+        const bool is_separator = i < path.length() && (path[i] == '/' || path[i] == '\\');
+        const bool is_end       = i == path.length();
+
+        if (!is_separator && !is_end) {
+            continue;
         }
-        pos++;
+
+        const size_t component_length = i - component_start;
+        if (component_length == 0 && i != start_pos) {
+            return std::unexpected(
+                ValidationError { .code = ErrorCode::EmptyComponent, .position = i, .name_error = std::nullopt });
+        }
+
+        if (component_length > 0) {
+            if (auto result = NameValidator::validate(path.substr(component_start, component_length)); !result) {
+                return std::unexpected(ValidationError { .code       = ErrorCode::InvalidName,
+                                                         .position   = component_start,
+                                                         .name_error = result.error() });
+            }
+        }
+
+        component_start = i + 1;
     }
 
     return {};

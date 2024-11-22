@@ -75,7 +75,7 @@ enum class MessageType {
     Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)
-FORMAT_ENUM(MessageType)
+// FORMAT_ENUM(MessageType)
 
 enum class MessageStatus {
     NoStatus,
@@ -83,7 +83,7 @@ enum class MessageStatus {
     Response
 };
 MSGPACK_ADD_ENUM(MessageStatus)
-FORMAT_ENUM(MessageStatus)
+// FORMAT_ENUM(MessageStatus)
 
 struct MessageBody {
     MessageType   message_type;
@@ -111,19 +111,17 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_message(
-    const std::string &data,
-    MessageType        type,
-    MessageStatus      status,
-    const ActorId     &sender,
-    std::string        to_message_id) {
+inline MessageBody make_message(const std::string &data,
+                                MessageType        type,
+                                MessageStatus      status,
+                                const ActorId     &sender,
+                                std::string        to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
     }
 
-    std::string randomId = Utils::calcHash(
-                               std::to_string(QDateTime::currentSecsSinceEpoch())
-                               + std::to_string(QRandomGenerator::global()->bounded(100000)))
+    std::string randomId = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                                 + std::to_string(QRandomGenerator::global()->bounded(100000)))
                                .substr(0, 15); // temp
 
     MessageBody message = { .message_type = type,
@@ -151,19 +149,18 @@ struct VPNMessage {
     std::vector<std::string> allIPsToSet;
     std::string              senderID;
 
-    MSGPACK_DEFINE(
-        vpnCommand,
-        vpnType,
-        resultChainIndex,
-        lockedChainIndex,
-        countryEndpoint,
-        proxyCounter,
-        lookingForNodeID,
-        networkIdentifiersToIgnore,
-        localIP,
-        publicIP,
-        publicKeyFile,
-        uuid,
-        allIPsToSet,
-        senderID)
+    MSGPACK_DEFINE(vpnCommand,
+                   vpnType,
+                   resultChainIndex,
+                   lockedChainIndex,
+                   countryEndpoint,
+                   proxyCounter,
+                   lookingForNodeID,
+                   networkIdentifiersToIgnore,
+                   localIP,
+                   publicIP,
+                   publicKeyFile,
+                   uuid,
+                   allIPsToSet,
+                   senderID)
 };

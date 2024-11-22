@@ -94,7 +94,7 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId 
         }
     }
 
-    qWarning("Can't find actor");
+    eWarning("Can't find actor");
     // std::exit(-123);
     return nullptr;
 }
@@ -123,7 +123,7 @@ QJsonObject PrivateProfile::toJson() const {
     }
     json["walletNames"] = walletNames;
 
-    qDebug() << "[PrivateProfile] JSON:" << json;
+    eLog("[PrivateProfile] JSON: {}", QJsonDocument(json).toJson(QJsonDocument::Compact));
     return json;
 }
 
@@ -132,7 +132,7 @@ void PrivateProfile::save() {
     auto encrypted = Cryptography::encryptWithPassword(Bytes(jsonBytes.begin(), jsonBytes.end()), m_hash);
     auto data      = QByteArray(reinterpret_cast<const char *>(encrypted.data()), encrypted.size());
 
-    // qDebug() << "Save data:" << data;
+    // eLog("Save data: {}", data);
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
     if (file.write(data) == 0)

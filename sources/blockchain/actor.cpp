@@ -78,11 +78,11 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
 }
 
 namespace magic {
-std::string custom_magic<ActorId>::read(const ActorId &value) {
-    return value.to_string();
-}
+    std::string custom_magic<ActorId>::read(const ActorId &value) {
+        return value.to_string();
+    }
 
-ActorId custom_magic<ActorId>::write(const std::string &value) {
-    return ActorId(value);
-}
-}
+    ActorId custom_magic<ActorId>::write(const std::string &value) {
+        return ActorId(value);
+    }
+} // namespace magic

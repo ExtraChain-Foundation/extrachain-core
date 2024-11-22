@@ -19,6 +19,9 @@
 
 #pragma once
 
+#include <QDateTime>
+#include <QList>
+
 #include "utils/safeptr.h"
 
 class ActorId;

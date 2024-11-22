@@ -86,6 +86,7 @@ struct NetworkReconnect {
     quint16           port;
     Network::Protocol protocol;
     // quint64 lastTry;
+
     auto operator==(const NetworkReconnect& reconnect) const {
         return ip == reconnect.ip && port == reconnect.port && protocol == reconnect.protocol;
     }
@@ -104,13 +105,13 @@ struct NetworkReconnect {
     }
 
     static NetworkReconnect fromWsConnection(const DfsP::WSConnection& wsConnection) {
-        return NetworkReconnect{ .ip = QString::fromStdString(wsConnection.address),
-                                 .port = static_cast<quint16>(wsConnection.port),
-                                 .protocol = Network::Protocol::WebSocket };
+        return NetworkReconnect { .ip       = QString::fromStdString(wsConnection.address),
+                                  .port     = static_cast<quint16>(wsConnection.port),
+                                  .protocol = Network::Protocol::WebSocket };
     }
 
     void print() const {
-        qDebug() << "ip: " << ip << "port:" << port;
+        eLog("[NetworkReconnect] ip: {}, port: {}", ip, port);
     }
 };
 
@@ -140,34 +141,34 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
-    bool                   reservedActorListUse = false;
-    bool                   active               = false;
-    bool                   shouldRequest        = false;
-    std::unique_ptr<UPNPConnection>        upnpDis;
-    std::unique_ptr<UPNPConnection>        upnpNet;
-    QMap<std::string, int> msgHashList = {};
+    bool                            reservedActorListUse = false;
+    bool                            active               = false;
+    bool                            shouldRequest        = false;
+    std::unique_ptr<UPNPConnection> upnpDis;
+    std::unique_ptr<UPNPConnection> upnpNet;
+    QMap<std::string, int>          msgHashList = {};
 
-    ExtraChainNode*                        node;
-    std::shared_ptr<QNetworkAddressEntry>  local;
-    QWebSocketServer*      wsServer = nullptr;
-    SafePtr<QList<SocketService*>>               m_connections;
+    ExtraChainNode*                              node;
+    std::shared_ptr<QNetworkAddressEntry>        local;
+    QWebSocketServer*                            wsServer = nullptr;
+    SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
-    NetworkStatus          m_networkStatus;
+    NetworkStatus                                m_networkStatus;
 
-    std::map<std::string, std::string>           m_messages;
-    std::map<std::string, MessageIdDataWaiting>  m_messages_waiting;
-    std::map<std::string, MessageIdDataReceived> m_messages_received;
-    QTimer*                                      m_reconnectTimer;
-    CalculateTraffic*                            calculateTraffic;
+    std::map<std::string, std::string>                           m_messages;
+    std::map<std::string, MessageIdDataWaiting>                  m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived>                 m_messages_received;
+    QTimer*                                                      m_reconnectTimer;
+    CalculateTraffic*                                            calculateTraffic;
     SafePtr<std::map<std::string, std::pair<std::string, bool>>> m_receivedMessageId;
-    std::set<ActorId>                            m_customPool;
+    std::set<ActorId>                                            m_customPool;
 
     std::string m_networkHashForVPN;
 
 public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
-    void localInizialization();
+    void                        localInizialization();
     std::pair<QString, QString> getPublicIPAndCountry();
     bool                        removeOneConnection();
 
@@ -182,7 +183,7 @@ private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
 public:
-    SafePtr<QList<SocketService*>> connections() const;
+    SafePtr<std::set<SocketService*>> connections() const;
     bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
 
 public slots:
@@ -195,11 +196,10 @@ signals:
     void accrual(const ActorId& actorId);
 
 protected:
-    void connectToWebSocket(
-        const QString& ip,
-        quint16        port,
-        bool           requestListNodes = false,
-        const bool     isConstant       = false);
+    void connectToWebSocket(const QString& ip,
+                            quint16        port,
+                            bool           requestListNodes = false,
+                            const bool     isConstant       = false);
 
     /**
      * @brief NetworkManager::checkMsgCount
@@ -217,20 +217,18 @@ protected slots:
 
 public slots:
     void startNetwork();
-    void connectToNode(
-        const QString&    ip,
-        Network::Protocol protocol,
-        const bool        request    = false,
-        const bool        isConstant = false);
+    void connectToNode(const QString&    ip,
+                       Network::Protocol protocol,
+                       const bool        request    = false,
+                       const bool        isConstant = false);
     void process();
     void reconnection();
     void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
-    void setupProxy(
-        QNetworkProxy::ProxyType type,
-        const QString&           hostName,
-        quint16                  port,
-        const QString&           user,
-        const QString&           password);
+    void setupProxy(QNetworkProxy::ProxyType type,
+                    const QString&           hostName,
+                    quint16                  port,
+                    const QString&           user,
+                    const QString&           password);
 
 private slots:
     void removeWsConnection();
@@ -242,21 +240,19 @@ public:
     void sendMessage(const std::string&    serialized_message,
                      Config::Net::TypeSend typeSend,
                      const std::string&    receiver_identifier,
-                     MessageType           type_info = MessageType::Unknown,
+                     MessageType           type_info   = MessageType::Unknown,
                      MessageStatus         status_info = MessageStatus::NoStatus);
 
     void saveCustomMessage(const std::string& messageId, const std::string& identifier);
 
-    void sendCustomMessageFurther(
-        const CustomMessage& customMessage,
-        const MessageStatus& status,
-        const std::string&   messageId,
-        const std::string&   identifier);
+    void sendCustomMessageFurther(const CustomMessage& customMessage,
+                                  const MessageStatus& status,
+                                  const std::string&   messageId,
+                                  const std::string&   identifier);
 
-    void saveToCache(
-        const std::string&    serialized_message,
-        Config::Net::TypeSend typeSend,
-        const std::string&    receiver_identifier);
+    void saveToCache(const std::string&    serialized_message,
+                     Config::Net::TypeSend typeSend,
+                     const std::string&    receiver_identifier);
     void sendFromCache();
     bool isActiveConnectionExists();
 
@@ -265,18 +261,16 @@ public:
     QString foundCurrentIdentifier(QString ip, quint16 port);
 
     template <class T>
-    std::string send_message(
-        T                     data,
-        MessageType           type,
-        MessageStatus         status        = MessageStatus::NoStatus,
-        std::string           to_message_id = "",
-        Config::Net::TypeSend typeSend      = Config::Net::TypeSend::All) {
+    std::string send_message(T                     data,
+                             MessageType           type,
+                             MessageStatus         status        = MessageStatus::NoStatus,
+                             std::string           to_message_id = "",
+                             Config::Net::TypeSend typeSend      = Config::Net::TypeSend::All) {
         if (status == MessageStatus::Response && to_message_id.empty()) {
             eFatal("[Network] Send message error: empty message id for response message");
         }
         if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
-            qDebug()
-                << "[Network] Send message warning: incorrect type send for response message, set to focused";
+            eLog("[Network] Send message warning: incorrect type send for response message, set to focused");
             typeSend = Config::Net::TypeSend::Focused;
         }
 
@@ -302,14 +296,12 @@ public:
         if (Network::networkDebug) {
             msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
             msgpack::object        deserialized = oh.get();
-            qDebug() << fmt::format(
-                    "[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
-                    message.message_type,
-                    message.status,
-                    message.message_id,
-                    typeSend,
-                    (std::stringstream() << deserialized).str())
-                .c_str();
+            eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+                 message.message_type,
+                 message.status,
+                 message.message_id,
+                 typeSend,
+                 (std::stringstream() << deserialized).str());
         }
 #endif
 
@@ -332,12 +324,11 @@ signals:
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
     void messageCountReceived(BigNumber count);
-    void customMessageReceived(
-        const CustomMessage customPackage,
-        const MessageStatus status,
-        const std::string   messageId,
-        const ActorId       senderId,
-        const std::string   identifier);
+    void customMessageReceived(const CustomMessage customPackage,
+                               const MessageStatus status,
+                               const std::string   messageId,
+                               const ActorId       senderId,
+                               const std::string   identifier);
 
     friend class DfsNetworkManager;
 };

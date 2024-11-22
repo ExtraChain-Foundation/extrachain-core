@@ -149,7 +149,7 @@ Contract::performersDeserialize(const QByteArray &serialized) const
         QList<QByteArray> list_el = Serialization::deserialize(el, PERFORMER_DELIMETR);
         if (list.size() != 2)
         {
-            qDebug() << "[Contract] performer fields list wrong size";
+            eLog("[Contract] performer fields list wrong size");
             break;
         }
         result[BigNumber(list_el.takeFirst())] = fromInt(list_el.takeFirst().toInt());

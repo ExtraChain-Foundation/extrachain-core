@@ -39,7 +39,7 @@ private:
 
     std::uint64_t     records = 0;
     const std::string folderPath =
-        fmt::format("{}/{}/", DataStorage::BLOCKCHAIN_INDEX, DataStorage::ACTOR_INDEX_FOLDER_NAME);
+        fmt::format("{}/{}/", BlockchainConst::BLOCKCHAIN_INDEX, BlockchainConst::ACTOR_INDEX_FOLDER_NAME);
     int16_t SECTION_NAME_SIZE = 2;
     ActorId m_firstId;
 

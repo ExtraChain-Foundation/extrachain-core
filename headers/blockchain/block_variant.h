@@ -26,16 +26,9 @@
 
 class BlockVariant {
 public:
-    explicit BlockVariant(std::variant<Block, GenesisBlock> block)
-        : m_block(std::move(block)) {
-    }
-
-    explicit BlockVariant(Block block)
-        : m_block(std::move(block)) {
-    }
-    explicit BlockVariant(GenesisBlock block)
-        : m_block(std::move(block)) {
-    }
+    explicit BlockVariant(std::variant<Block, GenesisBlock> block);
+    explicit BlockVariant(Block block);
+    explicit BlockVariant(GenesisBlock block);
 
     bool isEmpty() const;
 
@@ -48,8 +41,6 @@ public:
     Signatures             signatures() const;
     std::set<Transaction>  transactions() const;
     const GenesisDataRows& dataRows() const;
-
-    std::string toString() const;
 
     void setType(BlockType type);
     void setPrevHash(const std::string& prevHash);
@@ -75,6 +66,6 @@ public:
 
 private:
     std::variant<Block, GenesisBlock> m_block;
-};
 
-QDebug operator<<(QDebug debug, const BlockVariant& block);
+    BOOST_DESCRIBE_CLASS(BlockVariant, (), (), (), (m_block))
+};

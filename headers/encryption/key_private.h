@@ -19,8 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
-
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
@@ -75,5 +73,3 @@ public:
     MSGPACK_DEFINE(m_secretKey, m_publicKey)
     BOOST_DESCRIBE_CLASS(KeyPrivate, (), (), (), (m_secretKey, m_publicKey))
 };
-
-MAKE_MAGICAL(KeyPrivate)

@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
 #include <QObject>
 
 #include "blockchain/actor.h"
@@ -33,18 +32,13 @@ static const uint size_of_data_list = 7;
 struct TokenData {
     std::string token, owner, count, name, ticker, color, smart;
 
-    bool operator==(const TokenData& other) const {
-        return token == other.token &&
-               owner == other.owner &&
-               count == other.count &&
-               name == other.name &&
-               ticker == other.ticker &&
-               color == other.color &&
-               smart == other.smart;
+    bool operator==(const TokenData &other) const {
+        return token == other.token && owner == other.owner && count == other.count && name == other.name
+               && ticker == other.ticker && color == other.color && smart == other.smart;
     }
 
-           // Overload the inequality operator
-    bool operator!=(const TokenData& other) const {
+    // Overload the inequality operator
+    bool operator!=(const TokenData &other) const {
         return !(*this == other);
     }
 
@@ -74,18 +68,17 @@ public:
 
     bool isContract(const QString &pathFile);
 
-    static bool isValidName(const std::string &name);
-    static bool isValidTicker(const std::string &ticker);
+    static bool                   isValidName(const std::string &name);
+    static bool                   isValidTicker(const std::string &ticker);
     static QMap<QString, QString> mapTokens();
 
 public slots:
-    std::expected<TokenData, CreateTokenError> createToken(
-        const std::string &tokenCount,
-        const std::string &tokenName,
-        const std::string &symbol,
-        const ActorId     &owner,
-        const std::string &color);
-    void checkIsContract(const QString &pathToFile);
+    std::expected<TokenData, CreateTokenError> createToken(const std::string &tokenCount,
+                                                           const std::string &tokenName,
+                                                           const std::string &symbol,
+                                                           const ActorId     &owner,
+                                                           const std::string &color);
+    void                                       checkIsContract(const QString &pathToFile);
 
 protected:
     bool checkJsonObjectHasTokenFields(const QJsonObject &jsonObj);
@@ -93,10 +86,9 @@ protected:
 signals:
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateToken(const ActorId &actorId, const Transaction &tx);
-    void saveActorInPrivateProfile(
-        const QByteArray &id,
-        const QString    &type    = "wallet",
-        const bool       &rewrite = false);
+    void saveActorInPrivateProfile(const QByteArray &id,
+                                   const QString    &type    = "wallet",
+                                   const bool       &rewrite = false);
     void errorNameTokenExist(const QString &);
     void errorTickerTokenExist(const QString &);
     void added(const ActorId &owner, const TokenId &token);

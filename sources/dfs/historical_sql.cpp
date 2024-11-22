@@ -20,8 +20,7 @@
 #include "dfs/historical_sql.h"
 #include "utils/db_connector.h"
 
-HistoricalSql
-HistoricalSql::create(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std::string &file_id) {
+HistoricalSql HistoricalSql::create(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std::string &file_id) {
     HistoricalSql chain(actor, file_id);
 
     DbConnector db(chain.history_path);
@@ -31,21 +30,19 @@ HistoricalSql::create(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std
 
     using namespace sqlite::literals;
     auto history_schema = DbSchema("historical_chain");
-    history_schema.add_columns(
-        "id"_int.primary_key(),
-        "prevId"_int.unique().not_null(),
-        "actorId"_text,
-        "operation"_int.not_null().between(0, 3),
-        "data"_json.not_null(),
-        "timestamp"_int.not_null(),
-        "sign"_blob);
+    history_schema.add_columns("id"_int.primary_key(),
+                               "prevId"_int.unique().not_null(),
+                               "actorId"_text,
+                               "operation"_int.not_null().between(0, 3),
+                               "data"_json.not_null(),
+                               "timestamp"_int.not_null(),
+                               "sign"_blob);
     db.create_table(history_schema);
 
     return chain;
 }
 
-HistoricalSql
-HistoricalSql::load(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std::string &file_id) {
+HistoricalSql HistoricalSql::load(const std::shared_ptr<Actor<KeyPrivate>> &actor, const std::string &file_id) {
     HistoricalSql chain(actor, file_id);
     // check db exists
     return chain;

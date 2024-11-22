@@ -25,9 +25,6 @@
 #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
 
-#undef qCritical // temp
-#define qCritical qDebug
-
 Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)
     , */
@@ -37,8 +34,8 @@ Blockchain::Blockchain(ExtraChainNode *node)
 Blockchain::~Blockchain() {
 }
 
-std::expected<BlockVariant, BlockError>
-Blockchain::getBlockByIndex(const BigNumber &index, const bool makeRequestBlock) {
+std::expected<BlockVariant, BlockError> Blockchain::getBlockByIndex(const BigNumber &index,
+                                                                    const bool       makeRequestBlock) {
     auto block = blockIndex.getBlockById(index);
     if (!block.has_value())
         return std::unexpected(BlockError::NotExists);
@@ -87,11 +84,9 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
 void Blockchain::sync(const BigNumber &from) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
-    if (lastBlock.has_value())
-        removeBlock(lastBlock.value());
     if (fromBlock < 0)
         fromBlock = 0;
-    // qDebug() << "[Blockchain] Request sync from" << fromBlock;
+    // eLog("[Blockchain] Request sync from {}", fromBlock);
     node->network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
 }
 
@@ -105,7 +100,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
 
     if (lastIndex < fromBlock) {
         // this->sync();
-        qDebug() << "[Blockchain] No sync: lastIndex < fromBlock" << lastIndex << fromBlock;
+        eLog("{} {}", lastIndex, fromBlock);
         return;
     }
 
@@ -114,7 +109,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         from = 0;
 
     for (; from <= lastIndex; from++) {
-        // qDebug() << "[Blockchain] Send sync" << from;
+        // eLog("[Blockchain] Send sync {}", from);
         auto block = blockIndex.getBlockById(from);
 
         if (!block.has_value()) {
@@ -126,23 +121,21 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         }
 
         if (block->isGenesisBlock()) {
-            node->network()->send_message(
-                block->getGenesisBlockConst(),
-                MessageType::BlockchainGenesisBlock,
-                MessageStatus::Response,
-                messageId,
-                Config::Net::TypeSend::Focused);
+            node->network()->send_message(block->getGenesisBlockConst(),
+                                          MessageType::BlockchainGenesisBlock,
+                                          MessageStatus::Response,
+                                          messageId,
+                                          Config::Net::TypeSend::Focused);
         } else {
-            node->network()->send_message(
-                block->getBlockConst(),
-                MessageType::BlockchainNewBlock,
-                MessageStatus::Response,
-                messageId,
-                Config::Net::TypeSend::Focused);
+            node->network()->send_message(block->getBlockConst(),
+                                          MessageType::BlockchainNewBlock,
+                                          MessageStatus::Response,
+                                          messageId,
+                                          Config::Net::TypeSend::Focused);
         }
     }
 
-    // qDebug() << "[Blockchain] Send for sync: from" << fromBlock << "to" << lastIndex;
+    // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
 
 void Blockchain::lastSavedRequest() {
@@ -157,13 +150,12 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByReceiver(const ActorId &id,
     return blockIndex.getLastTxByReceiver(id, token);
 }
 
-std::pair<Transaction, BigNumber>
-Blockchain::getTxBySenderOrReceiver(const ActorId &id, const TokenId &token) {
+std::pair<Transaction, BigNumber> Blockchain::getTxBySenderOrReceiver(const ActorId &id, const TokenId &token) {
     return blockIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
-std::pair<Transaction, BigNumber>
-Blockchain::getTxBySenderOrReceiverAndToken(const ActorId &id, const TokenId &token) {
+std::pair<Transaction, BigNumber> Blockchain::getTxBySenderOrReceiverAndToken(const ActorId &id,
+                                                                              const TokenId &token) {
     return blockIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
@@ -180,8 +172,10 @@ BigNumber Blockchain::lastGenesisIdFor(const BigNumber &id) {
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
-std::set<Transaction>
-Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id, BigNumber from, int count, ActorId token) {
+std::set<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id,
+                                                                BigNumber        from,
+                                                                int              count,
+                                                                ActorId          token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
 
@@ -198,7 +192,7 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
         node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock);
     }
 
-    // qDebug() << "Send" << block;
+    // eLog("Send {}", block);
 
     return true;
 }
@@ -228,9 +222,9 @@ bool Blockchain::isGenesisId(const BigNumber &id) {
     return id == 0 || id % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0;
 }
 
-std::expected<BlockVariant, BlockError>
-Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    qDebug() << "Creating genesis block";
+std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(
+    const std::shared_ptr<Actor<KeyPrivate>> actor) {
+    eLog("Creating genesis block");
 
     if (blockIndex.getLastSavedId() == -1 || blockIndex.getRecords() == 0) {
         return std::unexpected(BlockError::EmptyBlockchain);
@@ -268,8 +262,7 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
             auto sender   = transaction.sender();
             auto receiver = transaction.receiver();
             auto tokenId  = transaction.token();
-            if (sender == ActorId()
-                || tokenId != TokenId() && transaction.type() == TransactionType::InitContract)
+            if (sender == ActorId() || tokenId != TokenId() && transaction.type() == TransactionType::InitContract)
                 lastDataRows[{ sender, tokenId }].state -= transaction.amount();
             lastDataRows[{ receiver, tokenId }].state += transaction.amount();
         }
@@ -280,10 +273,9 @@ Blockchain::createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     return BlockVariant(genesis);
 }
 
-std::expected<BlockVariant, BlockError>
-Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    if (blockIndex.getRecords() != 0 || blockIndex.getFirstSavedId() != 0
-        || blockIndex.getLastSavedId() != 0) {
+std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(
+    const std::shared_ptr<Actor<KeyPrivate>> actor) {
+    if (blockIndex.getRecords() != 0 || blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
         return std::unexpected(BlockError::Invalid);
     }
 
@@ -292,7 +284,7 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     // genesis.addRows(dataRows);
     GenesisDataInfo gdi;
     gdi.state = BigNumberFloat(0);
-    gdi.type  = DataStorage::DataRowType::Universal;
+    gdi.type  = BlockchainConst::DataRowType::Universal;
     genesis.addRow(ActorId(), ActorId(), gdi);
     genesis.addData(actor->id().to_string());
     genesis.sign(actor);
@@ -309,8 +301,8 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (existed->getType() == BlockType::Data) {
-        // qDebug() << "re" << received;
-        // qDebug() << "ex" << existed.value();
+        // eLog("re {}", received);
+        // eLog("ex {}", existed.value());
     }
 
     if (existed->isEmpty() || received.isEmpty()) {
@@ -322,7 +314,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (!canMergeBlocks(received, existed.value())) {
-        // qDebug() << "[Blockchain] Blocks with id" << receivedBlockIndex << "can't be merged";
+        // eLog("[Blockchain] Blocks with id {} can't be merged", receivedBlockIndex);
         return std::unexpected(BlockError::CantMerge);
     }
 
@@ -331,30 +323,29 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (received == existed && received.signatures() == existed->signatures()) {
-        // qDebug() << "[Blockchain] Blocks" << received.getIndex() << "are equal";
+        // eLog("[Blockchain] Blocks {} are equal", received.getIndex());
         return std::unexpected(BlockError::MergeEqual);
     }
 
-    qDebug() << "[Blockchain] Merging block" << received.getIndex();
-    auto merged = received.isBlock()
-                      ? mergeBlocks(received.getBlockConst().value(), existed->getBlockConst().value())
-                      : mergeGenesisBlocks(
-                            received.getGenesisBlockConst().value(),
-                            existed->getGenesisBlockConst().value());
+    eLog("[Blockchain] Merging block {}", received.getIndex());
+    auto merged =
+        received.isBlock()
+            ? mergeBlocks(received.getBlockConst().value(), existed->getBlockConst().value())
+            : mergeGenesisBlocks(received.getGenesisBlockConst().value(), existed->getGenesisBlockConst().value());
 
     if (!merged.has_value() || (merged.has_value() && merged->isEmpty())) {
         return std::unexpected(BlockError::CantMerge);
     }
 
     auto mergedVariant = BlockVariant(merged.value());
-    qDebug() << "me" << mergedVariant;
+    eLog("me {}", mergedVariant);
     this->replaceBlock(mergedVariant);
 
     return mergedVariant;
 }
 
-std::expected<BlockVariant, BlockError>
-Blockchain::getBlock(SearchEnum::BlockParam type, const std::string &value) {
+std::expected<BlockVariant, BlockError> Blockchain::getBlock(SearchEnum::BlockParam type,
+                                                             const std::string     &value) {
     switch (type) {
     case SearchEnum::BlockParam::Id:
         return getBlockByIndex(BigNumber(value));
@@ -367,8 +358,9 @@ Blockchain::getBlock(SearchEnum::BlockParam type, const std::string &value) {
     }
 }
 
-std::pair<Transaction, BigNumber>
-Blockchain::getTransaction(SearchEnum::TxParam type, const std::string &value, const TokenId &token) {
+std::pair<Transaction, BigNumber> Blockchain::getTransaction(SearchEnum::TxParam type,
+                                                             const std::string  &value,
+                                                             const TokenId      &token) {
     switch (type) {
     case SearchEnum::TxParam::UserSenderOrReceiverOrToken:
         return getTxBySenderOrReceiverAndToken(ActorId(value), token);
@@ -385,7 +377,7 @@ Blockchain::getTransaction(SearchEnum::TxParam type, const std::string &value, c
     case SearchEnum::TxParam::UserSenderOrReceiver:
         return getTxBySenderOrReceiver(ActorId(value), token);
     default:
-        qWarning() << "Can't get tx: incorrect SearchEnum::TxParam. Value:" << value;
+        eWarning("Can't get tx: incorrect SearchEnum::TxParam. Value: {}", value);
         return { Transaction(), BigNumber("-1") };
     }
 }
@@ -417,7 +409,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
     const auto blockId = block.getIndex();
     if (block.isGenesisBlock() && !Blockchain::isGenesisId(blockId)) {
-        qDebug() << "[Blockchain] Incorrect genesis";
+        eLog("[Blockchain] Incorrect genesis");
         // eFatal("Incorrect genesis");
         return std::unexpected(BlockError::Invalid);
     }
@@ -429,7 +421,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
         if (nextBlock.has_value()) {
-            qDebug() << "[Blockchain] Already chained";
+            eLog("[Blockchain] Already chained");
             return std::unexpected(BlockError::AlreadyChained);
         }
 
@@ -439,7 +431,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         }
 
         if (!block.isGenesisBlock() && blockId > prevBlock->getIndex() + 1) {
-            qDebug() << "[Blockchain] New block id is greater than last id, sync request";
+            eLog("[Blockchain] New block id is greater than last id, sync request");
             sync();
             return std::unexpected(BlockError::Invalid);
         }
@@ -447,22 +439,25 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
         auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : prevBlock->getHash();
         if (checkedPrevHash != expectedPrevHash) {
-            qDebug() << "[Blockchain] Can't chained, sync request";
-            // qDebug() << "jb" << block;
+            eLog("[Blockchain] Can't chained, sync request");
+            // eLog("jb {}", block);
             // if (lastBlock.has_value())
-            //     qDebug() << "lb" << lastBlock.value();
+            //     eLog("lb {}", lastBlock.value());
             // if (lastGenesis.has_value())
-            //     qDebug() << "lg" << lastGenesis.value();
+            //     eLog("lg {}", lastGenesis.value());
             // if (block.getType() != BlockType::Dummy)
+            if (lastRealBlock.has_value())
+                removeBlock(lastRealBlock.value());
+
             sync(blockId - 1); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }
     }
 
     if (block.getType() == BlockType::Genesis) {
-        // qDebug() << "[Blockchain] Adding a genesis block" << block.getIndex() << "to storage";
+        // eLog("[Blockchain] Adding a genesis block {} to storage", block.getIndex());
     } else {
-        // qDebug() << "[Blockchain] Adding a block" << block.getIndex() << "to storage" << block.getType();
+        // eLog("[Blockchain] Adding a block {} to storage {}", block.getIndex(), block.getType());
     }
 
     this->updateFirstId(block);
@@ -532,7 +527,7 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    qDebug() << "[Blockchain] Attempting to merge" << blockA << "and" << blockB;
+    eLog("[Blockchain] Attempting to merge {} and {}", blockA, blockB);
 
     if (blockA.getIndex() == 0) {
         return std::unexpected(BlockError::CantMerge);
@@ -586,9 +581,9 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlocks(const Block &blo
     return mergedVariant;
 }
 
-std::expected<BlockVariant, BlockError>
-Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB) {
-    qDebug() << "[Blockchain] Attempting to merge" << blockA << "and" << blockB;
+std::expected<BlockVariant, BlockError> Blockchain::mergeGenesisBlocks(const GenesisBlock &blockA,
+                                                                       const GenesisBlock &blockB) {
+    eLog("[Blockchain] Attempting to merge {} and {}", blockA, blockB);
 
     if (blockA.getIndex() == 0) {
         return std::unexpected(BlockError::CantMerge);
@@ -712,10 +707,10 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
 }
 
 void Blockchain::showBlockchain() const {
-    qDebug() << "[Blockchain] Show blockchain:";
+    eLog("[Blockchain] Show blockchain:");
 
     auto genBlock = blockIndex.getLastGenesisBlock();
-    qDebug() << "Last genesis:" << *genBlock.value().getGenesisBlock();
+    // eLog("Last genesis: {}", genBlock);
 
     int i = 0;
 
@@ -723,25 +718,25 @@ void Blockchain::showBlockchain() const {
     //     auto currentBlock = blockIndex.getBlockById(i);
 
     //     if (currentBlock->isGenesisBlock())
-    //         qDebug() << currentBlock->getGenesisBlockConst();
+    //         eLog("{}", currentBlock->getGenesisBlockConst());
     //     else
-    //         qDebug() << currentBlock->getBlock();
+    //         eLog("{}", currentBlock->getBlock());
 
     //     i++;
     // } while (!currentBlock.isEmpty());
 }
 
 BigNumber Blockchain::getBlockCount() {
-    qDebug() << "[Blockchain] Count:" << this->blockIndex.getLastSavedId();
+    eLog("[Blockchain] Count: {}", this->blockIndex.getLastSavedId());
     return this->blockIndex.getLastSavedId();
 }
 
 void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &messageId) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
-        // qDebug() << "!!!!!!!!!!!";
+        // eLog("!!!!!!!!!!!");
     }
     if (block.getType() == BlockType::Data) {
-        // qDebug() << "???????";
+        // eLog("???????");
     }
 
     auto lastBlock = this->getLastBlock();
@@ -761,12 +756,11 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
             if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
                 syncResponse(block.getIndex(), messageId);
             } else {
-                node->network()->send_message(
-                    "",
-                    MessageType::BlockchainAnarchy,
-                    MessageStatus::Response,
-                    messageId,
-                    Config::Net::TypeSend::Focused);
+                node->network()->send_message("",
+                                              MessageType::BlockchainAnarchy,
+                                              MessageStatus::Response,
+                                              messageId,
+                                              Config::Net::TypeSend::Focused);
             }
 
             return;
@@ -817,9 +811,9 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
 }
 
 // Actors //
-TransactionProveError
-Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> transactions) {
-    // qDebug() << "[Blockchain] Transaction prove started:" << tx;
+TransactionProveError Blockchain::proveTransaction(const Transaction          &tx,
+                                                   const std::set<Transaction> transactions) {
+    // eLog("[Blockchain] Transaction prove started: {}", tx);
 
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
@@ -927,13 +921,13 @@ Blockchain::proveTransaction(const Transaction &tx, const std::set<Transaction> 
     //    if (!senderActor.key().verify(tx->getDataForSignature().toStdString(),
     //    tx->getSignature().toStdString()))
     //    {
-    //        qDebug() << "Tx" << tx->getHash() << "not approved: bad signature";
+    //        eLog("Tx {} not approved: bad signature", tx->getHash());
     //        return TransactionProveError::InvalidSignature;
     //    }
 
     // special conditions: receiver is null - coins burning, contract creation
     if (targetReceiver.is_zero()) {
-        qDebug() << "target received is empty";
+        eLog("target received is empty");
 
         // Transaction provedTx(tx);
         // provedTx.sign(node->accountController()->currentWallet());
@@ -997,5 +991,5 @@ BlockIndex &Blockchain::getBlockIndex() {
 
 void Blockchain::removeAll() {
     this->blockIndex.removeAll();
-    QFile(QString::fromStdString(DataStorage::TMP_GENESIS_BLOCK)).remove();
+    QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
 }

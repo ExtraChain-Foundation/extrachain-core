@@ -39,7 +39,7 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase ba
             }
         }
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumberFloat value:" << bigNumberFloat.c_str();
+        eLog("Incorrect BigNumberFloat value: {}", bigNumberFloat);
         assert(false);
     }
 
@@ -237,8 +237,7 @@ std::string BigNumberFloat::to_string(NumeralBase numSystem) const {
 
         BigNumber one(integer_part, NumeralBase::Dec);
         BigNumber two(fractional_part, NumeralBase::Dec);
-        return one.to_string(NumeralBase::Hex) + "." + std::string(zeros, '0')
-               + two.to_string(NumeralBase::Hex);
+        return one.to_string(NumeralBase::Hex) + "." + std::string(zeros, '0') + two.to_string(NumeralBase::Hex);
     } else {
         throw std::invalid_argument("Unsupported base");
     }
@@ -254,8 +253,8 @@ BigNumberFloat BigNumberFloat::abs() const {
     return BigNumberFloat(res);
 }
 
-std::expected<BigNumberFloat, BigNumberError>
-BigNumberFloat::create(const std::string &bigNumberFloat, NumeralBase base) {
+std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::string &bigNumberFloat,
+                                                                     NumeralBase        base) {
     if (bigNumberFloat == "inf") {
         return std::unexpected(BigNumberError::Infinity);
     }
@@ -290,17 +289,17 @@ BigNumberFloat BigNumberFloat::from_hex(const std::string &number) {
     size_t    zeros = sizeBefore - fractional_part.size();
     BigNumber one(integer_part, NumeralBase::Hex);
     BigNumber two(fractional_part, NumeralBase::Hex);
-    return BigNumberFloat(
-        one.to_string(NumeralBase::Dec) + "." + std::string(zeros, '0') + two.to_string(NumeralBase::Dec),
-        NumeralBase::Dec);
+    return BigNumberFloat(one.to_string(NumeralBase::Dec) + "." + std::string(zeros, '0')
+                              + two.to_string(NumeralBase::Dec),
+                          NumeralBase::Dec);
 }
 
 namespace magic {
-std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
-    return value.to_string(NumeralBase::Hex);
-}
+    std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
+        return value.to_string(NumeralBase::Hex);
+    }
 
-BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
-    return BigNumberFloat(value);
-}
+    BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
+        return BigNumberFloat(value);
+    }
 } // namespace magic

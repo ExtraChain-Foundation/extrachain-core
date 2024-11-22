@@ -70,16 +70,3 @@ public: // slots:
 private:
     static QString normalizeFileName(const QString& file);
 };
-
-struct UnicodedStream : QTextStream {
-    using QTextStream::QTextStream;
-
-    template <typename T>
-    UnicodedStream& operator<<(T const& t) {
-        return static_cast<UnicodedStream&>(static_cast<QTextStream&>(*this) << t);
-    }
-
-    UnicodedStream& operator<<(char const* ptr) {
-        return static_cast<UnicodedStream&>(*this << QString(ptr));
-    }
-};

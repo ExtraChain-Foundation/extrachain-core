@@ -38,12 +38,11 @@ class DataMiningManager : public QObject {
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
 
-    BigNumberFloat calculateCoins(
-        BigNumberFloat dataAmountStored,
-        BigNumberFloat dataAmountTotalStoredInNetwork,
-        BigNumberFloat circulativeSupply,
-        BigNumberFloat blockAmount,
-        double         coefficient);
+    BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored,
+                                  BigNumberFloat dataAmountTotalStoredInNetwork,
+                                  BigNumberFloat circulativeSupply,
+                                  BigNumberFloat blockAmount,
+                                  double         coefficient);
 
     /**
      * @brief Reward request

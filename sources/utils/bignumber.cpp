@@ -48,7 +48,7 @@ BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
             }
         }
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
+        eLog("Incorrect BigNumber value: {}", bigNumber);
         assert(false);
     }
 
@@ -290,7 +290,7 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
         }
         return bn;
     } catch (std::exception &) {
-        qDebug() << "Incorrect BigNumber value:" << bigNumber.c_str();
+        eLog("Incorrect BigNumber value: {}", bigNumber);
         assert(false);
         return std::unexpected(BigNumberError::InvalidNumber);
     }
@@ -321,11 +321,11 @@ bool BigNumber::operator==(const int &other) const {
 }
 
 namespace magic {
-std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-    return value.to_string(NumeralBase::Hex);
-}
+    std::string custom_magic<BigNumber>::read(const BigNumber &value) {
+        return value.to_string(NumeralBase::Hex);
+    }
 
-BigNumber custom_magic<BigNumber>::write(const std::string &value) {
-    return BigNumber(value);
-}
+    BigNumber custom_magic<BigNumber>::write(const std::string &value) {
+        return BigNumber(value);
+    }
 } // namespace magic

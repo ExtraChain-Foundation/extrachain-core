@@ -20,11 +20,12 @@
 #include "managers/token_manager.h"
 
 #include <QString>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "blockchain/transaction.h"
-#include "encryption/key_private.h"
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 
@@ -42,7 +43,7 @@ TokenManager::TokenManager(ExtraChainNode *node)
 bool TokenManager::isContract(const QString &pathFile) {
     QFile file(pathFile);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qDebug() << "Can not open file " << pathFile << ".";
+        eLog("Can not open file {}", pathFile);
         return false;
     }
 
@@ -89,7 +90,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {
-        qWarning() << "Database doesn't opened.";
+        eWarning("Database doesn't opened");
         return map;
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
@@ -102,10 +103,9 @@ QMap<QString, QString> TokenManager::mapTokens() {
     return map;
 }
 
-void TokenManager::sendInitialTransaction(
-    const ActorId        &owner,
-    const TokenId        &token,
-    const BigNumberFloat &amount) {
+void TokenManager::sendInitialTransaction(const ActorId        &owner,
+                                          const TokenId        &token,
+                                          const BigNumberFloat &amount) {
     Transaction tx;
     tx.setSender(owner);
     tx.setReceiver(owner);
@@ -128,7 +128,7 @@ void TokenManager::initializeTokenArray() {
     //         QByteArray data = file.readLine();
     //         auto deserializedDataList = Serialization::deserialize(data.toStdString());
     //         if (deserializedDataList.size() != size_of_data_list) {
-    //             qDebug() << "[TokenManager] Error when open file " << file.fileName() << " list size !=7";
+    //             eLog("[TokenManager] Error when open file {}, list size !=7", file.fileName());
     //             return;
     //         }
     //         file.close();
@@ -144,21 +144,19 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
         return false;
     }
 
-    auto countRow = db.count(
-        Token::TOKEN_TABLE_NAME,
-        fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
-    qDebug() << "[TokenManager] Name: count row:" << countRow;
+    auto countRow =
+        db.count(Token::TOKEN_TABLE_NAME, fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
+    eLog("[TokenManager] Name: count row: {}", countRow);
     return countRow > 0;
 }
 
-std::expected<TokenData, CreateTokenError> TokenManager::createToken(
-    const std::string &count,
-    const std::string &name,
-    const std::string &ticker,
-    const ActorId     &owner,
-    const std::string &color) {
+std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::string &count,
+                                                                     const std::string &name,
+                                                                     const std::string &ticker,
+                                                                     const ActorId     &owner,
+                                                                     const std::string &color) {
     if (!node->network()->isActiveConnectionExists()) {
-        qDebug() << "[TokenManager] No connections";
+        eLog("[TokenManager] No connections");
     }
 
     auto countBn = BigNumberFloat::create(count, NumeralBase::Dec);
@@ -168,17 +166,27 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     }
 
     if (countBn.value() < 0 || countBn.value() >= Token::MAX_TOKEN_COUNT) {
-        qDebug() << "[TokenManager] Error create token. Count:" << count << "| name:" << name
-                 << "| ticker:" << ticker << "| rull address:" << owner << "| color:" << color;
+        eLog(
+            "[TokenManager] Error create token. Count: {} | name: {} | ticker: {} | rull address: {} | "
+            "color: {}",
+            count,
+            name,
+            ticker,
+            owner,
+            color);
         return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
-    qDebug() << "[TokenManager] Create token. Count:" << count << "| name:" << name << "| ticker:" << ticker
-             << "| rull address:" << owner << "| color:" << color;
+    eLog("[TokenManager] Create token. Count: {} | name: {} | ticker: {} | rull address: {} | color: {}",
+         count,
+         name,
+         ticker,
+         owner,
+         color);
 
     if (!isValidName(name) || !isValidTicker(ticker)) {
-        qDebug() << "[TokenManager] Incorrecnt name:" << isValidName(name) << isValidTicker(ticker);
-        qDebug() << "[TokenManager] Incorrecnt name. Name:" << name << "| ticker:" << ticker;
+        eLog("[TokenManager] Incorrecnt name: {} {}", isValidName(name), isValidTicker(ticker));
+        eLog("[TokenManager] Incorrecnt name. Name: {} | ticker: {}", name, ticker);
         emit errorNameTokenExist("name");
         return std::unexpected(CreateTokenError::InvalidName);
     }
@@ -186,7 +194,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
     auto upperTokenName = Utils::str_to_upper(name);
     auto tickerSymbol   = Utils::str_to_upper(ticker);
     if (upperTokenName == "EXTRACOIN" || tickerSymbol == "EXC" || tokenExist(name, ticker)) {
-        qDebug() << "[TokenManager] Name or ticker exists";
+        eLog("[TokenManager] Name or ticker exists");
         emit errorNameTokenExist("exists");
         return std::unexpected(CreateTokenError::ExistToken);
     }
@@ -209,7 +217,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
         DbRow rowRow = tokenData.toDBRow();
 
         const bool inserted = db.insert(Token::TOKEN_TABLE_NAME, rowRow);
-        qDebug() << "Inserted token into db:" << (inserted ? "success" : "failed") << ".";
+        eLog("Inserted token into db: {}", (inserted ? "success" : "failed"));
     }
 
     QFile fileSaveJson(jsonFilePath);
@@ -221,8 +229,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
 
         emit sendToken(actor.id(), jsonFilePath);
     } else {
-        qDebug() << "[TokenManager] Error save json into file. File" << fileSaveJson.fileName()
-                 << " not open.";
+        eLog("[TokenManager] Error save json into file. File {} not open", fileSaveJson.fileName());
     }
 
     sendInitialTransaction(owner, TokenId(tokenData.token), BigNumberFloat(count, NumeralBase::Dec));
@@ -247,8 +254,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 return;
 
             DbRow rowRow;
-            rowRow.insert(
-                { "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
+            rowRow.insert({ "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
             rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
             rowRow.insert(
@@ -263,7 +269,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 bool        isDbOpen = db.open();
                 if (isDbOpen) {
                     const bool inserted = db.insert(Token::TOKEN_TABLE_NAME, rowRow);
-                    qDebug() << "Inserted token into db - " << (inserted ? "success" : "failed") << ".";
+                    eLog("Inserted token into db: {}", (inserted ? "success" : "failed"));
                     emit newToken();
                 }
             }
@@ -274,7 +280,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
 bool TokenManager::checkJsonObjectHasTokenFields(const QJsonObject &jsonObj) {
     for (const std::string &field : Token::Fields::fields) {
         if (!jsonObj.contains(field.c_str())) {
-            qWarning() << "JSON contract doesn't has this field:" << field;
+            eWarning("JSON contract doesn't has this field: {}", field);
             return false;
         }
     }

@@ -32,6 +32,7 @@
 
 #include <string>
 #include <string_view>
+#include <random>
 
 #include <sodium.h>
 
@@ -40,36 +41,34 @@
 
 #include "cpp-base64/base64.cpp"
 #include "encryption/encryption_tools.h"
-#include "managers/data_mining_manager.h"
+// #include "managers/data_mining_manager.h"
 #include "sha3.h"
+#include "blake3.h"
 #include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
 #endif
 
-std::string Utils::calcHash(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Sha3_512: {
+std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
+    switch (hash_algorithm) {
+    case HashAlgorithm::Sha3_512: {
         SHA3 sha3(SHA3::Bits::Bits512);
-        res = sha3(data);
-        break;
+        return sha3(data);
     }
-    case HashEncode::Base64: {
-        res = Utils::to_base64(data);
-        break;
+    case HashAlgorithm::Blake3: {
+        blake3_hasher hasher;
+        blake3_hasher_init(&hasher);
+        blake3_hasher_update(&hasher, data.data(), data.size());
+
+        uint8_t hash[BLAKE3_OUT_LEN];
+        blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+
+        return fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
     }
-    case HashEncode::Hex: {
-        qDebug() << "Hex encode not supported!";
-        break;
+    default:
+        eFatal("Unknown hash algorithm");
     }
-    default: {
-        qDebug() << "This encode not supported!";
-        break;
-    }
-    }
-    return res;
 }
 
 // SERIALIZATION //
@@ -93,15 +92,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c) {
     if (start != end)
         v.emplace_back(start, end);
     return v;
-}
-
-int Utils::compare(const QByteArray &one, const QByteArray &two) {
-    if (one.size() > two.size()) {
-        return one.size() - two.size();
-    } else if (one.size() == two.size()) {
-        return static_cast<int>(one == two);
-    } else
-        return two.size() - one.size();
 }
 
 template <>
@@ -183,11 +173,10 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-void Utils::rootMerkleHash(
-    std::vector<std::string>      &listHashes,
-    std::vector<MerkleDataBlocks> &branchesTree,
-    const bool                     isHahsing,
-    std::string                   &result) {
+void Utils::rootMerkleHash(std::vector<std::string>      &listHashes,
+                           std::vector<MerkleDataBlocks> &branchesTree,
+                           const bool                     isHahsing,
+                           std::string                   &result) {
     if (listHashes.empty()) {
         eFatal("Root merkle hash: list is empty");
     };
@@ -221,8 +210,8 @@ std::string Utils::rootMerkleHash(std::string &data) {
     return result;
 }
 
-std::vector<Utils::MerkleDataBlocks>
-Utils::splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing) {
+std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::string> &vector,
+                                                              const bool                isHahsing) {
     std::vector<MerkleDataBlocks> result;
 
     if (vector.empty())
@@ -264,35 +253,64 @@ Utils::splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing)
 
 void Utils::hashingElements(std::vector<std::string> &vector) {
     for (int i = 0; i < vector.size(); i++) {
-        vector[i] = Utils::calcHash(vector[i]);
+        vector[i] = Utils::calculate_hash(vector[i]);
     }
 }
 
 std::string Utils::merkleFormula(const std::string &hash1, const std::string &hash2) {
-    return Utils::calcHash(hash1 + hash2);
+    return Utils::calculate_hash(hash1 + hash2);
 }
 
-std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
-    QFile file(QString::fromStdWString(fileName.wstring()));
-    if (file.open(QFile::ReadOnly)) {
-        SHA3 sha3(SHA3::Bits::Bits512);
-        while (!file.atEnd()) {
-            QByteArray data = file.read(1024);
-            sha3.add(data.data(), data.length());
-        }
-        return sha3.getHash();
+std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(const FsPath &path) {
+    auto exists_result = path.exists();
+    if (!exists_result) {
+        return std::unexpected(FileHashError::FileNotFound);
+    }
+    if (!*exists_result) {
+        return std::unexpected(FileHashError::FileNotFound);
     }
 
-    eFatal("Utils::calcHashForFile");
-    qDebug() << "[Utils] Calc hash for file: can't open file" << fileName.c_str();
-    return "";
+    auto has_read = path.has_read_permission();
+    if (!has_read) {
+        return std::unexpected(FileHashError::AccessError);
+    }
+    if (!*has_read) {
+        return std::unexpected(FileHashError::AccessError);
+    }
+
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
+    constexpr size_t     BUFFER_SIZE = 64 * 1024;
+    std::vector<uint8_t> buffer(BUFFER_SIZE);
+
+    FILE *file = fopen(path.native().string().c_str(), "rb");
+    if (!file) {
+        return std::unexpected(FileHashError::ReadError);
+    }
+
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer.data(), 1, buffer.size(), file)) > 0) {
+        blake3_hasher_update(&hasher, buffer.data(), bytes_read);
+        if (ferror(file)) {
+            fclose(file);
+            return std::unexpected(FileHashError::ReadError);
+        }
+    }
+
+    fclose(file);
+
+    uint8_t hash[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+
+    auto result = fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
+    return result;
 }
 
-bool Utils::encryptFile(
-    const QString    &originalName,
-    const QString    &encryptName,
-    const QByteArray &key,
-    int               blockSize) {
+bool Utils::encryptFile(const QString    &originalName,
+                        const QString    &encryptName,
+                        const QByteArray &key,
+                        int               blockSize) {
     QFile orig(originalName);
     if (!orig.exists())
         return false;
@@ -300,30 +318,27 @@ bool Utils::encryptFile(
     bool  origOpen    = orig.open(QFile::ReadOnly);
     bool  encryptOpen = encrypt.open(QFile::WriteOnly);
     if (!origOpen || !encryptOpen) {
-        qDebug() << "[Utils::encryptFile] Error while loading files" << origOpen << encryptOpen;
+        eLog("[Utils::encryptFile] Error while loading files {} {}", origOpen, encryptOpen);
         return false;
     }
     auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!orig.atEnd()) {
-        QByteArray part = orig.read(blockSize);
-        QByteArray encrypted =
-            ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
+        QByteArray part      = orig.read(blockSize);
+        QByteArray encrypted = ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         encrypt.write(encrypted);
-        // qDebug() << "encrypted" << part.size() << encrypted.size();
+        // eLog("encrypted {} {}", part.size(), encrypted.size());
     }
 
-    qDebug() << "[DFS] Encrypted file" << originalName << "to" << encryptName << "with sizes" << orig.size()
-             << encrypt.size();
+    eLog("[Dfs] Encrypted file {} to {} with sizes {} {}", originalName, encryptName, orig.size(), encrypt.size());
     orig.close();
     encrypt.close();
     return QFile::exists(encryptName);
 }
 
-bool Utils::decryptFile(
-    const QString    &encryptName,
-    const QString    &decryptName,
-    const QByteArray &key,
-    int               blockSize) //
+bool Utils::decryptFile(const QString    &encryptName,
+                        const QString    &decryptName,
+                        const QByteArray &key,
+                        int               blockSize) //
 {
     blockSize = (blockSize / 8 + 1) * 8;
     QFile encrypt(encryptName);
@@ -334,49 +349,20 @@ bool Utils::decryptFile(
     bool encryptOpen = encrypt.open(QFile::ReadOnly);
     bool decryptOpen = decrypt.open(QFile::WriteOnly);
     if (!encryptOpen || !decryptOpen) {
-        qDebug() << "[Utils::encryptFile] Error while loading files" << encryptOpen << decryptOpen;
+        eLog("[Utils::decryptFile] Error while loading files {} {}", encryptOpen, decryptOpen);
         return false;
     }
     auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!encrypt.atEnd()) {
-        QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted =
-            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
+        QByteArray part      = encrypt.read(blockSize);
+        QByteArray decrypted = ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         decrypt.write(decrypted);
-        qDebug() << "decrypted" << part.size() << decrypted.size();
+        eLog("Utils::decryptFile] Decrypted {} {}", part.size(), decrypted.size());
     }
 
     encrypt.close();
     decrypt.close();
     return QFile::exists(decryptName);
-}
-
-QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize) {
-    blockSize = (blockSize / 8 + 1) * 8;
-
-    if (!QFileInfo::exists(encryptName)) {
-        return QByteArray();
-    }
-
-    QFile encrypt(encryptName);
-    if (!encrypt.open(QFile::ReadOnly)) {
-        qDebug() << "[Utils::encryptFile] Error while loading file:" << encrypt.error()
-                 << encrypt.errorString();
-        return QByteArray();
-    }
-
-    QByteArray result;
-    auto       rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
-
-    while (!encrypt.atEnd()) {
-        QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted =
-            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
-        result.append(decrypted);
-        qDebug() << "decrypted" << part.size() << decrypted.size();
-    }
-
-    return result;
 }
 
 QString Utils::fileMimeType(const QString &filePath) {
@@ -395,7 +381,7 @@ std::string Serialization::serialize(const std::vector<std::string> &list) {
     std::string              res;
     std::vector<std::string> reslist;
     for (int i = 0; i < list.size(); i++) {
-        reslist.push_back(Utils::bytesEncodeStdString(list.at(i)));
+        reslist.push_back(Utils::to_base64(list.at(i)));
     }
     res = boost::algorithm::join(reslist, "|");
     return res;
@@ -406,10 +392,10 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
     std::vector<std::string> reslist;
     boost::algorithm::split(templist, serialized, boost::algorithm::is_any_of("|"));
     if (templist.empty()) {
-        qDebug() << "decerialize error - empty list after split";
+        eLog("deserialize error: empty list after split");
     }
     for (int i = 0; i < templist.size(); i++) {
-        reslist.push_back(Utils::bytesDecodeStdString(templist.at(i)));
+        reslist.push_back(Utils::from_base64(templist.at(i)));
     }
     return reslist;
 }
@@ -421,18 +407,19 @@ void Utils::wipeDataFiles() {
     QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
     QDir("keystore").removeRecursively();
     QDir("tmp").removeRecursively();
+    QDir("encrypt").removeRecursively();
+    QDir("tokens").removeRecursively();
     QFile(".settings").remove();
     QFile(".auth_hash").remove();
 
     QDir dir(QDir::currentPath());
     dir.cdUp();
     QDir::setCurrent(dir.canonicalPath());
-    QString dataName = Utils::dataDir();
-    QDir(dataName).removeRecursively();
-    QDir().mkpath(dataName);
+    // QString dataName = Utils::dataDir();
+    // QDir(dataName).removeRecursively();
+    // QDir().mkpath(dataName);
 
-    QString shareFolder =
-        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
+    QString shareFolder = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
     QDir(shareFolder).removeRecursively();
 
     QDir::setCurrent(current);
@@ -457,25 +444,7 @@ QString Utils::dataDir(const QString &newDir) {
     return current;
 }
 
-bool Serialization::isEmpty(const QByteArray &bytes) {
-    return bytes.isEmpty();
-}
-
-bool Serialization::isEmpty(const std::string &str) {
-    return str.empty();
-}
-
-bool Serialization::isEmpty(std::string_view str_view) {
-    return str_view.empty();
-}
-
-QDebug operator<<(QDebug d, const Notification &n) {
-    d.noquote().nospace() << "Notification(time: " << QString::number(n.time)
-                          << ", type: " << QString::number(n.type) << ", data: \"" << n.data << "\")";
-    return d;
-}
-
-std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
+std::string Utils::to_hex(std::vector<unsigned char> &data) {
     size_t            psize = data.size() * 2 + 1;
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
@@ -484,12 +453,12 @@ std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
     return s;
 }
 
-std::string Utils::byteToHexString(const std::string &data) {
+std::string Utils::to_hex(const std::string &data) {
     std::vector<unsigned char> v(data.begin(), data.end());
-    return byteToHexString(v);
+    return to_hex(v);
 }
 
-std::string Utils::hexStringToByte(const std::string &data) {
+std::string Utils::from_hex(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);
     const char *end;
@@ -499,32 +468,6 @@ std::string Utils::hexStringToByte(const std::string &data) {
     if (r == 0) {
         res = std::string(p.begin(), p.end());
         res.resize(res.size() - 1);
-    }
-    return res;
-}
-
-std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Base64:
-        return Utils::to_base64(data);
-    case HashEncode::Hex:
-        break;
-    case HashEncode::Sha3_512:
-        break;
-    }
-    return res;
-}
-
-std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Base64:
-        return Utils::from_base64(data);
-    case HashEncode::Hex:
-        break;
-    case HashEncode::Sha3_512:
-        break;
     }
     return res;
 }
@@ -594,9 +537,9 @@ QString Utils::detectCompiler() {
 }
 
 QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
-    const auto          allInterfaces = QNetworkInterface::allInterfaces();
-    const QHostAddress &localhost     = QHostAddress(QHostAddress::LocalHost);
-    QList<QHostAddress> localIpNotConnect;
+    const auto                allInterfaces = QNetworkInterface::allInterfaces();
+    const QHostAddress       &localhost     = QHostAddress(QHostAddress::LocalHost);
+    std::vector<QHostAddress> localIpNotConnect;
 
     for (const QNetworkInterface &networkInterface : allInterfaces) {
         const auto entries = networkInterface.addressEntries();
@@ -604,10 +547,10 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
         for (const QNetworkAddressEntry &address : entries) {
             if (address.ip().protocol() == QAbstractSocket::IPv4Protocol && address.ip() != localhost) {
                 if (debug == PrintDebug::On) {
-                    qDebug() << "[FindLocalIp] Find local ip candidate:" << networkInterface;
+                    eLog("[FindLocalIp] Find local ip candidate: {}", networkInterface);
                 }
 
-                localIpNotConnect.append(address.ip());
+                localIpNotConnect.push_back(address.ip());
             }
         }
     }
@@ -633,7 +576,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
                     continue;
             }
 
-            if (localIpNotConnect.contains(entry.ip())) {
+            if (Utils::vector_contains(localIpNotConnect, entry.ip())) {
                 QString name = networkInterface.name();
 
                 if (name.left(2) == "vm")
@@ -646,7 +589,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
         }
     }
 
-    qCritical() << "[Network] Can't find local ip, set 0.0.0.0";
+    eCritical("[Network] Can't find local ip, set 0.0.0.0");
     QNetworkAddressEntry entry;
     entry.setIp(QHostAddress::AnyIPv4);
     return entry;
@@ -671,7 +614,7 @@ void Utils::benchmark(std::function<void()> func, int count) {
         for (int i = 0; i != count; i++) {
             func();
         }
-        qDebug() << timer.elapsed() << "ms";
+        eLog("{} ms", timer.elapsed());
     }
 }
 

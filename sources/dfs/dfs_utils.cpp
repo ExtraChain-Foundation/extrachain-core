@@ -54,15 +54,16 @@ std::filesystem::path Dfs::Tables::ActorDirFile::actorDbPath(const ActorId &acto
     return path;
 }
 
-std::filesystem::path
-Dfs::Tables::ActorDirFile::storjDbPath(const ActorId &actorId, const std::string &storjName) {
+std::filesystem::path Dfs::Tables::ActorDirFile::storjDbPath(const ActorId     &actorId,
+                                                             const std::string &storjName) {
     std::string path = DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string()
                        + Utils::platformDelimeter() + storjName;
     return path;
 }
 
-std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError>
-Dfs::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t lastModified) {
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::getDirRows(
+    const ActorId &actorId,
+    std::uint64_t  lastModified) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
@@ -83,8 +84,8 @@ Dfs::Tables::ActorDirFile::getDirRows(const ActorId &actorId, std::uint64_t last
     return dirRows;
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError>
-Dfs::Tables::ActorDirFile::getDirRow(const ActorId &actorId, const std::string &fileId) {
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::getDirRow(const ActorId     &actorId,
+                                                                               const std::string &fileId) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
@@ -184,8 +185,8 @@ int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     return std::stoi(row["SUM(size)"]);
 }
 
-std::uint64_t
-Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId &actorId, const std::string &storjName) {
+std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     &actorId,
+                                                              const std::string &storjName) {
     DbConnector db(storjDbPath(actorId, storjName).string());
     db.open();
     if (!db.is_open()) {

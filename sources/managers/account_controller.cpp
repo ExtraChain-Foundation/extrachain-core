@@ -41,7 +41,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     addToProfileList(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
-    qDebug() << "[Accounts] Created new profile:" << actor.id();
+    eLog("[Accounts] Created new profile: {}", actor.id());
 
     node->start(); // TODO: remove
 
@@ -51,8 +51,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, Acto
     return actor;
 }
 
-Actor<KeyPrivate>
-AccountController::createWallet(const ActorId &profileActor, const std::string &walletName) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &walletName) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
@@ -71,10 +70,9 @@ Actor<KeyPrivate> AccountController::createService(const ActorId &profileActor) 
     return actor;
 }
 
-void AccountController::renameWallet(
-    const ActorId     &profileActor,
-    const ActorId     &actorId,
-    const std::string &walletName) {
+void AccountController::renameWallet(const ActorId     &profileActor,
+                                     const ActorId     &actorId,
+                                     const std::string &walletName) {
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     profile.renameWallet(actorId, walletName);
 }
@@ -171,7 +169,7 @@ const std::shared_ptr<Actor<KeyPrivate>> AccountController::currentWallet() cons
 void AccountController::clear() {
     m_profiles.clear();
     m_currentProfile = ActorId();
-    qDebug() << "[AccountController] Cleared";
+    eLog("[AccountController] Cleared");
 }
 
 std::vector<ActorId> AccountController::profilesList() {

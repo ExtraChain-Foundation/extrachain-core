@@ -19,8 +19,6 @@
 
 #pragma once
 
-#include <QDebug>
-
 #include "blockchain/actor.h"
 #include "blockchain/private_profile.h"
 #include "utils/autologinhash.h"
@@ -34,6 +32,7 @@ class ExtraChainNode;
  */
 class EXTRACHAIN_EXPORT AccountController : public QObject {
     Q_OBJECT
+
 public:
     explicit AccountController(ExtraChainNode *node);
 
@@ -42,8 +41,8 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate>
-    createWallet(const ActorId &profileActor = ActorId(), const std::string &walletName = std::string());
+    Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
+                                   const std::string &walletName   = std::string());
     // createDAppMaster
     Actor<KeyPrivate> createService(const ActorId &profileActor = ActorId());
 
@@ -60,23 +59,23 @@ public:
      */
     const PrivateProfile &currentProfile() const;
 
-    int count() const;
+    int  count() const;
     bool empty() const;
     void changeCurrentProfile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &accounts() const; // temp
-    const std::vector<ActorId> accountsIds() const;
-    const std::shared_ptr<Actor<KeyPrivate>> currentWallet() const; // temp
-    void clear();
+    const std::vector<ActorId>                             accountsIds() const;
+    const std::shared_ptr<Actor<KeyPrivate>>               currentWallet() const; // temp
+    void                                                   clear();
 
     static std::vector<ActorId> profilesList();
-    void addToProfileList(const ActorId &actorId);
+    void                        addToProfileList(const ActorId &actorId);
 
 private:
     ExtraChainNode *node;
-    AutologinHash autologinHash;
+    AutologinHash   autologinHash;
 
     std::vector<PrivateProfile> m_profiles;
-    ActorId m_currentProfile;
+    ActorId                     m_currentProfile;
 };

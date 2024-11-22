@@ -57,20 +57,14 @@ Bytes KeyPrivate::decrypt(const Bytes &data, const PublicKey &senderPublicKey, c
 
 Bytes KeyPrivate::encryptSelf(const Bytes &data) const {
     Nonce nonce;
-    std::copy_n(
-        m_secretKey.begin(),
-        std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()),
-        nonce.begin());
+    std::copy_n(m_secretKey.begin(), std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()), nonce.begin());
 
     return this->encrypt(data, this->m_publicKey, nonce);
 }
 
 Bytes KeyPrivate::decryptSelf(const Bytes &data) const {
     Nonce nonce;
-    std::copy_n(
-        m_secretKey.begin(),
-        std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()),
-        nonce.begin());
+    std::copy_n(m_secretKey.begin(), std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()), nonce.begin());
 
     return this->decrypt(data, this->m_publicKey, nonce);
 }
