@@ -663,8 +663,8 @@ EXTRACHAIN_EXPORT bool decryptFile(
     const QString    &decryptName,
     const QByteArray &key,
     int               blockSize = 60007);
-    QString fileMimeType(const QString &filePath);
-    QString fileMimeSuffix(const QString &filePath);
+QString fileMimeType(const QString &filePath);
+QString fileMimeSuffix(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
 

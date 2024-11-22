@@ -15,8 +15,12 @@ int main(int argc, char *argv[]) {
     // extrachain_login();
 
     ActorPrivate *actor_private = extrachain_create_actor(0);
-    printf("[ExtraChainC] Actor: %s %d %s %s\n", actor_private->id, actor_private->type,
-           actor_private->secret_key, actor_private->public_key);
+    printf(
+        "[ExtraChainC] Actor: %s %d %s %s\n",
+        actor_private->id,
+        actor_private->type,
+        actor_private->secret_key,
+        actor_private->public_key);
 
     ActorPublic *actor_public = extrachain_private_to_public(actor_private);
     if (!extrachain_is_public_actor_valid(actor_public)) {
@@ -24,12 +28,18 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("[ExtraChainC] Public actor from private: %s %d %s\n", actor_public->id, actor_public->type,
-           actor_public->public_key);
+    printf(
+        "[ExtraChainC] Public actor from private: %s %d %s\n",
+        actor_public->id,
+        actor_public->type,
+        actor_public->public_key);
 
     ActorPublic *actor_getted = extrachain_get_actor(actor_public->id);
-    printf("[ExtraChainC] After get actor: %s %d %s\n", actor_getted->id, actor_getted->type,
-           actor_getted->public_key);
+    printf(
+        "[ExtraChainC] After get actor: %s %d %s\n",
+        actor_getted->id,
+        actor_getted->type,
+        actor_getted->public_key);
 
     char *sig = extrachain_sign("EXC", 3, actor_private);
     printf("[ExtraChainC] Sign: %s\n", sig);

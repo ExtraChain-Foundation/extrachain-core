@@ -143,7 +143,6 @@
     #include <boost/mp11.hpp>
     #include <boost/json.hpp>
 
-
     #ifdef Q_OS_WINDOWS
         #define UINT32_C(c) (c##ULL)
         #define UINT64_C(c) (c##ULL)

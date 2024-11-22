@@ -50,7 +50,7 @@ private slots:
         QCOMPARE(decrypted, decrypted2);
     }
 
-//    auto key1 =
+    //    auto key1 =
     //        KeyPrivate("0c6b88536b8e82af9080650ee7fc02bc721d6b9dce7b9f31513ddf6611154ad3517a72717814ff418628"
     //                   "b11648731f4ecd16828b52d7752e3af15e1f10991b3a",
     //                   "517a72717814ff418628b11648731f4ecd16828b52d7752e3af15e1f10991b3a");
@@ -87,40 +87,40 @@ private slots:
     //            key.sign(data);
     //        eLog("{} ms", timer.elapsed());
     //    }
-    
+
     void bigNumberTest() {
-    //    BigNumber b(1);
-//    b++;
-//    b--;
-//    --b;
-//    ++b;
-//    b = b + 7;
-//    b = b - 4;
-//    b += 4;
-//    b -= 6;
-//    b *= 4;
-//    b = b * 4;
-//    b /= 2;
-//    b = b / 2;
+        //    BigNumber b(1);
+        //    b++;
+        //    b--;
+        //    --b;
+        //    ++b;
+        //    b = b + 7;
+        //    b = b - 4;
+        //    b += 4;
+        //    b -= 6;
+        //    b *= 4;
+        //    b = b * 4;
+        //    b /= 2;
+        //    b = b / 2;
 
-//    int i(1);
-//    i++;
-//    i--;
-//    --i;
-//    ++i;
-//    i = i + 7;
-//    i = i - 4;
-//    i += 4;
-//    i -= 6;
-//    i *= 4;
-//    i = i * 4;
-//    i /= 2;
-//    i = i / 2;
+        //    int i(1);
+        //    i++;
+        //    i--;
+        //    --i;
+        //    ++i;
+        //    i = i + 7;
+        //    i = i - 4;
+        //    i += 4;
+        //    i -= 6;
+        //    i *= 4;
+        //    i = i * 4;
+        //    i /= 2;
+        //    i = i / 2;
 
-//    eLog("{} {}", b.toByteArray(10).toInt(), i);
-//    eLog("{}", (b - 5 == i - 5));
+        //    eLog("{} {}", b.toByteArray(10).toInt(), i);
+        //    eLog("{}", (b - 5 == i - 5));
 
-//    return 0;
+        //    return 0;
     }
 
     void createNetwork() {
@@ -128,7 +128,7 @@ private slots:
         QDir().mkdir("test-data");
         QDir::setCurrent("test-data");
         Utils::wipeDataFiles();
-        node = new ExtraChainNode;
+        node           = new ExtraChainNode;
         bool isCreated = node->createNewNetwork("email", "password", "Token", "1000", "#ffffff");
         QVERIFY(isCreated);
     }

@@ -44,6 +44,6 @@ signals:
     void statusChanged(NetworkStatus::Status status);
 
 private:
-    void setNetworkStatus(Status status);
+    void   setNetworkStatus(Status status);
     Status m_networkStatus = Status::Offline;
 };

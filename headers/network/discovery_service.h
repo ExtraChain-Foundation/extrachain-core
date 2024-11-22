@@ -37,11 +37,11 @@ class EXTRACHAIN_EXPORT DiscoveryService : public QObject {
     Q_OBJECT
 
 private:
-    quint16 netPort; // network port
-    quint16 port;    // discovery port
+    quint16               netPort; // network port
+    quint16               port;    // discovery port
     QNetworkAddressEntry *local;
-    QUdpSocket *socket;
-    bool active = false;
+    QUdpSocket           *socket;
+    bool                  active = false;
 
 public:
     DiscoveryService(quint16 discoveryPort, quint16 networkPort, QNetworkAddressEntry *local);

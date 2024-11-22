@@ -25,8 +25,8 @@
 
 class AutologinHash {
 public:
-    bool load();
-    void save(const std::string &key);
+    bool               load();
+    void               save(const std::string &key);
     const std::string &hash() const;
 
     static bool isAvailable();

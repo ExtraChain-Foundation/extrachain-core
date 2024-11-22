@@ -32,14 +32,9 @@ static const uint size_of_data_list = 7;
 struct TokenData {
     std::string token, owner, count, name, ticker, color, smart;
 
-    bool operator==(const TokenData& other) const {
-        return token == other.token &&
-               owner == other.owner &&
-               count == other.count &&
-               name == other.name &&
-               ticker == other.ticker &&
-               color == other.color &&
-               smart == other.smart;
+    bool operator==(const TokenData &other) const {
+        return token == other.token && owner == other.owner && count == other.count && name == other.name
+               && ticker == other.ticker && color == other.color && smart == other.smart;
     }
 
     // Overload the inequality operator
@@ -73,8 +68,8 @@ public:
 
     bool isContract(const QString &pathFile);
 
-    static bool isValidName(const std::string &name);
-    static bool isValidTicker(const std::string &ticker);
+    static bool                   isValidName(const std::string &name);
+    static bool                   isValidTicker(const std::string &ticker);
     static QMap<QString, QString> mapTokens();
 
 public slots:

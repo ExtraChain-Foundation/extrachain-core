@@ -44,36 +44,36 @@ public:
 
 private:
     std::shared_ptr<QNetworkAddressEntry> localAddress;
-    int internalPort;
-    QHostAddress externalAddress;
-    int externalPort;
-    QString info;
-    QString pcol;
+    int                                   internalPort;
+    QHostAddress                          externalAddress;
+    int                                   externalPort;
+    QString                               info;
+    QString                               pcol;
 
 private:
-    QHostAddress gateway;
-    QUrl gatewayCtrlUrl;
-    QString ctrlPort;
+    QHostAddress           gateway;
+    QUrl                   gatewayCtrlUrl;
+    QString                ctrlPort;
     QNetworkAccessManager *http_socket;
-    QNetworkReply *http_reply;
-    QUdpSocket *udp_socket;
+    QNetworkReply         *http_reply;
+    QUdpSocket            *udp_socket;
 
 private:
     QTimer *timer;
-    State conn_state;
-    int waitTime;
+    State   conn_state;
+    int     waitTime;
 
 public:
     explicit UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent = nullptr);
     ~UPNPConnection();
 
 public:
-    void makeTunnel(int internal, int external, QString protocol, QString text = "Tunnel ");
-    void setTunnel();
-    void removeTunnel();
-    State getState() const;
+    void         makeTunnel(int internal, int external, QString protocol, QString text = "Tunnel ");
+    void         setTunnel();
+    void         removeTunnel();
+    State        getState() const;
     QHostAddress getExternalAddress() const;
-    int getPort();
+    int          getPort();
 
 private:
     void getExternalIP();

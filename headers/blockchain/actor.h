@@ -133,7 +133,8 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto        publicKey = this->m_key.publicKey();
-        std::string hash      = Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
+        std::string hash =
+            Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
 
         if (hash.size() >= BlockchainConst::ACTOR_SIZE)
             m_id = hash.substr(0, BlockchainConst::ACTOR_SIZE);

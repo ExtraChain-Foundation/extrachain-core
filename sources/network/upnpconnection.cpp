@@ -51,18 +51,22 @@ UPNPConnection::~UPNPConnection() {
 
 void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text) {
     if ((protocol == "TCP") || (protocol == "UDP")) {
-        externalPort = external;
-        internalPort = internal;
-        info = text;
-        pcol = protocol;
+        externalPort            = external;
+        internalPort            = internal;
+        info                    = text;
+        pcol                    = protocol;
         QString discover_string = QString("M-SEARCH * HTTP/1.1\r\nHOST:239.255.255.250:1900\r\n")
-            + QString("ST:urn:schemas-upnp-org:device:InternetGatewayDevice:"
-                      "1\r\n" /*upnp:rootdevice*/)
-            + QString("Man:\"ssdp:discover\"\r\n") + QString("MX:3\r\n\r\n");
+                                  + QString(
+                                      "ST:urn:schemas-upnp-org:device:InternetGatewayDevice:"
+                                      "1\r\n" /*upnp:rootdevice*/)
+                                  + QString("Man:\"ssdp:discover\"\r\n") + QString("MX:3\r\n\r\n");
         QObject::connect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
         QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
-        udp_socket->writeDatagram(discover_string.toLatin1(), discover_string.size(),
-                                  localAddress->broadcast(), 1900);
+        udp_socket->writeDatagram(
+            discover_string.toLatin1(),
+            discover_string.size(),
+            localAddress->broadcast(),
+            1900);
         timer->start(waitTime);
     } else {
         emit upnpError("Invalid protocol");
@@ -75,15 +79,15 @@ void UPNPConnection::getUdp() {
         QByteArray datagram;
         datagram.resize(udp_socket->pendingDatagramSize());
         QHostAddress sender;
-        quint16 senderPort;
+        quint16      senderPort;
         udp_socket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
         QHostAddress st_addr(sender.toIPv4Address());
         if (st_addr != localAddress->ip()) {
             timer->stop();
             gateway = st_addr;
-            emit stageSucceded(st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data()
-                               + "\n");
-            vs = datagram.data();
+            emit stageSucceded(
+                st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data() + "\n");
+            vs        = datagram.data();
             int index = vs.indexOf("LOCATION: ");
             if (index != -1) {
                 vs.remove(0, index + 10);
@@ -105,8 +109,11 @@ void UPNPConnection::getUdp() {
                 }
                 sport.remove(index, sport.size() - index);
                 ctrlPort = sport;
-                QObject::connect(http_socket, SIGNAL(finished(QNetworkReply *)), this,
-                                 SLOT(processReq(QNetworkReply *)));
+                QObject::connect(
+                    http_socket,
+                    SIGNAL(finished(QNetworkReply *)),
+                    this,
+                    SLOT(processReq(QNetworkReply *)));
                 http_socket->get(QNetworkRequest(QUrl(vs)));
                 udp_socket->close();
             }
@@ -122,10 +129,13 @@ void UPNPConnection::timeExpired() {
 }
 
 void UPNPConnection::processReq(QNetworkReply *reply) {
-    QObject::disconnect(http_socket, SIGNAL(finished(QNetworkReply *)), this,
-                        SLOT(processReq(QNetworkReply *)));
+    QObject::disconnect(
+        http_socket,
+        SIGNAL(finished(QNetworkReply *)),
+        this,
+        SLOT(processReq(QNetworkReply *)));
     QString response = reply->readAll();
-    int i = 0;
+    int     i        = 0;
     while (i < response.size()) {
         if (!response[i].isPrint())
             response.remove(i, 1);
@@ -142,7 +152,7 @@ void UPNPConnection::processReq(QNetworkReply *reply) {
                 }
                 if (reader.name().toString() == "controlURL") {
                     gatewayCtrlUrl = QString("http://") + gateway.toString() + QString(":") + ctrlPort
-                        + reader.readElementText();
+                                     + reader.readElementText();
 
                     break;
                 }
@@ -157,18 +167,19 @@ void UPNPConnection::processReq(QNetworkReply *reply) {
 }
 
 void UPNPConnection::getExternalIP() {
-    QString message("<?xml version=\"1.0\"?>\r\n"
-                    "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-                    "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
-                    "<s:Body>\r\n<u:GetExternalIPAddress "
-                    "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
-                    "</u:GetExternalIPAddress>\r\n</s:Body>\r\n</s:Envelope>\r\n");
+    QString message(
+        "<?xml version=\"1.0\"?>\r\n"
+        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
+        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
+        "<s:Body>\r\n<u:GetExternalIPAddress "
+        "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
+        "</u:GetExternalIPAddress>\r\n</s:Body>\r\n</s:Envelope>\r\n");
     this->postSOAP("GetExternalIPAddress", message);
 }
 
 void UPNPConnection::postSOAP(QString action, QString message) {
-    emit stageSucceded(QString("POST: \nAction: ") + action + QString("\nMessage: ") + message
-                       + QString("\n\n"));
+    emit stageSucceded(
+        QString("POST: \nAction: ") + action + QString("\nMessage: ") + message + QString("\n\n"));
     QNetworkRequest req(gatewayCtrlUrl);
     req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLatin1());
     req.setRawHeader(QByteArray("Content-Type"), QByteArray("text/xml; charset=\"utf-8\""));
@@ -178,15 +189,21 @@ void UPNPConnection::postSOAP(QString action, QString message) {
         (QString("\"urn:schemas-upnp-org:service:WANIPConnection:1#") + action + QString("\"")).toLatin1());
     http_reply = http_socket->post(req, message.toLatin1());
     QObject::connect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
-    QObject::connect(http_reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
-                     SLOT(getHttpError(QNetworkReply::NetworkError)));
+    QObject::connect(
+        http_reply,
+        SIGNAL(error(QNetworkReply::NetworkError)),
+        this,
+        SLOT(getHttpError(QNetworkReply::NetworkError)));
 }
 
 void UPNPConnection::getHttp() {
     QString reply = http_reply->readAll();
     QObject::disconnect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
-    QObject::disconnect(http_reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
-                        SLOT(getHttpError(QNetworkReply::NetworkError)));
+    QObject::disconnect(
+        http_reply,
+        SIGNAL(error(QNetworkReply::NetworkError)),
+        this,
+        SLOT(getHttpError(QNetworkReply::NetworkError)));
     eLog("UPnP Reply: {}", reply);
     if (!reply.contains("UPnPError")) {
         if (reply.contains("<NewExternalIPAddress>")) {
@@ -237,7 +254,7 @@ void UPNPConnection::extractUPNPError(QString message) {
             setTunnel();
         } else {
             emit upnpError(ertext);
-            int rp = QRandomGenerator::global()->bounded(1000, 2000);
+            int  rp      = QRandomGenerator::global()->bounded(1000, 2000);
             internalPort = rp;
             externalPort = rp;
             checkTunnels();
@@ -246,73 +263,85 @@ void UPNPConnection::extractUPNPError(QString message) {
 }
 
 void UPNPConnection::checkTunnels() {
-    QString message("<?xml version=\"1.0\"?>\r\n"
-                    "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-                    "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
-                    "<s:Body>\r\n"
-                    "<u:GetSpecificPortMappingEntry "
-                    "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
-                    "<NewRemoteHost></NewRemoteHost>"
-                    "<NewExternalPort>");
+    QString message(
+        "<?xml version=\"1.0\"?>\r\n"
+        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
+        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
+        "<s:Body>\r\n"
+        "<u:GetSpecificPortMappingEntry "
+        "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
+        "<NewRemoteHost></NewRemoteHost>"
+        "<NewExternalPort>");
     message += QString::number(externalPort);
-    message += QString("</NewExternalPort>"
-                       "<NewProtocol>");
+    message += QString(
+        "</NewExternalPort>"
+        "<NewProtocol>");
     message += pcol;
-    message += QString("</NewProtocol>"
-                       "</u:GetSpecificPortMappingEntry>\r\n"
-                       "</s:Body>\r\n"
-                       "</s:Envelope>\r\n");
+    message += QString(
+        "</NewProtocol>"
+        "</u:GetSpecificPortMappingEntry>\r\n"
+        "</s:Body>\r\n"
+        "</s:Envelope>\r\n");
     this->postSOAP("GetSpecificPortMappingEntry", message);
 }
 
 void UPNPConnection::setTunnel() {
-    QString message("<?xml version=\"1.0\"?>\r\n"
-                    "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-                    "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
-                    "<s:Body>\r\n"
-                    "<u:AddPortMapping "
-                    "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
-                    "<NewRemoteHost></NewRemoteHost>"
-                    "<NewExternalPort>");
+    QString message(
+        "<?xml version=\"1.0\"?>\r\n"
+        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
+        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
+        "<s:Body>\r\n"
+        "<u:AddPortMapping "
+        "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
+        "<NewRemoteHost></NewRemoteHost>"
+        "<NewExternalPort>");
     message += QString::number(externalPort);
-    message += QString("</NewExternalPort>"
-                       "<NewProtocol>");
+    message += QString(
+        "</NewExternalPort>"
+        "<NewProtocol>");
     message += pcol;
-    message += QString("</NewProtocol>"
-                       "<NewInternalPort>");
+    message += QString(
+        "</NewProtocol>"
+        "<NewInternalPort>");
     message += QString::number(internalPort);
-    message += QString("</NewInternalPort>"
-                       "<NewInternalClient>");
+    message += QString(
+        "</NewInternalPort>"
+        "<NewInternalClient>");
     message += localAddress->ip().toString();
-    message += QString("</NewInternalClient>"
-                       "<NewEnabled>1</NewEnabled>"
-                       "<NewPortMappingDescription>");
+    message += QString(
+        "</NewInternalClient>"
+        "<NewEnabled>1</NewEnabled>"
+        "<NewPortMappingDescription>");
     message += info + localAddress->ip().toString() + QString(":") + QString::number(internalPort);
-    message += QString("</NewPortMappingDescription>"
-                       "<NewLeaseDuration>0</NewLeaseDuration>"
-                       "</u:AddPortMapping>\r\n"
-                       "</s:Body>\r\n"
-                       "</s:Envelope>\r\n");
+    message += QString(
+        "</NewPortMappingDescription>"
+        "<NewLeaseDuration>0</NewLeaseDuration>"
+        "</u:AddPortMapping>\r\n"
+        "</s:Body>\r\n"
+        "</s:Envelope>\r\n");
     this->postSOAP("AddPortMapping", message);
 }
 
 void UPNPConnection::removeTunnel() {
-    QString message("<?xml version=\"1.0\"?>\r\n"
-                    "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
-                    "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
-                    "<s:Body>\r\n"
-                    "<u:DeletePortMapping "
-                    "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
-                    "<NewRemoteHost></NewRemoteHost>"
-                    "<NewExternalPort>");
+    QString message(
+        "<?xml version=\"1.0\"?>\r\n"
+        "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
+        "s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">\r\n"
+        "<s:Body>\r\n"
+        "<u:DeletePortMapping "
+        "xmlns:u=\"urn:schemas-upnp-org:service:WANIPConnection:1\">\r\n"
+        "<NewRemoteHost></NewRemoteHost>"
+        "<NewExternalPort>");
     message += QString::number(externalPort);
-    message += QString("</NewExternalPort>"
-                       "<NewProtocol>");
+    message += QString(
+        "</NewExternalPort>"
+        "<NewProtocol>");
     message += pcol;
-    message += QString("</NewProtocol>"
-                       "</u:DeletePortMapping>\r\n"
-                       "</s:Body>\r\n"
-                       "</s:Envelope>\r\n");
+    message += QString(
+        "</NewProtocol>"
+        "</u:DeletePortMapping>\r\n"
+        "</s:Body>\r\n"
+        "</s:Envelope>\r\n");
     this->postSOAP("DeletePortMapping", message);
 }
 
