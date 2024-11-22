@@ -36,15 +36,14 @@ KeyPass Cryptography::getKeyPassFromPassword(const std::string &pass, const Salt
     }
 
     KeyPass key;
-    int     rst1 = crypto_pwhash(
-        key.data(),
-        key.size(),
-        pass.data(),
-        pass.size(),
-        vsalt.data(),
-        crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        crypto_pwhash_ALG_DEFAULT);
+    int     rst1 = crypto_pwhash(key.data(),
+                             key.size(),
+                             pass.data(),
+                             pass.size(),
+                             vsalt.data(),
+                             crypto_pwhash_OPSLIMIT_INTERACTIVE,
+                             crypto_pwhash_MEMLIMIT_INTERACTIVE,
+                             crypto_pwhash_ALG_DEFAULT);
     if (rst1 != 0) {
         eFatal("Incorrect getKeyFromPass");
     }
@@ -86,8 +85,7 @@ Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
     Nonce nonce;
     randombytes_buf(nonce.data(), nonce.size());
 
-    int r =
-        crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data());
+    int r = crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data());
 
     if (r != 0) {
         eLog("[SecretKey::encrypt] Encryption failed");
@@ -100,10 +98,7 @@ Bytes Cryptography::encrypt(const Bytes &data, const KeyPass &secret_key) {
 
 Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_key) {
     if (encrypted_data.empty() || Utils::isAllEmpty(secret_key)) {
-        eFatal(
-            "[SecretKey::decrypt] data or secret is empty. data: {}, secret: {}",
-            encrypted_data,
-            secret_key);
+        eFatal("[SecretKey::decrypt] data or secret is empty. data: {}, secret: {}", encrypted_data, secret_key);
     }
 
     const size_t minimum_size = crypto_secretbox_NONCEBYTES + crypto_secretbox_MACBYTES;
@@ -122,12 +117,11 @@ Bytes Cryptography::decrypt(const Bytes &encrypted_data, const KeyPass &secret_k
 
     Bytes decrypted_message(encrypted_message.size() - crypto_secretbox_MACBYTES);
 
-    int r = crypto_secretbox_open_easy(
-        decrypted_message.data(),
-        encrypted_message.data(),
-        encrypted_message.size(),
-        nonce.data(),
-        secret_key.data());
+    int r = crypto_secretbox_open_easy(decrypted_message.data(),
+                                       encrypted_message.data(),
+                                       encrypted_message.size(),
+                                       nonce.data(),
+                                       secret_key.data());
 
     if (r != 0) {
         eLog("[SecretKey::decrypt] Decryption failed");
@@ -164,11 +158,10 @@ std::pair<PrivateKey, PublicKey> Cryptography::createAsymmetricPair() {
     return { sk, pk };
 }
 
-Bytes Cryptography::encryptAsymmetric(
-    const Bytes      &data,
-    const PrivateKey &secret_key,
-    const PublicKey  &public_key,
-    const Nonce      &nonce) {
+Bytes Cryptography::encryptAsymmetric(const Bytes      &data,
+                                      const PrivateKey &secret_key,
+                                      const PublicKey  &public_key,
+                                      const Nonce      &nonce) {
     if (data.empty()) {
         eFatal("[SecretKey::encryptAsymmetric] data is empty");
     }
@@ -190,13 +183,12 @@ Bytes Cryptography::encryptAsymmetric(
 
     Bytes encrypted_message(crypto_box_MACBYTES + data.size());
 
-    int res = crypto_box_easy(
-        encrypted_message.data(),
-        data.data(),
-        data.size(),
-        working_nonce.data(),
-        x_public_key.data(),
-        x_secret_key.data());
+    int res = crypto_box_easy(encrypted_message.data(),
+                              data.data(),
+                              data.size(),
+                              working_nonce.data(),
+                              x_public_key.data(),
+                              x_secret_key.data());
     if (res != 0) {
         eLog("[SecretKey::encryptAsymmetric] Encryption failed");
         return Bytes {};
@@ -212,11 +204,10 @@ Bytes Cryptography::encryptAsymmetric(
     return encrypted_message;
 }
 
-Bytes Cryptography::decryptAsymmetric(
-    const Bytes      &encrypted_data,
-    const PrivateKey &secret_key,
-    const PublicKey  &public_key,
-    const Nonce      &nonce) {
+Bytes Cryptography::decryptAsymmetric(const Bytes      &encrypted_data,
+                                      const PrivateKey &secret_key,
+                                      const PublicKey  &public_key,
+                                      const Nonce      &nonce) {
     if (encrypted_data.empty()) {
         eFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
     }
@@ -248,13 +239,12 @@ Bytes Cryptography::decryptAsymmetric(
 
     Bytes decrypted_message(encrypted_message.size() - crypto_box_MACBYTES);
 
-    int res = crypto_box_open_easy(
-        decrypted_message.data(),
-        encrypted_message.data(),
-        encrypted_message.size(),
-        working_nonce.data(),
-        x_public_key.data(),
-        x_secret_key.data());
+    int res = crypto_box_open_easy(decrypted_message.data(),
+                                   encrypted_message.data(),
+                                   encrypted_message.size(),
+                                   working_nonce.data(),
+                                   x_public_key.data(),
+                                   x_secret_key.data());
     if (res != 0) {
         eLog("[SecretKey::decryptAsymmetric] Decryption failed");
         return Bytes {};

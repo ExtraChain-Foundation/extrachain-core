@@ -80,18 +80,18 @@ public:
     GenesisBlock();
     GenesisBlock(const GenesisBlock &block);
 
-    GenesisBlock(
-        std::string     &&type,
-        std::string     &&data,
-        BigNumber         idx,
-        std::uint64_t     date,
-        std::string     &&prevHash,
-        std::string     &&hash,
-        std::string     &&prevGenHash,
-        Signatures      &&signatures,
-        GenesisDataRows &&dataRows);
+    GenesisBlock(std::string     &&type,
+                 std::string     &&data,
+                 BigNumber         idx,
+                 std::uint64_t     date,
+                 std::string     &&prevHash,
+                 std::string     &&hash,
+                 std::string     &&prevGenHash,
+                 Signatures      &&signatures,
+                 GenesisDataRows &&dataRows);
 
     // Block interface
+
 public:
     void addRow(const ActorId &actorId, const TokenId &tokenId, const GenesisDataInfo &row);
     void addRows(const GenesisDataRows &dataRows);
@@ -117,6 +117,6 @@ public:
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-           && l.dataService() == r.dataService() && l.dataRows() == r.dataRows();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+           && l.dataRows() == r.dataRows();
 }

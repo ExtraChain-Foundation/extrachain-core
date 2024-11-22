@@ -173,11 +173,10 @@ int Utils::qByteArrayToInt(const QByteArray &number) {
     return res;
 }
 
-void Utils::rootMerkleHash(
-    std::vector<std::string>      &listHashes,
-    std::vector<MerkleDataBlocks> &branchesTree,
-    const bool                     isHahsing,
-    std::string                   &result) {
+void Utils::rootMerkleHash(std::vector<std::string>      &listHashes,
+                           std::vector<MerkleDataBlocks> &branchesTree,
+                           const bool                     isHahsing,
+                           std::string                   &result) {
     if (listHashes.empty()) {
         eFatal("Root merkle hash: list is empty");
     };
@@ -211,8 +210,8 @@ std::string Utils::rootMerkleHash(std::string &data) {
     return result;
 }
 
-std::vector<Utils::MerkleDataBlocks>
-Utils::splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing) {
+std::vector<Utils::MerkleDataBlocks> Utils::splitListIntoPair(std::vector<std::string> &vector,
+                                                              const bool                isHahsing) {
     std::vector<MerkleDataBlocks> result;
 
     if (vector.empty())
@@ -308,11 +307,10 @@ std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(cons
     return result;
 }
 
-bool Utils::encryptFile(
-    const QString    &originalName,
-    const QString    &encryptName,
-    const QByteArray &key,
-    int               blockSize) {
+bool Utils::encryptFile(const QString    &originalName,
+                        const QString    &encryptName,
+                        const QByteArray &key,
+                        int               blockSize) {
     QFile orig(originalName);
     if (!orig.exists())
         return false;
@@ -325,29 +323,22 @@ bool Utils::encryptFile(
     }
     auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!orig.atEnd()) {
-        QByteArray part = orig.read(blockSize);
-        QByteArray encrypted =
-            ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
+        QByteArray part      = orig.read(blockSize);
+        QByteArray encrypted = ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         encrypt.write(encrypted);
         // eLog("encrypted {} {}", part.size(), encrypted.size());
     }
 
-    eLog(
-        "[Dfs] Encrypted file {} to {} with sizes {} {}",
-        originalName,
-        encryptName,
-        orig.size(),
-        encrypt.size());
+    eLog("[Dfs] Encrypted file {} to {} with sizes {} {}", originalName, encryptName, orig.size(), encrypt.size());
     orig.close();
     encrypt.close();
     return QFile::exists(encryptName);
 }
 
-bool Utils::decryptFile(
-    const QString    &encryptName,
-    const QString    &decryptName,
-    const QByteArray &key,
-    int               blockSize) //
+bool Utils::decryptFile(const QString    &encryptName,
+                        const QString    &decryptName,
+                        const QByteArray &key,
+                        int               blockSize) //
 {
     blockSize = (blockSize / 8 + 1) * 8;
     QFile encrypt(encryptName);
@@ -363,9 +354,8 @@ bool Utils::decryptFile(
     }
     auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
     while (!encrypt.atEnd()) {
-        QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted =
-            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
+        QByteArray part      = encrypt.read(blockSize);
+        QByteArray decrypted = ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
         decrypt.write(decrypted);
         eLog("Utils::decryptFile] Decrypted {} {}", part.size(), decrypted.size());
     }
@@ -429,8 +419,7 @@ void Utils::wipeDataFiles() {
     // QDir(dataName).removeRecursively();
     // QDir().mkpath(dataName);
 
-    QString shareFolder =
-        QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
+    QString shareFolder = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
     QDir(shareFolder).removeRecursively();
 
     QDir::setCurrent(current);

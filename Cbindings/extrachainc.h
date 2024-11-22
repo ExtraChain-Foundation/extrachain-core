@@ -60,23 +60,17 @@ ActorPublic  *extrachain_private_to_public(ActorPrivate *actor_private);
 bool          extrachain_is_public_actor_valid(ActorPublic *actor_public);
 
 char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_private);
-bool  extrachain_verify_private(
-     const char         *data,
-     size_t              size,
-     const char         *sign,
-     const ActorPrivate *actor_public);
-bool extrachain_verify(const char *data, size_t size, const char *sign, const ActorPublic *actor_public);
+bool  extrachain_verify_private(const char *data, size_t size, const char *sign, const ActorPrivate *actor_public);
+bool  extrachain_verify(const char *data, size_t size, const char *sign, const ActorPublic *actor_public);
 
-char *extrachain_encrypt(
-    const char         *data,
-    size_t              size,
-    const ActorPrivate *actor_private,
-    const ActorPublic  *actor_public);
-char *extrachain_decrypt(
-    const char         *data,
-    size_t              size,
-    const ActorPrivate *actor_private,
-    const ActorPublic  *actor_public);
+char *extrachain_encrypt(const char         *data,
+                         size_t              size,
+                         const ActorPrivate *actor_private,
+                         const ActorPublic  *actor_public);
+char *extrachain_decrypt(const char         *data,
+                         size_t              size,
+                         const ActorPrivate *actor_private,
+                         const ActorPublic  *actor_public);
 char *extrachain_encrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
 char *extrachain_decrypt_self(const char *data, size_t size, const ActorPrivate *actor_private);
 

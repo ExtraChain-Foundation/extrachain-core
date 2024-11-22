@@ -140,8 +140,7 @@ QJsonObject FileDataManager::getFileDataByName(const std::string &nameFile, cons
     return object;
 }
 
-QJsonDocument
-FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
+QJsonDocument FileDataManager::getFilesTreeByStatus(const FileStatus &fileStatus, const bool &shouldUpdateList) {
     if (shouldUpdateList)
         files = updateFileList(savedActorId);
 

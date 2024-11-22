@@ -73,13 +73,12 @@ public:
     static QMap<QString, QString> mapTokens();
 
 public slots:
-    std::expected<TokenData, CreateTokenError> createToken(
-        const std::string &tokenCount,
-        const std::string &tokenName,
-        const std::string &symbol,
-        const ActorId     &owner,
-        const std::string &color);
-    void checkIsContract(const QString &pathToFile);
+    std::expected<TokenData, CreateTokenError> createToken(const std::string &tokenCount,
+                                                           const std::string &tokenName,
+                                                           const std::string &symbol,
+                                                           const ActorId     &owner,
+                                                           const std::string &color);
+    void                                       checkIsContract(const QString &pathToFile);
 
 protected:
     bool checkJsonObjectHasTokenFields(const QJsonObject &jsonObj);
@@ -87,10 +86,9 @@ protected:
 signals:
     void verifyActor(Actor<KeyPublic> actor);
     void sendTransactionCreateToken(const ActorId &actorId, const Transaction &tx);
-    void saveActorInPrivateProfile(
-        const QByteArray &id,
-        const QString    &type    = "wallet",
-        const bool       &rewrite = false);
+    void saveActorInPrivateProfile(const QByteArray &id,
+                                   const QString    &type    = "wallet",
+                                   const bool       &rewrite = false);
     void errorNameTokenExist(const QString &);
     void errorTickerTokenExist(const QString &);
     void added(const ActorId &owner, const TokenId &token);

@@ -70,10 +70,9 @@ class FragmentWriter : public QThread {
     std::vector<std::string> m_compliteFiles;
 
 public:
-    FragmentWriter(
-        const DfsP::SegmentMessage& msg,
-        std::vector<std::string>    m_compliteFiles,
-        QObject*                    parent = nullptr);
+    FragmentWriter(const DfsP::SegmentMessage& msg,
+                   std::vector<std::string>    m_compliteFiles,
+                   QObject*                    parent = nullptr);
     ~FragmentWriter() {
         quit();
     }

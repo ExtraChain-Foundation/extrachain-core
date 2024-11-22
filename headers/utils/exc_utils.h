@@ -68,9 +68,8 @@ public:
     }
 
     ByteArray(const std::string &str)
-        : m_data(
-              reinterpret_cast<const uint8_t *>(str.data()),
-              reinterpret_cast<const uint8_t *>(str.data()) + str.size()) {
+        : m_data(reinterpret_cast<const uint8_t *>(str.data()),
+                 reinterpret_cast<const uint8_t *>(str.data()) + str.size()) {
     }
 
     ByteArray(const char *data, size_t length)
@@ -82,9 +81,8 @@ public:
     }
 
     ByteArray(const QByteArray &qba)
-        : m_data(
-              reinterpret_cast<const uint8_t *>(qba.data()),
-              reinterpret_cast<const uint8_t *>(qba.data()) + qba.size()) {
+        : m_data(reinterpret_cast<const uint8_t *>(qba.data()),
+                 reinterpret_cast<const uint8_t *>(qba.data()) + qba.size()) {
     }
 
     ByteArray(const QString &qstr)
@@ -178,9 +176,8 @@ public:
     }
 
     ByteArray slice(size_t start, size_t length) const {
-        return ByteArray(std::vector<uint8_t>(
-            m_data.begin() + start,
-            m_data.begin() + std::min(start + length, m_data.size())));
+        return ByteArray(std::vector<uint8_t>(m_data.begin() + start,
+                                              m_data.begin() + std::min(start + length, m_data.size())));
     }
 
 private:
@@ -188,548 +185,545 @@ private:
 };
 
 namespace Network {
-Q_NAMESPACE
+    Q_NAMESPACE
 
-static bool    isStartedServer = true;
-static quint16 maxConnections  = 100;
-static bool    networkDebug    = false;
+    static bool    isStartedServer = true;
+    static quint16 maxConnections  = 100;
+    static bool    networkDebug    = false;
 
-enum class Protocol {
-    Undefined = 0,
-    Udp       = 1,
-    WebSocket = 2
-};
-Q_ENUM_NS(Protocol)
+    enum class Protocol {
+        Undefined = 0,
+        Udp       = 1,
+        WebSocket = 2
+    };
+    Q_ENUM_NS(Protocol)
 
-enum class SocketServiceError {
-    Unknown                = 0,
-    IncompatibleVersion    = 1,
-    IncompatibleNetwork    = 2,
-    IncompatibleIdentifier = 3,
-    DuplicateIdentifier    = 4,
-    IncorrectPublicKey     = 5,
-};
-Q_ENUM_NS(SocketServiceError)
+    enum class SocketServiceError {
+        Unknown                = 0,
+        IncompatibleVersion    = 1,
+        IncompatibleNetwork    = 2,
+        IncompatibleIdentifier = 3,
+        DuplicateIdentifier    = 4,
+        IncorrectPublicKey     = 5,
+    };
+    Q_ENUM_NS(SocketServiceError)
 
-[[maybe_unused]] inline static QByteArray currentIdentifier() {
-    // static QByteArray identifier;
-    // if (!identifier.isEmpty())
-    //     return identifier;
+    [[maybe_unused]] inline static QByteArray currentIdentifier() {
+        // static QByteArray identifier;
+        // if (!identifier.isEmpty())
+        //     return identifier;
 
-    QFile file(".settings");
-    file.open(QIODevice::ReadOnly);
-    QByteArray identifier = file.readAll();
-    file.close();
-    return identifier;
-}
+        QFile file(".settings");
+        file.open(QIODevice::ReadOnly);
+        QByteArray identifier = file.readAll();
+        file.close();
+        return identifier;
+    }
 } // namespace Network
 
 namespace Config {
-const int NECESSARY_SAME_TX = 1;
+    const int NECESSARY_SAME_TX = 1;
 
-namespace DataStorage {
-    static const std::string BlockTable = "Block";
-    static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-        + " ( "
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL  "
-          ");";
-    static const std::string TxBlockTable = "Transactions";
-    static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
-        + " ("
-          "type         INT   NOT NULL, "
-          "sender       TEXT  NOT NULL, "
-          "receiver     TEXT  NOT NULL, "
-          "amount       TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "token        TEXT  NOT NULL, "
-          "prevBlock    TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "approver     TEXT  NOT NULL, "
-          "signature    TEXT  NOT NULL, "
-          "producer     TEXT  NOT NULL "
-          ");";
-    static const std::string SignTable = "Signatures";
-    static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
-        + " ("
-          "actorId      TEXT PRIMARY KEY NOT NULL, "
-          "signature    TEXT             NOT NULL, "
-          "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
-          ");";
+    namespace DataStorage {
+        static const std::string BlockTable = "Block";
+        static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
+                                            + " ( "
+                                              "type         TEXT  NOT NULL, "
+                                              "id           TEXT  NOT NULL, "
+                                              "date         TEXT  NOT NULL, "
+                                              "data         TEXT          , "
+                                              "prevHash     TEXT  NOT NULL, "
+                                              "hash         TEXT  NOT NULL  "
+                                              ");";
+        static const std::string TxBlockTable = "Transactions";
+        static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
+                                              + " ("
+                                                "type         INT   NOT NULL, "
+                                                "sender       TEXT  NOT NULL, "
+                                                "receiver     TEXT  NOT NULL, "
+                                                "amount       TEXT  NOT NULL, "
+                                                "date         TEXT  NOT NULL, "
+                                                "data         TEXT          , "
+                                                "token        TEXT  NOT NULL, "
+                                                "prevBlock    TEXT  NOT NULL, "
+                                                "hash         TEXT  NOT NULL, "
+                                                "approver     TEXT  NOT NULL, "
+                                                "signature    TEXT  NOT NULL, "
+                                                "producer     TEXT  NOT NULL "
+                                                ");";
+        static const std::string SignTable = "Signatures";
+        static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
+                                                + " ("
+                                                  "actorId      TEXT PRIMARY KEY NOT NULL, "
+                                                  "signature    TEXT             NOT NULL, "
+                                                  "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
+                                                  ");";
 
-    static const std::string GenesisBlockTable = "GenesisBlock";
-    static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
-        + " ("
-          "type         TEXT  NOT NULL, "
-          "id           TEXT  NOT NULL, "
-          "date         TEXT  NOT NULL, "
-          "data         TEXT          , "
-          "prevHash     TEXT  NOT NULL, "
-          "hash         TEXT  NOT NULL, "
-          "prevGenHash  TEXT            "
-          ");";
-    static const std::string RowGenesisBlockTable = "GenesisDataRow";
-    static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
-        + " ("
-          "actorId    TEXT  NOT NULL, "
-          "state      TEXT  NOT NULL, "
-          "token      TEXT  NOT NULL, "
-          "type       TEXT  NOT NULL "
-          ");";
+        static const std::string GenesisBlockTable = "GenesisBlock";
+        static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
+                                                   + " ("
+                                                     "type         TEXT  NOT NULL, "
+                                                     "id           TEXT  NOT NULL, "
+                                                     "date         TEXT  NOT NULL, "
+                                                     "data         TEXT          , "
+                                                     "prevHash     TEXT  NOT NULL, "
+                                                     "hash         TEXT  NOT NULL, "
+                                                     "prevGenHash  TEXT            "
+                                                     ");";
+        static const std::string RowGenesisBlockTable = "GenesisDataRow";
+        static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
+                                                      + " ("
+                                                        "actorId    TEXT  NOT NULL, "
+                                                        "state      TEXT  NOT NULL, "
+                                                        "token      TEXT  NOT NULL, "
+                                                        "type       TEXT  NOT NULL "
+                                                        ");";
 
-    static const std::string tokensCacheTable = "Tokens";
-    static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
-        + " ("
-          "tokenId      TEXT PRIMARY KEY NOT NULL, "
-          "name         TEXT             NOT NULL, "
-          "color        TEXT             NOT NULL, "
-          "canStaking   INT              NOT NULL  "
-          ");";
+        static const std::string tokensCacheTable = "Tokens";
+        static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
+                                                  + " ("
+                                                    "tokenId      TEXT PRIMARY KEY NOT NULL, "
+                                                    "name         TEXT             NOT NULL, "
+                                                    "color        TEXT             NOT NULL, "
+                                                    "canStaking   INT              NOT NULL  "
+                                                    ");";
 
-    static const std::string actorsTable = "Actors";
-    static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
-        + " ("
-          "id   TEXT PRIMARY KEY NOT NULL, "
-          "type INT              NOT NULL  "
-          ");";
+        static const std::string actorsTable = "Actors";
+        static const std::string actorsTableCreate = "CREATE TABLE IF NOT EXISTS " + actorsTable
+                                             + " ("
+                                               "id   TEXT PRIMARY KEY NOT NULL, "
+                                               "type INT              NOT NULL  "
+                                               ");";
 
-    // How many files one section folder will store
-    static const int SECTION_SIZE = 1000;
+        // How many files one section folder will store
+        static const int SECTION_SIZE = 1000;
 
-    // How often to construct block from pending transactions (in miliseconds)
-    static const int BLOCK_CREATION_PERIOD = 2000;
+        // How often to construct block from pending transactions (in miliseconds)
+        static const int BLOCK_CREATION_PERIOD = 2000;
 
-    // How often to construct genesis block (in blocks)
-    static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
+        // How often to construct genesis block (in blocks)
+        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
 
-    // How often to prove pransactions
-    static const int PROVE_TXS_INTERVAL = 2000;
+        // How often to prove pransactions
+        static const int PROVE_TXS_INTERVAL = 2000;
 
-    static int MAX_SIGN_AMOUNT = 13;
-} // namespace DataStorage
+        static int MAX_SIGN_AMOUNT = 13;
+    } // namespace DataStorage
 
-namespace Net {
-    // Networking will work only if there are enough peers
-    static const int MINIMUM_PEERS = 1;
+    namespace Net {
+        // Networking will work only if there are enough peers
+        static const int MINIMUM_PEERS = 1;
 
-    // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
-    // responses
-    static const int NECESSARY_RESPONSE_COUNT = 1; // 3
+        // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
+        // responses
+        static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
-    enum class TypeSend {
-        All,
-        Except,
-        Focused
-    };
-} // namespace Net
+        enum class TypeSend {
+            All,
+            Except,
+            Focused
+        };
+    } // namespace Net
 } // namespace Config
 
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 // FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Errors {
-// IO
-static const int FILE_NOT_EXISTS     = 0;
-static const int FILE_ALREADY_EXISTS = 101;
-static const int FILE_IS_NOT_OPENED  = 102;
-static const int UNDEFINED           = 103;
+    // IO
+    static const int FILE_NOT_EXISTS     = 0;
+    static const int FILE_ALREADY_EXISTS = 101;
+    static const int FILE_IS_NOT_OPENED  = 102;
+    static const int UNDEFINED           = 103;
 
-// Blocks
-// static const int BLOCK_IS_NOT_VALID = 201;
-// static const int BLOCKS_CANT_MERGE = 202;
-// static const int BLOCKS_ARE_EQUAL = 203;
+    // Blocks
+    // static const int BLOCK_IS_NOT_VALID = 201;
+    // static const int BLOCKS_CANT_MERGE = 202;
+    // static const int BLOCKS_ARE_EQUAL = 203;
 
-// Mem and Block index
-// static const int NO_BLOCKS = 401;
+    // Mem and Block index
+    // static const int NO_BLOCKS = 401;
 } // namespace Errors
 
 namespace Serialization {
-EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
-EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
-} // namespace Seralization
+    EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
+    EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
+} // namespace Serialization
 
 namespace MessagePack {
-template <class T>
-std::string serialize(const T &t) {
-    msgpack::sbuffer buffer;
-    msgpack::pack(buffer, t);
-    return std::string(buffer.data(), buffer.size());
-}
+    template <class T>
+    std::string serialize(const T &t) {
+        msgpack::sbuffer buffer;
+        msgpack::pack(buffer, t);
+        return std::string(buffer.data(), buffer.size());
+    }
 
-template <class T, class StringContainer>
-T deserialize(const StringContainer &data, std::size_t size = 0) {
-    if (data.empty()) {
-        eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
-        eFatal("[MessagePack] Empty deserialize");
+    template <class T, class StringContainer>
+    T deserialize(const StringContainer &data, std::size_t size = 0) {
+        if (data.empty()) {
+            eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
+            eFatal("[MessagePack] Empty deserialize");
+            return T();
+        }
+
+        try {
+            msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
+            msgpack::object        deserialized = oh.get();
+            auto                   t            = deserialized.as<T>();
+            return t;
+        } catch (std::exception &e) {
+            eLog("{}", e.what());
+        }
+
+        auto qt_bytes = QByteArray::fromStdString(data.data());
+        eLog("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
+        eFatal("[MessagePack] Incorrect deserialize");
         return T();
     }
 
-    try {
-        msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
-        msgpack::object        deserialized = oh.get();
-        auto                   t            = deserialized.as<T>();
-        return t;
-    } catch (std::exception &e) {
-        eLog("{}", e.what());
+    template <class T>
+    std::vector<std::string> serialize_container(std::vector<T> &list) {
+        std::vector<std::string> result;
+        for (const auto &item : list) {
+            result.push_back(serialize(item));
+        }
+        return result;
     }
 
-    auto qt_bytes = QByteArray::fromStdString(data.data());
-    eLog("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
-    eFatal("[MessagePack] Incorrect deserialize");
-    return T();
-}
+    template <class T>
+    std::vector<T> deserialize_container(const std::vector<std::string> dataContainer) {
+        std::vector<T> result;
 
-template <class T>
-std::vector<std::string> serialize_container(std::vector<T> &list) {
-    std::vector<std::string> result;
-    for (const auto &item : list) {
-        result.push_back(serialize(item));
+        for (const auto &data : dataContainer) {
+            const T element = deserialize<T>(data);
+            result.push_back(element);
+        }
+        return result;
     }
-    return result;
-}
-
-template <class T>
-std::vector<T> deserialize_container(const std::vector<std::string> dataContainer) {
-    std::vector<T> result;
-
-    for (const auto &data : dataContainer) {
-        const T element = deserialize<T>(data);
-        result.push_back(element);
-    }
-    return result;
-}
 } // namespace MessagePack
 
 namespace Json {
-template <typename T>
-boost::json::value serialize_value(const T &t) {
-    auto json = json_convert::to_json(t);
-    return json;
-}
-
-template <typename T>
-std::string serialize(const T &t) {
-    auto json     = serialize_value(t);
-    auto json_str = boost::json::serialize(json);
-    return json_str;
-}
-
-template <typename T>
-std::expected<T, std::string> deserialize(const std::string &json_str) {
-    try {
-        auto parsed   = boost::json::parse(json_str);
-        auto restored = json_convert::from_json<T>(parsed);
-        return restored;
-    } catch (const std::exception &e) {
-        eLog("Json deserialize error: {}", e.what());
-        return std::unexpected(e.what());
+    template <typename T>
+    boost::json::value serialize_value(const T &t) {
+        auto json = json_convert::to_json(t);
+        return json;
     }
-}
+
+    template <typename T>
+    std::string serialize(const T &t) {
+        auto json     = serialize_value(t);
+        auto json_str = boost::json::serialize(json);
+        return json_str;
+    }
+
+    template <typename T>
+    std::expected<T, std::string> deserialize(const std::string &json_str) {
+        try {
+            auto parsed   = boost::json::parse(json_str);
+            auto restored = json_convert::from_json<T>(parsed);
+            return restored;
+        } catch (const std::exception &e) {
+            eLog("Json deserialize error: {}", e.what());
+            return std::unexpected(e.what());
+        }
+    }
 } // namespace Json
 
 namespace Token {
-static const auto        MAX_TOKEN_COUNT  = BigNumberFloat("1000000000000");
-static const std::string FOLDER_TOKENS    = "tokens";
-static const std::string DB_TOKENS        = "tokens";
-static const std::string TOKEN_TABLE_NAME = "tokens";
-static const std::string DB_TOKENS_PATH   = fmt::format("{}/{}", FOLDER_TOKENS, DB_TOKENS);
-static const std::string TOKEN_TABLE_CREATE =
-    "CREATE TABLE IF NOT EXISTS tokens("
-    "actorId       TEXT  PRIMARY KEY NOT NULL, "
-    "name          TEXT  NOT NULL, "
-    "ticker        TEXT  NOT NULL, "
-    "count         TEXT  NOT NULL, "
-    "owner         TEXT  NOT NULL, "
-    "color         TEXT  NOT NULL, "
-    "smart         TEXT  NOT NULL);";
-namespace Fields {
-    static const std::string              actorId = "actorId";
-    static const std::string              name    = "name";
-    static const std::string              ticker  = "ticker";
-    static const std::string              count   = "count";
-    static const std::string              owner   = "owner";
-    static const std::string              color   = "color";
-    static const std::string              smart   = "smart";
-    static const std::vector<std::string> fields  = { name, ticker, count, owner, color, smart };
-}
-}
+    static const auto        MAX_TOKEN_COUNT  = BigNumberFloat("1000000000000");
+    static const std::string FOLDER_TOKENS    = "tokens";
+    static const std::string DB_TOKENS        = "tokens";
+    static const std::string TOKEN_TABLE_NAME = "tokens";
+    static const std::string DB_TOKENS_PATH   = fmt::format("{}/{}", FOLDER_TOKENS, DB_TOKENS);
+    static const std::string TOKEN_TABLE_CREATE =
+        "CREATE TABLE IF NOT EXISTS tokens("
+        "actorId       TEXT  PRIMARY KEY NOT NULL, "
+        "name          TEXT  NOT NULL, "
+        "ticker        TEXT  NOT NULL, "
+        "count         TEXT  NOT NULL, "
+        "owner         TEXT  NOT NULL, "
+        "color         TEXT  NOT NULL, "
+        "smart         TEXT  NOT NULL);";
+    namespace Fields {
+        static const std::string              actorId = "actorId";
+        static const std::string              name    = "name";
+        static const std::string              ticker  = "ticker";
+        static const std::string              count   = "count";
+        static const std::string              owner   = "owner";
+        static const std::string              color   = "color";
+        static const std::string              smart   = "smart";
+        static const std::vector<std::string> fields  = { name, ticker, count, owner, color, smart };
+    } // namespace Fields
+} // namespace Token
 
 namespace Utils {
-EXTRACHAIN_EXPORT std::string platformDelimeter();
-const static int              RECONNECT_INTERVAL = 5000;
+    EXTRACHAIN_EXPORT std::string platformDelimeter();
+    const static int              RECONNECT_INTERVAL = 5000;
 
-static std::uint64_t currentDateSecs() {
-    using namespace std::chrono;
-    std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-    return secs;
-}
+    static std::uint64_t currentDateSecs() {
+        using namespace std::chrono;
+        std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        return secs;
+    }
 
-static std::uint64_t currentDateMs() {
-    using namespace std::chrono;
-    std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-    return ms;
-}
+    static std::uint64_t currentDateMs() {
+        using namespace std::chrono;
+        std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        return ms;
+    }
 
-template <typename T>
-bool vector_contains(const std::vector<T> &vec, const T &element) {
-    return std::find(vec.begin(), vec.end(), element) != vec.end();
-}
+    template <typename T>
+    bool vector_contains(const std::vector<T> &vec, const T &element) {
+        return std::find(vec.begin(), vec.end(), element) != vec.end();
+    }
 
-EXTRACHAIN_EXPORT std::string extrachainVersion();
-EXTRACHAIN_EXPORT std::string sodiumVersion();
-EXTRACHAIN_EXPORT std::string boostVersion();
-EXTRACHAIN_EXPORT std::string boostAsioVersion();
+    EXTRACHAIN_EXPORT std::string extrachainVersion();
+    EXTRACHAIN_EXPORT std::string sodiumVersion();
+    EXTRACHAIN_EXPORT std::string boostVersion();
+    EXTRACHAIN_EXPORT std::string boostAsioVersion();
 
-enum PrintDebug {
-    Off = 0,
-    On  = 1
-};
+    enum PrintDebug {
+        Off = 0,
+        On  = 1
+    };
 
-enum class HashAlgorithm {
-    Sha3_512,
-    Blake3
-};
+    enum class HashAlgorithm {
+        Sha3_512,
+        Blake3
+    };
 
-enum class ParseError {
-    Invalid,
-    EmptyString,
-    InvalidFormat,
-    OutOfRange,
-    EnumConversionError,
-    FieldNotFound
-};
+    enum class ParseError {
+        Invalid,
+        EmptyString,
+        InvalidFormat,
+        OutOfRange,
+        EnumConversionError,
+        FieldNotFound
+    };
 
 #ifdef Q_OS_WIN
-static const std::wstring filePrefix = L"file:///";
+    static const std::wstring filePrefix = L"file:///";
 #else
-static const std::wstring filePrefix = L"file://";
+    static const std::wstring filePrefix = L"file://";
 #endif
 
-template <typename E>
-std::string enum_value_name(E value) {
-    return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
-}
-
-EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
-EXTRACHAIN_EXPORT qint64  diskFreeMemory();
-EXTRACHAIN_EXPORT qint64  diskTotalMemory();
-
-template <typename T>
-std::string toString(const T &value) {
-    if constexpr (std::is_enum_v<T>) {
-        return std::to_string(std::to_underlying(value));
-    } else {
-        return fmt::format("{}", value);
-    }
-}
-
-template <typename T>
-std::expected<T, ParseError> fromString(const std::string &str) {
-    if (str.empty()) {
-        return std::unexpected(ParseError::EmptyString);
+    template <typename E>
+    std::string enum_value_name(E value) {
+        return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
     }
 
-    try {
+    EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
+    EXTRACHAIN_EXPORT qint64  diskFreeMemory();
+    EXTRACHAIN_EXPORT qint64  diskTotalMemory();
+
+    template <typename T>
+    std::string toString(const T &value) {
         if constexpr (std::is_enum_v<T>) {
-            try {
-                return static_cast<T>(std::stoi(str));
-            } catch (...) {
-                return std::unexpected(ParseError::EnumConversionError);
-            }
+            return std::to_string(std::to_underlying(value));
         } else {
-            T                  value;
-            std::istringstream iss(str);
-            iss >> value;
-            if (iss.fail()) {
-                return std::unexpected(ParseError::InvalidFormat);
-            }
-            return value;
+            return fmt::format("{}", value);
         }
-    } catch (const std::out_of_range &) {
-        return std::unexpected(ParseError::OutOfRange);
-    } catch (...) {
-        return std::unexpected(ParseError::Invalid);
     }
-}
 
-boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
+    template <typename T>
+    std::expected<T, ParseError> fromString(const std::string &str) {
+        if (str.empty()) {
+            return std::unexpected(ParseError::EmptyString);
+        }
 
-EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
-EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
-bool                          is_hex_string(const std::string &str);
-bool                          is_hex_string_lower(const std::string &str);
+        try {
+            if constexpr (std::is_enum_v<T>) {
+                try {
+                    return static_cast<T>(std::stoi(str));
+                } catch (...) {
+                    return std::unexpected(ParseError::EnumConversionError);
+                }
+            } else {
+                T                  value;
+                std::istringstream iss(str);
+                iss >> value;
+                if (iss.fail()) {
+                    return std::unexpected(ParseError::InvalidFormat);
+                }
+                return value;
+            }
+        } catch (const std::out_of_range &) {
+            return std::unexpected(ParseError::OutOfRange);
+        } catch (...) {
+            return std::unexpected(ParseError::Invalid);
+        }
+    }
 
-QByteArray                       intToByteArray(const int &number, const int &size);
-std::string                      intToStdString(const int &number, const int &size);
-int                              qByteArrayToInt(const QByteArray &number);
-typedef std::vector<std::string> MerkleDataBlocks;
+    boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
-EXTRACHAIN_EXPORT void rootMerkleHash(
-    std::vector<std::string>      &listHashes,
-    std::vector<MerkleDataBlocks> &branchesTree,
-    const bool                     isHahsing,
-    std::string                   &result);
-EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
-EXTRACHAIN_EXPORT             std::vector<MerkleDataBlocks>
-                              splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
-EXTRACHAIN_EXPORT void        hashingElements(std::vector<std::string> &vector);
-EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
-EXTRACHAIN_EXPORT             std::string
-calculate_hash(const std::string &data, HashAlgorithm hash_algorithm = HashAlgorithm::Sha3_512);
+    EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
+    EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
+    bool                          is_hex_string(const std::string &str);
+    bool                          is_hex_string_lower(const std::string &str);
 
-/**
- * @brief Error codes for file hashing operations
- */
-enum class FileHashError {
-    FileNotFound, ///< File does not exist
-    ReadError,    ///< Error reading file data
-    HashError,    ///< Error during hash calculation
-    AccessError   ///< Permission or access-related errors
-};
+    QByteArray                       intToByteArray(const int &number, const int &size);
+    std::string                      intToStdString(const int &number, const int &size);
+    int                              qByteArrayToInt(const QByteArray &number);
+    typedef std::vector<std::string> MerkleDataBlocks;
 
-/**
- * @brief Calculate BLAKE3 hash of a file
- * @param path Path to the file
- * @return Expected containing hex string of hash or FileHashError
- * @retval string Hex representation of BLAKE3 hash on success
- * @retval FileHashError::FileNotFound If file doesn't exist
- * @retval FileHashError::ReadError If file reading fails
- * @retval FileHashError::AccessError If file access is denied
- *
- * @details Uses 64KB buffer for file reading and generates BLAKE3 hash
- * of the entire file content. The resulting hash is returned as a
- * hexadecimal string.
- */
-EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
+    EXTRACHAIN_EXPORT void rootMerkleHash(std::vector<std::string>      &listHashes,
+                                          std::vector<MerkleDataBlocks> &branchesTree,
+                                          const bool                     isHahsing,
+                                          std::string                   &result);
+    EXTRACHAIN_EXPORT std::string rootMerkleHash(std::string &data);
+    EXTRACHAIN_EXPORT std::vector<MerkleDataBlocks> splitListIntoPair(std::vector<std::string> &vector,
+                                                                      const bool                isHahsing);
+    EXTRACHAIN_EXPORT void                          hashingElements(std::vector<std::string> &vector);
+    EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
+    EXTRACHAIN_EXPORT std::string calculate_hash(const std::string &data,
+                                                 HashAlgorithm      hash_algorithm = HashAlgorithm::Sha3_512);
 
-std::string to_hex(std::vector<unsigned char> &data);
-std::string to_hex(const std::string &data);
-std::string from_hex(const std::string &data);
+    /**
+     * @brief Error codes for file hashing operations
+     */
+    enum class FileHashError {
+        FileNotFound, ///< File does not exist
+        ReadError,    ///< Error reading file data
+        HashError,    ///< Error during hash calculation
+        AccessError   ///< Permission or access-related errors
+    };
 
-std::string generate_random_hex(size_t length);
+    /**
+     * @brief Calculate BLAKE3 hash of a file
+     * @param path Path to the file
+     * @return Expected containing hex string of hash or FileHashError
+     * @retval string Hex representation of BLAKE3 hash on success
+     * @retval FileHashError::FileNotFound If file doesn't exist
+     * @retval FileHashError::ReadError If file reading fails
+     * @retval FileHashError::AccessError If file access is denied
+     *
+     * @details Uses 64KB buffer for file reading and generates BLAKE3 hash
+     * of the entire file content. The resulting hash is returned as a
+     * hexadecimal string.
+     */
+    EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
 
-template <typename T>
-concept Container = std::ranges::range<T>;
+    std::string to_hex(std::vector<unsigned char> &data);
+    std::string to_hex(const std::string &data);
+    std::string from_hex(const std::string &data);
 
-/**
- * @brief Checks if all elements in a container equal the given value
- *
- * @tparam C Container type that satisfies the Container concept
- * @param container The container to check
- * @param value The value to compare against
- * @return true if all elements equal the given value
- * @return false otherwise
- *
- * @note This function is constexpr and can be evaluated at compile-time
- * @see isAllZeros for a specialized version checking for zeros
- */
-template <Container C>
-constexpr bool isAllValue(const C &container, const std::ranges::range_value_t<C> &value) {
-    return std::ranges::all_of(container, [&value](const auto &x) {
-        return x == value;
-    });
-}
+    std::string generate_random_hex(size_t length);
 
-/**
- * @brief Specialized function to check if all elements in a container are zero
- *
- * @tparam C Container type that satisfies the Container concept
- * @param container The container to check
- * @return true if all elements are zero
- * @return false otherwise
- *
- * @requires The container's value type must be arithmetic (integer or floating-point)
- * @note This function is constexpr and can be evaluated at compile-time
- * @see isAllValue for a more general version that can check against any value
- */
-template <Container C>
-    requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
-constexpr bool isAllEmpty(const C &container) {
-    return isAllValue(container, std::ranges::range_value_t<C> { '\0' });
-}
+    template <typename T>
+    concept Container = std::ranges::range<T>;
 
-EXTRACHAIN_EXPORT bool encryptFile(
-    const QString    &originalName,
-    const QString    &encryptName,
-    const QByteArray &key,
-    int               blockSize = 60007);
-EXTRACHAIN_EXPORT bool decryptFile(
-    const QString    &encryptName,
-    const QString    &decryptName,
-    const QByteArray &key,
-    int               blockSize = 60007);
-QString fileMimeType(const QString &filePath);
-QString fileMimeSuffix(const QString &filePath);
+    /**
+     * @brief Checks if all elements in a container equal the given value
+     *
+     * @tparam C Container type that satisfies the Container concept
+     * @param container The container to check
+     * @param value The value to compare against
+     * @return true if all elements equal the given value
+     * @return false otherwise
+     *
+     * @note This function is constexpr and can be evaluated at compile-time
+     * @see isAllZeros for a specialized version checking for zeros
+     */
+    template <Container C>
+    constexpr bool isAllValue(const C &container, const std::ranges::range_value_t<C> &value) {
+        return std::ranges::all_of(container, [&value](const auto &x) {
+            return x == value;
+        });
+    }
 
-std::vector<std::string> split(const std::string &s, char c);
+    /**
+     * @brief Specialized function to check if all elements in a container are zero
+     *
+     * @tparam C Container type that satisfies the Container concept
+     * @param container The container to check
+     * @return true if all elements are zero
+     * @return false otherwise
+     *
+     * @requires The container's value type must be arithmetic (integer or floating-point)
+     * @note This function is constexpr and can be evaluated at compile-time
+     * @see isAllValue for a more general version that can check against any value
+     */
+    template <Container C>
+        requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
+    constexpr bool isAllEmpty(const C &container) {
+        return isAllValue(container, std::ranges::range_value_t<C> { '\0' });
+    }
 
-/**
- * @brief Remove data and cache files
- */
-EXTRACHAIN_EXPORT void wipeDataFiles();
+    EXTRACHAIN_EXPORT bool encryptFile(const QString    &originalName,
+                                       const QString    &encryptName,
+                                       const QByteArray &key,
+                                       int               blockSize = 60007);
+    EXTRACHAIN_EXPORT bool decryptFile(const QString    &encryptName,
+                                       const QString    &decryptName,
+                                       const QByteArray &key,
+                                       int               blockSize = 60007);
+    QString                fileMimeType(const QString &filePath);
+    QString                fileMimeSuffix(const QString &filePath);
 
-EXTRACHAIN_EXPORT QString              detectCompiler();
-EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
-EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
-EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
+    std::vector<std::string> split(const std::string &s, char c);
+
+    /**
+     * @brief Remove data and cache files
+     */
+    EXTRACHAIN_EXPORT void wipeDataFiles();
+
+    EXTRACHAIN_EXPORT QString              detectCompiler();
+    EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
+    EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+    EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
+    EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
 } // namespace Utils
 
 namespace BlockchainConst {
-// Main blockchain folder
-static const int         ACTOR_SIZE = 40;
-static const std::string BLOCKCHAIN = "blockchain";
+    // Main blockchain folder
+    static const int         ACTOR_SIZE = 40;
+    static const std::string BLOCKCHAIN = "blockchain";
 
-// Temporary folder
-static const std::string TMP_FOLDER        = "tmp";
-static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
+    // Temporary folder
+    static const std::string TMP_FOLDER        = "tmp";
+    static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
 
-// Folder with blocks
-static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
-static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
-static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
+    // Folder with blocks
+    static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
+    static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
+    static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
 
-// Dfs
-static const int DATA_OFFSET = 512;
+    // Dfs
+    static const int DATA_OFFSET = 512;
 
-enum class DataRowType {
-    Universal,
-};
+    enum class DataRowType {
+        Universal,
+    };
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 
 namespace KeyStore {
-// To store user private/public keys
-static const std::string folder   = "keystore";
-static const std::string format   = ".profile";
-static const std::string profiles = "profiles";
-static const std::string encrypt  = "encrypt";
-}
+    // To store user private/public keys
+    static const std::string folder   = "keystore";
+    static const std::string format   = ".profile";
+    static const std::string profiles = "profiles";
+    static const std::string encrypt  = "encrypt";
+} // namespace KeyStore
 
 namespace SearchEnum {
-enum class BlockParam {
-    Id = 0,
-    Data,
-    Hash,
-    Null
-};
+    enum class BlockParam {
+        Id = 0,
+        Data,
+        Hash,
+        Null
+    };
 
-enum class TxParam {
-    UserSender = 0,
-    UserReceiver,
-    UserApprover,
-    UserSenderOrReceiver,
-    UserSenderOrReceiverOrToken,
-    User, // sender or receiver or approver
-    Hash,
-    Data,
-    Null
-};
+    enum class TxParam {
+        UserSender = 0,
+        UserReceiver,
+        UserApprover,
+        UserSenderOrReceiver,
+        UserSenderOrReceiverOrToken,
+        User, // sender or receiver or approver
+        Hash,
+        Data,
+        Null
+    };
 } // namespace SearchEnum
 
 struct EXTRACHAIN_EXPORT Notification {
@@ -747,7 +741,7 @@ struct EXTRACHAIN_EXPORT Notification {
     QByteArray    data = "";
 };
 
-#define TIMER_START(name)                                                                                    \
-    QElapsedTimer name;                                                                                      \
+#define TIMER_START(name)                                                                                         \
+    QElapsedTimer name;                                                                                           \
     name.start();
 #define TIMER_END(name) eInfo("{} ms for timer {}", name.elapsed(), #name);

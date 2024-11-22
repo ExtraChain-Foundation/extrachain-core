@@ -103,10 +103,9 @@ QMap<QString, QString> TokenManager::mapTokens() {
     return map;
 }
 
-void TokenManager::sendInitialTransaction(
-    const ActorId        &owner,
-    const TokenId        &token,
-    const BigNumberFloat &amount) {
+void TokenManager::sendInitialTransaction(const ActorId        &owner,
+                                          const TokenId        &token,
+                                          const BigNumberFloat &amount) {
     Transaction tx;
     tx.setSender(owner);
     tx.setReceiver(owner);
@@ -145,19 +144,17 @@ bool TokenManager::tokenExist(const std::string &nameToken, const std::string &t
         return false;
     }
 
-    auto countRow = db.count(
-        Token::TOKEN_TABLE_NAME,
-        fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
+    auto countRow =
+        db.count(Token::TOKEN_TABLE_NAME, fmt::format("name='{}' OR ticker=UPPER('{}')", nameToken, tickerToken));
     eLog("[TokenManager] Name: count row: {}", countRow);
     return countRow > 0;
 }
 
-std::expected<TokenData, CreateTokenError> TokenManager::createToken(
-    const std::string &count,
-    const std::string &name,
-    const std::string &ticker,
-    const ActorId     &owner,
-    const std::string &color) {
+std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::string &count,
+                                                                     const std::string &name,
+                                                                     const std::string &ticker,
+                                                                     const ActorId     &owner,
+                                                                     const std::string &color) {
     if (!node->network()->isActiveConnectionExists()) {
         eLog("[TokenManager] No connections");
     }
@@ -180,13 +177,12 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(
         return std::unexpected(CreateTokenError::InvalidAmount);
     }
 
-    eLog(
-        "[TokenManager] Create token. Count: {} | name: {} | ticker: {} | rull address: {} | color: {}",
-        count,
-        name,
-        ticker,
-        owner,
-        color);
+    eLog("[TokenManager] Create token. Count: {} | name: {} | ticker: {} | rull address: {} | color: {}",
+         count,
+         name,
+         ticker,
+         owner,
+         color);
 
     if (!isValidName(name) || !isValidTicker(ticker)) {
         eLog("[TokenManager] Incorrecnt name: {} {}", isValidName(name), isValidTicker(ticker));
@@ -258,8 +254,7 @@ void TokenManager::checkIsContract(const QString &pathToFile) {
                 return;
 
             DbRow rowRow;
-            rowRow.insert(
-                { "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
+            rowRow.insert({ "actorId", jsonObj[Token::Fields::actorId.c_str()].toString().toStdString() }); // TODO
             rowRow.insert({ "name", jsonObj[Token::Fields::name.c_str()].toString().toStdString() });
             rowRow.insert({ "ticker", jsonObj[Token::Fields::ticker.c_str()].toString().toStdString() });
             rowRow.insert(

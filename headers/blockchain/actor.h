@@ -94,9 +94,8 @@ using TokenId = ActorId;
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {
-    static_assert(
-        (std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
-        "Type is not supported. Only Keys are supported");
+    static_assert((std::is_same<T, KeyPrivate>::value || std::is_same<T, KeyPublic>::value),
+                  "Type is not supported. Only Keys are supported");
 
 private:
     ActorId   m_id;
@@ -126,15 +125,13 @@ public:
      * @param id
      */
     void create(ActorType type) {
-        static_assert(
-            std::is_same<T, KeyPrivate>::value,
-            "Сannot be created with a public key. Only private is supported");
+        static_assert(std::is_same<T, KeyPrivate>::value,
+                      "Сannot be created with a public key. Only private is supported");
 
         this->m_type = type;
         this->m_key.generate();
         auto        publicKey = this->m_key.publicKey();
-        std::string hash =
-            Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
+        std::string hash = Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
 
         if (hash.size() >= BlockchainConst::ACTOR_SIZE)
             m_id = hash.substr(0, BlockchainConst::ACTOR_SIZE);

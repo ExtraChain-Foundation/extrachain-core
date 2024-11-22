@@ -231,11 +231,10 @@ char *extrachain_sign(const char *data, size_t size, const ActorPrivate *actor_p
     return res;
 }
 
-bool extrachain_verify_private(
-    const char         *data,
-    size_t              size,
-    const char         *sign,
-    const ActorPrivate *actor_private) {
+bool extrachain_verify_private(const char         *data,
+                               size_t              size,
+                               const char         *sign,
+                               const ActorPrivate *actor_private) {
     auto actor  = ActorKeyPrivate_from_actor_private(actor_private);
     bool verify = actor.key().verify(std::string(data, size), sign);
     return verify;
@@ -247,33 +246,29 @@ bool extrachain_verify(const char *data, size_t size, const char *sign, const Ac
     return verify;
 }
 
-char *extrachain_encrypt(
-    const char         *data,
-    size_t              size,
-    const ActorPrivate *actor_private,
-    const ActorPublic  *actor_public) {
-    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto actorPublic  = ActorKeyPublic_from_actor_public(actor_public);
-    auto encrypted    = SecretKey::encryptAsymmetric(
-        std::string(data, size),
-        actorPrivate.key().secretKey(),
-        actorPublic.key().publicKey());
+char *extrachain_encrypt(const char         *data,
+                         size_t              size,
+                         const ActorPrivate *actor_private,
+                         const ActorPublic  *actor_public) {
+    auto  actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto  actorPublic  = ActorKeyPublic_from_actor_public(actor_public);
+    auto  encrypted    = SecretKey::encryptAsymmetric(std::string(data, size),
+                                                  actorPrivate.key().secretKey(),
+                                                  actorPublic.key().publicKey());
     char *res;
     copy_char(res, encrypted);
     return res;
 }
 
-char *extrachain_decrypt(
-    const char         *data,
-    size_t              size,
-    const ActorPrivate *actor_private,
-    const ActorPublic  *actor_public) {
-    auto actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
-    auto actorPublic  = ActorKeyPublic_from_actor_public(actor_public);
-    auto decrypted    = SecretKey::decryptAsymmetric(
-        std::string(data, size),
-        actorPrivate.key().secretKey(),
-        actorPublic.key().publicKey());
+char *extrachain_decrypt(const char         *data,
+                         size_t              size,
+                         const ActorPrivate *actor_private,
+                         const ActorPublic  *actor_public) {
+    auto  actorPrivate = ActorKeyPrivate_from_actor_private(actor_private);
+    auto  actorPublic  = ActorKeyPublic_from_actor_public(actor_public);
+    auto  decrypted    = SecretKey::decryptAsymmetric(std::string(data, size),
+                                                  actorPrivate.key().secretKey(),
+                                                  actorPublic.key().publicKey());
     char *res;
     copy_char(res, decrypted);
     return res;

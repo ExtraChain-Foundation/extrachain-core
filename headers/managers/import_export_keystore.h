@@ -82,11 +82,10 @@ public:
     }
 
     // Encrypt a single file
-    bool encryptFile(
-        const QString    &inputPath,
-        const QString    &outputPath,
-        const QByteArray &key,
-        std::string      &writeData) {
+    bool encryptFile(const QString    &inputPath,
+                     const QString    &outputPath,
+                     const QByteArray &key,
+                     std::string      &writeData) {
         QFile inputFile(inputPath);
         if (!inputFile.open(QIODevice::ReadOnly)) {
             return false;
@@ -105,12 +104,11 @@ public:
         return true;
     }
 
-    bool encryptFolder(
-        const QString     &folderPath,
-        const QString     &outputFolderPath,
-        const QString     &namefileExport,
-        const QByteArray  &key,
-        const std::string &autologinHash) {
+    bool encryptFolder(const QString     &folderPath,
+                       const QString     &outputFolderPath,
+                       const QString     &namefileExport,
+                       const QByteArray  &key,
+                       const std::string &autologinHash) {
         eLog("Export folder: {}", folderPath);
         eLog("Output folder: {}", outputFolderPath);
         eLog("By key: {}", key);
@@ -162,11 +160,9 @@ public:
         eLog("Size of ecrypted data: {}", encryptedData.size());
 
         // Remove files
-        foreach (
-            QFileInfo item,
-            tmpEncryptFolder.entryInfoList(
-                QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
-                QDir::DirsFirst)) {
+        foreach (QFileInfo item,
+                 tmpEncryptFolder.entryInfoList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs,
+                                                QDir::DirsFirst)) {
             if (!item.isDir()) {
                 eLog("Remove file: {}", item.fileName());
                 QFile::remove(item.absoluteFilePath());
@@ -192,12 +188,11 @@ public:
     }
 
     // Decrypt all files in a folder
-    bool decryptFolder(
-        const QString    &filePath,
-        const QString    &outputFolderPath,
-        const QByteArray &key,
-        QString          &error,
-        std::string      &hash) {
+    bool decryptFolder(const QString    &filePath,
+                       const QString    &outputFolderPath,
+                       const QByteArray &key,
+                       QString          &error,
+                       std::string      &hash) {
         QDir dir(filePath);
         if (!filePath.endsWith(folderEncryptExt)) {
             error = "File has not extention `.fenc`";

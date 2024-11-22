@@ -60,11 +60,10 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(
-        QObject* parent,
-        bool     isClientApp           = false,
-        bool     allowRunRestApiServer = false,
-        bool     isRaccoon             = false);
+    ExtraChainNodeWrapper(QObject* parent,
+                          bool     isClientApp           = false,
+                          bool     allowRunRestApiServer = false,
+                          bool     isRaccoon             = false);
 
     ~ExtraChainNodeWrapper();
 
@@ -139,14 +138,17 @@ public:
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    std::expected<Transaction, TransactionError>
-    createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token);
+    std::expected<Transaction, TransactionError> createTransaction(ActorId        receiver,
+                                                                   BigNumberFloat amount,
+                                                                   ActorId        token);
 
-    std::expected<Transaction, TransactionError>
-    createTransactionFrom(ActorId sender, ActorId receiver, BigNumberFloat amount, ActorId token);
+    std::expected<Transaction, TransactionError> createTransactionFrom(ActorId        sender,
+                                                                       ActorId        receiver,
+                                                                       BigNumberFloat amount,
+                                                                       ActorId        token);
 
-    std::expected<Transaction, TransactionError>
-    sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer);
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction,
+                                                                 const std::shared_ptr<Actor<KeyPrivate>> signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();

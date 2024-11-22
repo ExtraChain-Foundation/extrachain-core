@@ -302,8 +302,7 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
 }
 
 bool DbConnector::table_exists(const std::string &table) {
-    std::string query =
-        fmt::format("SELECT name FROM sqlite_master WHERE type='table' AND name='{}';", table);
+    std::string query = fmt::format("SELECT name FROM sqlite_master WHERE type='table' AND name='{}';", table);
     return select(query).size() > 0;
 }
 
@@ -414,10 +413,7 @@ sqlite3 *DbConnector::getDb() const {
     return db;
 }
 
-bool DbConnector::implementation_prepare(
-    const std::string &tableName,
-    const DbRow       &data,
-    sqlite3_stmt      *stmt) {
+bool DbConnector::implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt) {
     int  rc;
     auto columns  = table_columns(tableName);
     int  fieldNum = 1;

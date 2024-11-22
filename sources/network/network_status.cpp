@@ -30,11 +30,7 @@ NetworkStatus::NetworkStatus(QObject *parent)
         return;
     }
     onReachabilityChanged(networkInfo->reachability());
-    connect(
-        networkInfo,
-        &QNetworkInformation::reachabilityChanged,
-        this,
-        &NetworkStatus::onReachabilityChanged);
+    connect(networkInfo, &QNetworkInformation::reachabilityChanged, this, &NetworkStatus::onReachabilityChanged);
 }
 
 NetworkStatus::Status NetworkStatus::status() {

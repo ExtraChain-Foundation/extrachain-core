@@ -139,28 +139,19 @@ public:
         std::string working_pattern(pattern);
 
         if (!m_case_sensitive) {
-            std::transform(
-                working_filename.begin(),
-                working_filename.end(),
-                working_filename.begin(),
-                ::tolower);
-            std::transform(
-                working_pattern.begin(),
-                working_pattern.end(),
-                working_pattern.begin(),
-                ::tolower);
+            std::transform(working_filename.begin(), working_filename.end(), working_filename.begin(), ::tolower);
+            std::transform(working_pattern.begin(), working_pattern.end(), working_pattern.begin(), ::tolower);
         }
 
         return working_filename.find(working_pattern) != std::string::npos;
     }
 
     bool matchesExcludePatterns(std::string_view filename) const {
-        return std::any_of(
-            m_exclude_patterns.begin(),
-            m_exclude_patterns.end(),
-            [this, filename](const std::string& pattern) {
-                return matchesPattern(filename, pattern);
-            });
+        return std::any_of(m_exclude_patterns.begin(),
+                           m_exclude_patterns.end(),
+                           [this, filename](const std::string& pattern) {
+                               return matchesPattern(filename, pattern);
+                           });
     }
 
     bool matchesModule(std::string_view filename, std::string_view module_name) const {
@@ -168,23 +159,21 @@ public:
         auto base_filename = (pos == std::string::npos) ? filename : filename.substr(pos + 1);
 
         if (auto it = m_modules.find(std::string(module_name)); it != m_modules.end()) {
-            return std::any_of(
-                it->second.begin(),
-                it->second.end(),
-                [this, base_filename](const std::string& pattern) {
-                    return matchesPattern(base_filename, pattern);
-                });
+            return std::any_of(it->second.begin(),
+                               it->second.end(),
+                               [this, base_filename](const std::string& pattern) {
+                                   return matchesPattern(base_filename, pattern);
+                               });
         }
         return false;
     }
 
     bool matchesCustomPatterns(std::string_view filename) const {
-        return std::any_of(
-            m_custom_patterns.begin(),
-            m_custom_patterns.end(),
-            [this, filename](const std::string& pattern) {
-                return matchesPattern(filename, pattern);
-            });
+        return std::any_of(m_custom_patterns.begin(),
+                           m_custom_patterns.end(),
+                           [this, filename](const std::string& pattern) {
+                               return matchesPattern(filename, pattern);
+                           });
     }
 
     bool matches(std::string_view filename) const {

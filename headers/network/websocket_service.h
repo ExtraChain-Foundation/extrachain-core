@@ -31,12 +31,11 @@ class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
     Q_OBJECT
 
 public:
-    explicit WebSocketService(
-        QWebSocket     *ws,
-        ExtraChainNode *node,
-        QObject        *parent       = nullptr,
-        const bool      isConstant   = false,
-        const bool      needToDelete = false);
+    explicit WebSocketService(QWebSocket     *ws,
+                              ExtraChainNode *node,
+                              QObject        *parent       = nullptr,
+                              const bool      isConstant   = false,
+                              const bool      needToDelete = false);
     // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 

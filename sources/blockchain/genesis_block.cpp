@@ -34,25 +34,23 @@ GenesisBlock::GenesisBlock(const GenesisBlock &block)
     this->m_dataRows    = block.dataRows();
 }
 
-GenesisBlock::GenesisBlock(
-    std::string                                 &&type,
-    std::string                                 &&data,
-    BigNumber                                     idx,
-    std::uint64_t                                 date,
-    std::string                                 &&prevHash,
-    std::string                                 &&hash,
-    std::string                                 &&prevGenHash,
-    Signatures                                  &&signatures,
-    std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
-    : Block(
-          std::move(type),
-          std::move(data),
-          std::move(idx),
-          date,
-          std::move(prevHash),
-          std::move(hash),
-          std::move(signatures),
-          {})
+GenesisBlock::GenesisBlock(std::string                                 &&type,
+                           std::string                                 &&data,
+                           BigNumber                                     idx,
+                           std::uint64_t                                 date,
+                           std::string                                 &&prevHash,
+                           std::string                                 &&hash,
+                           std::string                                 &&prevGenHash,
+                           Signatures                                  &&signatures,
+                           std::map<GenesisDataActor, GenesisDataInfo> &&dataRows)
+    : Block(std::move(type),
+            std::move(data),
+            std::move(idx),
+            date,
+            std::move(prevHash),
+            std::move(hash),
+            std::move(signatures),
+            {})
     , m_prevGenHash(std::move(prevGenHash))
     , m_dataRows(std::move(dataRows)) {
     setType(type);

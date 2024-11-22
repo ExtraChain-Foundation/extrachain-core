@@ -101,12 +101,11 @@ void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QStrin
     connectToWebSocket(connectInfo.ip, connectInfo.port);
 }
 
-void NetworkManager::setupProxy(
-    QNetworkProxy::ProxyType type,
-    const QString           &hostName,
-    quint16                  port,
-    const QString           &user,
-    const QString           &password) {
+void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
+                                const QString           &hostName,
+                                quint16                  port,
+                                const QString           &user,
+                                const QString           &password) {
     QNetworkProxy proxy;
     proxy.setType(type);
     proxy.setHostName(hostName);
@@ -128,9 +127,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         auto service = qobject_cast<SocketService *>(senderObj);
 
         emit this->newSocketActivated();
-        emit this->newSocketActivatedWithParams(
-            service->ip().toStdString(),
-            service->identifier().toStdString());
+        emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
     });
 
     {
@@ -237,10 +234,9 @@ void NetworkManager::startNetwork() {
         eLog("[WS] Server socker error: {}", int(socketError));
     });
 
-    eLog(
-        "[WS] Start listening: {}:{}",
-        wsServer->serverAddress(),
-        wsServer->serverPort()); // << wsServer->serverName();
+    eLog("[WS] Start listening: {}:{}",
+         wsServer->serverAddress(),
+         wsServer->serverPort()); // << wsServer->serverName();
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -251,11 +247,10 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(
-    const QString    &ip,
-    Network::Protocol protocol,
-    const bool        request,
-    const bool        isConstant) {
+void NetworkManager::connectToNode(const QString    &ip,
+                                   Network::Protocol protocol,
+                                   const bool        request,
+                                   const bool        isConstant) {
     if (m_connections->size() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -267,11 +262,7 @@ void NetworkManager::connectToNode(
         return;
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
-    eLog(
-        "[NetworkManager] Connect to {}, protocol: {}, port: {}",
-        ip,
-        Utils::enum_value_name(protocol),
-        port);
+    eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
     // m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
     using Network::Protocol;
@@ -286,25 +277,22 @@ void NetworkManager::connectToNode(
     }
 }
 
-void NetworkManager::connectToWebSocket(
-    const QString &ip,
-    quint16        port,
-    bool           requestListNodes,
-    const bool     isConstant) {
+void NetworkManager::connectToWebSocket(const QString &ip,
+                                        quint16        port,
+                                        bool           requestListNodes,
+                                        const bool     isConstant) {
     auto service = new WebSocketService(nullptr, node, this, isConstant);
     service->open(ip, port);
     connectWsService(service, requestListNodes);
-    m_reconnectionsToIdentifier->emplace(
-        NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket },
-        "");
+    m_reconnectionsToIdentifier
+        ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
 }
 
-void NetworkManager::sendMessage(
-    const std::string    &serialized_message,
-    Config::Net::TypeSend type_send,
-    const std::string    &receiver_identifier,
-    MessageType           type_info,
-    MessageStatus         status_info) {
+void NetworkManager::sendMessage(const std::string    &serialized_message,
+                                 Config::Net::TypeSend type_send,
+                                 const std::string    &receiver_identifier,
+                                 MessageType           type_info,
+                                 MessageStatus         status_info) {
     if (!isActiveConnectionExists()) {
         eLog("[NetworkManager] Save message to cache {} {}", type_info, status_info);
         saveToCache(serialized_message, type_send, receiver_identifier);
@@ -340,30 +328,27 @@ void NetworkManager::saveCustomMessage(const std::string &messageId, const std::
     m_receivedMessageId->insert_or_assign(messageId, std::make_pair(identifier, true));
 }
 
-void NetworkManager::sendCustomMessageFurther(
-    const CustomMessage &customMessage,
-    const MessageStatus &status,
-    const std::string   &messageId,
-    const std::string   &identifier) {
+void NetworkManager::sendCustomMessageFurther(const CustomMessage &customMessage,
+                                              const MessageStatus &status,
+                                              const std::string   &messageId,
+                                              const std::string   &identifier) {
     auto receivedMessageIdLocked = *m_receivedMessageId;
     auto it                      = receivedMessageIdLocked->find(messageId);
     if (it != receivedMessageIdLocked->end() || !it->second.second) {
-        node->network()->send_message(
-            customMessage,
-            MessageType::Custom,
-            status,
-            messageId,
-            Config::Net::TypeSend::Except);
+        node->network()->send_message(customMessage,
+                                      MessageType::Custom,
+                                      status,
+                                      messageId,
+                                      Config::Net::TypeSend::Except);
 
         it->second.first  = identifier;
         it->second.second = true;
     }
 }
 
-void NetworkManager::saveToCache(
-    const std::string    &serialized_message,
-    Config::Net::TypeSend typeSend,
-    const std::string    &receiver_identifier) {
+void NetworkManager::saveToCache(const std::string    &serialized_message,
+                                 Config::Net::TypeSend typeSend,
+                                 const std::string    &receiver_identifier) {
     std::ofstream file;
     file.open(NetworkCacheFile, std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
@@ -431,8 +416,7 @@ void NetworkManager::sendFromCache() {
     };
 
     for (int numberPackage = 0; numberPackage < allPackages.size(); numberPackage++) {
-        const std::vector<std::string> deserializedList =
-            Serialization::deserialize(allPackages[numberPackage]);
+        const std::vector<std::string> deserializedList = Serialization::deserialize(allPackages[numberPackage]);
         if (deserializedList.size() < 3) {
             eWarning("Size deserialized data in not correct");
             continue;
@@ -440,12 +424,11 @@ void NetworkManager::sendFromCache() {
         const std::string           deserialized_message = deserializedList[0];
         const Config::Net::TypeSend typeSend             = typeSendFromString(deserializedList[1]);
         const std::string           receiver_identifier  = deserializedList[2];
-        sendMessage(
-            deserialized_message,
-            typeSend,
-            receiver_identifier,
-            MessageType::Unknown,
-            MessageStatus::NoStatus);
+        sendMessage(deserialized_message,
+                    typeSend,
+                    receiver_identifier,
+                    MessageType::Unknown,
+                    MessageStatus::NoStatus);
     }
 }
 
@@ -483,10 +466,9 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     return flag_result;
 }
 
-void NetworkManager::messageReceived(
-    const std::string &message,
-    const std::string &ip,
-    const std::string &identifier) {
+void NetworkManager::messageReceived(const std::string &message,
+                                     const std::string &ip,
+                                     const std::string &identifier) {
     if (!checkMsgCount(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;
@@ -510,12 +492,11 @@ void NetworkManager::messageReceived(
     if (Network::networkDebug) {
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object        deserialized = oh.get();
-        eLog(
-            "[Network Message] Received: type {}, status {}, id {}, body: {}",
-            type,
-            status,
-            messId,
-            (std::stringstream() << deserialized).str());
+        eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
+             type,
+             status,
+             messId,
+             (std::stringstream() << deserialized).str());
     }
 #endif
 
@@ -527,7 +508,7 @@ void NetworkManager::messageReceived(
         eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, mb.sender_id);
 
         auto receivedMessageIdLocked = *m_receivedMessageId;
-        auto res = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
+        auto res                     = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
         if (!res.second) {
             if (res.first->second.second && status == MessageStatus::Response) {
                 auto identifier = res.first->second.first;
@@ -575,12 +556,11 @@ void NetworkManager::messageReceived(
             }
 
             if (!ips.empty()) {
-                node->network()->send_message(
-                    MessagePack::serialize_container(ips),
-                    MessageType::ShareConnections,
-                    MessageStatus::Response,
-                    messageId,
-                    Config::Net::TypeSend::Focused);
+                node->network()->send_message(MessagePack::serialize_container(ips),
+                                              MessageType::ShareConnections,
+                                              MessageStatus::Response,
+                                              messageId,
+                                              Config::Net::TypeSend::Focused);
             }
         } else if (status == MessageStatus::Response) {
             eInfo("Achieved ShareConnections(Response) {}", messageId);
@@ -720,16 +700,14 @@ void NetworkManager::messageReceived(
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            std::vector<std::string> listMessage =
-                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<std::string> listMessage = MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
                 MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
             node->dfs()->verifyFiles(listVerifiedMessage, messageId);
             break;
         }
         case MessageStatus::Response: {
-            std::vector<std::string> listMessage =
-                MessagePack::deserialize<std::vector<std::string>>(serialized);
+            std::vector<std::string> listMessage = MessagePack::deserialize<std::vector<std::string>>(serialized);
             std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
                 MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
             float percentVerified = node->dfs()->percentVerified(listVerifiedMessage);
@@ -856,8 +834,7 @@ void NetworkManager::messageReceived(
     }
 
     default:
-        std::string error =
-            fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
+        std::string error = fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
         eFatal("{}", error.data());
         break;
     }
@@ -888,8 +865,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     if (error != Network::SocketServiceError::DuplicateIdentifier
         && error != Network::SocketServiceError::IncompatibleIdentifier) {
         auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-        for (auto it = m_reconnectionsToIdentifierLocked->begin();
-             it != m_reconnectionsToIdentifierLocked->end();
+        for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
              ++it) {
             if (it->first.ip == service->ip() && it->first.protocol == service->protocol()) {
                 auto r = it->first;
@@ -950,17 +926,17 @@ std::string NetworkManager::getNetworkVPNHash() noexcept {
 }
 
 void NetworkManager::setNetworkVPNHash() noexcept {
-    boost::mt11213b rng(std::chrono::system_clock::now().time_since_epoch().count());
+    boost::mt11213b                           rng(std::chrono::system_clock::now().time_since_epoch().count());
     boost::random::uniform_int_distribution<> dist(0, INT_MAX);
     std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
 
     KeyPrivate key;
     key.generate();
-    m_networkHashForVPN = Utils::calculate_hash(
-                              ByteArray(key.publicKey()).toString()
+    m_networkHashForVPN =
+        Utils::calculate_hash(ByteArray(key.publicKey()).toString()
                                   + node->accountController()->mainActor()->id().to_string() + salt,
                               Utils::HashAlgorithm::Sha3_512)
-                              .substr(0, 64);
+            .substr(0, 64);
 }
 
 QString NetworkManager::localIp() {
@@ -986,11 +962,10 @@ void NetworkManager::onNewWsConnection() {
     auto service = new WebSocketService(ws, node, this, false, needToDelete);
     connectWsService(service);
     if (!needToDelete)
-        m_reconnectionsToIdentifier->emplace(
-            NetworkReconnect { .ip       = service->ip(),
-                               .port     = service->port(),
-                               .protocol = Network::Protocol::WebSocket },
-            "");
+        m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
+                                                                .port     = service->port(),
+                                                                .protocol = Network::Protocol::WebSocket },
+                                             "");
 }
 
 bool NetworkManager::removeOneConnection() {
@@ -1048,15 +1023,14 @@ qint64 CalculateTraffic::totalBytesReceivedFromConnection(const std::string &ip)
 
 std::pair<std::uint64_t, std::uint64_t> CalculateTraffic::totalBytes() {
     std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
-    return std::accumulate(
-        m_trafficStats.begin(),
-        m_trafficStats.end(),
-        std::make_pair(std::uint64_t { 0 }, std::uint64_t { 0 }),
-        [](std::pair<std::uint64_t, std::uint64_t> acc, const auto &connection) {
-            acc.first += connection.second.bytesSent;
-            acc.second += connection.second.bytesReceived;
-            return acc;
-        });
+    return std::accumulate(m_trafficStats.begin(),
+                           m_trafficStats.end(),
+                           std::make_pair(std::uint64_t { 0 }, std::uint64_t { 0 }),
+                           [](std::pair<std::uint64_t, std::uint64_t> acc, const auto &connection) {
+                               acc.first += connection.second.bytesSent;
+                               acc.second += connection.second.bytesReceived;
+                               return acc;
+                           });
 }
 
 QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {

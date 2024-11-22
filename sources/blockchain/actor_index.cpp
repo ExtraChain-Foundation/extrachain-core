@@ -64,10 +64,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
         Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            eWarning(
-                "Can not validate block {}. There no actor {} in local storage",
-                block.getIndex(),
-                actorId);
+            eWarning("Can not validate block {}. There no actor {} in local storage", block.getIndex(), actorId);
             continue;
         }
 
@@ -94,12 +91,11 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
         eFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
-        node->network()->send_message(
-            actor,
-            MessageType::Actor,
-            MessageStatus::Response,
-            messageId,
-            Config::Net::TypeSend::Focused);
+        node->network()->send_message(actor,
+                                      MessageType::Actor,
+                                      MessageStatus::Response,
+                                      messageId,
+                                      Config::Net::TypeSend::Focused);
     } else {
         sendGetActorMessage(actorId);
     }
@@ -112,12 +108,11 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     auto result = allActors();
     result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
     if (!result.empty()) {
-        node->network()->send_message(
-            result,
-            MessageType::ActorAll,
-            MessageStatus::Response,
-            messageId,
-            Config::Net::TypeSend::Focused);
+        node->network()->send_message(result,
+                                      MessageType::ActorAll,
+                                      MessageStatus::Response,
+                                      messageId,
+                                      Config::Net::TypeSend::Focused);
     } else {
         // send empty response
     }
@@ -164,10 +159,9 @@ void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
 void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
     eLog("[ActorIndex] Get actor count response: {}", this->getRecords());
 
-    node->network()->send_message(
-        std::to_string(this->getRecords()),
-        MessageType::ActorCount,
-        MessageStatus::Response);
+    node->network()->send_message(std::to_string(this->getRecords()),
+                                  MessageType::ActorCount,
+                                  MessageStatus::Response);
 }
 
 bool ActorIndex::actorExist(const ActorId &actorId) {
@@ -269,9 +263,8 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         this->records++;
         DbConnector db(folderPath + "actors");
         db.open();
-        bool dbInsert = db.insert(
-            Config::DataStorage::actorsTable,
-            { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
+        bool dbInsert = db.insert(Config::DataStorage::actorsTable,
+                                  { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
         if (!dbInsert)
             eFatal("db actor insert error");
 

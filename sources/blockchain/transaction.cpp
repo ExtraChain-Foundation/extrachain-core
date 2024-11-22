@@ -35,12 +35,11 @@ Transaction::Transaction() {
     calculate_hash();
 }
 
-Transaction::Transaction(
-    const ActorId        &sender,
-    const ActorId        &receiver,
-    const BigNumberFloat &amount,
-    const ActorId        &token,
-    const std::string    &data) {
+Transaction::Transaction(const ActorId        &sender,
+                         const ActorId        &receiver,
+                         const BigNumberFloat &amount,
+                         const ActorId        &token,
+                         const std::string    &data) {
     this->m_sender    = sender;
     this->m_receiver  = receiver;
     this->m_amount    = amount;
@@ -141,8 +140,8 @@ void Transaction::setDate(std::uint64_t value) {
 }
 
 void Transaction::calculate_hash() {
-    auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex)
-                    + m_data + std::to_string(m_date) + m_token.to_string() + m_prevBlock.to_string()
+    auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex) + m_data
+                    + std::to_string(m_date) + m_token.to_string() + m_prevBlock.to_string()
                     + m_approver.to_string() + m_producer.to_string();
 
     std::string resultHash = Utils::calculate_hash(hashData);

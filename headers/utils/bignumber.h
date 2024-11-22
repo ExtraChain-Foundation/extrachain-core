@@ -29,8 +29,8 @@
 #include "extrachain_global.h"
 
 #ifdef QT_DEBUG
-    #define UPDATE_DEBUG()                                                                                   \
-        qdata    = to_string(NumeralBase::Hex);                                                              \
+    #define UPDATE_DEBUG()                                                                                        \
+        qdata    = to_string(NumeralBase::Hex);                                                                   \
         qdataDec = to_string(NumeralBase::Dec);
 #else
     #define UPDATE_DEBUG()
@@ -42,8 +42,8 @@ enum class NumeralBase {
 };
 
 namespace BigNumberUtils {
-const static std::vector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                         '2', '3', '4', '5', '6', '7', '8', '9' };
+    const static std::vector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
+                                             '2', '3', '4', '5', '6', '7', '8', '9' };
 }
 
 enum class BigNumberError {
@@ -115,8 +115,8 @@ public:
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
 
-    static std::expected<BigNumber, BigNumberError>
-    create(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
+    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber,
+                                                           NumeralBase        base = NumeralBase::Hex);
 
     std::strong_ordering operator<=>(const BigNumber &other) const;
     std::strong_ordering operator<=>(const int &other) const;

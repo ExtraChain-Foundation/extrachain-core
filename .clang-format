@@ -1,9 +1,8 @@
 BasedOnStyle: WebKit
 Standard: c++20
 Language: Cpp
-ColumnLimit: 110
+ColumnLimit: 115
 CommentPragmas: "^!|^:"
-#PointerBindsToType: true
 PointerAlignment: Left
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeTernaryOperators: true
@@ -29,10 +28,10 @@ BraceWrapping:
  SplitEmptyFunction: true
  SplitEmptyRecord: true
  SplitEmptyNamespace: true
-
-AlignAfterOpenBracket: AlwaysBreak
+AlignAfterOpenBracket: Align
+PenaltyReturnTypeOnItsOwnLine: 1000
+PenaltyBreakBeforeFirstCallParameter: 1000
 AlwaysBreakTemplateDeclarations: Yes
-#AllowShortFunctionsOnASingleLine: Inline
 AllowShortEnumsOnASingleLine: false
 SortIncludes: Never
 SortUsingDeclarations: true
@@ -42,16 +41,13 @@ AllowShortLambdasOnASingleLine: None
 SpaceBeforeParens: ControlStatements
 DerivePointerAlignment: true
 IndentPPDirectives: BeforeHash
-KeepEmptyLinesAtTheStartOfBlocks: false
-
-MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: true
+MaxEmptyLinesToKeep: 2
 AllowShortIfStatementsOnASingleLine: Never
-#AlignEscapedNewlinesLeft: true
 AllowShortLoopsOnASingleLine: false
-
-AlignConsecutiveMacros: true
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
 AlignEscapedNewlines: Right
 AlignOperands: true
 AllowAllArgumentsOnNextLine: false
@@ -61,6 +57,19 @@ AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: true
-
 BinPackArguments: false
 BinPackParameters: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceInEmptyParentheses: false
+SpaceBeforeCpp11BracedList: true
+Cpp11BracedListStyle: false
+NamespaceIndentation: All
+CompactNamespaces: false
+FixNamespaceComments: true
+TabWidth: 4
+UseTab: Never
+IndentWidth: 4
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock

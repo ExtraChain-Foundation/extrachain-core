@@ -41,15 +41,14 @@ Block::Block(const Block &block) {
     this->m_transactions = block.m_transactions;
 }
 
-Block::Block(
-    std::string           &&type,
-    std::string           &&data,
-    BigNumber               idx,
-    std::uint64_t           date,
-    std::string           &&prevHash,
-    std::string           &&hash,
-    Signatures            &&signatures,
-    std::set<Transaction> &&transactions)
+Block::Block(std::string           &&type,
+             std::string           &&data,
+             BigNumber               idx,
+             std::uint64_t           date,
+             std::string           &&prevHash,
+             std::string           &&hash,
+             Signatures            &&signatures,
+             std::set<Transaction> &&transactions)
     : m_index(std::move(idx))
     , m_date(date)
     , m_prevHash(std::move(prevHash))

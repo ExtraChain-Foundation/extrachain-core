@@ -95,8 +95,8 @@ bool PermissionManager::initPermissionDB(const Actor<KeyPrivate> &actor) {
     return true;
 }
 
-PermissionManager::Permission
-PermissionManager::getHighestPermission(const QString &userId, const QString &fileHash) {
+PermissionManager::Permission PermissionManager::getHighestPermission(const QString &userId,
+                                                                      const QString &fileHash) {
     Permission permFilePermission = getUserPermission(userId, fileHash);
 
     Permission sharedFilePermission = getUserPermission(QString::number(sharedId), fileHash);
@@ -116,8 +116,8 @@ PermissionManager::getHighestPermission(const QString &userId, const QString &fi
     return NoPermission;
 }
 
-PermissionManager::Permission
-PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermissionMsg &msg) {
+PermissionManager::Permission PermissionManager::getPermission(const Actor<KeyPrivate> &actor,
+                                                               const GetPermissionMsg  &msg) {
     const QString &userId   = msg.userId.c_str();
     const QString &fileHash = msg.fileHash.c_str();
 
@@ -130,10 +130,9 @@ PermissionManager::getPermission(const Actor<KeyPrivate> &actor, const GetPermis
         return targetFilePermission;
     }
 
-    eLog(
-        "{} Actor {} has no permission to read the Permissions file",
-        __FUNCTION__,
-        actor.id().to_string().c_str());
+    eLog("{} Actor {} has no permission to read the Permissions file",
+         __FUNCTION__,
+         actor.id().to_string().c_str());
     return permFilePermission;
 }
 
@@ -230,8 +229,8 @@ bool PermissionManager::setPermission(const Actor<KeyPrivate> &actor, const SetP
     return true;
 }
 
-PermissionManager::Permission
-PermissionManager::getUserPermission(const QString &userId, const QString &fileHash) {
+PermissionManager::Permission PermissionManager::getUserPermission(const QString &userId,
+                                                                   const QString &fileHash) {
     //    DBRow currentPermissionRow = findDBRow(userId, fileHash);
 
     //    if (currentPermissionRow.empty()) {
@@ -274,11 +273,10 @@ PermissionManager::getUserPermission(const QString &userId, const QString &fileH
 //                                  ServiceDir);
 //}
 
-DbRow PermissionManager::makeDBRow(
-    const QString   &fileHash,
-    const Permission permission,
-    const QString   &userId,
-    const QString   &signature) {
+DbRow PermissionManager::makeDBRow(const QString   &fileHash,
+                                   const Permission permission,
+                                   const QString   &userId,
+                                   const QString   &signature) {
     return { { "fileHash", fileHash.toStdString() },
              { "permission", permissions[permission] },
              { "userId", userId.toStdString() },

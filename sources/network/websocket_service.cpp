@@ -21,12 +21,11 @@
 
 #include <QJsonObject>
 
-WebSocketService::WebSocketService(
-    QWebSocket     *ws,
-    ExtraChainNode *node,
-    QObject        *parent,
-    const bool      isConstant,
-    const bool      needToDelete)
+WebSocketService::WebSocketService(QWebSocket     *ws,
+                                   ExtraChainNode *node,
+                                   QObject        *parent,
+                                   const bool      isConstant,
+                                   const bool      needToDelete)
     : SocketService(node, parent) {
     m_isConstant   = isConstant;
     m_needToDelete = needToDelete;
@@ -95,10 +94,9 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         m_identifier = json["identifier"].toString();
         auto tempPub = json["pub"].toString();
 
-        eInfo(
-            "[WS] First message key achieved: {}, isConstant: {}",
-            json.toJson(QJsonDocument::Compact),
-            m_isConstant);
+        eInfo("[WS] First message key achieved: {}, isConstant: {}",
+              json.toJson(QJsonDocument::Compact),
+              m_isConstant);
 
         pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
         if (pub.empty()) { // or incorrect

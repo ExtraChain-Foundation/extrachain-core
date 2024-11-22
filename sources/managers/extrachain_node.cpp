@@ -42,11 +42,10 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(
-    QObject* parent,
-    bool     isClientApp,
-    bool     allowRunRestApiServer,
-    bool     isRaccoonCheck)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
+                                             bool     isClientApp,
+                                             bool     allowRunRestApiServer,
+                                             bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
 }
@@ -163,14 +162,13 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
     using namespace sqlite::literals;
 
     auto tokens = DbSchema("tokens");
-    tokens.add_columns(
-        "tokenId"_text.primary_key(),
-        "name"_text.not_null().unique(),
-        "ticker"_text.not_null().unique(),
-        "count"_text.not_null(),
-        "owner"_text.not_null(), // perm: field for author actor id
-        "color"_text.not_null(),
-        "smart"_text);
+    tokens.add_columns("tokenId"_text.primary_key(),
+                       "name"_text.not_null().unique(),
+                       "ticker"_text.not_null().unique(),
+                       "count"_text.not_null(),
+                       "owner"_text.not_null(), // perm: field for author actor id
+                       "color"_text.not_null(),
+                       "smart"_text);
 
     if (tokens.validation_error()) {
         eCritical("Token database not correct: {}", tokens.validation_error().value());
@@ -279,8 +277,9 @@ TokenManager* ExtraChainNode::tokenManager() const {
     return m_tokenManager;
 }
 
-std::expected<Transaction, TransactionError>
-ExtraChainNode::createTransaction(ActorId receiver, BigNumberFloat amount, ActorId token) {
+std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(ActorId        receiver,
+                                                                               BigNumberFloat amount,
+                                                                               ActorId        token) {
     auto actor = m_accountController->currentWallet();
 
     Transaction tx(actor->id(), receiver, amount, token);
@@ -310,10 +309,7 @@ std::string ExtraChainNode::exportUser() {
     return ByteArray(data).toString();
 }
 
-bool ExtraChainNode::importUser(
-    const std::string& data,
-    const std::string& login,
-    const std::string& password) {
+bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
     auto hash = Utils::calculate_hash(login + password);
 
     auto json = ByteArray(Cryptography::decryptWithPassword(ByteArray(data).toBytes(), hash)).toQByteArray();
@@ -347,11 +343,10 @@ bool ExtraChainNode::importUser(
     return true;
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(
-    ActorId        sender,
-    ActorId        receiver,
-    BigNumberFloat amount,
-    ActorId        token) {
+std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
+                                                                                   ActorId        receiver,
+                                                                                   BigNumberFloat amount,
+                                                                                   ActorId        token) {
     if (sender == ActorId()) { // TODO: remove hack
         sender = m_accountController->currentWallet()->id();
     }
@@ -396,8 +391,9 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError>
-ExtraChainNode::sendTransaction(Transaction transaction, const std::shared_ptr<Actor<KeyPrivate>> signer) {
+std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(
+    Transaction                              transaction,
+    const std::shared_ptr<Actor<KeyPrivate>> signer) {
     auto lastRealBlock = m_blockchain->getLastRealBlock();
 
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
@@ -445,9 +441,8 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calculate_hash(
-                   std::to_string(QDateTime::currentSecsSinceEpoch())
-                   + std::to_string(QRandomGenerator::global()->bounded(100000)))
+    file.write(Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                     + std::to_string(QRandomGenerator::global()->bounded(100000)))
                    .c_str());
     file.flush();
     file.close();
@@ -528,11 +523,7 @@ void ExtraChainNode::connectSignals() {
     connectActorIndex();
     dfsConnection();
 
-    connect(
-        m_networkManager,
-        &NetworkManager::newSocketActivated,
-        this,
-        &ExtraChainNode::getAllActorsTimerCall);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
 
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
@@ -553,27 +544,24 @@ void ExtraChainNode::connectSignals() {
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
-    connect(
-        m_tokenManager,
-        &TokenManager::sendTransactionCreateToken,
-        this,
-        [&](const ActorId& actorId, const Transaction& tx) {
-            auto actor = m_accountController->currentProfile().getActor(actorId);
-            this->sendTransaction(tx, actor);
-        });
+    connect(m_tokenManager,
+            &TokenManager::sendTransactionCreateToken,
+            this,
+            [&](const ActorId& actorId, const Transaction& tx) {
+                auto actor = m_accountController->currentProfile().getActor(actorId);
+                this->sendTransaction(tx, actor);
+            });
 
-    connect(
-        m_tokenManager,
-        &TokenManager::sendToken,
-        this,
-        [=, this](const ActorId& actorId, const QString& pathToJson) {
-            m_dfs->storeFile(
-                actorId,
-                pathToJson.toStdString(),
-                "contract",
-                "token-description.json",
-                Dfs::Encryption::Public);
-        });
+    connect(m_tokenManager,
+            &TokenManager::sendToken,
+            this,
+            [=, this](const ActorId& actorId, const QString& pathToJson) {
+                m_dfs->storeFile(actorId,
+                                 pathToJson.toStdString(),
+                                 "contract",
+                                 "token-description.json",
+                                 Dfs::Encryption::Public);
+            });
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -582,10 +570,10 @@ void ExtraChainNode::prepareFolders() {
 
     QDir().mkpath(QString::fromStdString(KeyStore::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
-    QDir().mkpath(QString::fromStdString(
-        BlockchainConst::BLOCKCHAIN_INDEX + "/" + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
-    QDir().mkpath(QString::fromStdString(
-        BlockchainConst::BLOCKCHAIN_INDEX + "/" + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
+                                         + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
+                                         + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 

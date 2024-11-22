@@ -62,11 +62,10 @@ void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QS
                                   + QString("Man:\"ssdp:discover\"\r\n") + QString("MX:3\r\n\r\n");
         QObject::connect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
         QObject::connect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
-        udp_socket->writeDatagram(
-            discover_string.toLatin1(),
-            discover_string.size(),
-            localAddress->broadcast(),
-            1900);
+        udp_socket->writeDatagram(discover_string.toLatin1(),
+                                  discover_string.size(),
+                                  localAddress->broadcast(),
+                                  1900);
         timer->start(waitTime);
     } else {
         emit upnpError("Invalid protocol");
@@ -85,8 +84,7 @@ void UPNPConnection::getUdp() {
         if (st_addr != localAddress->ip()) {
             timer->stop();
             gateway = st_addr;
-            emit stageSucceded(
-                st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data() + "\n");
+            emit stageSucceded(st_addr.toString() + ": " + QString(senderPort) + ";\n" + datagram.data() + "\n");
             vs        = datagram.data();
             int index = vs.indexOf("LOCATION: ");
             if (index != -1) {
@@ -109,11 +107,10 @@ void UPNPConnection::getUdp() {
                 }
                 sport.remove(index, sport.size() - index);
                 ctrlPort = sport;
-                QObject::connect(
-                    http_socket,
-                    SIGNAL(finished(QNetworkReply *)),
-                    this,
-                    SLOT(processReq(QNetworkReply *)));
+                QObject::connect(http_socket,
+                                 SIGNAL(finished(QNetworkReply *)),
+                                 this,
+                                 SLOT(processReq(QNetworkReply *)));
                 http_socket->get(QNetworkRequest(QUrl(vs)));
                 udp_socket->close();
             }
@@ -129,11 +126,7 @@ void UPNPConnection::timeExpired() {
 }
 
 void UPNPConnection::processReq(QNetworkReply *reply) {
-    QObject::disconnect(
-        http_socket,
-        SIGNAL(finished(QNetworkReply *)),
-        this,
-        SLOT(processReq(QNetworkReply *)));
+    QObject::disconnect(http_socket, SIGNAL(finished(QNetworkReply *)), this, SLOT(processReq(QNetworkReply *)));
     QString response = reply->readAll();
     int     i        = 0;
     while (i < response.size()) {
@@ -178,32 +171,30 @@ void UPNPConnection::getExternalIP() {
 }
 
 void UPNPConnection::postSOAP(QString action, QString message) {
-    emit stageSucceded(
-        QString("POST: \nAction: ") + action + QString("\nMessage: ") + message + QString("\n\n"));
+    emit stageSucceded(QString("POST: \nAction: ") + action + QString("\nMessage: ") + message + QString("\n\n"));
+
     QNetworkRequest req(gatewayCtrlUrl);
     req.setRawHeader(QByteArray("Host"), (gateway.toString() + QString(":") + ctrlPort).toLatin1());
     req.setRawHeader(QByteArray("Content-Type"), QByteArray("text/xml; charset=\"utf-8\""));
     req.setRawHeader(QByteArray("Content-Length"), QString::number(message.size()).toLatin1());
-    req.setRawHeader(
-        QByteArray("Soapaction"),
-        (QString("\"urn:schemas-upnp-org:service:WANIPConnection:1#") + action + QString("\"")).toLatin1());
+    req.setRawHeader(QByteArray("Soapaction"),
+                     (QString("\"urn:schemas-upnp-org:service:WANIPConnection:1#") + action + QString("\""))
+                         .toLatin1());
     http_reply = http_socket->post(req, message.toLatin1());
     QObject::connect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
-    QObject::connect(
-        http_reply,
-        SIGNAL(error(QNetworkReply::NetworkError)),
-        this,
-        SLOT(getHttpError(QNetworkReply::NetworkError)));
+    QObject::connect(http_reply,
+                     SIGNAL(error(QNetworkReply::NetworkError)),
+                     this,
+                     SLOT(getHttpError(QNetworkReply::NetworkError)));
 }
 
 void UPNPConnection::getHttp() {
     QString reply = http_reply->readAll();
     QObject::disconnect(http_reply, SIGNAL(readyRead()), this, SLOT(getHttp()));
-    QObject::disconnect(
-        http_reply,
-        SIGNAL(error(QNetworkReply::NetworkError)),
-        this,
-        SLOT(getHttpError(QNetworkReply::NetworkError)));
+    QObject::disconnect(http_reply,
+                        SIGNAL(error(QNetworkReply::NetworkError)),
+                        this,
+                        SLOT(getHttpError(QNetworkReply::NetworkError)));
     eLog("UPnP Reply: {}", reply);
     if (!reply.contains("UPnPError")) {
         if (reply.contains("<NewExternalIPAddress>")) {

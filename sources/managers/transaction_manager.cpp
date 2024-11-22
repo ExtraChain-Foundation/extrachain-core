@@ -76,11 +76,10 @@ void TransactionManager::makeBlock() {
     }
 
     if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-        eLog(
-            "[Blockchain] Last block: {}, last real: {}, type: {}",
-            lastBlock->getIndex(),
-            lastRealBlock->getIndex(),
-            lastRealBlock->getType());
+        eLog("[Blockchain] Last block: {}, last real: {}, type: {}",
+             lastBlock->getIndex(),
+             lastRealBlock->getIndex(),
+             lastRealBlock->getType());
     } else {
         eLog("[Blockchain] Last block: {}, type: {}", lastRealBlock->getIndex(), lastRealBlock->getType());
     }
@@ -96,10 +95,9 @@ void TransactionManager::makeBlock() {
 
     auto maybeGenesisId = lastBlock->getIndex() + 1;
     if (!lastBlock->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
-        eLog(
-            "[Blockchain] Create genesis block {}, dec: {}",
-            maybeGenesisId,
-            maybeGenesisId.to_string(NumeralBase::Dec));
+        eLog("[Blockchain] Create genesis block {}, dec: {}",
+             maybeGenesisId,
+             maybeGenesisId.to_string(NumeralBase::Dec));
         const auto actor   = node->accountController()->mainActor();
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 

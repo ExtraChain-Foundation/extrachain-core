@@ -41,8 +41,8 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
-    Actor<KeyPrivate>
-    createWallet(const ActorId &profileActor = ActorId(), const std::string &walletName = std::string());
+    Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
+                                   const std::string &walletName   = std::string());
     // createDAppMaster
     Actor<KeyPrivate> createService(const ActorId &profileActor = ActorId());
 

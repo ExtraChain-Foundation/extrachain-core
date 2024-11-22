@@ -27,6 +27,7 @@
 
 class EXTRACHAIN_EXPORT PermissionManager : public QObject {
     Q_OBJECT
+
 public:
     enum CriticalErrors {
         RootDirCreateError  = -2,
@@ -66,11 +67,10 @@ private:
     //    QString makeActorDirPath(const Actor<KeyPrivate> & actor);
     //    QString makeServiceDirPath(const Actor<KeyPrivate> & actor);
 
-    DbRow makeDBRow(
-        const QString   &fileHash,
-        const Permission permission,
-        const QString   &userId,
-        const QString   &signature);
+    DbRow makeDBRow(const QString   &fileHash,
+                    const Permission permission,
+                    const QString   &userId,
+                    const QString   &signature);
     //    DBRow findDBRow(const QString & userId, const QString & fileHash);
 
     Permission getUserPermission(const QString &userId, const QString &fileHash);

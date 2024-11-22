@@ -50,8 +50,7 @@ void DiscoveryService::process() {
 
         foreach (QNetworkAddressEntry entry, networkInterface.addressEntries()) {
             QHostAddress broadcastAddress = entry.broadcast();
-            if (broadcastAddress != QHostAddress::Null
-                && entry.ip().protocol() == QAbstractSocket::IPv4Protocol
+            if (broadcastAddress != QHostAddress::Null && entry.ip().protocol() == QAbstractSocket::IPv4Protocol
                 && broadcastAddress != QHostAddress::LocalHost
                 && broadcastAddress != QHostAddress(QHostAddress::LocalHost)) {
                 eLog("{} {}", broadcastAddress, QHostAddress(QHostAddress::LocalHost));

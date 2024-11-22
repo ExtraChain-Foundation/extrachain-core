@@ -21,11 +21,10 @@
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
-ConnectionsManager::ConnectionsManager(
-    const std::string address,
-    const std::string port,
-    const QByteArray  key,
-    QObject          *parent)
+ConnectionsManager::ConnectionsManager(const std::string address,
+                                       const std::string port,
+                                       const QByteArray  key,
+                                       QObject          *parent)
     : QObject(parent)
     , m_address(address)
     , m_port(port)
@@ -224,14 +223,13 @@ void ConnectionsManager::tryToNewConnect() {
         // try connect
 
         // remove connection from new connections list
-        newConnections.erase(
-            std::remove_if(
-                newConnections.begin(),
-                newConnections.end(),
-                [&](Connection const &item) {
-                    return item.address == connection.address && item.port == connection.port;
-                }),
-            newConnections.end());
+        newConnections.erase(std::remove_if(newConnections.begin(),
+                                            newConnections.end(),
+                                            [&](Connection const &item) {
+                                                return item.address == connection.address
+                                                       && item.port == connection.port;
+                                            }),
+                             newConnections.end());
     }
 }
 
@@ -314,14 +312,13 @@ void ConnectionsManager::synchroActivityDB() {
 }
 
 void ConnectionsManager::removeConnection(Dfs::Packets::Connection &connection) {
-    activeConnections.erase(
-        std::remove_if(
-            activeConnections.begin(),
-            activeConnections.end(),
-            [&](Connection const &item) {
-                return item.address == connection.address && item.port == connection.port;
-            }),
-        activeConnections.end());
+    activeConnections.erase(std::remove_if(activeConnections.begin(),
+                                           activeConnections.end(),
+                                           [&](Connection const &item) {
+                                               return item.address == connection.address
+                                                      && item.port == connection.port;
+                                           }),
+                            activeConnections.end());
 }
 
 bool ConnectionsManager::isConnection(const Dfs::Packets::Connection &connection) {

@@ -101,10 +101,7 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
     bool       somethingEmpty     = jsonFirstId.is_zero() || currentFirstId.is_zero();
     QJsonArray connectionsArr     = json["connections"].toArray();
 
-    eLog(
-        "[Socket] First message: {} | Current first: {}",
-        json.toJson(QJsonDocument::Compact),
-        currentFirstId);
+    eLog("[Socket] First message: {} | Current first: {}", json.toJson(QJsonDocument::Compact), currentFirstId);
 
     if (currentFirstId.is_zero() && !jsonFirstId.is_zero()) { // TODO: remove hack
         node->actorIndex()->setFirstId(jsonFirstId);

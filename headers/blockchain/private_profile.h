@@ -30,7 +30,7 @@ public:
     const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &actors() const;
     bool                                                   changeCurrent(const ActorId &actorId);
     void                                                   addWallet(const Actor<KeyPrivate> &actor);
-    bool renameWallet(const ActorId &actorId, const std::string &walletName);
+    bool                                     renameWallet(const ActorId &actorId, const std::string &walletName);
     const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
     bool                                     loaded();
     const std::string                       &hash() const;

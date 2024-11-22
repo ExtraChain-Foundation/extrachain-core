@@ -152,8 +152,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByData(const std::st
     return getBlockByParam(data, SearchEnum::BlockParam::Data);
 }
 
-std::expected<BlockVariant, BlockError>
-BlockIndex::getBlockByParam(const std::string &id, SearchEnum::BlockParam param) const {
+std::expected<BlockVariant, BlockError> BlockIndex::getBlockByParam(const std::string     &id,
+                                                                    SearchEnum::BlockParam param) const {
     if (param == SearchEnum::BlockParam::Id) {
         return getBlockById(BigNumber(id));
     }
@@ -188,53 +188,48 @@ BlockIndex::getBlockByParam(const std::string &id, SearchEnum::BlockParam param)
     return std::unexpected(BlockError::NotExists);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxByHash(const std::string &hash, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByHash(const std::string &hash,
+                                                              const TokenId     &token) const {
     return getLastTxByParam(hash, SearchEnum::TxParam::Hash, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxByData(const std::string &data, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByData(const std::string &data,
+                                                              const TokenId     &token) const {
     return getLastTxByParam(data, SearchEnum::TxParam::Data, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxBySender(const ActorId &id, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySender(const ActorId &id, const TokenId &token) const {
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSender, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxByReceiver(const ActorId &id, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByReceiver(const ActorId &id, const TokenId &token) const {
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserReceiver, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySenderOrReceiver(const ActorId &id,
+                                                                          const TokenId &token) const {
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiver, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxBySenderOrReceiverAndToken(const ActorId &id, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySenderOrReceiverAndToken(const ActorId &id,
+                                                                                  const TokenId &token) const {
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-std::pair<Transaction, BigNumber>
-BlockIndex::getLastTxByApprover(const ActorId &id, const TokenId &token) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByApprover(const ActorId &id, const TokenId &token) const {
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserApprover, token);
 }
 
-std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(
-    const BigNumber &id,
-    BigNumber        from,
-    int              count,
-    const ActorId   &token) const {
+std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id,
+                                                                BigNumber        from,
+                                                                int              count,
+                                                                const ActorId   &token) const {
     return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
 
-std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(
-    const std::string  &data,
-    SearchEnum::TxParam param,
-    const TokenId      &tokenId) const {
+std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string  &data,
+                                                               SearchEnum::TxParam param,
+                                                               const TokenId      &tokenId) const {
     BigNumber records = getRecords();
 
     if (records == 0) {
@@ -309,12 +304,11 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(
     return { Transaction(), BigNumber("-1") };
 }
 
-std::set<Transaction> BlockIndex::getTxsByParamInRow(
-    const BigNumber    &id,
-    SearchEnum::TxParam param,
-    BigNumber           from,
-    int                 count,
-    ActorId             token) const {
+std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
+                                                     SearchEnum::TxParam param,
+                                                     BigNumber           from,
+                                                     int                 count,
+                                                     ActorId             token) const {
     std::set<Transaction> currentTxs;
     BigNumber             records = getRecords();
 
@@ -458,9 +452,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         // }
     }
 
-    DbConnector db(
-        path.toStdString(),
-        m_blockCompress ? DbConnectorType::Compressed : DbConnectorType::Regular);
+    DbConnector db(path.toStdString(), m_blockCompress ? DbConnectorType::Compressed : DbConnectorType::Regular);
 
     auto bl = newBlock;
     if (!db.open()) {
@@ -766,16 +758,15 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
             dataRows.insert({ { ActorId(actorId), TokenId(tokenId) }, dRow });
         }
 
-        auto block = GenesisBlock(
-            std::move(res[0].at("type")),
-            std::move(res[0].at("data")),
-            blockId,
-            date,
-            std::move(res[0].at("prevHash")),
-            std::move(res[0].at("hash")),
-            std::move(prevGenHash),
-            std::move(signatures),
-            std::move(dataRows));
+        auto block = GenesisBlock(std::move(res[0].at("type")),
+                                  std::move(res[0].at("data")),
+                                  blockId,
+                                  date,
+                                  std::move(res[0].at("prevHash")),
+                                  std::move(res[0].at("hash")),
+                                  std::move(prevGenHash),
+                                  std::move(signatures),
+                                  std::move(dataRows));
 
         return BlockVariant(block);
     } else {
@@ -801,15 +792,14 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
                 transactions.insert(tx);
         }
 
-        auto block = Block(
-            std::move(res[0].at("type")),
-            std::move(res[0].at("data")),
-            blockId,
-            date,
-            std::move(res[0].at("prevHash")),
-            std::move(res[0].at("hash")),
-            std::move(signatures),
-            std::move(transactions));
+        auto block = Block(std::move(res[0].at("type")),
+                           std::move(res[0].at("data")),
+                           blockId,
+                           date,
+                           std::move(res[0].at("prevHash")),
+                           std::move(res[0].at("hash")),
+                           std::move(signatures),
+                           std::move(transactions));
 
         return BlockVariant(block);
     }

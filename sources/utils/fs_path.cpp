@@ -149,14 +149,13 @@ std::expected<bool, FsError> FsPath::is_file_locked() const {
 
     try {
 #ifdef _WIN32
-        HANDLE file_handle = CreateFileW(
-            m_path.wstring().c_str(),
-            GENERIC_READ | GENERIC_WRITE,
-            0,
-            NULL,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            NULL);
+        HANDLE file_handle = CreateFileW(m_path.wstring().c_str(),
+                                         GENERIC_READ | GENERIC_WRITE,
+                                         0,
+                                         NULL,
+                                         OPEN_EXISTING,
+                                         FILE_ATTRIBUTE_NORMAL,
+                                         NULL);
 
         if (file_handle == INVALID_HANDLE_VALUE) {
             return GetLastError() == ERROR_SHARING_VIOLATION;

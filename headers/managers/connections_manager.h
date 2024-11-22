@@ -52,11 +52,10 @@ class ConnectionsManager : public QObject {
     QByteArray                                m_key;
 
 public:
-    ConnectionsManager(
-        const std::string address,
-        const std::string port,
-        const QByteArray  key,
-        QObject          *parent = nullptr);
+    ConnectionsManager(const std::string address,
+                       const std::string port,
+                       const QByteArray  key,
+                       QObject          *parent = nullptr);
     ~ConnectionsManager();
 
     void                           addConnection(const Connection &connection);

@@ -66,9 +66,9 @@ public:
     std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash);
     ~Blockchain();
 
-    std::expected<BlockVariant, BlockError>
-    getBlockByIndex(const BigNumber &index, const bool makeRequestBlock = false);
-    std::pair<Transaction, BigNumber> getTxByHash(const std::string &hash, const TokenId &token = TokenId());
+    std::expected<BlockVariant, BlockError> getBlockByIndex(const BigNumber &index,
+                                                            const bool       makeRequestBlock = false);
+    std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
     void sync(const BigNumber &from = BigNumber());
     void lastSavedRequest();
@@ -78,10 +78,9 @@ private:
 
     std::pair<Transaction, BigNumber> getTxBySender(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxByReceiver(const ActorId &id, const TokenId &token = TokenId());
-    std::pair<Transaction, BigNumber>
-    getTxBySenderOrReceiver(const ActorId &id, const TokenId &token = TokenId());
-    std::pair<Transaction, BigNumber>
-    getTxBySenderOrReceiverAndToken(const ActorId &id, const ActorId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTxBySenderOrReceiver(const ActorId &id, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTxBySenderOrReceiverAndToken(const ActorId &id,
+                                                                      const ActorId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxByApprover(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
@@ -93,18 +92,16 @@ public:
     static BigNumber lastGenesisIdFor(const BigNumber &id);
     static bool      isGenesisId(const BigNumber &id);
 
-    std::expected<BlockVariant, BlockError>
-    createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    std::expected<BlockVariant, BlockError> createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor);
 
-    std::expected<BlockVariant, BlockError>
-    createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>>
-                         actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
+    std::expected<BlockVariant, BlockError> createFirstBlock(
+        const std::shared_ptr<Actor<KeyPrivate>>
+            actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(
-        const BigNumber &id,
-        BigNumber        from  = BigNumber(-1),
-        int              count = 10,
-        ActorId          token = ActorId());
+    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
+                                                        BigNumber        from  = BigNumber(-1),
+                                                        int              count = 10,
+                                                        ActorId          token = ActorId());
 
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
@@ -161,8 +158,9 @@ public:
      * @param type of param
      * @return transaction
      */
-    std::pair<Transaction, BigNumber>
-    getTransaction(SearchEnum::TxParam type, const std::string &value, const TokenId &token = TokenId());
+    std::pair<Transaction, BigNumber> getTransaction(SearchEnum::TxParam type,
+                                                     const std::string  &value,
+                                                     const TokenId      &token = TokenId());
 
 private:
     /**
@@ -200,8 +198,8 @@ public:
      * @return merged block
      */
     std::expected<BlockVariant, BlockError> mergeBlocks(const Block &blockA, const Block &blockB);
-    std::expected<BlockVariant, BlockError>
-    mergeGenesisBlocks(const GenesisBlock &blockA, const GenesisBlock &blockB);
+    std::expected<BlockVariant, BlockError> mergeGenesisBlocks(const GenesisBlock &blockA,
+                                                               const GenesisBlock &blockB);
 
     /**
      * @brief Sign Block with current approver
@@ -243,10 +241,9 @@ public:
      */
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat getUserBalance(
-        ActorId         userId,
-        TokenId         tokenId = TokenId(),
-        TransactionType txType  = TransactionType::Regular) const;
+    BigNumberFloat getUserBalance(ActorId         userId,
+                                  TokenId         tokenId = TokenId(),
+                                  TransactionType txType  = TransactionType::Regular) const;
 
     /**
      * @brief Show blockchain

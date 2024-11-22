@@ -27,85 +27,80 @@
 #endif
 
 namespace Utils {
-
-enum class ConversionError {
-    Utf8ToUtf16Failed,
-    Utf16ToUtf8Failed,
-};
+    enum class ConversionError {
+        Utf8ToUtf16Failed,
+        Utf16ToUtf8Failed,
+    };
 
 #ifdef _WIN32
-[[nodiscard]] inline std::expected<std::wstring, ConversionError> utf8_to_utf16(std::string_view utf8) {
-    if (utf8.empty())
-        return std::wstring();
+    [[nodiscard]] inline std::expected<std::wstring, ConversionError> utf8_to_utf16(std::string_view utf8) {
+        if (utf8.empty())
+            return std::wstring();
 
-    int required_size = MultiByteToWideChar(
-        CP_UTF8,
-        MB_ERR_INVALID_CHARS,
-        utf8.data(),
-        static_cast<int>(utf8.size()),
-        nullptr,
-        0);
+        int required_size = MultiByteToWideChar(CP_UTF8,
+                                                MB_ERR_INVALID_CHARS,
+                                                utf8.data(),
+                                                static_cast<int>(utf8.size()),
+                                                nullptr,
+                                                0);
 
-    if (required_size <= 0)
-        return std::unexpected(ConversionError::Utf8ToUtf16Failed);
+        if (required_size <= 0)
+            return std::unexpected(ConversionError::Utf8ToUtf16Failed);
 
-    std::wstring wide_str(required_size, L'\0');
-    if (!MultiByteToWideChar(
-            CP_UTF8,
-            MB_ERR_INVALID_CHARS,
-            utf8.data(),
-            static_cast<int>(utf8.size()),
-            wide_str.data(),
-            required_size)) {
-        return std::unexpected(ConversionError::Utf8ToUtf16Failed);
+        std::wstring wide_str(required_size, L'\0');
+        if (!MultiByteToWideChar(CP_UTF8,
+                                 MB_ERR_INVALID_CHARS,
+                                 utf8.data(),
+                                 static_cast<int>(utf8.size()),
+                                 wide_str.data(),
+                                 required_size)) {
+            return std::unexpected(ConversionError::Utf8ToUtf16Failed);
+        }
+
+        return wide_str;
     }
 
-    return wide_str;
-}
+    [[nodiscard]] inline std::expected<std::string, ConversionError> utf16_to_utf8(const std::wstring& utf16) {
+        if (utf16.empty())
+            return std::string();
 
-[[nodiscard]] inline std::expected<std::string, ConversionError> utf16_to_utf8(const std::wstring& utf16) {
-    if (utf16.empty())
-        return std::string();
+        int required_size = WideCharToMultiByte(CP_UTF8,
+                                                WC_ERR_INVALID_CHARS,
+                                                utf16.c_str(),
+                                                static_cast<int>(utf16.size()),
+                                                nullptr,
+                                                0,
+                                                nullptr,
+                                                nullptr);
 
-    int required_size = WideCharToMultiByte(
-        CP_UTF8,
-        WC_ERR_INVALID_CHARS,
-        utf16.c_str(),
-        static_cast<int>(utf16.size()),
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
+        if (required_size <= 0)
+            return std::unexpected(ConversionError::Utf16ToUtf8Failed);
 
-    if (required_size <= 0)
-        return std::unexpected(ConversionError::Utf16ToUtf8Failed);
+        std::string utf8_str(required_size, '\0');
+        if (!WideCharToMultiByte(CP_UTF8,
+                                 WC_ERR_INVALID_CHARS,
+                                 utf16.c_str(),
+                                 static_cast<int>(utf16.size()),
+                                 utf8_str.data(),
+                                 required_size,
+                                 nullptr,
+                                 nullptr)) {
+            return std::unexpected(ConversionError::Utf16ToUtf8Failed);
+        }
 
-    std::string utf8_str(required_size, '\0');
-    if (!WideCharToMultiByte(
-            CP_UTF8,
-            WC_ERR_INVALID_CHARS,
-            utf16.c_str(),
-            static_cast<int>(utf16.size()),
-            utf8_str.data(),
-            required_size,
-            nullptr,
-            nullptr)) {
-        return std::unexpected(ConversionError::Utf16ToUtf8Failed);
+        return utf8_str;
     }
-
-    return utf8_str;
-}
 #endif
 
-[[nodiscard]] inline std::string normalize_separators(std::string_view path) {
-    std::string normalized { path };
+    [[nodiscard]] inline std::string normalize_separators(std::string_view path) {
+        std::string normalized { path };
 #ifdef _WIN32
-    std::replace(normalized.begin(), normalized.end(), '/', '\\');
+        std::replace(normalized.begin(), normalized.end(), '/', '\\');
 #else
-    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+        std::replace(normalized.begin(), normalized.end(), '\\', '/');
 #endif
-    return normalized;
-}
+        return normalized;
+    }
 
 } // namespace Utils
 

@@ -37,8 +37,7 @@ struct Approver {
         std::ostringstream oss;
         oss << "Approver { "
             << "actor_id: \""
-            << actorIdStr.substr(0, 5) + "..."
-                   + actorIdStr.substr(actorIdStr.size() - 5, actorIdStr.size() - 1)
+            << actorIdStr.substr(0, 5) + "..." + actorIdStr.substr(actorIdStr.size() - 5, actorIdStr.size() - 1)
             << "\", "
             << "sign: \"" << (sign.empty() ? "" : sign.substr(0, 8) + "...") << "\", "
             << "is_approve: " << std::boolalpha << isApprove << " }";
@@ -107,15 +106,14 @@ public:
     /**
      * @brief Block
      */
-    Block(
-        std::string           &&type,
-        std::string           &&data,
-        BigNumber               idx,
-        std::uint64_t           date,
-        std::string           &&prevHash,
-        std::string           &&hash,
-        Signatures            &&signatures,
-        std::set<Transaction> &&transactions);
+    Block(std::string           &&type,
+          std::string           &&data,
+          BigNumber               idx,
+          std::uint64_t           date,
+          std::string           &&prevHash,
+          std::string           &&hash,
+          Signatures            &&signatures,
+          std::set<Transaction> &&transactions);
 
     virtual ~Block();
 
@@ -193,6 +191,6 @@ inline bool operator<(const Block &l, const Block &r) {
 }
 
 inline bool operator==(const Block &l, const Block &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash()
-           && l.dataService() == r.dataService() && l.transactions() == r.transactions();
+    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+           && l.transactions() == r.transactions();
 }

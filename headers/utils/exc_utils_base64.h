@@ -23,44 +23,44 @@
 #include "cpp-base64/base64.h"
 
 namespace Utils {
-template <typename Container>
-std::string to_base64(const Container &input) {
-    std::string result = base64_encode(reinterpret_cast<const unsigned char *>(input.data()), input.size());
+    template <typename Container>
+    std::string to_base64(const Container &input) {
+        std::string result = base64_encode(reinterpret_cast<const unsigned char *>(input.data()), input.size());
 
-    for (char &c : result) {
-        if (c == '+')
-            c = '-';
-        else if (c == '/')
-            c = '_';
-        else if (c == '=') {
-            result.resize(result.find('='));
-            break;
+        for (char &c : result) {
+            if (c == '+')
+                c = '-';
+            else if (c == '/')
+                c = '_';
+            else if (c == '=') {
+                result.resize(result.find('='));
+                break;
+            }
         }
+
+        return result;
     }
 
-    return result;
-}
+    template <typename Container = std::string>
+    Container from_base64(const std::string &input) {
+        std::string base64 = input;
 
-template <typename Container = std::string>
-Container from_base64(const std::string &input) {
-    std::string base64 = input;
+        for (char &c : base64) {
+            if (c == '-')
+                c = '+';
+            else if (c == '_')
+                c = '/';
+        }
 
-    for (char &c : base64) {
-        if (c == '-')
-            c = '+';
-        else if (c == '_')
-            c = '/';
+        int padding = (4 - (base64.size() % 4)) % 4;
+        base64.append(padding, '=');
+
+        std::string decoded = base64_decode(base64);
+
+        if constexpr (std::is_same_v<Container, std::string>) {
+            return decoded;
+        }
+
+        return Container(decoded.begin(), decoded.end());
     }
-
-    int padding = (4 - (base64.size() % 4)) % 4;
-    base64.append(padding, '=');
-
-    std::string decoded = base64_decode(base64);
-
-    if constexpr (std::is_same_v<Container, std::string>) {
-        return decoded;
-    }
-
-    return Container(decoded.begin(), decoded.end());
-}
 } // namespace Utils

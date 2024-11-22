@@ -89,12 +89,11 @@ public:
     Transaction();
 
     // Construct transaction
-    Transaction(
-        const ActorId        &sender,
-        const ActorId        &receiver,
-        const BigNumberFloat &amount,
-        const ActorId        &token = ActorId(),
-        const std::string    &data  = std::string());
+    Transaction(const ActorId        &sender,
+                const ActorId        &receiver,
+                const BigNumberFloat &amount,
+                const ActorId        &token = ActorId(),
+                const std::string    &data  = std::string());
 
     Transaction(const Transaction &other);
 
@@ -142,35 +141,33 @@ public:
     TransactionType type() const;
     virtual void    setType(TransactionType newType);
 
-    MSGPACK_DEFINE(
-        m_sender,
-        m_receiver,
-        m_amount,
-        m_date,
-        m_data,
-        m_token,
-        m_prevBlock,
-        m_hash,
-        m_approver,
-        m_producer,
-        m_signature,
-        m_type)
+    MSGPACK_DEFINE(m_sender,
+                   m_receiver,
+                   m_amount,
+                   m_date,
+                   m_data,
+                   m_token,
+                   m_prevBlock,
+                   m_hash,
+                   m_approver,
+                   m_producer,
+                   m_signature,
+                   m_type)
 
-    BOOST_DESCRIBE_CLASS(
-        Transaction,
-        (),
-        (),
-        (),
-        (m_sender,
-         m_receiver,
-         m_amount,
-         m_date,
-         m_data,
-         m_token,
-         m_prevBlock,
-         m_hash,
-         m_approver,
-         m_producer,
-         m_signature,
-         m_type))
+    BOOST_DESCRIBE_CLASS(Transaction,
+                         (),
+                         (),
+                         (),
+                         (m_sender,
+                          m_receiver,
+                          m_amount,
+                          m_date,
+                          m_data,
+                          m_token,
+                          m_prevBlock,
+                          m_hash,
+                          m_approver,
+                          m_producer,
+                          m_signature,
+                          m_type))
 };

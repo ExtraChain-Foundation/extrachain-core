@@ -44,9 +44,9 @@ bool LogsManager::toModel   = false;
 
 VariantModel LogsManager::logs = VariantModel(nullptr, { "text", "date", "file", "line", "func" });
 QStringList  LogsManager::filesFilter;
-bool         LogsManager::antiFilter = false;
-bool         LogsManager::debugLogs  = false;
-QString LogsManager::currentThread = QString::number(reinterpret_cast<quintptr>(QThread::currentThreadId()));
+bool         LogsManager::antiFilter    = false;
+bool         LogsManager::debugLogs     = false;
+QString      LogsManager::currentThread = QString::number(reinterpret_cast<quintptr>(QThread::currentThreadId()));
 
 LogsManager::LogsManager() {
     // connect(this, &LogsManager::makeLogSignal, this, &LogsManager::makeLog);
@@ -58,14 +58,13 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
     switch (type) {
     case QtInfoMsg:
-        makeLog(
-            context.file,
-            context.line,
-            context.function,
+        makeLog(context.file,
+                context.line,
+                context.function,
 #ifdef QT_DEBUG
-            "[Info] " +
+                "[Info] " +
 #endif
-                msg);
+                    msg);
         break;
     case QtCriticalMsg:
         makeLog(context.file, context.line, context.function, "[Critical] " + msg);
@@ -112,8 +111,8 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     Q_UNUSED(file)
     Q_UNUSED(line)
     Q_UNUSED(function)
-    static QFile logFile(
-        "logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss.zzz") + ".log");
+    static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss.zzz")
+                         + ".log");
 
     if (LogsManager::toFile && !logFile.isOpen())
         logFile.open(QFile::Append | QFile::Text);
@@ -147,10 +146,10 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     #endif
 
         if (message.left(fileNameQrc.length()) == fileNameQrc) {
-            lineRow = message.mid(
-                fileNameQrc.length(),
-                message.length() - (message.length() - message.indexOf(":", fileNameQrc.length() + 1))
-                    - fileNameQrc.length());
+            lineRow =
+                message.mid(fileNameQrc.length(),
+                            message.length() - (message.length() - message.indexOf(":", fileNameQrc.length() + 1))
+                                - fileNameQrc.length());
 
             fileNameQrc = fileNameQrc + lineRow;
 

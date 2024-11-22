@@ -287,13 +287,12 @@ struct fmt::formatter<QNetworkInterface> {
         if (!flags.empty())
             flags.pop_back();
 
-        return fmt::format_to(
-            ctx.out(),
-            "{}[{}]: {} -> {}",
-            iface.name().toStdString(),
-            iface.hardwareAddress().toStdString(),
-            flags,
-            fmt::join(iface.addressEntries(), ", "));
+        return fmt::format_to(ctx.out(),
+                              "{}[{}]: {} -> {}",
+                              iface.name().toStdString(),
+                              iface.hardwareAddress().toStdString(),
+                              flags,
+                              fmt::join(iface.addressEntries(), ", "));
     }
 };
 
@@ -307,18 +306,13 @@ struct fmt::formatter<QNetworkAddressEntry> {
     auto format(const QNetworkAddressEntry& addr, FormatContext& ctx) const {
         const auto& broadcast = addr.broadcast();
         if (broadcast.isNull()) {
-            return fmt::format_to(
-                ctx.out(),
-                "{}/{}",
-                addr.ip().toString().toStdString(),
-                addr.prefixLength());
+            return fmt::format_to(ctx.out(), "{}/{}", addr.ip().toString().toStdString(), addr.prefixLength());
         }
-        return fmt::format_to(
-            ctx.out(),
-            "{}/{} (broadcast: {})",
-            addr.ip().toString().toStdString(),
-            addr.prefixLength(),
-            broadcast.toString().toStdString());
+        return fmt::format_to(ctx.out(),
+                              "{}/{} (broadcast: {})",
+                              addr.ip().toString().toStdString(),
+                              addr.prefixLength(),
+                              broadcast.toString().toStdString());
     }
 };
 
