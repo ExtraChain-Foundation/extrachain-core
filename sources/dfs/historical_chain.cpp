@@ -209,7 +209,7 @@ DbRow HistoricalChain::makeDBRow(std::uint64_t num, std::uint64_t prevNum, int t
     row.insert({ PREV_NUM, std::to_string(prevNum) });
     row.insert({ TYPE, std::to_string(type) });
     row.insert({ DATA, data });
-    row.insert({ HASH, Utils::calcHash(data) });
+    row.insert({ HASH, Utils::calculate_hash(data) });
     return row;
 }
 

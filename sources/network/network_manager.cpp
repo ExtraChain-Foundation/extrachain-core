@@ -385,7 +385,6 @@ void NetworkManager::saveToCache(
     if (size == 0) {
         std::string serializedMessage = Serialization::serialize(
             std::vector<std::string> { serialized_message, typeSendToString(typeSend), receiver_identifier });
-        std::string package = Utils::bytesEncodeStdString(serializedMessage);
         file << Serialization::serialize(std::vector<std::string> { serializedMessage });
         file.flush();
         file.close();
@@ -466,7 +465,7 @@ bool NetworkManager::isActiveConnectionExists() {
 bool NetworkManager::checkMsgCount(const std::string &msg) {
     bool                             flag_result = true;
     bool                             value       = 0;
-    std::string                      hashMsg     = Utils::calcHash(msg);
+    std::string                      hashMsg     = Utils::calculate_hash(msg);
     QMap<std::string, int>::iterator it          = msgHashList.find(hashMsg);
 
     if (it == msgHashList.end())
@@ -957,10 +956,10 @@ void NetworkManager::setNetworkVPNHash() noexcept {
 
     KeyPrivate key;
     key.generate();
-    m_networkHashForVPN = Utils::calcHash(
+    m_networkHashForVPN = Utils::calculate_hash(
                               ByteArray(key.publicKey()).toString()
                                   + node->accountController()->mainActor()->id().to_string() + salt,
-                              Utils::HashEncode::Sha3_512)
+                              Utils::HashAlgorithm::Sha3_512)
                               .substr(0, 64);
 }
 

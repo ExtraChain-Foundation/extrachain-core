@@ -276,7 +276,7 @@ DbRow FragmentStorage::makeFragmentRow(DfsP::SegmentMessage msg, std::uint64_t s
     row.insert({ "pos", std::to_string(msg.offset) });
     row.insert({ "storedPos", std::to_string(storedPos) });
     row.insert({ "size", std::to_string(msg.data.size()) });
-    row.insert({ "fragHash", Utils::calcHash(msg.data) });
+    row.insert({ "fragHash", Utils::calculate_hash(msg.data) });
     return row;
 }
 
@@ -505,7 +505,7 @@ void FragmentWriter::run() {
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(m_msg.actorId, m_msg.fileId, double(m_msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        if (m_msg.hash == Utils::calcHashForFile(fileName)) {
+        if (m_msg.hash == Utils::calculate_hash_file(FsPath::create(fileName).value()).value()) {
             eLog("[Dfs] File {} done", fileName);
             emit eraseFromFiles(m_msg);
             emit downloadedFile(dirRow);

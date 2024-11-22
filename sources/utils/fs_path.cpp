@@ -51,9 +51,12 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
         auto fs_path = std::filesystem::path(normalized).lexically_normal();
 #endif
         auto current = fs_path;
-        while (!current.empty()) {
+        while (true) {
             if (std::filesystem::is_symlink(current)) {
                 return std::unexpected(FsError::SymlinkFound);
+            }
+            if (current.empty() || current.root_path() == current) {
+                break;
             }
             current = current.parent_path();
         }
@@ -73,6 +76,18 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
         eCritical("Failed to process path: {}", e.what());
         return std::unexpected(FsError::ConversionFailed);
     }
+}
+
+std::expected<FsPath, FsError> FsPath::create(const std::string& path) {
+    return create(std::string_view(path));
+}
+
+std::expected<FsPath, FsError> FsPath::create(const std::filesystem::path& path) {
+#ifdef _WIN32
+    return create(std::string_view(Utils::utf16_to_utf8(path.wstring()).value()));
+#else
+    return create(std::string_view(path.string()));
+#endif
 }
 
 std::expected<std::string, FsError> FsPath::string() const {

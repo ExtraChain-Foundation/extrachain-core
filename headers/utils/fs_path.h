@@ -138,6 +138,8 @@ public:
     using TimePoint = std::chrono::system_clock::time_point;
 
     [[nodiscard]] static std::expected<FsPath, FsError>     create(std::string_view utf8_path);
+    static std::expected<FsPath, FsError>                   create(const std::string& path);
+    static std::expected<FsPath, FsError>                   create(const std::filesystem::path& path);
     [[nodiscard]] std::expected<std::string, FsError>       string() const;
     [[nodiscard]] std::expected<FsPath, FsError>            absolute() const;
     [[nodiscard]] std::expected<bool, FsError>              exists() const;

@@ -349,17 +349,8 @@ static const int UNDEFINED           = 103;
 } // namespace Errors
 
 namespace Serialization {
-
-// Delimiters //
-static const int TRANSACTION_FIELD_SIZE = 4;
-static const int DEFAULT_FIELD_SIZE     = 8;
-
 EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
 EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);
-
-bool isEmpty(const QByteArray &bytes);
-bool isEmpty(const std::string &str);
-bool isEmpty(std::string_view str_view);
 } // namespace Seralization
 
 namespace MessagePack {
@@ -372,7 +363,7 @@ std::string serialize(const T &t) {
 
 template <class T, class StringContainer>
 T deserialize(const StringContainer &data, std::size_t size = 0) {
-    if (Serialization::isEmpty(data)) {
+    if (data.empty()) {
         eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
         eFatal("[MessagePack] Empty deserialize");
         return T();
@@ -499,10 +490,9 @@ enum PrintDebug {
     On  = 1
 };
 
-enum class HashEncode {
-    Base64,
+enum class HashAlgorithm {
     Sha3_512,
-    Hex,
+    Blake3
 };
 
 enum class ParseError {
@@ -589,16 +579,37 @@ EXTRACHAIN_EXPORT             std::vector<MerkleDataBlocks>
                               splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing);
 EXTRACHAIN_EXPORT void        hashingElements(std::vector<std::string> &vector);
 EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
-EXTRACHAIN_EXPORT std::string calcHash(const std::string &data, HashEncode encode = HashEncode::Sha3_512);
 EXTRACHAIN_EXPORT             std::string
-calcHashForFile(const std::filesystem::path &fileName, HashEncode encode = HashEncode::Sha3_512);
+calculate_hash(const std::string &data, HashAlgorithm hash_algorithm = HashAlgorithm::Sha3_512);
 
-std::string byteToHexString(std::vector<unsigned char> &data);
-std::string byteToHexString(const std::string &data);
-std::string hexStringToByte(const std::string &data);
+/**
+ * @brief Error codes for file hashing operations
+ */
+enum class FileHashError {
+    FileNotFound, ///< File does not exist
+    ReadError,    ///< Error reading file data
+    HashError,    ///< Error during hash calculation
+    AccessError   ///< Permission or access-related errors
+};
 
-std::string bytesEncodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
-std::string bytesDecodeStdString(const std::string &data, HashEncode encode = HashEncode::Base64);
+/**
+ * @brief Calculate BLAKE3 hash of a file
+ * @param path Path to the file
+ * @return Expected containing hex string of hash or FileHashError
+ * @retval string Hex representation of BLAKE3 hash on success
+ * @retval FileHashError::FileNotFound If file doesn't exist
+ * @retval FileHashError::ReadError If file reading fails
+ * @retval FileHashError::AccessError If file access is denied
+ *
+ * @details Uses 64KB buffer for file reading and generates BLAKE3 hash
+ * of the entire file content. The resulting hash is returned as a
+ * hexadecimal string.
+ */
+EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
+
+std::string to_hex(std::vector<unsigned char> &data);
+std::string to_hex(const std::string &data);
+std::string from_hex(const std::string &data);
 
 std::string generate_random_hex(size_t length);
 
@@ -652,14 +663,10 @@ EXTRACHAIN_EXPORT bool decryptFile(
     const QString    &decryptName,
     const QByteArray &key,
     int               blockSize = 60007);
-EXTRACHAIN_EXPORT QByteArray
-        decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize = 60007);
-QString fileMimeType(const QString &filePath);
-QString fileMimeSuffix(const QString &filePath);
+    QString fileMimeType(const QString &filePath);
+    QString fileMimeSuffix(const QString &filePath);
 
 std::vector<std::string> split(const std::string &s, char c);
-
-int compare(const QByteArray &one, const QByteArray &two);
 
 /**
  * @brief Remove data and cache files
@@ -673,7 +680,7 @@ EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
 EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
 } // namespace Utils
 
-namespace DataStorage {
+namespace BlockchainConst {
 // Main blockchain folder
 static const int         ACTOR_SIZE = 40;
 static const std::string BLOCKCHAIN = "blockchain";
@@ -693,8 +700,8 @@ static const int DATA_OFFSET = 512;
 enum class DataRowType {
     Universal,
 };
-} // namespace DataStorage
-MSGPACK_ADD_ENUM(DataStorage::DataRowType)
+} // namespace BlockchainConst
+MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 
 namespace KeyStore {
 // To store user private/public keys

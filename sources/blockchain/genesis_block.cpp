@@ -72,7 +72,7 @@ const std::string &GenesisBlock::getDataForSignature() const {
     return Block::getDataForSignature();
 }
 
-void GenesisBlock::calcHash() {
+void GenesisBlock::calculate_hash() {
     SHA3 sha3(SHA3::Bits::Bits512);
     auto index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());

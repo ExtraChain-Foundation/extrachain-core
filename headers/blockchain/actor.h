@@ -73,11 +73,11 @@ public:
 
 private:
     void normalize() {
-        if (m_id.size() > DataStorage::ACTOR_SIZE) {
+        if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
             eFatal("[ActorId] Not correct size: %zu", m_id.size());
         }
 
-        m_id = std::string(DataStorage::ACTOR_SIZE - m_id.length(), '0') + m_id;
+        m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
 
         if (!Utils::is_hex_string_lower(m_id)) {
             eFatal("[ActorId] Not correct hex: {}", m_id);
@@ -133,10 +133,10 @@ public:
         this->m_type = type;
         this->m_key.generate();
         auto        publicKey = this->m_key.publicKey();
-        std::string hash      = Utils::calcHash(ByteArray(publicKey).toString(), Utils::HashEncode::Sha3_512);
+        std::string hash      = Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
 
-        if (hash.size() >= DataStorage::ACTOR_SIZE)
-            m_id = hash.substr(0, DataStorage::ACTOR_SIZE);
+        if (hash.size() >= BlockchainConst::ACTOR_SIZE)
+            m_id = hash.substr(0, BlockchainConst::ACTOR_SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }

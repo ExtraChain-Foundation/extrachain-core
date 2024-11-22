@@ -43,34 +43,32 @@
 #include "encryption/encryption_tools.h"
 // #include "managers/data_mining_manager.h"
 #include "sha3.h"
+#include "blake3.h"
 #include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
 #endif
 
-std::string Utils::calcHash(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Sha3_512: {
+std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
+    switch (hash_algorithm) {
+    case HashAlgorithm::Sha3_512: {
         SHA3 sha3(SHA3::Bits::Bits512);
-        res = sha3(data);
-        break;
+        return sha3(data);
     }
-    case HashEncode::Base64: {
-        res = Utils::to_base64(data);
-        break;
+    case HashAlgorithm::Blake3: {
+        blake3_hasher hasher;
+        blake3_hasher_init(&hasher);
+        blake3_hasher_update(&hasher, data.data(), data.size());
+
+        uint8_t hash[BLAKE3_OUT_LEN];
+        blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+
+        return fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
     }
-    case HashEncode::Hex: {
-        eLog("Hex encode not supported!");
-        break;
+    default:
+        eFatal("Unknown hash algorithm");
     }
-    default: {
-        eLog("This encode not supported!");
-        break;
-    }
-    }
-    return res;
 }
 
 // SERIALIZATION //
@@ -94,15 +92,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c) {
     if (start != end)
         v.emplace_back(start, end);
     return v;
-}
-
-int Utils::compare(const QByteArray &one, const QByteArray &two) {
-    if (one.size() > two.size()) {
-        return one.size() - two.size();
-    } else if (one.size() == two.size()) {
-        return static_cast<int>(one == two);
-    } else
-        return two.size() - one.size();
 }
 
 template <>
@@ -265,28 +254,58 @@ Utils::splitListIntoPair(std::vector<std::string> &vector, const bool isHahsing)
 
 void Utils::hashingElements(std::vector<std::string> &vector) {
     for (int i = 0; i < vector.size(); i++) {
-        vector[i] = Utils::calcHash(vector[i]);
+        vector[i] = Utils::calculate_hash(vector[i]);
     }
 }
 
 std::string Utils::merkleFormula(const std::string &hash1, const std::string &hash2) {
-    return Utils::calcHash(hash1 + hash2);
+    return Utils::calculate_hash(hash1 + hash2);
 }
 
-std::string Utils::calcHashForFile(const std::filesystem::path &fileName, HashEncode encode) {
-    QFile file(QString::fromStdWString(fileName.wstring()));
-    if (file.open(QFile::ReadOnly)) {
-        SHA3 sha3(SHA3::Bits::Bits512);
-        while (!file.atEnd()) {
-            QByteArray data = file.read(1024);
-            sha3.add(data.data(), data.length());
-        }
-        return sha3.getHash();
+std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(const FsPath &path) {
+    auto exists_result = path.exists();
+    if (!exists_result) {
+        return std::unexpected(FileHashError::FileNotFound);
+    }
+    if (!*exists_result) {
+        return std::unexpected(FileHashError::FileNotFound);
     }
 
-    eFatal("Utils::calcHashForFile");
-    eLog("[Utils] Calc hash for file: can't open file {}", fileName);
-    return "";
+    auto has_read = path.has_read_permission();
+    if (!has_read) {
+        return std::unexpected(FileHashError::AccessError);
+    }
+    if (!*has_read) {
+        return std::unexpected(FileHashError::AccessError);
+    }
+
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
+    constexpr size_t     BUFFER_SIZE = 64 * 1024;
+    std::vector<uint8_t> buffer(BUFFER_SIZE);
+
+    FILE *file = fopen(path.native().string().c_str(), "rb");
+    if (!file) {
+        return std::unexpected(FileHashError::ReadError);
+    }
+
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer.data(), 1, buffer.size(), file)) > 0) {
+        blake3_hasher_update(&hasher, buffer.data(), bytes_read);
+        if (ferror(file)) {
+            fclose(file);
+            return std::unexpected(FileHashError::ReadError);
+        }
+    }
+
+    fclose(file);
+
+    uint8_t hash[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+
+    auto result = fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
+    return result;
 }
 
 bool Utils::encryptFile(
@@ -356,36 +375,6 @@ bool Utils::decryptFile(
     return QFile::exists(decryptName);
 }
 
-QByteArray Utils::decryptFileIntoByteArray(const QString &encryptName, const QByteArray &key, int blockSize) {
-    blockSize = (blockSize / 8 + 1) * 8;
-
-    if (!QFileInfo::exists(encryptName)) {
-        return QByteArray();
-    }
-
-    QFile encrypt(encryptName);
-    if (!encrypt.open(QFile::ReadOnly)) {
-        eLog(
-            "[Utils::decryptFileIntoByteArray] Error while loading file: {} {}",
-            encrypt.error(),
-            encrypt.errorString());
-        return QByteArray();
-    }
-
-    QByteArray result;
-    auto       rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
-
-    while (!encrypt.atEnd()) {
-        QByteArray part = encrypt.read(blockSize);
-        QByteArray decrypted =
-            ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
-        result.append(decrypted);
-        eLog("decrypted {} {}", part.size(), decrypted.size());
-    }
-
-    return result;
-}
-
 QString Utils::fileMimeType(const QString &filePath) {
     QMimeDatabase db;
     QMimeType     type = db.mimeTypeForFile(filePath);
@@ -402,7 +391,7 @@ std::string Serialization::serialize(const std::vector<std::string> &list) {
     std::string              res;
     std::vector<std::string> reslist;
     for (int i = 0; i < list.size(); i++) {
-        reslist.push_back(Utils::bytesEncodeStdString(list.at(i)));
+        reslist.push_back(Utils::to_base64(list.at(i)));
     }
     res = boost::algorithm::join(reslist, "|");
     return res;
@@ -416,7 +405,7 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
         eLog("deserialize error: empty list after split");
     }
     for (int i = 0; i < templist.size(); i++) {
-        reslist.push_back(Utils::bytesDecodeStdString(templist.at(i)));
+        reslist.push_back(Utils::from_base64(templist.at(i)));
     }
     return reslist;
 }
@@ -466,19 +455,7 @@ QString Utils::dataDir(const QString &newDir) {
     return current;
 }
 
-bool Serialization::isEmpty(const QByteArray &bytes) {
-    return bytes.isEmpty();
-}
-
-bool Serialization::isEmpty(const std::string &str) {
-    return str.empty();
-}
-
-bool Serialization::isEmpty(std::string_view str_view) {
-    return str_view.empty();
-}
-
-std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
+std::string Utils::to_hex(std::vector<unsigned char> &data) {
     size_t            psize = data.size() * 2 + 1;
     std::vector<char> p(psize);
     sodium_bin2hex(p.data(), psize, data.data(), data.size());
@@ -487,12 +464,12 @@ std::string Utils::byteToHexString(std::vector<unsigned char> &data) {
     return s;
 }
 
-std::string Utils::byteToHexString(const std::string &data) {
+std::string Utils::to_hex(const std::string &data) {
     std::vector<unsigned char> v(data.begin(), data.end());
-    return byteToHexString(v);
+    return to_hex(v);
 }
 
-std::string Utils::hexStringToByte(const std::string &data) {
+std::string Utils::from_hex(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);
     const char *end;
@@ -502,32 +479,6 @@ std::string Utils::hexStringToByte(const std::string &data) {
     if (r == 0) {
         res = std::string(p.begin(), p.end());
         res.resize(res.size() - 1);
-    }
-    return res;
-}
-
-std::string Utils::bytesEncodeStdString(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Base64:
-        return Utils::to_base64(data);
-    case HashEncode::Hex:
-        break;
-    case HashEncode::Sha3_512:
-        break;
-    }
-    return res;
-}
-
-std::string Utils::bytesDecodeStdString(const std::string &data, HashEncode encode) {
-    std::string res;
-    switch (encode) {
-    case HashEncode::Base64:
-        return Utils::from_base64(data);
-    case HashEncode::Hex:
-        break;
-    case HashEncode::Sha3_512:
-        break;
     }
     return res;
 }

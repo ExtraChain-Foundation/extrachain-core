@@ -121,7 +121,7 @@ inline MessageBody make_message(
         eFatal("make message error: incorrect message id size");
     }
 
-    std::string randomId = Utils::calcHash(
+    std::string randomId = Utils::calculate_hash(
                                std::to_string(QDateTime::currentSecsSinceEpoch())
                                + std::to_string(QRandomGenerator::global()->bounded(100000)))
                                .substr(0, 15); // temp

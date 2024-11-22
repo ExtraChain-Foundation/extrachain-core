@@ -122,13 +122,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(
     }
 
     std::string           fileId   = createFileId(filePath);
-    std::string           fileHash = Utils::calcHashForFile(newFilePath);
+    std::string           fileHash = Utils::calculate_hash_file(FsPath::create(newFilePath).value()).value();
     std::filesystem::path placeInDFS =
         DfsB::fsActrRootW + DfsB::separator + actorId.toQString().toStdWString() + DfsB::separator;
     std::filesystem::path dfsPath = DfsPath::filePath(actorId, fileId);
 
     if (std::filesystem::exists(dfsPath) && std::filesystem::file_size(dfsPath) == fileSize) {
-        std::string dfsFileHash = Utils::calcHashForFile(dfsPath);
+        std::string dfsFileHash = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
         if (fileHash == dfsFileHash) {
             eWarning("[Dfs] File already in dfs");
             return std::unexpected(Dfs::DfsError::AlreadyExists);
@@ -195,7 +195,7 @@ DfsController::store_database(const ActorId &actorId, const std::string &visualN
     auto chain = HistoricalSql::create(actor, fileId);
     chain.create_table(schema);
 
-    std::string fileHash = Utils::calcHashForFile(dfsPath);
+    std::string fileHash = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
     auto        fileSize = std::filesystem::file_size(dfsPath);
 
     Dfs::DirRow dirRow = { .actorId      = actorId,
@@ -245,7 +245,7 @@ ExpectedDirRow DfsController::insert_database(const ActorId &actorId, const std:
     auto chain   = HistoricalSql::load(actor, fileId);
     chain.insert_into(row, "tokens");
 
-    dirRow.hash = Utils::calcHashForFile(dfsPath);
+    dirRow.hash = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
     Dfs::Tables::ActorDirFile::updateHash(actorId, dirRow);
 
     return dirRowExp;
@@ -325,7 +325,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
 
     if (loadBytes) {
         if (std::filesystem::exists(realFilePath)) {
-            eLog("[Dfs] File already exists"); // temp: not correct, add calc file
+            eLog("[Dfs] File already exists"); // temp: not correct, add calculate file
             return dirRow.fileId;
         }
         if (!writeAvailable(dirRow.size)) {
@@ -481,7 +481,8 @@ std::string DfsController::createFileIdFromData(const std::string &data) {
     boost::mt11213b rng(time);
     boost::random::uniform_int_distribution<> dist(0, INT_MAX);
     std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
-    std::string ret = Utils::calcHash(fmt::format("{}{}{}", data, std::to_string(time), salt)).substr(0, 64);
+    std::string                               ret =
+        Utils::calculate_hash(fmt::format("{}{}{}", data, std::to_string(time), salt)).substr(0, 64);
     return ret;
 }
 
@@ -524,7 +525,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
     }
     insertDataChunk(msg.data, msg.offset, realFilePath);
     actrDirFile.close();
-    return Utils::calcHashForFile(realFilePath.string());
+    return Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
 }
 
 // void DfsController::addListFiles(const QStringList &files) {
@@ -1180,7 +1181,7 @@ void DfsController::verifyFiles(
             eLog("File by path {} doesn't exist", realFilePath);
             continue;
         }
-        std::string fileHash = Utils::calcHashForFile(realFilePath);
+        std::string fileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
         if (fileHash == file.hash) {
             file.verified = true;
         }
@@ -1281,7 +1282,8 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(msg.actorId, msg.fileId, double(msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        if (msg.hash == Utils::calcHashForFile(fileName)) {
+        const auto file_hash = Utils::calculate_hash_file(FsPath::create(fileName).value()).value();
+        if (msg.hash == file_hash) {
             eLog("[Dfs] File {} done", fileName);
             auto dirRow = files.at({ msg.actorId, msg.fileId });
             files.erase({ msg.actorId, msg.fileId });
@@ -1355,7 +1357,7 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
         return "";
     }
     removeDataChunk(msg.offset, msg.size, realFilePath);
-    std::string newFileHash = Utils::calcHashForFile(realFilePath.string());
+    std::string newFileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
     // std::uint64_t newFileSize = std::filesystem::file_size(realFilePath);
 
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {

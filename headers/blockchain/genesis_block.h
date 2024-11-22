@@ -48,8 +48,8 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
  */
 struct EXTRACHAIN_EXPORT GenesisDataInfo {
     BigNumberFloat state = BigNumberFloat(0); /**< State represented as a big number float, default is 0 */
-    DataStorage::DataRowType type =
-        DataStorage::DataRowType::Universal; /**< Type of the data row, default is Universal */
+    BlockchainConst::DataRowType type =
+        BlockchainConst::DataRowType::Universal; /**< Type of the data row, default is Universal */
 
     auto operator<=>(const GenesisDataInfo &) const = default;
     bool operator==(const GenesisDataInfo &) const  = default;
@@ -105,7 +105,7 @@ public:
     const GenesisDataRows &dataRows() const;
 
 protected:
-    void calcHash() override;
+    void calculate_hash() override;
 
 public:
     std::string getPrevGenHash() const;

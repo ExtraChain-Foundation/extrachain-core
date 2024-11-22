@@ -287,7 +287,7 @@ Blockchain::createFirstBlock(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     // genesis.addRows(dataRows);
     GenesisDataInfo gdi;
     gdi.state = BigNumberFloat(0);
-    gdi.type  = DataStorage::DataRowType::Universal;
+    gdi.type  = BlockchainConst::DataRowType::Universal;
     genesis.addRow(ActorId(), ActorId(), gdi);
     genesis.addData(actor->id().to_string());
     genesis.sign(actor);
@@ -995,5 +995,5 @@ BlockIndex &Blockchain::getBlockIndex() {
 
 void Blockchain::removeAll() {
     this->blockIndex.removeAll();
-    QFile(QString::fromStdString(DataStorage::TMP_GENESIS_BLOCK)).remove();
+    QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
 }

@@ -76,7 +76,7 @@ Block Block::operator=(const Block &block) {
     return *this;
 }
 
-void Block::calcHash() {
+void Block::calculate_hash() {
     SHA3        sha3(SHA3::Bits::Bits512);
     std::string index = m_index.to_string(NumeralBase::Hex);
     sha3.add(index.c_str(), index.size());
@@ -115,7 +115,7 @@ void Block::setPrev(const BlockVariant &prev) {
     if (prev.isEmpty()) {
         // eLog("[Block] Construction first block");
         this->m_index    = BigNumber("0");
-        this->m_prevHash = Utils::calcHash("0 index");
+        this->m_prevHash = Utils::calculate_hash("0 index");
     } else {
         // eLog("[Block] Construction block. Previous block id: {}", prev->getIndex());
         this->m_index    = prev.getIndex() + 1;
@@ -144,7 +144,7 @@ const std::string &Block::getDataForSignature() const {
 }
 
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    calcHash();
+    calculate_hash();
     auto sign = actor->key().sign(getDataForSignature());
     this->addSignature(actor->id(), sign, true);
 }

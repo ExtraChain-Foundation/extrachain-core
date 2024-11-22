@@ -25,11 +25,11 @@
 #include "blockchain/blockchain.h"
 
 BlockIndex::BlockIndex() {
-    this->folderName  = DataStorage::BLOCK_INDEX_FOLDER_NAME;
+    this->folderName  = BlockchainConst::BLOCK_INDEX_FOLDER_NAME;
     this->sectionSize = Config::DataStorage::SECTION_SIZE;
     firstSavedId      = loadFirstId();
     lastSavedId       = loadLastId();
-    QDir          dir(QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + '/' + folderName));
+    QDir          dir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + '/' + folderName));
     QFileInfoList sectionList = dir.entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
 
     removeDummyBlocks();
@@ -681,7 +681,7 @@ void BlockIndex::removeAll() {
 }
 
 std::string BlockIndex::getFolderPath() const {
-    return DataStorage::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
+    return BlockchainConst::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
 }
 
 std::string BlockIndex::getFolderName() const {
@@ -759,7 +759,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
         GenesisDataRows    dataRows;
         for (const auto &row : rows) {
             GenesisDataInfo dRow;
-            dRow.type    = DataStorage::DataRowType(QByteArray(row.at("type").c_str()).toInt());
+            dRow.type    = BlockchainConst::DataRowType(QByteArray(row.at("type").c_str()).toInt());
             dRow.state   = BigNumberFloat(row.at("state"));
             auto actorId = row.at("actorId");
             auto tokenId = row.at("token");

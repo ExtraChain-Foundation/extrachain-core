@@ -82,7 +82,8 @@ public:
         EmptyPath,
         TooLong,
         InvalidName,
-        EmptyComponent
+        EmptyComponent,
+        InvalidDriveLetter
     };
 
     struct ValidationError {

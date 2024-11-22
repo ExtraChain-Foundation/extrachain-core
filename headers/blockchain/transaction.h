@@ -82,7 +82,7 @@ private:
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    void calcHash();
+    void calculate_hash();
 
 public:
     // Construct empty transaction

@@ -124,7 +124,7 @@ protected:
      * Calculates hash of this block and writes hash to "hash" variable.
      * Uses sha3.
      */
-    virtual void               calcHash();
+    virtual void               calculate_hash();
     virtual const std::string &getDataForSignature() const;
 
 public:

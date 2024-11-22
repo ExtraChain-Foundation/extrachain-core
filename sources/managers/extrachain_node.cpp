@@ -146,7 +146,7 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
     }
 
     eLog("[Node] Create network with login {}", login);
-    auto consoleHash = Utils::calcHash(login + password);
+    auto consoleHash = Utils::calculate_hash(login + password);
     auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
     m_actorIndex->setFirstId(first.id());
     m_accountController->getProfile(first.id()).renameWallet(first.id(), "King of the World");
@@ -314,7 +314,7 @@ bool ExtraChainNode::importUser(
     const std::string& data,
     const std::string& login,
     const std::string& password) {
-    auto hash = Utils::calcHash(login + password);
+    auto hash = Utils::calculate_hash(login + password);
 
     auto json = ByteArray(Cryptography::decryptWithPassword(ByteArray(data).toBytes(), hash)).toQByteArray();
     if (hash.empty() || json.isEmpty()) {
@@ -445,7 +445,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
 void ExtraChainNode::createNetworkIdentifier() {
     QFile file(".settings");
     file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calcHash(
+    file.write(Utils::calculate_hash(
                    std::to_string(QDateTime::currentSecsSinceEpoch())
                    + std::to_string(QRandomGenerator::global()->bounded(100000)))
                    .c_str());
@@ -581,11 +581,11 @@ void ExtraChainNode::prepareFolders() {
     eLog("Working directory: {}", QDir::currentPath());
 
     QDir().mkpath(QString::fromStdString(KeyStore::folder));
-    QDir().mkpath(QString::fromStdString(DataStorage::TMP_FOLDER));
-    QDir().mkpath(
-        QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::ACTOR_INDEX_FOLDER_NAME));
-    QDir().mkpath(
-        QString::fromStdString(DataStorage::BLOCKCHAIN_INDEX + "/" + DataStorage::BLOCK_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
+    QDir().mkpath(QString::fromStdString(
+        BlockchainConst::BLOCKCHAIN_INDEX + "/" + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(
+        BlockchainConst::BLOCKCHAIN_INDEX + "/" + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
@@ -625,7 +625,7 @@ ConnectionsManager* ExtraChainNode::connectionsManager() const {
 }
 
 bool ExtraChainNode::login(const std::string& login, const std::string& password) {
-    return m_accountController->load(Utils::calcHash(login + password));
+    return m_accountController->load(Utils::calculate_hash(login + password));
 }
 
 bool ExtraChainNode::login(const std::string& hash) {
