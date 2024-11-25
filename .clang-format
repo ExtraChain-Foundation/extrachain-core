@@ -42,7 +42,7 @@ SpaceBeforeParens: ControlStatements
 DerivePointerAlignment: true
 IndentPPDirectives: BeforeHash
 KeepEmptyLinesAtTheStartOfBlocks: true
-MaxEmptyLinesToKeep: 2
+MaxEmptyLinesToKeep: 1
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AlignConsecutiveMacros: Consecutive
