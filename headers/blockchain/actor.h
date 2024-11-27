@@ -43,7 +43,7 @@ enum class ActorType {
 MSGPACK_ADD_ENUM(ActorType)
 // FORMAT_ENUM(ActorType)
 
-class EXTRACHAIN_EXPORT ActorId {
+class EXTRACHAIN_EXPORT ActorId final {
 public:
     ActorId();
     explicit ActorId(const std::string &actorId);
@@ -53,6 +53,7 @@ public:
     QByteArray toQByteArray() const;
     QString    toQString() const;
 
+    const std::string &value() const;
     const std::string &to_string() const;
     bool               is_zero() const;
 

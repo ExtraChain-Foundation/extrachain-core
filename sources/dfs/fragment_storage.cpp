@@ -467,7 +467,7 @@ void FragmentWriter::run() {
         return;
     }
 
-    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(m_msg.actorId, m_msg.fileId);
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(m_msg.actorId, m_msg.fileId);
 
     if (!dirRowExp.has_value()) {
         eLog("[Dfs] Fragments: dir row error");

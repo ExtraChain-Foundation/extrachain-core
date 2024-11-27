@@ -417,15 +417,24 @@ namespace Json {
     }
 
     template <typename T>
-    std::expected<T, std::string> deserialize(const std::string &json_str) {
+    std::expected<T, std::string> deserialize(std::string_view data) {
         try {
-            auto parsed   = boost::json::parse(json_str);
-            auto restored = json_convert::from_json<T>(parsed);
-            return restored;
+            auto parsed = boost::json::parse(data);
+            return json_convert::from_json<T>(parsed);
         } catch (const std::exception &e) {
-            eLog("Json deserialize error: {}", e.what());
+            eWarning("Json deserialize error: {}", e.what());
             return std::unexpected(e.what());
         }
+    }
+
+    template <typename T>
+    std::expected<T, std::string> deserialize(const std::string &data) {
+        return deserialize<T>(std::string_view(data));
+    }
+
+    template <typename T>
+    std::expected<T, std::string> deserialize(const std::vector<uint8_t> &data) {
+        return deserialize<T>(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));
     }
 } // namespace Json
 
@@ -516,44 +525,6 @@ namespace Utils {
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 
-    template <typename T>
-    std::string toString(const T &value) {
-        if constexpr (std::is_enum_v<T>) {
-            return std::to_string(std::to_underlying(value));
-        } else {
-            return fmt::format("{}", value);
-        }
-    }
-
-    template <typename T>
-    std::expected<T, ParseError> fromString(const std::string &str) {
-        if (str.empty()) {
-            return std::unexpected(ParseError::EmptyString);
-        }
-
-        try {
-            if constexpr (std::is_enum_v<T>) {
-                try {
-                    return static_cast<T>(std::stoi(str));
-                } catch (...) {
-                    return std::unexpected(ParseError::EnumConversionError);
-                }
-            } else {
-                T                  value;
-                std::istringstream iss(str);
-                iss >> value;
-                if (iss.fail()) {
-                    return std::unexpected(ParseError::InvalidFormat);
-                }
-                return value;
-            }
-        } catch (const std::out_of_range &) {
-            return std::unexpected(ParseError::OutOfRange);
-        } catch (...) {
-            return std::unexpected(ParseError::Invalid);
-        }
-    }
-
     boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
     EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
@@ -602,6 +573,19 @@ namespace Utils {
      * hexadecimal string.
      */
     EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
+
+    enum class FileError {
+        ReadError,
+        SizeTooLarge,
+        EmptyFile
+    };
+
+    /**
+     * Reads entire file content into a byte vector
+     * @param path File path to read
+     * @return Expected vector with file contents or FileError
+     */
+    EXTRACHAIN_EXPORT std::expected<std::vector<uint8_t>, FileError> read_file_content(const FsPath &path);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);

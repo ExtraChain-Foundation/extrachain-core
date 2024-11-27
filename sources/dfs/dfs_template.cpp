@@ -1,0 +1,132 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#include "dfs/dfs_template.h"
+#include <boost/algorithm/string/join.hpp>
+
+namespace Dfs {
+    std::expected<DfsTemplate, SqlCreateError> DfsTemplate::create(std::string name) {
+        return DfsTemplate(std::move(name));
+    }
+
+    DfsTemplate::DfsTemplate(std::string name)
+        : m_name(std::move(name)) {
+    }
+
+    DfsTemplate& DfsTemplate::add_fields(const std::initializer_list<FieldBuilder>& fields) {
+        m_fields.insert(m_fields.end(), fields);
+        return *this;
+    }
+
+    std::expected<DbSchema, SqlCreateError> DfsTemplate::to_db_schema() const {
+        DbSchema schema(m_name);
+        for (const auto& field : m_fields) {
+            auto column = field.to_db_column();
+            if (!column) {
+                return std::unexpected(column.error());
+            }
+            schema.add_column(std::move(*column));
+        }
+        return schema;
+    }
+
+    std::expected<DbColumn, SqlCreateError> FieldBuilder::to_db_column() const {
+        auto map_type_to_column = [](FieldType type) -> ColumnType {
+            switch (type) {
+            case FieldType::Id:
+            case FieldType::Integer:
+            case FieldType::Timestamp:
+                return ColumnType::Integer;
+            case FieldType::Real:
+                return ColumnType::Real;
+            case FieldType::Json:
+                return ColumnType::Json;
+            case FieldType::Blob:
+                return ColumnType::Blob;
+            default:
+                return ColumnType::Text;
+            }
+        };
+
+        DbColumn column(m_name, map_type_to_column(m_type));
+
+        if (m_is_primary && m_autoincrement.has_value()) {
+            column.primary_key(m_autoincrement.value());
+            return column;
+        }
+
+        if (m_required) {
+            column.not_null();
+        }
+
+        if (m_unique) {
+            column.unique();
+        }
+
+        if (m_default_now && m_type == FieldType::Timestamp) {
+            column.default_value("CURRENT_TIMESTAMP");
+        } else if (m_default) {
+            column.default_value(*m_default);
+        }
+
+        std::vector<std::string> checks;
+
+        // Length checks for string types
+        if ((m_min_length || m_max_length)
+            && (m_type == FieldType::String || m_type == FieldType::Text || m_type == FieldType::Email
+                || m_type == FieldType::Url || m_type == FieldType::Username)) {
+            checks.push_back(fmt::format("length({}) BETWEEN {} AND {}",
+                                         m_name,
+                                         m_min_length.value_or(0),
+                                         m_max_length.value_or(std::numeric_limits<size_t>::max())));
+        }
+
+        // Range checks for numeric types
+        if ((m_min || m_max) && (m_type == FieldType::Integer || m_type == FieldType::Real)) {
+            if (m_min) {
+                checks.push_back(fmt::format("{} >= {}", m_name, *m_min));
+            }
+            if (m_max) {
+                checks.push_back(fmt::format("{} <= {}", m_name, *m_max));
+            }
+        }
+
+        // Pattern check
+        if (m_pattern) {
+            checks.push_back(fmt::format("{} REGEXP '{}'", m_name, *m_pattern));
+        }
+
+        // Allowed values check
+        if (m_allowed_values && !m_allowed_values->empty()) {
+            std::vector<std::string> quoted;
+            quoted.reserve(m_allowed_values->size());
+            for (const auto& val : *m_allowed_values) {
+                quoted.push_back(fmt::format("'{}'", val));
+            }
+            checks.push_back(fmt::format("{} IN ({})", m_name, boost::algorithm::join(quoted, ", ")));
+        }
+
+        // Add combined checks if any exist
+        if (!checks.empty()) {
+            column.check(boost::algorithm::join(checks, " AND "));
+        }
+
+        return column;
+    }
+} // namespace Dfs

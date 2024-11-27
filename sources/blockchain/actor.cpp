@@ -47,6 +47,10 @@ QString ActorId::toQString() const {
     return QString::fromStdString(m_id);
 }
 
+const std::string &ActorId::value() const {
+    return m_id;
+}
+
 const std::string &ActorId::to_string() const {
     return m_id;
 }

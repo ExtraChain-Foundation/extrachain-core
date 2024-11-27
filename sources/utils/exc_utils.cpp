@@ -94,11 +94,6 @@ std::vector<std::string> Utils::split(const std::string &s, char c) {
     return v;
 }
 
-template <>
-std::expected<std::string, Utils::ParseError> Utils::fromString<std::string>(const std::string &str) {
-    return str;
-}
-
 std::string Utils::str_to_lower(const std::string &str) {
     std::string str_ = str;
     std::transform(str_.begin(), str_.end(), str_.begin(), [](unsigned char c) {
@@ -688,4 +683,44 @@ boost::json::value Utils::stringToJsonValue(const std::string &value, const std:
     }
 
     return boost::json::value(std::string(value));
+}
+
+std::expected<std::vector<uint8_t>, Utils::FileError> Utils::read_file_content(const FsPath &path) {
+    // Get file size
+    const auto size = path.file_size();
+    if (!size.has_value()) {
+        eLog("Failed to get file size: {}", path.string().value_or("invalid path"));
+        return std::unexpected(FileError::ReadError);
+    }
+
+    if (*size == 0) {
+        eLog("File is empty: {}", path.string().value_or("invalid path"));
+        return std::unexpected(FileError::EmptyFile);
+    }
+
+    // Check if file size is reasonable (e.g., less than 4GB)
+    constexpr std::uintmax_t MAX_FILE_SIZE = 4ULL * 1024 * 1024 * 1024;
+    if (*size > MAX_FILE_SIZE) {
+        eLog("File too large: {} bytes", *size);
+        return std::unexpected(FileError::SizeTooLarge);
+    }
+
+    // Read file content
+    std::vector<uint8_t> content;
+    content.reserve(static_cast<size_t>(*size));
+
+    std::ifstream file(path.native(), std::ios::binary);
+    if (!file) {
+        eLog("Failed to open file: {}", path.string().value_or("invalid path"));
+        return std::unexpected(FileError::ReadError);
+    }
+
+    content.insert(content.begin(), std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+
+    if (file.fail()) {
+        eLog("Failed to read file: {}", path.string().value_or("invalid path"));
+        return std::unexpected(FileError::ReadError);
+    }
+
+    return content;
 }

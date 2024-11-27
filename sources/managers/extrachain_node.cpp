@@ -38,7 +38,7 @@
 #include "managers/transaction_manager.h"
 #include "managers/token_manager.h"
 #include "managers/thread_pool.h"
-
+#include "dfs/dfs_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
@@ -138,7 +138,7 @@ void ExtraChainNode::cleanUp() {
     m_dfs->deleteLater();
 }
 
-bool ExtraChainNode::createNewNetwork(const std::string& login, const std::string& password) {
+bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
     if (!QDir("keystore/profile").isEmpty()) {
         eInfo("Cannot create a new network: existing profile data found");
         return false;
@@ -161,24 +161,24 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
 
     using namespace sqlite::literals;
 
-    auto tokens = DbSchema("tokens");
-    tokens.add_columns("tokenId"_text.primary_key(),
-                       "name"_text.not_null().unique(),
-                       "ticker"_text.not_null().unique(),
-                       "count"_text.not_null(),
-                       "owner"_text.not_null(), // perm: field for author actor id
-                       "color"_text.not_null(),
-                       "smart"_text);
+    auto tokens_template = Dfs::DfsTemplate::create("tokens").value().add_fields(
+        { Dfs::Field::String("tokenId").primary_key(SqlAutoincrement::No),
+          Dfs::Field::String("name").not_null().unique(),
+          Dfs::Field::String("ticker").not_null().unique(),
+          Dfs::Field::String("count").not_null(),
+          Dfs::Field::String("owner").not_null(),
+          Dfs::Field::String("color").not_null(),
+          Dfs::Field::String("smart") });
 
-    if (tokens.validation_error()) {
-        eCritical("Token database not correct: {}", tokens.validation_error().value());
-        Utils::wipeDataFiles();
+    auto template_res = m_dfs->store_template(first.id(), tokens_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", template_res.error());
         return false;
     }
 
-    auto storeRes = m_dfs->store_database(first.id(), "tokens", tokens);
-    if (!storeRes.has_value()) {
-        eCritical("Can't create token cache database, because {}", storeRes.error());
+    auto store_res = m_dfs->store_database(first.id(), "tokens", first.id(), "tokens");
+    if (!store_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", store_res.error());
         Utils::wipeDataFiles();
         return false;
     }
@@ -193,7 +193,7 @@ bool ExtraChainNode::createNewNetwork(const std::string& login, const std::strin
                         { "owner", first.id().to_string() },
                         { "color", "#111111" },
                         { "smart", "" } };
-    m_dfs->insert_database(storeRes->actorId, storeRes->fileId, tokensRow);
+    m_dfs->insert_database(store_res->actorId, store_res->fileId, tokensRow);
 
     eSuccess("[Node] New network created");
     return true;
@@ -556,11 +556,11 @@ void ExtraChainNode::connectSignals() {
             &TokenManager::sendToken,
             this,
             [=, this](const ActorId& actorId, const QString& pathToJson) {
-                m_dfs->storeFile(actorId,
-                                 pathToJson.toStdString(),
-                                 "contract",
-                                 "token-description.json",
-                                 Dfs::Encryption::Public);
+                m_dfs->store_file(actorId,
+                                  pathToJson.toStdString(),
+                                  "contract",
+                                  "token-description.json",
+                                  Dfs::SecurityLevel::Public);
             });
 }
 

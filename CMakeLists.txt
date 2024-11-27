@@ -105,6 +105,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_template.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_sql.cpp

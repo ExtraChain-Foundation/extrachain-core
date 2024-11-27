@@ -46,7 +46,11 @@
 using FileId         = std::string;
 using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
 
+namespace Dfs {
+    class DfsTemplate;
+}
 class ThreadAddFiles;
+
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -69,19 +73,40 @@ public:
     void initializeActor(const ActorId &actorId);
 
     // Internal use only
-    std::expected<Dfs::DirRow, Dfs::DfsError> storeFile(const ActorId               &actorId,
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actorId,
                                                         const std::filesystem::path &filePath,
                                                         const std::string           &visualFolder,
                                                         const std::string           &visualName,
-                                                        Dfs::Encryption              securityLevel);
+                                                        Dfs::SecurityLevel           securityLevel);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_database(const ActorId     &actorId,
-                                                             const std::string &visualName,
-                                                             const DbSchema    &schema);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(const ActorId                  &actor_id,
+                                                                 const std::vector<std::uint8_t> data,
+                                                                 const std::string              &visual_folder,
+                                                                 const std::string              &visual_name,
+                                                                 Dfs::SecurityLevel              security_level);
+
+    // TODO
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(const ActorId     &actor_id,
+                                                           const std::string &visual_folder);
+
+    // TODO
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &actor_id,
+                                                                const ActorId &dmaster_id);
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId          &actor_id,
+                                                             const Dfs::DfsTemplate &template_body);
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_database(const ActorId     &actor_id,
+                                                             const std::string &visual_name,
+                                                             const ActorId     &template_actor_id,
+                                                             const std::string &template_name);
 
     ExpectedDirRow insert_database(const ActorId &actorId, const std::string &fileId, DbRow row);
     ExpectedDirRow update_database(const ActorId &actorId, const std::string &fileId, DbRow row);
     ExpectedDirRow delete_database(const ActorId &actorId, const std::string &fileId, DbRow row);
+
+    // TODO: get from database
 
     bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile

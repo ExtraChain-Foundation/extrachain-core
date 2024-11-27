@@ -19,207 +19,222 @@
 
 #pragma once
 
-#include <string>
-#include <variant>
-#include <vector>
-#include <expected>
-#include <chrono>
-#include <optional>
-#include <fmt/format.h>
-#include <boost/algorithm/string/join.hpp>
-
 #include "utils/db_schema.h"
+#include "utils/exc_utils.h"
+#include <boost/describe.hpp>
+#include <expected>
+#include <string>
+#include <vector>
 
-class DfsTemplate {
-public:
-    enum class Type {
+namespace Dfs {
+    enum class FieldType {
         Id,
+        Integer,
+        Real,
         String,
+        Text,
+        Blob,
+        Json,
         Email,
         Url,
         Username,
         Ip,
-        Ipv4,
-        Ipv6,
-        Base64,
-        Hex,
-        Integer,
-        Float,
-        BigInt,
-        BigFloat,
-        Timestamp,
-        Json,
-        Phone
+        Phone,
+        Timestamp
     };
 
-    struct BaseSettings {
-        std::optional<bool> required {};
-        std::optional<bool> unique {};
-    };
+    class FieldBuilder {
+    public:
+        FieldBuilder() = default;
 
-    struct StringSettings : BaseSettings {
-        std::optional<size_t>                   min_length {};
-        std::optional<size_t>                   max_length {};
-        std::optional<std::string>              pattern {};
-        std::optional<std::string>              default_value {};
-        std::optional<std::vector<std::string>> allowed_values {};
-    };
+        FieldBuilder& primary_key(SqlAutoincrement autoincrement = SqlAutoincrement::Yes) {
+            m_is_primary    = true;
+            m_autoincrement = autoincrement;
+            return *this;
+        }
 
-    struct NumberSettings : BaseSettings {
-        std::optional<std::string>              min {};
-        std::optional<std::string>              max {};
-        std::optional<std::string>              default_value {};
-        std::optional<std::vector<std::string>> allowed_values {};
-    };
+        FieldBuilder& not_null() {
+            m_required = true;
+            return *this;
+        }
 
-    struct JsonSettings : BaseSettings {
-        std::optional<size_t> max_depth {};
-    };
+        FieldBuilder& unique() {
+            m_unique = true;
+            return *this;
+        }
 
-    struct TimestampSettings : BaseSettings {
-        std::optional<bool> default_now {};
-    };
+        FieldBuilder& default_value(std::string value) {
+            m_default = std::move(value);
+            return *this;
+        }
 
-    using FieldSettings =
-        std::variant<BaseSettings, StringSettings, NumberSettings, JsonSettings, TimestampSettings>;
+        template <typename T>
+        FieldBuilder& default_value(const T& value) {
+            if constexpr (std::is_arithmetic_v<T>) {
+                m_default = std::to_string(value);
+            } else {
+                m_default = Json::serialize(value);
+            }
+            return *this;
+        }
+
+        FieldBuilder& between(std::string min, std::string max) {
+            m_min = std::move(min);
+            m_max = std::move(max);
+            return *this;
+        }
+
+        FieldBuilder& between(int64_t min, int64_t max) {
+            m_min = std::to_string(min);
+            m_max = std::to_string(max);
+            return *this;
+        }
+
+        FieldBuilder& length(size_t min, size_t max) {
+            m_min_length = min;
+            m_max_length = max;
+            return *this;
+        }
+
+        FieldBuilder& pattern(std::string pattern) {
+            m_pattern = std::move(pattern);
+            return *this;
+        }
+
+        template <typename T>
+        FieldBuilder& allowed_values(const std::vector<T>& values) {
+            std::vector<std::string> str_values;
+            str_values.reserve(values.size());
+            for (const auto& value : values) {
+                if constexpr (std::is_arithmetic_v<T>) {
+                    str_values.push_back(std::to_string(value));
+                } else {
+                    str_values.push_back(Json::serialize(value));
+                }
+            }
+            m_allowed_values = std::move(str_values);
+            return *this;
+        }
+
+        FieldBuilder& max_depth(size_t depth) {
+            m_max_depth = depth;
+            return *this;
+        }
+
+        FieldBuilder& default_now() {
+            m_default_now = true;
+            return *this;
+        }
+
+        std::expected<DbColumn, SqlCreateError> to_db_column() const;
+
+        auto operator<=>(const FieldBuilder&) const = default;
+
+    private:
+        friend struct Field;
+
+        FieldBuilder(std::string name, FieldType type)
+            : m_name(std::move(name))
+            , m_type(type) {
+        }
+
+        std::string                             m_name;
+        FieldType                               m_type;
+        std::optional<bool>                     m_required;
+        std::optional<bool>                     m_unique;
+        std::optional<bool>                     m_is_primary;
+        std::optional<SqlAutoincrement>         m_autoincrement;
+        std::optional<std::string>              m_default;
+        std::optional<std::string>              m_min;
+        std::optional<std::string>              m_max;
+        std::optional<size_t>                   m_min_length;
+        std::optional<size_t>                   m_max_length;
+        std::optional<std::string>              m_pattern;
+        std::optional<std::vector<std::string>> m_allowed_values;
+        std::optional<size_t>                   m_max_depth;
+        std::optional<bool>                     m_default_now;
+
+        BOOST_DESCRIBE_CLASS(FieldBuilder,
+                             (),
+                             (),
+                             (),
+                             (m_name,
+                              m_type,
+                              m_required,
+                              m_unique,
+                              m_is_primary,
+                              m_autoincrement,
+                              m_default,
+                              m_min,
+                              m_max,
+                              m_min_length,
+                              m_max_length,
+                              m_pattern,
+                              m_allowed_values,
+                              m_max_depth,
+                              m_default_now));
+    };
 
     struct Field {
-        std::string   name;
-        Type          type;
-        FieldSettings settings;
-
-        Field(std::string n, Type t, FieldSettings s)
-            : name(std::move(n))
-            , type(t)
-            , settings(std::move(s)) {
+        static FieldBuilder Id(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Id);
+        }
+        static FieldBuilder Integer(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Integer);
+        }
+        static FieldBuilder Real(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Real);
+        }
+        static FieldBuilder String(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::String);
+        }
+        static FieldBuilder Text(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Text);
+        }
+        static FieldBuilder Blob(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Blob);
+        }
+        static FieldBuilder Json(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Json);
+        }
+        static FieldBuilder Email(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Email);
+        }
+        static FieldBuilder Url(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Url);
+        }
+        static FieldBuilder Username(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Username);
+        }
+        static FieldBuilder Ip(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Ip);
+        }
+        static FieldBuilder Phone(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Phone);
+        }
+        static FieldBuilder Timestamp(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Timestamp);
         }
     };
 
-    DfsTemplate(std::string name, std::initializer_list<Field> fields)
-        : m_name(std::move(name))
-        , m_fields(fields) {
-    }
-
-    std::expected<DbSchema, SqlCreateError> to_db_schema() const {
-        DbSchema schema(m_name);
-
-        for (const auto& field : m_fields) {
-            auto column = std::visit(
-                [&](const auto& settings) -> std::expected<DbColumn, SqlCreateError> {
-                    DbColumn col(field.name, get_column_type(field.type));
-
-                    if (field.type == Type::Id) {
-                        col.primary_key(SqlAutoincrement::Yes);
-                        return col;
-                    }
-
-                    if (settings.required && *settings.required) {
-                        col.not_null();
-                    }
-                    if (settings.unique && *settings.unique) {
-                        col.unique();
-                    }
-
-                    using S = std::decay_t<decltype(settings)>;
-                    if constexpr (std::is_same_v<S, StringSettings>) {
-                        if (settings.min_length || settings.max_length) {
-                            col.check(
-                                fmt::format("length({}) BETWEEN {} AND {}",
-                                            field.name,
-                                            settings.min_length.value_or(0),
-                                            settings.max_length.value_or(std::numeric_limits<size_t>::max())));
-                        }
-
-                        if (settings.default_value) {
-                            col.default_value(*settings.default_value);
-                        }
-
-                        if (settings.allowed_values && !settings.allowed_values->empty()) {
-                            std::vector<std::string> quoted;
-                            quoted.reserve(settings.allowed_values->size());
-                            for (const auto& val : *settings.allowed_values) {
-                                quoted.push_back(fmt::format("'{}'", val));
-                            }
-                            col.check(fmt::format("{} IN ({})", field.name, boost::algorithm::join(quoted, ", ")));
-                        }
-                    } else if constexpr (std::is_same_v<S, NumberSettings>) {
-                        std::vector<std::string> conditions;
-
-                        if (settings.min) {
-                            conditions.push_back(fmt::format("{} >= {}", field.name, *settings.min));
-                        }
-                        if (settings.max) {
-                            conditions.push_back(fmt::format("{} <= {}", field.name, *settings.max));
-                        }
-
-                        if (!conditions.empty()) {
-                            col.check(boost::algorithm::join(conditions, " AND "));
-                        }
-
-                        if (settings.default_value) {
-                            col.default_value(*settings.default_value);
-                        }
-
-                        if (settings.allowed_values && !settings.allowed_values->empty()) {
-                            col.check(fmt::format("{} IN ({})",
-                                                  field.name,
-                                                  boost::algorithm::join(*settings.allowed_values, ", ")));
-                        }
-                    } else if constexpr (std::is_same_v<S, JsonSettings>) {
-                        if (settings.max_depth) {
-                            // TODO: add json depth validation when supported
-                        }
-                    } else if constexpr (std::is_same_v<S, TimestampSettings>) {
-                        if (settings.default_now && *settings.default_now) {
-                            col.default_value("CURRENT_TIMESTAMP");
-                        }
-                    }
-
-                    return col;
-                },
-                field.settings);
-
-            if (!column) {
-                return std::unexpected(column.error());
-            }
-
-            schema.add_column(std::move(*column));
+    class DfsTemplate {
+    public:
+        DfsTemplate() = default;
+        static std::expected<DfsTemplate, SqlCreateError> create(std::string name);
+        DfsTemplate&                            add_fields(const std::initializer_list<FieldBuilder>& fields);
+        std::expected<DbSchema, SqlCreateError> to_db_schema() const;
+        const std::string                       name() const {
+            return m_name;
         }
 
-        return schema;
-    }
+        auto operator<=>(const DfsTemplate&) const = default;
 
-private:
-    static ColumnType get_column_type(Type type) {
-        switch (type) {
-        case Type::Id:
-        case Type::Integer:
-            return ColumnType::Integer;
-        case Type::Float:
-            return ColumnType::Real;
-        case Type::String:
-        case Type::Email:
-        case Type::Url:
-        case Type::Username:
-        case Type::Phone:
-        case Type::Ip:
-        case Type::Ipv4:
-        case Type::Ipv6:
-        case Type::Base64:
-        case Type::Hex:
-            return ColumnType::Text;
-        case Type::BigInt:
-        case Type::BigFloat:
-            return ColumnType::Text;
-        case Type::Json:
-            return ColumnType::Json;
-        case Type::Timestamp:
-            return ColumnType::Integer;
-        default:
-            return ColumnType::Text;
-        }
-    }
+        BOOST_DESCRIBE_CLASS(DfsTemplate, (), (), (), (m_name, m_fields));
 
-    std::string        m_name;
-    std::vector<Field> m_fields;
-};
+    private:
+        explicit DfsTemplate(std::string name);
+
+        std::string               m_name;
+        std::vector<FieldBuilder> m_fields;
+    };
+} // namespace Dfs
