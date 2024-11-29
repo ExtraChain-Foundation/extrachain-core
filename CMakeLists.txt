@@ -104,6 +104,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/diff.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
@@ -148,7 +149,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/diff.cpp
     )
+
+add_subdirectory(${EXTRACHAIN_3RDPARTY}/HDiffPatch ${CMAKE_CURRENT_BINARY_DIR}/HDiffPatch)
 
 # add_library(extrachainc
 #     ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
@@ -191,7 +195,7 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3
     magic_enum::magic_enum unofficial::hash-library
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json)
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json HDiffPatch/hdiffpatch)
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)
