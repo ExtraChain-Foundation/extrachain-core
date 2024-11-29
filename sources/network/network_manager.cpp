@@ -26,6 +26,8 @@
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
+#include "dfs/historical_collection.h"
+#include "utils/exc_logs_extra.h"
 
 #include <filesystem>
 #include <fstream>
@@ -692,6 +694,46 @@ void NetworkManager::messageReceived(const std::string &message,
     case MessageType::DfsSendingFileDone: { // TODO
         auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         eLog("[Dfs] File done: {} {}", actorId, fileHash);
+        break;
+    }
+
+    case MessageType::DfsDatabaseRequest: {
+        auto [actor_id, file_id] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        eCritical("DfsDatabaseRequest {} {}", actor_id, file_id);
+        node->dfs()->network_request_database(actor_id, file_id, messageId);
+        break;
+    }
+    case MessageType::DfsDatabaseHistory: {
+        eCritical("DfsDatabaseHistory");
+        auto [actor_id, file_id, historical_rows] =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
+                serialized);
+
+        node->dfs()->network_response_historical_database(actor_id, file_id, historical_rows);
+        break;
+    }
+    case MessageType::DfsDatabaseContent: {
+        eCritical("DfsDatabaseContent");
+        auto [actor_id, file_id, rows] =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
+
+        node->dfs()->network_response_content_database(actor_id, file_id, rows);
+        break;
+    }
+    case MessageType::DfsDatabaseInsert: {
+        eCritical("DfsDatabaseInsert");
+        auto [actor_id, file_id, historical_row] =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
+
+        node->dfs()->network_insert_database(actor_id, file_id, historical_row);
+        break;
+    }
+    case MessageType::DfsDatabaseUpdate: {
+        eCritical("DfsDatabaseUpdate");
+        break;
+    }
+    case MessageType::DfsDatabaseDelete: {
+        eCritical("DfsDatabaseDelete");
         break;
     }
 

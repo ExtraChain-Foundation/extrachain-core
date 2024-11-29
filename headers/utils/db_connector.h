@@ -48,47 +48,65 @@ namespace Utils {
     DbRow to_dbrow(const T &obj) {
         auto  json = Json::serialize_value(obj);
         DbRow result;
+
+        boost::mp11::mp_for_each<
+            boost::describe::describe_members<T,
+                                              boost::describe::mod_any_access | boost::describe::mod_inherited>>(
+            [&](auto D) {
+                if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                    const auto &field_value = obj.*D.pointer;
+                    const auto  field_name  = magic::detail::clean_field_name(D.name);
+
+                    using FieldType = std::remove_reference_t<decltype(field_value)>;
+                    if constexpr (magic::is_optional<FieldType>::value) {
+                        if (!field_value.has_value()) {
+                            result[field_name] = "";
+                        }
+                    }
+                }
+            });
+
         for (const auto &field : json.as_object()) {
             const auto &value = field.value();
-            if (value.is_null()) {
-                result[field.key()] = std::string();
-            } else if (value.is_string()) {
+            if (value.is_string()) {
                 result[field.key()] = std::string(value.as_string());
+            } else if (value.is_null()) {
+                result[field.key()] = "";
             } else {
                 result[field.key()] = boost::json::serialize(value);
             }
         }
+
         return result;
     }
 
     template <typename T>
     std::expected<T, Utils::ParseError> from_dbrow(const DbRow &map) {
         try {
-            using namespace boost::mp11;
-
             boost::json::object json;
             for (const auto &[key, value] : map) {
-                mp_for_each<boost::describe::describe_members<T,
-                                                              boost::describe::mod_any_access
-                                                                  | boost::describe::mod_inherited>>([&](auto D) {
-                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
-                        if (key == magic::detail::clean_field_name(D.name)) {
-                            using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
+                boost::mp11::mp_for_each<boost::describe::describe_members<T,
+                                                                           boost::describe::mod_any_access
+                                                                               | boost::describe::mod_inherited>>(
+                    [&](auto D) {
+                        if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                            if (key == magic::detail::clean_field_name(D.name)) {
+                                using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
 
-                            if constexpr (magic::is_optional<MemberType>::value) {
-                                if (value.empty()) {
-                                    json[key] = nullptr;
+                                if constexpr (magic::is_optional<MemberType>::value) {
+                                    if (value.empty()) {
+                                        json[key] = nullptr;
+                                    } else {
+                                        json[key] = stringToJsonValue(value, typeid(MemberType));
+                                    }
+                                } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
+                                    json[key] = value;
                                 } else {
                                     json[key] = stringToJsonValue(value, typeid(MemberType));
                                 }
-                            } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
-                                json[key] = value;
-                            } else {
-                                json[key] = stringToJsonValue(value, typeid(MemberType));
                             }
                         }
-                    }
-                });
+                    });
             }
 
             return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
@@ -131,6 +149,7 @@ protected:
 public:
     explicit DbConnector(const std::string &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const std::filesystem::path &filePath, DbConnectorType type = DbConnectorType::Regular);
+    explicit DbConnector(const FsPath &filePath, DbConnectorType type = DbConnectorType::Regular);
     explicit DbConnector(const char *filePath, DbConnectorType type = DbConnectorType::Regular);
     DbConnector(DbConnector &&db);
     ~DbConnector();
@@ -155,6 +174,9 @@ public:
     bool                                       is_open() const;
     std::vector<std::string>                   table_names();
     std::vector<DBColumn>                      table_columns(const std::string &table);
+
+    std::string hash();
+    uint64_t    size();
 
 public:
     bool          query(std::string query);

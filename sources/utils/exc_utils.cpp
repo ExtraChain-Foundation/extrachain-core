@@ -42,8 +42,8 @@
 #include "cpp-base64/base64.cpp"
 #include "encryption/encryption_tools.h"
 // #include "managers/data_mining_manager.h"
-#include "sha3.h"
-#include "blake3.h"
+#include <sha3.h>
+#include <blake3.h>
 #include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE

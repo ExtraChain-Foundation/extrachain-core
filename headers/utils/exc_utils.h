@@ -469,15 +469,15 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
 
-    static std::uint64_t currentDateSecs() {
+    static std::uint64_t current_date_secs() {
         using namespace std::chrono;
         std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
         return secs;
     }
 
-    static std::uint64_t currentDateMs() {
+    static std::uint64_t current_date_ms() {
         using namespace std::chrono;
-        std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        std::uint64_t ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
         return ms;
     }
 

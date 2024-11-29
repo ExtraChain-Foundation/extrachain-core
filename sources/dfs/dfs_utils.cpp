@@ -57,9 +57,9 @@ std::filesystem::path Dfs::Tables::ActorDirFile::storjDbPath(const ActorId     &
     return path;
 }
 
-std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::getDirRows(
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_rows(
     const ActorId &actorId,
-    std::uint64_t  lastModified) {
+    std::uint64_t  last_modified) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
@@ -67,7 +67,7 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
 
     std::vector<Dfs::DirRow> dirRows;
     auto                     actrDirData =
-        db.select(fmt::format("SELECT * FROM {} WHERE lastModified >= {}", TableName, lastModified));
+        db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
 
     for (auto &row : actrDirData) {
         auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
@@ -111,12 +111,12 @@ bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow
         return false;
     }
 
-    auto currentSecs = Utils::currentDateSecs();
-    auto fileIdPrev  = DfsT::ActorDirFile::getLastFileId(dirFile);
+    auto current_ms = Utils::current_date_ms();
+    auto fileIdPrev = DfsT::ActorDirFile::getLastFileId(dirFile);
 
-    dirRow.created      = currentSecs;
-    dirRow.lastModified = currentSecs;
-    dirRow.fileIdPrev   = fileIdPrev;
+    dirRow.created       = current_ms;
+    dirRow.last_modified = current_ms;
+    dirRow.fileIdPrev    = fileIdPrev;
 
     auto dirRowDb = Utils::to_dbrow(dirRow);
     bool res      = dirFile.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
@@ -192,19 +192,20 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     return std::stoull(row["SUM(size)"]);
 }
 
-bool Dfs::Tables::ActorDirFile::update_hash_size(const ActorId &actorId, DirRow &dirRow) {
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actorId, DirRow &dirRow) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
         eFatal("Database error");
         return 0;
     }
 
-    // TODO: update last mod
-    std::string query = fmt::format("UPDATE {} SET hash = '{}' AND size = {} WHERE fileId = '{}'",
-                                    TableName,
-                                    dirRow.hash,
-                                    dirRow.size,
-                                    dirRow.fileId);
+    std::string query =
+        fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}' WHERE fileId = '{}'",
+                    TableName,
+                    dirRow.hash,
+                    dirRow.size,
+                    dirRow.last_modified,
+                    dirRow.fileId);
     return db.update(query);
 }
 

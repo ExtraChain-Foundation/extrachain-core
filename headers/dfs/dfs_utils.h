@@ -80,6 +80,7 @@ namespace Dfs {
         static const std::wstring  fsActrRootW                = L"dfs";
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";
+        static const std::string   COLLECTION_FILE            = ".collection";
         static const std::uint64_t sectionSize                = /*2097152*/ 524228;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
@@ -146,11 +147,11 @@ namespace Dfs {
     };
 
     enum class FileType {
-        Folder   = 0,
-        Bytes    = 1,
-        Text     = 2,
-        Database = 3,
-        Json     = 4
+        Folder     = 0,
+        Bytes      = 1,
+        Collection = 2,
+        Text       = 3,
+        Json       = 4
     };
 
     enum class FileState {
@@ -176,8 +177,8 @@ namespace Dfs {
         std::string                name;
 
         std::size_t   size;
-        std::uint64_t created      = 0;
-        std::uint64_t lastModified = 0;
+        std::uint64_t created       = 0;
+        std::uint64_t last_modified = 0;
 
         Dfs::FileType      type;
         Dfs::SecurityLevel encryption;
@@ -211,7 +212,7 @@ namespace Dfs {
                            name,
                            size,
                            created,
-                           lastModified,
+                           last_modified,
                            type,
                            encryption,
                            state,
@@ -342,7 +343,6 @@ namespace Dfs {
 
     namespace Fragments {
         static const std::string Extension          = ".fragments";
-        static const std::string ExtensionJournal   = ".storj-journal";
         static const std::string TableNameFragments = "Fragments";
         static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
                                                      + "("
@@ -387,6 +387,8 @@ namespace Dfs {
                 data = string.substr(8);
             }
         };
+
+        static const std::string HISTORICAL_TABLE = "historical_chain";
 
         static const std::string TableNameHC = "HistoricalChain";
         static const std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
@@ -443,7 +445,7 @@ namespace Dfs {
       "name          TEXT             NOT NULL,"
       "size          INTEGER          NOT NULL,"
       "created       INTEGER          NOT NULL,"
-      "lastModified  INTEGER          NOT NULL,"
+      "last_modified  INTEGER          NOT NULL,"
       "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 4),"
       "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
       "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
@@ -465,8 +467,8 @@ namespace Dfs {
             std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const ActorId&     actor_id,
                                                                                const std::string& search_value,
                                                                                const std::string& field = "fileId");
-            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> getDirRows(const ActorId& actorId,
-                                                                              std::uint64_t  lastModified = 0);
+            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
+                                                                                std::uint64_t  last_modified = 0);
 
             // TODO: expected
             std::optional<Dfs::DfsTemplate> get_dfs_template(const ActorId&     actor_id,
@@ -475,7 +477,7 @@ namespace Dfs {
             bool addDirRow(const ActorId& actorId, DirRow& dirRow);
             bool addDirRows(const ActorId& actorId, const std::vector<Dfs::DirRow>& dirRows);
 
-            bool update_hash_size(const ActorId& actorId, DirRow& dirRow);
+            bool update_file_metadata(const ActorId& actorId, DirRow& dirRow);
         } // namespace ActorDirFile
 
         namespace DirsFile {
@@ -483,7 +485,7 @@ namespace Dfs {
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                             + "("
                                               "actorId      TEXT PRIMARY KEY NOT NULL,"
-                                              "lastModified INTEGER          NOT NULL "
+                                              "last_modified INTEGER          NOT NULL "
                                               ");";
         } // namespace DirsFile
 

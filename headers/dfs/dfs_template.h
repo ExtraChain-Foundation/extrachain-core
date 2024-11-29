@@ -48,6 +48,8 @@ namespace Dfs {
         FieldBuilder() = default;
 
         FieldBuilder& primary_key(SqlAutoincrement autoincrement = SqlAutoincrement::Yes) {
+            if (m_name != "id")
+                return *this;
             m_is_primary    = true;
             m_autoincrement = autoincrement;
             return *this;
@@ -236,5 +238,7 @@ namespace Dfs {
 
         std::string               m_name;
         std::vector<FieldBuilder> m_fields;
+
+        friend class FieldBuilder;
     };
 } // namespace Dfs

@@ -161,14 +161,14 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     using namespace sqlite::literals;
 
-    auto tokens_template = Dfs::DfsTemplate::create("tokens").value().add_fields(
-        { Dfs::Field::String("tokenId").primary_key(SqlAutoincrement::No),
-          Dfs::Field::String("name").not_null().unique(),
-          Dfs::Field::String("ticker").not_null().unique(),
-          Dfs::Field::String("count").not_null(),
-          Dfs::Field::String("owner").not_null(),
-          Dfs::Field::String("color").not_null(),
-          Dfs::Field::String("smart") });
+    auto tokens_template =
+        Dfs::DfsTemplate::create("tokens").value().add_fields({ Dfs::Field::String("tokenId").not_null().unique(),
+                                                                Dfs::Field::String("name").not_null().unique(),
+                                                                Dfs::Field::String("ticker").not_null().unique(),
+                                                                Dfs::Field::String("count").not_null(),
+                                                                Dfs::Field::String("owner").not_null(),
+                                                                Dfs::Field::String("color").not_null(),
+                                                                Dfs::Field::String("smart") });
 
     auto template_res = m_dfs->store_template(first.id(), tokens_template);
     if (!template_res.has_value()) {
@@ -179,7 +179,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     auto store_res = m_dfs->store_database(first.id(), "tokens", first.id(), "tokens");
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
-        Utils::wipeDataFiles();
+        // Utils::wipeDataFiles();
         return false;
     }
 

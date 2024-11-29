@@ -32,6 +32,7 @@
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/random.hpp>
+#include <boost/algorithm/string.hpp>
 #include <filesystem>
 #include <QThread>
 
@@ -40,8 +41,7 @@
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_utils.h"
-#include <QtConcurrent>
-#include <boost/algorithm/string.hpp>
+#include "dfs/historical_collection.h"
 
 using FileId         = std::string;
 using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
@@ -49,6 +49,7 @@ using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
 namespace Dfs {
     class DfsTemplate;
 }
+
 class ThreadAddFiles;
 
 class EXTRACHAIN_EXPORT DfsController : public QObject {
@@ -75,10 +76,10 @@ public:
     // Internal use only
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actorId,
-                                                        const std::filesystem::path &filePath,
-                                                        const std::string           &visualFolder,
-                                                        const std::string           &visualName,
-                                                        Dfs::SecurityLevel           securityLevel);
+                                                         const std::filesystem::path &filePath,
+                                                         const std::string           &visualFolder,
+                                                         const std::string           &visualName,
+                                                         Dfs::SecurityLevel           securityLevel);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(const ActorId                  &actor_id,
                                                                  const std::vector<std::uint8_t> data,
@@ -102,9 +103,22 @@ public:
                                                              const ActorId     &template_actor_id,
                                                              const std::string &template_name);
 
-    ExpectedDirRow insert_database(const ActorId &actorId, const std::string &fileId, DbRow row);
+    ExpectedDirRow insert_database(const ActorId &actor_id, const std::string &file_id, DbRow row);
     ExpectedDirRow update_database(const ActorId &actorId, const std::string &fileId, DbRow row);
-    ExpectedDirRow delete_database(const ActorId &actorId, const std::string &fileId, DbRow row);
+    ExpectedDirRow delete_database(const ActorId &actorId, const std::string &fileId, DbRow row); // uint32_t id
+
+    void network_request_database(const ActorId     &actor_id,
+                                  const std::string &file_id,
+                                  const std::string &message_id);
+    void network_response_historical_database(const ActorId                              &actor_id,
+                                              const std::string                          &file_id,
+                                              const std::vector<HistoricalCollectionRow> &historical_rows);
+    void network_response_content_database(const ActorId            &actor_id,
+                                           const std::string        &file_id,
+                                           const std::vector<DbRow> &db_rows);
+    void network_insert_database(const ActorId                 &actor_id,
+                                 const std::string             &file_id,
+                                 const HistoricalCollectionRow &row);
 
     // TODO: get from database
 
@@ -135,7 +149,7 @@ public:
                                  std::string         &nameFile,
                                  DfsP::ReferenceData &referenceData);
 
-    void updateDirsLastModified(const ActorId &actorId, std::uint64_t lastModified);
+    void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
 
 private:
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
@@ -161,9 +175,9 @@ public:
                                     BigNumber                              dfsCount) const;
     void        requestSync();
     void        requestDirFileAllActors();
-    void        sendSync(std::uint64_t lastModified, const std::string &messageId);
+    void        sendSync(std::uint64_t last_modified, const std::string &messageId);
     void        requestDirData(const ActorId &actorId);
-    void        sendDirData(const ActorId &actorId, std::uint64_t lastModified, const std::string &messageId);
+    void        sendDirData(const ActorId &actorId, std::uint64_t last_modified, const std::string &messageId);
     void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
     void        requestFile(const ActorId &actorId, const std::string &fileName);
     void        sendFile(const ActorId &actorId, const std::string &fileId, const std::string &messageId = "");
@@ -197,6 +211,10 @@ signals:
 
     void uploaded(Dfs::DirRow dirRow);
     void downloaded(Dfs::DirRow dirRow);
+
+    void collectionAdding(HistoricalCollectionRow);
+    void collectionUpdate(HistoricalCollectionRow);
+    void collectionRemove(HistoricalCollectionRow);
 
     void downloadProgress(ActorId actorId, std::string fileId, int progress);
     void uploadProgress(ActorId actorId, std::string fileId, int progress);

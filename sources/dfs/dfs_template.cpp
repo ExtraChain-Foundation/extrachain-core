@@ -22,7 +22,13 @@
 
 namespace Dfs {
     std::expected<DfsTemplate, SqlCreateError> DfsTemplate::create(std::string name) {
-        return DfsTemplate(std::move(name));
+        auto tmpl = DfsTemplate(std::move(name));
+        tmpl.add_fields({
+            Field::Id("id").primary_key(),
+            Field::Integer("timestamp").not_null(),
+            // Field::Text("sign").not_null().unique()
+        });
+        return tmpl;
     }
 
     DfsTemplate::DfsTemplate(std::string name)
@@ -36,6 +42,7 @@ namespace Dfs {
 
     std::expected<DbSchema, SqlCreateError> DfsTemplate::to_db_schema() const {
         DbSchema schema(m_name);
+
         for (const auto& field : m_fields) {
             auto column = field.to_db_column();
             if (!column) {
@@ -43,6 +50,7 @@ namespace Dfs {
             }
             schema.add_column(std::move(*column));
         }
+
         return schema;
     }
 

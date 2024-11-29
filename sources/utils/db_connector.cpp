@@ -25,6 +25,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 
+#include <blake3.h>
+
 #include "utils/exc_logs.h"
 
 // #define ENABLE_SQLITE_TRUE_LOGS
@@ -57,6 +59,10 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
 
 DbConnector::DbConnector(const std::filesystem::path &filePath, DbConnectorType type)
     : DbConnector(filePath.string(), type) {
+}
+
+DbConnector::DbConnector(const FsPath &filePath, DbConnectorType type)
+    : DbConnector(filePath.native(), type) {
 }
 
 DbConnector::DbConnector(const char *filePath, DbConnectorType type)
@@ -368,7 +374,7 @@ bool DbConnector::query(std::string query) {
 #ifndef ENABLE_SQLITE_TRUE_LOGS
     if (res != SQLITE_DONE)
 #endif
-        eLog("[DbConnector] {}({}): {}", file(), (res == SQLITE_DONE ? "true" : "false"), query);
+        eWarning("[DbConnector] {}({}): {}", file(), (res == SQLITE_DONE ? "true" : "false"), query);
     if (res != SQLITE_DONE)
         eWarning("[DbConnector] Query error: {}", sqlite3_errmsg(db));
 
@@ -527,4 +533,55 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     sqlite3_finalize(stmt);
     dbmutex.unlock();
     return true;
+}
+
+std::string DbConnector::hash() {
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
+    for (const auto &table : table_names()) {
+        blake3_hasher_update(&hasher, table.data(), table.size());
+        for (const auto &col : table_columns(table)) {
+            blake3_hasher_update(&hasher, col.name.data(), col.name.size());
+            blake3_hasher_update(&hasher, col.type.data(), col.type.size());
+        }
+
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db, fmt::format("SELECT * FROM {} ORDER BY rowid", table).c_str(), -1, &stmt, nullptr);
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            for (int i = 0; i < sqlite3_column_count(stmt); i++) {
+                auto bytes = sqlite3_column_bytes(stmt, i);
+                blake3_hasher_update(&hasher, sqlite3_column_blob(stmt, i), bytes);
+            }
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    uint8_t hash[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+    return fmt::format("{:02x}", fmt::join(hash, hash + BLAKE3_OUT_LEN, ""));
+}
+
+uint64_t DbConnector::size() {
+    uint64_t total = 0;
+
+    for (const auto &table : table_names()) {
+        total += table.size();
+        for (const auto &col : table_columns(table)) {
+            total += col.name.size() + col.type.size();
+        }
+    }
+
+    for (const auto &table : table_names()) {
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db, fmt::format("SELECT * FROM {}", table).c_str(), -1, &stmt, nullptr);
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            for (int i = 0; i < sqlite3_column_count(stmt); i++) {
+                total += sqlite3_column_bytes(stmt, i);
+            }
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    return total;
 }

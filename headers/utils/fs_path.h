@@ -105,14 +105,9 @@ namespace Utils {
 } // namespace Utils
 
 #include <filesystem>
-#include <string>
-#include <expected>
-#include <chrono>
-
-#include <string>
-#include <expected>
-#include <chrono>
-#include <filesystem>
+#include <boost/chrono.hpp>
+#include <boost/chrono/time_point.hpp>
+#include <boost/chrono/chrono_io.hpp>
 
 enum class FsError {
     ConversionFailed,
@@ -130,8 +125,9 @@ class DirectoryIterator;
 
 class FsPath {
 public:
-    using TimePoint = std::chrono::system_clock::time_point;
+    using TimePoint = boost::chrono::system_clock::time_point;
 
+    explicit FsPath() = default;
     [[nodiscard]] static std::expected<FsPath, FsError>     create(std::string_view utf8_path);
     static std::expected<FsPath, FsError>                   create(const std::string& path);
     static std::expected<FsPath, FsError>                   create(const std::filesystem::path& path);
@@ -159,6 +155,7 @@ public:
 
 private:
     explicit FsPath(const std::filesystem::path& path);
+
     std::filesystem::path m_path;
 
     friend class DirectoryIterator;
