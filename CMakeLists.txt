@@ -24,7 +24,7 @@ message("Compiler: ${CMAKE_CXX_COMPILER_ID} | front: ${CMAKE_CXX_COMPILER_FRONTE
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpedantic -Werror=return-type -Werror=implicit-fallthrough")
     if (UNIX)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -fPIC")
     endif (UNIX)
 endif()
 if(MSVC)
@@ -35,7 +35,7 @@ endif()
 find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system thread mp11 describe json)
+find_package(Boost REQUIRED COMPONENTS system thread mp11 describe json filesystem chrono)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -195,7 +195,8 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3
     magic_enum::magic_enum unofficial::hash-library
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json ${HDIFFPATCH_LIB})
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json Boost::filesystem Boost::chrono
+    ${HDIFFPATCH_LIB})
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)

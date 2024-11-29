@@ -114,6 +114,8 @@ namespace Utils {
 #include <chrono>
 #include <filesystem>
 
+#include <boost/chrono.hpp>
+
 enum class FsError {
     ConversionFailed,
     InvalidPath,
@@ -130,7 +132,7 @@ class DirectoryIterator;
 
 class FsPath {
 public:
-    using TimePoint = std::chrono::system_clock::time_point;
+    using TimePoint = boost::chrono::system_clock::time_point;
 
     [[nodiscard]] static std::expected<FsPath, FsError>     create(std::string_view utf8_path);
     static std::expected<FsPath, FsError>                   create(const std::string& path);

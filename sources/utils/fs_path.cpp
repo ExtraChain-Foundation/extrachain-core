@@ -31,6 +31,8 @@
     #include <errno.h>
 #endif
 
+#include <boost/filesystem.hpp>
+
 FsPath::FsPath(const std::filesystem::path& path)
     : m_path(path) {
 }
@@ -249,8 +251,8 @@ std::expected<std::uintmax_t, FsError> FsPath::directory_size() const {
 
 std::expected<FsPath::TimePoint, FsError> FsPath::last_write_time() const {
     try {
-        auto ftime = std::filesystem::last_write_time(m_path);
-        return std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+        std::time_t ftime = boost::filesystem::last_write_time(m_path.string());
+        return FsPath::TimePoint(boost::chrono::seconds(ftime));
     } catch (const std::exception& e) {
         eCritical("Failed to get last write time: {}", e.what());
         return std::unexpected(FsError::IoError);
