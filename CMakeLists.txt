@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.19)
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
-    project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
+    project(extrachain LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
     add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
