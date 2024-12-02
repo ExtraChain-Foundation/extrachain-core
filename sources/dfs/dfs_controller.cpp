@@ -18,9 +18,10 @@
  */
 
 #include "dfs/dfs_controller.h"
+
 #include "dfs/fragment_storage.h"
-#include "dfs/historical_sql.h"
 #include "dfs/name_validator.h"
+#include "dfs/dfs_template.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
@@ -53,14 +54,15 @@ void DfsController::initializeActor(const ActorId &actorId) {
     requestDirData(actorId);
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(const ActorId               &actorId,
-                                                                   const std::filesystem::path &filePath,
-                                                                   const std::string           &visualFolder,
-                                                                   const std::string           &visualName,
-                                                                   Dfs::Encryption              securityLevel) {
-    std::filesystem::path fpath       = DfsPath::convertPathToPlatform(filePath);
-    std::filesystem::path newFilePath = fpath;
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &actorId,
+                                                                    const std::filesystem::path &filePath,
+                                                                    const std::string           &visualFolder,
+                                                                    const std::string           &visualName,
+                                                                    Dfs::SecurityLevel           securityLevel) {
+    auto fpath       = FsPath::create(filePath).value();
+    auto newFilePath = fpath;
 
+    // TODO: check path, check :***
     auto name_res = NameValidator::validate(visualName);
     if (!name_res.has_value()) {
         eLog("[Dfs] Can't load file: invalid name");
@@ -78,50 +80,51 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(const ActorId
     newFilePath = fpath;
 #endif
 
-    if (!std::filesystem::exists(newFilePath)) {
+    if (!newFilePath.exists()) {
         eInfo("[Dfs] Can't load file: file doesn't exist");
         return std::unexpected(Dfs::DfsError::NotExists);
     }
 
-    if (!std::filesystem::is_regular_file(newFilePath)) {
+    if (!newFilePath.is_regular_file()) {
         eInfo("[Dfs] This is not a file");
         return std::unexpected(Dfs::DfsError::NotFile);
     }
 
-    std::ifstream my_file(newFilePath);
+    std::ifstream my_file(newFilePath.native());
     if (!my_file) {
         eWarning("[Dfs] Can't read file");
         return std::unexpected(Dfs::DfsError::NotReadable);
     }
     my_file.close();
 
-    auto fileSize = std::filesystem::file_size(newFilePath);
+    auto fileSize = newFilePath.file_size().value();
     if (!writeAvailable(fileSize)) {
         return std::unexpected(Dfs::DfsError::StorageFull);
     }
 
-    if (securityLevel == Dfs::Encryption::Encrypted) {
-        std::wstring fname = std::filesystem::path(fpath).stem().wstring();
-        newFilePath        = L"temp";
-        std::filesystem::create_directories(newFilePath);
-        newFilePath = newFilePath.wstring() + DfsB::separator + fname;
-        if (!std::filesystem::exists(newFilePath)) {
-            std::filesystem::copy(filePath, newFilePath);
-        }
+    if (securityLevel == Dfs::SecurityLevel::Encrypted) {
+        // TODO: need to reimplement
+        // std::wstring fname = std::filesystem::path(fpath).stem().wstring();
+        // newFilePath        = L"temp";
+        // std::filesystem::create_directories(newFilePath.native());
+        // newFilePath = newFilePath.wstring() + DfsB::separator + fname;
+        // if (!newFilePath.exists()) {
+        //     std::filesystem::copy(filePath.native(), newFilePath.native());
+        // }
 
-        auto actor = node->accountController()->currentProfile().getActor(actorId);
-        actor->key().encryptFile(fpath, newFilePath);
+        // auto actor = node->accountController()->currentProfile().getActor(actorId);
+        // actor->key().encryptFile(fpath.native(), newFilePath.native());
 
-        std::filesystem::path nvp = newTargetVirtualFilePath;
-        std::filesystem::path nfn = nvp.filename();
-        nvp.remove_filename();
-        nvp /= "secured";
-        nvp /= nfn;
-        newTargetVirtualFilePath = nvp.string();
+        // std::filesystem::path nvp = newTargetVirtualFilePath;
+        // std::filesystem::path nfn = nvp.filename();
+        // nvp.remove_filename();
+        // nvp /= "secured";
+        // nvp /= nfn;
+        // newTargetVirtualFilePath = nvp.string();
     }
 
     std::string           fileId   = createFileId(filePath);
-    std::string           fileHash = Utils::calculate_hash_file(FsPath::create(newFilePath).value()).value();
+    std::string           fileHash = Utils::calculate_hash_file(newFilePath).value();
     std::filesystem::path placeInDFS =
         DfsB::fsActrRootW + DfsB::separator + actorId.toQString().toStdWString() + DfsB::separator;
     std::filesystem::path dfsPath = DfsPath::filePath(actorId, fileId);
@@ -139,28 +142,30 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(const ActorId
 #ifdef ANDROID
         std::filesystem::rename(newFilePath, dfsPath);
 #else
-        std::filesystem::copy(newFilePath, dfsPath);
+        std::filesystem::copy(newFilePath.native(), dfsPath.native());
 #endif
     } catch (std::filesystem::filesystem_error const &err) {
         eWarning("[Dfs] Copy error: {}", err.what());
+        return std::unexpected(Dfs::DfsError::NotWritable);
     }
 
-    if (std::filesystem::exists(newFilePath) && securityLevel == Dfs::Encryption::Encrypted)
-        std::filesystem::remove(newFilePath);
+    // TODO
+    // if (newFilePath.exists() && securityLevel == Dfs::SecurityLevel::Encrypted)
+    // std::filesystem::remove(newFilePath);
 
     // create new dir row
-    Dfs::DirRow dirRow = { .actorId      = actorId,
-                           .fileId       = fileId,
-                           .fileIdPrev   = "",
-                           .hash         = fileHash,
-                           .folder       = visualFolder,
-                           .name         = visualName,
-                           .size         = fileSize,
-                           .created      = 0,
-                           .lastModified = 0,
-                           .type         = Dfs::FileType::Bytes,
-                           .encryption   = securityLevel,
-                           .state        = Dfs::FileState::Loaded };
+    Dfs::DirRow dirRow = { .actorId       = actorId,
+                           .fileId        = fileId,
+                           .fileIdPrev    = "",
+                           .hash          = fileHash,
+                           .folder        = visualFolder,
+                           .name          = visualName,
+                           .size          = fileSize,
+                           .created       = 0,
+                           .last_modified = 0,
+                           .type          = Dfs::FileType::File,
+                           .encryption    = securityLevel,
+                           .state         = Dfs::FileState::Loaded };
 
     auto res = Dfs::Tables::ActorDirFile::addDirRow(actorId, dirRow);
     if (!res) {
@@ -175,7 +180,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(const ActorId
     fs.initLocalFile(fileSize);
     fs.initHistoricalChain();
 
-    updateDirsLastModified(actorId, dirRow.lastModified);
+    updateDirsLastModified(actorId, dirRow.last_modified);
 
     insertToFiles(dirRow);
     emit added(dirRow);
@@ -185,102 +190,302 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::storeFile(const ActorId
     // return addFile(msg, false);
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_database(const ActorId     &actorId,
-                                                                        const std::string &visualName,
-                                                                        const DbSchema    &schema) {
-    std::string fileId  = createFileIdFromData("db");
-    auto        dfsPath = DfsPath::filePath(actorId, fileId);
-    auto        actor   = node->accountController()->currentProfile().getActor(actorId);
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(const ActorId &actor_id,
+                                                                            const std::vector<std::uint8_t> data,
+                                                                            const std::string &visual_folder,
+                                                                            const std::string &visual_name,
+                                                                            Dfs::SecurityLevel security_level) {
+    std::string file_temp = createFileId("data");
+    std::string temp_path = std::format("tmp/{}", file_temp);
 
-    auto chain = HistoricalSql::create(actor, fileId);
-    chain.create_table(schema);
+    std::ofstream temp_file(temp_path, std::ios::binary);
+    if (!temp_file) {
+        eWarning("[Dfs] Can't create temp file {}", temp_path);
+        return std::unexpected(Dfs::DfsError::NotWritable);
+    }
 
-    std::string fileHash = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
-    auto        fileSize = std::filesystem::file_size(dfsPath);
+    temp_file.write(reinterpret_cast<const char *>(data.data()), data.size());
+    temp_file.close();
 
-    Dfs::DirRow dirRow = { .actorId      = actorId,
-                           .fileId       = fileId,
-                           .fileIdPrev   = "",
-                           .hash         = fileHash,
-                           .folder       = "db",
-                           .name         = visualName,
-                           .size         = fileSize,
-                           .created      = 0,
-                           .lastModified = 0,
-                           .type         = Dfs::FileType::Database,
-                           .encryption   = Dfs::Encryption::Public,
-                           .state        = Dfs::FileState::Loaded };
+    auto result = store_file(actor_id, temp_path, visual_folder, visual_name, security_level);
 
-    auto resDirRow = Dfs::Tables::ActorDirFile::addDirRow(actorId, dirRow);
+    std::filesystem::remove(temp_path);
+
+    return result;
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(const ActorId     &actor_id,
+                                                                      const std::string &visual_folder) {
+    return {};
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder_dapp(const ActorId &actor_id,
+                                                                           const ActorId &dmaster_id) {
+    return {};
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_template(const ActorId          &actor_id,
+                                                                        const Dfs::DfsTemplate &template_body) {
+    if (!template_body.to_db_schema().has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    // TODO: check if another dublicate template exists
+    // need new function in utils
+
+    auto schema = template_body.to_db_schema();
+    if (!schema.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto sql = schema->to_sql();
+    if (!sql.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    auto json = Json::serialize(template_body);
+    return store_data_as_file(actor_id,
+                              ByteArray(json).toVector(),
+                              ":templates",
+                              template_body.name(),
+                              Dfs::SecurityLevel::Public);
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(const ActorId     &actor_id,
+                                                                          const std::string &visual_name,
+                                                                          const ActorId     &template_actor_id,
+                                                                          const std::string &template_name) {
+    std::string file_id  = createFileIdFromData("db");
+    auto        dfs_path = DfsPath::file_path(actor_id, file_id).value();
+    auto        actor    = node->accountController()->currentProfile().getActor(actor_id);
+
+    auto dfs_template = Dfs::Tables::ActorDirFile::get_dfs_template(actor_id, template_name);
+
+    if (!dfs_template.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    auto schema = dfs_template->to_db_schema();
+    if (!schema.has_value()) {
+        return std::unexpected(Dfs::DfsError::InvalidTemplate);
+    }
+
+    auto chain   = HistoricalCollection::create(actor, actor->id(), file_id);
+    auto created = chain.create_table(schema.value());
+    if (!created.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    DbConnector db(dfs_path.native());
+    db.open();
+    auto [collection_hash, collection_size] = db.hash_size();
+    if (collection_hash.empty() || collection_size == 0) {
+        return std::unexpected(Dfs::DfsError::InvalidTemplate);
+    }
+    db.close();
+
+    Dfs::DirRow dirRow = { .actorId       = actor_id,
+                           .fileId        = file_id,
+                           .fileIdPrev    = "",
+                           .hash          = collection_hash,
+                           .folder        = ":collection",
+                           .name          = visual_name,
+                           .size          = collection_size,
+                           .created       = 0,
+                           .last_modified = 0,
+                           .type          = Dfs::FileType::Collection,
+                           .encryption    = Dfs::SecurityLevel::Public,
+                           .state         = Dfs::FileState::Loaded };
+
+    auto resDirRow = Dfs::Tables::ActorDirFile::addDirRow(actor_id, dirRow);
 
     if (!resDirRow) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
-    FragmentStorage fs(actorId, fileId, fileHash);
-    fs.initLocalFile(fileSize);
-    fs.initHistoricalChain();
-
-    updateDirsLastModified(actorId, dirRow.lastModified);
+    updateDirsLastModified(actor_id, dirRow.last_modified);
 
     insertToFiles(dirRow);
     emit added(dirRow);
-    sendFile(actorId, fileId);
+    sendFile(actor_id, file_id);
 
     return dirRow;
 }
 
-ExpectedDirRow DfsController::insert_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
-    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+ExpectedDirRow DfsController::add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
     if (!dirRowExp.has_value()) {
         return dirRowExp;
     }
+    auto dirRow = dirRowExp.value();
 
+    // TODO: check fields
+
+    auto dfsPath = DfsPath::filePath(actor_id, file_id);
+    auto actor   = node->accountController()->currentProfile().getActor(actor_id);
+    auto chain   = HistoricalCollection::load(actor, actor->id(), file_id);
+
+    auto historical_row = chain.insert_into(row);
+    if (!historical_row.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    auto        dfs_path = DfsPath::file_path(actor_id, file_id);
+    DbConnector db(dfs_path->native());
+    db.open();
+    auto [collection_hash, collection_size] = db.hash_size();
+    if (collection_hash.empty() || collection_size == 0) {
+        return std::unexpected(Dfs::DfsError::InvalidTemplate);
+    }
+    db.close();
+    Dfs::Tables::ActorDirFile::update_file_metadata(actor_id, dirRow);
+
+    node->network()->send_message(std::make_tuple(actor_id, file_id, historical_row.value()),
+                                  MessageType::DfsCollectionRowAdd);
+
+    return dirRowExp;
+}
+
+ExpectedDirRow DfsController::update_collection_row(const ActorId     &actorId,
+                                                    const std::string &fileId,
+                                                    uint32_t           id,
+                                                    DbRow              row) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(actorId, fileId);
+    if (!dirRowExp.has_value()) {
+        return dirRowExp;
+    }
     auto dirRow = dirRowExp.value();
 
     // TODO: check fields
 
     auto dfsPath = DfsPath::filePath(actorId, fileId);
     auto actor   = node->accountController()->currentProfile().getActor(actorId);
-    auto chain   = HistoricalSql::load(actor, fileId);
-    chain.insert_into(row, "tokens");
+    auto chain   = HistoricalCollection::load(actor, actor->id(), fileId);
 
-    dirRow.hash = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
-    Dfs::Tables::ActorDirFile::updateHash(actorId, dirRow);
+    auto historical_row = chain.update_where(row, "tokens");
+    if (!historical_row.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    // TODO: use data hash and size
+    dirRow.hash          = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
+    dirRow.size          = std::filesystem::file_size(Dfs::Path::filePath(dirRow.actorId, dirRow.fileId));
+    dirRow.last_modified = historical_row.value().timestamp;
+    Dfs::Tables::ActorDirFile::update_file_metadata(actorId, dirRow);
+
+    node->network()->send_message(historical_row.value(), MessageType::DfsCollectionRowUpdate);
 
     return dirRowExp;
 }
 
-ExpectedDirRow DfsController::update_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
-    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+ExpectedDirRow DfsController::remove_collection_row(const ActorId     &actorId,
+                                                    const std::string &fileId,
+                                                    uint32_t           id) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(actorId, fileId);
     if (!dirRowExp.has_value()) {
         return dirRowExp;
     }
+    auto dirRow = dirRowExp.value();
 
     // TODO: check fields
 
     auto dfsPath = DfsPath::filePath(actorId, fileId);
     auto actor   = node->accountController()->currentProfile().getActor(actorId);
-    auto chain   = HistoricalSql::load(actor, fileId);
-    chain.update_where(row, "tokens");
+    auto chain   = HistoricalCollection::load(actor, actor->id(), fileId);
+
+    auto historical_row = chain.delete_where(id);
+
+    // TODO: use data hash and size
+    dirRow.hash          = Utils::calculate_hash_file(FsPath::create(dfsPath).value()).value();
+    dirRow.size          = std::filesystem::file_size(Dfs::Path::filePath(dirRow.actorId, dirRow.fileId));
+    dirRow.last_modified = historical_row.value().timestamp;
+    Dfs::Tables::ActorDirFile::update_file_metadata(actorId, dirRow);
+
+    node->network()->send_message(historical_row.value(), MessageType::DfsCollectionRowRemove);
 
     return dirRowExp;
 }
 
-ExpectedDirRow DfsController::delete_database(const ActorId &actorId, const std::string &fileId, DbRow row) {
-    auto dirRowExp = Dfs::Tables::ActorDirFile::getDirRow(actorId, fileId);
+void DfsController::network_request_collection(const ActorId     &actor_id,
+                                               const std::string &file_id,
+                                               const std::string &message_id) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
     if (!dirRowExp.has_value()) {
-        return dirRowExp;
+        return;
+    }
+    auto dirRow = dirRowExp.value();
+
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::load(main_actor, actor_id, file_id);
+
+    auto historical_row = chain.get_historical_rows();
+    if (!historical_row.has_value()) {
+        return;
+    }
+    auto rows = chain.get_collection_rows();
+
+    node->network()->send_message(std::make_tuple(actor_id, file_id, historical_row.value()),
+                                  MessageType::DfsCollectionHistory,
+                                  MessageStatus::Response,
+                                  message_id,
+                                  Config::Net::TypeSend::Focused);
+
+    node->network()->send_message(std::make_tuple(actor_id, file_id, rows.value()),
+                                  MessageType::DfsCollectionContent,
+                                  MessageStatus::Response,
+                                  message_id,
+                                  Config::Net::TypeSend::Focused);
+}
+
+// TODO: checks
+void DfsController::network_response_historical_collection(
+    const ActorId                              &actor_id,
+    const std::string                          &file_id,
+    const std::vector<HistoricalCollectionRow> &historical_rows) {
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::create(main_actor, actor_id, file_id);
+
+    auto dfs_path = DfsPath::file_path(actor_id, file_id);
+    if (!dfs_path->exists()) {
+        return;
     }
 
-    // TODO: check fields
+    DbConnector db(chain.get_historical_path().native());
+    db.open();
+    for (const auto &historical_row : historical_rows) {
+        // TODO: verify
+        auto db_row = Utils::to_dbrow(historical_row);
+        db.insert(Dfs::Historical::HISTORICAL_TABLE, db_row);
+    }
+    db.close();
+}
 
-    auto dfsPath = DfsPath::filePath(actorId, fileId);
-    auto actor   = node->accountController()->currentProfile().getActor(actorId);
-    auto chain   = HistoricalSql::load(actor, fileId);
-    chain.delete_where(row, "tokens");
+// TODO: checks
+void DfsController::network_response_content_collection(const ActorId            &actor_id,
+                                                        const std::string        &file_id,
+                                                        const std::vector<DbRow> &db_rows) {
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::load(main_actor, actor_id, file_id);
+    auto schema_exp = chain.get_schema();
+    if (!schema_exp.has_value()) {
+        // remove historical and file
+        return;
+    }
 
-    return dirRowExp;
+    DbConnector db(chain.get_file_path().native());
+    db.open();
+    db.create_table(schema_exp.value());
+    for (const auto &db_row : db_rows) {
+        // TODO: verify
+        db.insert(Dfs::Historical::HISTORICAL_TABLE, db_row);
+    }
+}
+
+void DfsController::network_adding_collection(const ActorId                 &actor_id,
+                                              const std::string             &file_id,
+                                              const HistoricalCollectionRow &row) {
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::load(main_actor, actor_id, file_id);
+    // chain.insert_historical_row(row);
 }
 
 bool DfsController::removeLocalFile(const ActorId &actorId, const std::string &fileId) {
@@ -365,9 +570,9 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     dirsFile.open();
     dirsFile.replace(DfsT::DirsFile::TableName,
                      { { "actorId", dirRow.actorId.to_string() },
-                       { "lastModified", std::to_string(dirRow.lastModified) } });
+                       { "last_modified", std::to_string(dirRow.last_modified) } });
 
-    if (loadBytes) {
+    if (loadBytes && dirRow.type != Dfs::FileType::Collection && dirRow.type != Dfs::FileType::Folder) {
         if (dirRow.size >= m_bytesLimit - m_sizeTaken) {
             return dirRow.fileId;
         } else {
@@ -379,6 +584,12 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
         }
     }
 
+    if (loadBytes && dirRow.type == Dfs::FileType::Collection) {
+        node->network()->send_message(std::make_pair(dirRow.actorId, dirRow.fileId),
+                                      MessageType::DfsCollectionRequest,
+                                      MessageStatus::Request);
+    }
+
     insertToFiles(dirRow);
     emit added(dirRow);
 
@@ -387,6 +598,7 @@ std::string DfsController::addFile(const Dfs::DirRow &dirRow, bool loadBytes) {
     return dirRow.fileId;
 }
 
+// TODO: remove?
 std::string DfsController::getFileFromStorage(ActorId owner, std::string fileName) {
     auto                  localOwner      = node->accountController()->currentProfile().getActor(owner);
     std::string           pathDelim       = Utils::platformDelimeter();
@@ -428,7 +640,7 @@ bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
                     node->accountController()->mainActor()->id().to_string());
     eLog("{}", message);
 
-    auto dirRow = Dfs::Tables::ActorDirFile::getDirRow(msg.actorId, msg.fileId);
+    auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.fileId);
     if (!dirRow.has_value()) {
         return false;
     }
@@ -691,9 +903,9 @@ void DfsController::exportFile(const std::string &pathTo,
         const bool  folderToExist = std::filesystem::exists(pathTo);
         if (fileFromExist && folderToExist) {
             std::filesystem::copy(pathFile, pathTo);
-            auto dirRowsExp = Dfs::Tables::ActorDirFile::getDirRows(actorId);
+            auto dirRowsExp = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
             // TODO: error
-            auto dirRows = Dfs::Tables::ActorDirFile::getDirRows(actorId).value();
+            auto dirRows = Dfs::Tables::ActorDirFile::get_dir_rows(actorId).value();
             auto it      = std::find_if(dirRows.begin(), dirRows.end(), [&](Dfs::DirRow &dirRow) {
                 transform(dirRow.fileId.begin(), dirRow.fileId.end(), dirRow.fileId.begin(), ::tolower);
                 auto lowerNameFile = nameFile;
@@ -718,19 +930,20 @@ void DfsController::exportFile(const std::string &pathTo,
                 return false;
             });
         }
-    } else {
-        const std::string nameDirectory = pathTo + "/" + actorId.to_string();
-        std::filesystem::create_directories(nameDirectory);
-        if (pathFrom.find('/') != std::string::npos) {
-            for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(pathFrom)) {
-                if (entry.path().extension() != DfsF::Extension
-                    && entry.path().extension() != DfsF::ExtensionJournal
-                    && entry.path().filename() != DfsB::fsMapName) {
-                    auto copyTo = (pathTo + "/" + actorId.to_string());
-                    exportFile(copyTo, pathFrom, entry.path().filename().string());
-                }
-            }
-        }
+        // } else {
+        //     const std::string nameDirectory = pathTo + "/" + actorId.to_string();
+        //     std::filesystem::create_directories(nameDirectory);
+        //     if (pathFrom.find('/') != std::string::npos) {
+        //         for (std::filesystem::directory_entry const &entry :
+        //         std::filesystem::directory_iterator(pathFrom)) {
+        //             if (entry.path().extension() != DfsF::Extension
+        //                 && entry.path().extension() != DfsF::ExtensionJournal
+        //                 && entry.path().filename() != DfsB::fsMapName) {
+        //                 auto copyTo = (pathTo + "/" + actorId.to_string());
+        //                 exportFile(copyTo, pathFrom, entry.path().filename().string());
+        //             }
+        //         }
+        //     }
     }
 }
 
@@ -812,11 +1025,12 @@ void DfsController::dataFromReferenceString(const std::string           &referen
     referenceData = Dfs::Packets::ReferenceData(keyData, allowData);
 }
 
-void DfsController::updateDirsLastModified(const ActorId &actorId, uint64_t lastModified) {
+// TODO: move to utils
+void DfsController::updateDirsLastModified(const ActorId &actorId, uint64_t last_modified) {
     DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
     dirsFile.replace(DfsT::DirsFile::TableName,
-                     { { "actorId", actorId.to_string() }, { "lastModified", std::to_string(lastModified) } });
+                     { { "actorId", actorId.to_string() }, { "last_modified", std::to_string(last_modified) } });
     dirsFile.close();
 }
 
@@ -862,7 +1076,9 @@ void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &m
 }
 
 void DfsController::requestSync() {
-    node->network()->send_message(Utils::currentDateSecs(), MessageType::DfsLastModified, MessageStatus::Request);
+    node->network()->send_message(Utils::current_date_secs(),
+                                  MessageType::DfsLastModified,
+                                  MessageStatus::Request);
 }
 
 void DfsController::requestDirFileAllActors() {
@@ -871,14 +1087,14 @@ void DfsController::requestDirFileAllActors() {
         requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
 }
 
-void DfsController::sendSync(std::uint64_t lastModified, const std::string &messageId) {
+void DfsController::sendSync(std::uint64_t last_modified, const std::string &messageId) {
     DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
-    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {} WHERE lastModified = {}",
+    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {} WHERE last_modified = {}",
                                               DfsT::DirsFile::TableName,
-                                              std::to_string(lastModified)));
+                                              std::to_string(last_modified)));
     for (auto &row : actors) {
-        sendDirData(ActorId(row["actorId"]), lastModified, messageId);
+        sendDirData(ActorId(row["actorId"]), last_modified, messageId);
     }
 }
 
@@ -886,11 +1102,13 @@ void DfsController::requestDirData(const ActorId &actorId) {
     node->network()->send_message(actorId, MessageType::DfsDirData, MessageStatus::Request);
 }
 
-void DfsController::sendDirData(const ActorId &actorId, std::uint64_t lastModified, const std::string &messageId) {
+void DfsController::sendDirData(const ActorId     &actorId,
+                                std::uint64_t      last_modified,
+                                const std::string &messageId) {
     if (!std::filesystem::exists(DfsT::ActorDirFile::actorDbPath(actorId))) {
         return;
     }
-    auto dirRows = DfsT::ActorDirFile::getDirRows(actorId, lastModified);
+    auto dirRows = DfsT::ActorDirFile::get_dir_rows(actorId, last_modified);
     if (!dirRows.has_value())
         return;
     if (!dirRows.value().empty()) {
@@ -932,7 +1150,7 @@ void DfsController::sendFile(const ActorId &actorId, const std::string &fileId, 
         eFatal("[Dfs] Empty file name");
     }
 
-    auto dirRow = DfsT::ActorDirFile::getDirRow(actorId, fileId);
+    auto dirRow = DfsT::ActorDirFile::get_dir_row(actorId, fileId);
 
     if (!dirRow.has_value()) {
         return;
@@ -1009,7 +1227,7 @@ std::string DfsController::sendFragment(const DfsP::RequestFileSegmentMessage &m
                                   messageId,
                                   Config::Net::TypeSend::Focused);
     if (msg.offset + DfsB::sectionSize >= fileSize) {
-        if (const auto dirRow = Dfs::Tables::ActorDirFile::getDirRow(msg.actorId, msg.fileId);
+        if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.fileId);
             dirRow.has_value()) {
             emit uploaded(dirRow.value());
         }
@@ -1061,7 +1279,7 @@ void DfsController::fetchFragments(Dfs::Packets::RequestFileSegmentMessage &msg,
                                                   Config::Net::TypeSend::Focused);
 
         if (lastFragment) {
-            if (const auto dirRow = Dfs::Tables::ActorDirFile::getDirRow(msg.actorId, msg.fileId);
+            if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.fileId);
                 dirRow.has_value()) {
                 emit uploaded(dirRow.value());
             }
@@ -1113,7 +1331,7 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
                                   Config::Net::TypeSend::Focused);
 
     if (lastFragment) {
-        if (const auto dirRow = Dfs::Tables::ActorDirFile::getDirRow(msg.actorId, msg.fileId);
+        if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.fileId);
             dirRow.has_value()) {
             emit uploaded(dirRow.value());
         }

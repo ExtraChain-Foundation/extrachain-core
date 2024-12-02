@@ -32,10 +32,10 @@ if(MSVC)
 endif()
 
 
-find_package(Qt6 COMPONENTS Core Network Concurrent WebSockets REQUIRED)
+find_package(Qt6 COMPONENTS Core Network WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system thread mp11 describe json)
+find_package(Boost REQUIRED COMPONENTS system thread chrono filesystem mp11 describe json)
 find_package(fmt CONFIG REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
@@ -51,7 +51,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_sql.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_collection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
@@ -105,9 +105,10 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_template.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_sql.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
@@ -188,12 +189,13 @@ target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/p
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 # target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
-target_link_libraries(extrachain Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
+target_link_libraries(extrachain
+    Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3
     magic_enum::magic_enum unofficial::hash-library
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json)
+    Boost::boost Boost::system Boost::thread Boost::chrono Boost::filesystem Boost::mp11 Boost::describe Boost::json)
 # extrachainc
-# target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::Concurrent Qt6::WebSockets
+# target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)

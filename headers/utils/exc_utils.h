@@ -358,27 +358,30 @@ namespace MessagePack {
         return std::string(buffer.data(), buffer.size());
     }
 
+    enum class DeserializeError {
+        EmptyData,
+        DeserializationFailed,
+    };
+
     template <class T, class StringContainer>
-    T deserialize(const StringContainer &data, std::size_t size = 0) {
+    std::expected<T, DeserializeError> deserialize(const StringContainer &data, std::size_t size = 0) {
         if (data.empty()) {
             eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
-            eFatal("[MessagePack] Empty deserialize");
-            return T();
+            return std::unexpected(DeserializeError::EmptyData);
         }
 
         try {
             msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
             msgpack::object        deserialized = oh.get();
-            auto                   t            = deserialized.as<T>();
-            return t;
-        } catch (std::exception &e) {
-            eLog("{}", e.what());
-        }
+            return deserialized.as<T>();
+        } catch (const std::exception &e) {
+            eWarning("[MessagePack] Exception error: {}", e.what());
 
-        auto qt_bytes = QByteArray::fromStdString(data.data());
-        eLog("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
-        eFatal("[MessagePack] Incorrect deserialize");
-        return T();
+            auto qt_bytes = QByteArray::fromStdString(data.data());
+            eWarning("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
+
+            return std::unexpected(DeserializeError::DeserializationFailed);
+        }
     }
 
     template <class T>
@@ -391,13 +394,17 @@ namespace MessagePack {
     }
 
     template <class T>
-    std::vector<T> deserialize_container(const std::vector<std::string> dataContainer) {
+    std::expected<std::vector<T>, DeserializeError> deserialize_container(
+        const std::vector<std::string> dataContainer) {
         std::vector<T> result;
 
         for (const auto &data : dataContainer) {
-            const T element = deserialize<T>(data);
-            result.push_back(element);
+            const auto element = deserialize<T>(data);
+            if (!element.has_value())
+                continue;
+            result.push_back(element.value());
         }
+
         return result;
     }
 } // namespace MessagePack
@@ -417,15 +424,24 @@ namespace Json {
     }
 
     template <typename T>
-    std::expected<T, std::string> deserialize(const std::string &json_str) {
+    std::expected<T, std::string> deserialize(std::string_view data) {
         try {
-            auto parsed   = boost::json::parse(json_str);
-            auto restored = json_convert::from_json<T>(parsed);
-            return restored;
+            auto parsed = boost::json::parse(data);
+            return json_convert::from_json<T>(parsed);
         } catch (const std::exception &e) {
-            eLog("Json deserialize error: {}", e.what());
+            eWarning("Json deserialize error: {}", e.what());
             return std::unexpected(e.what());
         }
+    }
+
+    template <typename T>
+    std::expected<T, std::string> deserialize(const std::string &data) {
+        return deserialize<T>(std::string_view(data));
+    }
+
+    template <typename T>
+    std::expected<T, std::string> deserialize(const std::vector<uint8_t> &data) {
+        return deserialize<T>(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));
     }
 } // namespace Json
 
@@ -460,15 +476,15 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
 
-    static std::uint64_t currentDateSecs() {
+    static std::uint64_t current_date_secs() {
         using namespace std::chrono;
         std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
         return secs;
     }
 
-    static std::uint64_t currentDateMs() {
+    static std::uint64_t current_date_ms() {
         using namespace std::chrono;
-        std::uint64_t ms = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+        std::uint64_t ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
         return ms;
     }
 
@@ -515,44 +531,6 @@ namespace Utils {
     EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
-
-    template <typename T>
-    std::string toString(const T &value) {
-        if constexpr (std::is_enum_v<T>) {
-            return std::to_string(std::to_underlying(value));
-        } else {
-            return fmt::format("{}", value);
-        }
-    }
-
-    template <typename T>
-    std::expected<T, ParseError> fromString(const std::string &str) {
-        if (str.empty()) {
-            return std::unexpected(ParseError::EmptyString);
-        }
-
-        try {
-            if constexpr (std::is_enum_v<T>) {
-                try {
-                    return static_cast<T>(std::stoi(str));
-                } catch (...) {
-                    return std::unexpected(ParseError::EnumConversionError);
-                }
-            } else {
-                T                  value;
-                std::istringstream iss(str);
-                iss >> value;
-                if (iss.fail()) {
-                    return std::unexpected(ParseError::InvalidFormat);
-                }
-                return value;
-            }
-        } catch (const std::out_of_range &) {
-            return std::unexpected(ParseError::OutOfRange);
-        } catch (...) {
-            return std::unexpected(ParseError::Invalid);
-        }
-    }
 
     boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
@@ -602,6 +580,19 @@ namespace Utils {
      * hexadecimal string.
      */
     EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
+
+    enum class FileError {
+        ReadError,
+        SizeTooLarge,
+        EmptyFile
+    };
+
+    /**
+     * Reads entire file content into a byte vector
+     * @param path File path to read
+     * @return Expected vector with file contents or FileError
+     */
+    EXTRACHAIN_EXPORT std::expected<std::vector<uint8_t>, FileError> read_file_content(const FsPath &path);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);

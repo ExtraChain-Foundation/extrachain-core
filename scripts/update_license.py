@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+
 LICENSE_TEMPLATE = """/*
  * ExtraChain Core
  * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
@@ -21,7 +22,6 @@ LICENSE_TEMPLATE = """/*
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-
 """
 
 def process_file(filepath):

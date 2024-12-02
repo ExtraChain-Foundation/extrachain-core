@@ -25,7 +25,11 @@
 #include <expected>
 #include <variant>
 #include <filesystem>
-#include "magic_enum/magic_enum.hpp"
+#include <boost/filesystem/operations.hpp>
+#include <boost/chrono.hpp>
+#include <boost/chrono/time_point.hpp>
+#include <boost/chrono/chrono_io.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 template <typename T>
 struct fmt::formatter<T, std::enable_if_t<std::is_enum_v<T>, char>> : formatter<std::string_view> {
@@ -134,6 +138,75 @@ struct fmt::formatter<std::filesystem::path> {
         default:
             return fmt::format_to(ctx.out(), "{}", p.string());
         }
+    }
+};
+
+template <>
+struct fmt::formatter<boost::filesystem::path> {
+    enum class Style {
+        Full,
+        Stem,
+        Extension,
+        Filename
+    };
+    Style style = Style::Full;
+
+    constexpr auto parse(format_parse_context& ctx) {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}') {
+            switch (*it) {
+            case 's':
+                style = Style::Stem;
+                break;
+            case 'e':
+                style = Style::Extension;
+                break;
+            case 'f':
+                style = Style::Filename;
+                break;
+            default:
+                style = Style::Full;
+                break;
+            }
+            ++it;
+        }
+        return it;
+    }
+
+    template <typename FormatContext>
+    auto format(const boost::filesystem::path& p, FormatContext& ctx) const {
+        switch (style) {
+        case Style::Stem:
+            return fmt::format_to(ctx.out(), "{}", p.stem().string());
+        case Style::Extension:
+            return fmt::format_to(ctx.out(), "{}", p.extension().string());
+        case Style::Filename:
+            return fmt::format_to(ctx.out(), "{}", p.filename().string());
+        default:
+            return fmt::format_to(ctx.out(), "{}", p.string());
+        }
+    }
+};
+
+template <>
+struct fmt::formatter<boost::chrono::system_clock::time_point> {
+    constexpr auto parse(format_parse_context& ctx) {
+        return ctx.begin();
+    }
+
+    template <typename FormatContext>
+    auto format(const boost::chrono::system_clock::time_point& tp, FormatContext& ctx) const {
+        auto    tt = boost::chrono::system_clock::to_time_t(tp);
+        std::tm local_tm;
+#ifdef _WIN32
+        localtime_s(&local_tm, &tt);
+#else
+        localtime_r(&tt, &local_tm);
+#endif
+
+        char buffer[32];
+        std::strftime(buffer, 32, "%Y-%m-%d %H:%M:%S", &local_tm);
+        return fmt::format_to(ctx.out(), "{}", buffer);
     }
 };
 

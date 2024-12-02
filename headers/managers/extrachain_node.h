@@ -105,7 +105,7 @@ private:
 public:
     ~ExtraChainNode();
 
-    bool createNewNetwork(const std::string& login, const std::string& password);
+    bool create_new_network(const std::string& login, const std::string& password);
     void start();
 
     bool isClientApp() {

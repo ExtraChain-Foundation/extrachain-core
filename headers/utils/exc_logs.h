@@ -378,16 +378,17 @@ namespace detail {
                             static_cast<int>(log_buffer.size()),
                             log_buffer.data());
 #else
-        // Console with color
-        fmt::print(stdout, get_level_style(level), "{}\n", log_view);
-        fflush(stdout);
-
     #ifdef _WIN32
         if (IsDebuggerPresent()) {
             log_buffer.push_back('\n');
-            OutputDebugStringA(log_buffer.data());
+            auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
+            OutputDebugStringA(log_view.data());
         }
     #endif
+
+        // Console with color
+        fmt::print(stdout, get_level_style(level), "{}\n", log_view);
+        fflush(stdout);
 #endif
 
         if (Logger::instance().is_file_output()) {

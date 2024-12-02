@@ -31,8 +31,8 @@
 #include <fmt/format.h>
 #include <msgpack.hpp>
 
+#include "dfs/dfs_template.h"
 #include "utils/exc_logs.h"
-#include "utils/exc_magic.h"
 
 namespace Tools {
     template <typename T>
@@ -80,6 +80,7 @@ namespace Dfs {
         static const std::wstring  fsActrRootW                = L"dfs";
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";
+        static const std::string   COLLECTION_FILE            = ".collection";
         static const std::uint64_t sectionSize                = /*2097152*/ 524228;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
@@ -91,7 +92,47 @@ namespace Dfs {
         static const std::string   dsStoreExtention = ".DS_Store";
     } // namespace Basic
 
+    enum class FileIdError {
+        InvalidHexString,
+        EmptyString
+    };
+
+    class FileId final {
+    public:
+        // Prevents direct construction
+        static std::expected<FileId, FileIdError> create(std::string hex_string) {
+            if (hex_string.empty()) {
+                eLog("Attempt to create FileId with empty string");
+                return std::unexpected(FileIdError::EmptyString);
+            }
+
+            if (!Utils::is_hex_string_lower(hex_string)) {
+                eLog("Invalid hex string for FileId: {}", hex_string);
+                return std::unexpected(FileIdError::InvalidHexString);
+            }
+
+            return FileId(std::move(hex_string));
+        }
+
+        // Getter for the hex string
+        [[nodiscard]] const std::string& value() const noexcept {
+            return hex_string_;
+        }
+
+        // Equality operators
+        bool operator==(const FileId& other) const noexcept = default;
+        bool operator!=(const FileId& other) const noexcept = default;
+
+    private:
+        explicit FileId(std::string hex_string)
+            : hex_string_(std::move(hex_string)) {
+        }
+
+        std::string hex_string_;
+    };
+
     enum class DfsError {
+        Unknown,
         NotExists,
         NotFile,
         NotReadable,
@@ -99,14 +140,17 @@ namespace Dfs {
         AlreadyExists,
         DirError,
         DirValueNotExists,
-        DatabaseCreationError,
-        InvalidName
+        CollectionCreationError,
+        InvalidName,
+        InvalidTemplate,
+        NotWritable
     };
 
     enum class FileType {
-        Folder   = 0,
-        Bytes    = 1,
-        Database = 2
+        Folder     = 0,
+        File       = 10,
+        Collection = 20,
+        Dictionary = 30
     };
 
     enum class FileState {
@@ -115,7 +159,7 @@ namespace Dfs {
         Loaded    = 2
     };
 
-    enum class Encryption {
+    enum class SecurityLevel {
         Public    = 0,
         Encrypted = 1
     };
@@ -132,12 +176,12 @@ namespace Dfs {
         std::string                name;
 
         std::size_t   size;
-        std::uint64_t created      = 0;
-        std::uint64_t lastModified = 0;
+        std::uint64_t created       = 0;
+        std::uint64_t last_modified = 0;
 
-        Dfs::FileType   type;
-        Dfs::Encryption encryption;
-        Dfs::FileState  state;
+        Dfs::FileType      type;
+        Dfs::SecurityLevel encryption;
+        Dfs::FileState     state;
 
         Signature sign;
 
@@ -153,7 +197,7 @@ namespace Dfs {
         }
 
         bool isEncrypted() const {
-            return encryption == Dfs::Encryption::Encrypted;
+            return encryption == Dfs::SecurityLevel::Encrypted;
         }
     };
 
@@ -167,7 +211,7 @@ namespace Dfs {
                            name,
                            size,
                            created,
-                           lastModified,
+                           last_modified,
                            type,
                            encryption,
                            state,
@@ -297,8 +341,7 @@ namespace Dfs {
     } // namespace Packets
 
     namespace Fragments {
-        static const std::string Extension          = ".storj";
-        static const std::string ExtensionJournal   = ".storj-journal";
+        static const std::string Extension          = ".fragments";
         static const std::string TableNameFragments = "Fragments";
         static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
                                                      + "("
@@ -343,6 +386,8 @@ namespace Dfs {
                 data = string.substr(8);
             }
         };
+
+        static const std::string HISTORICAL_TABLE = "historical_chain";
 
         static const std::string TableNameHC = "HistoricalChain";
         static const std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
@@ -389,44 +434,49 @@ namespace Dfs {
     namespace Tables {
         namespace ActorDirFile {
             static const std::string TableName = "Files";
-            static const std::string CreateTableQuery =
-    "CREATE TABLE IF NOT EXISTS " + TableName
+            static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
     + "("
-      "actorId       TEXT             NOT NULL,"
       "fileId        TEXT PRIMARY KEY NOT NULL,"
+      "actorId       TEXT             NOT NULL,"
       "fileIdPrev    TEXT                     ,"
       "hash          TEXT             NOT NULL,"
       "folder        TEXT                     ,"
       "name          TEXT             NOT NULL,"
       "size          INTEGER          NOT NULL,"
       "created       INTEGER          NOT NULL,"
-      "lastModified  INTEGER          NOT NULL,"
-      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 2),"
+      "last_modified  INTEGER          NOT NULL,"
+      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 39),"
       "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
       "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
       "sign          TEXT             NOT NULL"
       ");";
-            std::vector<DbRow> getFileDataByHash(DbConnector* db, std::string hash);
+
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
             std::string        getLastFileId(DbConnector& db);
             int                totalFileSize(const ActorId& actorId);
             std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
-            // TODO: optional
+            // TODO: expected
             DbConnector actorDbConnector(const ActorId& actorId);
 
             std::filesystem::path actorDbPath(const ActorId& actorId);
             std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
-            std::expected<Dfs::DirRow, Dfs::DfsError>
 
-            getDirRow(const ActorId& actorId, const std::string& fileId);
-            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> getDirRows(const ActorId& actorId,
-                                                                              std::uint64_t  lastModified = 0);
+            // TODO: field: string to enum class
+            std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const ActorId&     actor_id,
+                                                                               const std::string& search_value,
+                                                                               const std::string& field = "fileId");
+            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
+                                                                                std::uint64_t  last_modified = 0);
+
+            // TODO: expected
+            std::optional<Dfs::DfsTemplate> get_dfs_template(const ActorId&     actor_id,
+                                                             const std::string& template_name);
 
             bool addDirRow(const ActorId& actorId, DirRow& dirRow);
             bool addDirRows(const ActorId& actorId, const std::vector<Dfs::DirRow>& dirRows);
 
-            bool updateHash(const ActorId& actorId, DirRow& dirRow);
+            bool update_file_metadata(const ActorId& actorId, DirRow& dirRow);
         } // namespace ActorDirFile
 
         namespace DirsFile {
@@ -434,7 +484,7 @@ namespace Dfs {
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                             + "("
                                               "actorId      TEXT PRIMARY KEY NOT NULL,"
-                                              "lastModified INTEGER          NOT NULL "
+                                              "last_modified INTEGER          NOT NULL "
                                               ");";
         } // namespace DirsFile
 
@@ -453,11 +503,13 @@ namespace Dfs {
     } // namespace Tables
 
     namespace Path {
-        std::filesystem::path convertPathToPlatform(const std::filesystem::path& path);
-        std::filesystem::path filePath(const ActorId& actorId, const std::string& fileName);
-        std::filesystem::path actorPath(const ActorId& actorId);
+        std::filesystem::path          filePath(const ActorId& actor_id, const std::string& file_id);
+        std::expected<FsPath, FsError> file_path(const ActorId& actor_id, const std::string& file_id);
+        std::filesystem::path          actorPath(const ActorId& actorId);
     } // namespace Path
 } // namespace Dfs
+
+MAKE_CUSTOM_MAGICAL(Dfs::FileId)
 
 namespace DfsP    = Dfs::Packets;
 namespace DfsF    = Dfs::Fragments;
@@ -475,6 +527,6 @@ namespace DfsPath = Dfs::Path;
 
 MSGPACK_ADD_ENUM(Dfs::FileType)
 MSGPACK_ADD_ENUM(Dfs::FileState)
-MSGPACK_ADD_ENUM(Dfs::Encryption)
+MSGPACK_ADD_ENUM(Dfs::SecurityLevel)
 MSGPACK_ADD_ENUM(Dfs::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(Dfs::Reward::TypeFunctioning)

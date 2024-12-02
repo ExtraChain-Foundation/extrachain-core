@@ -222,8 +222,11 @@ public:
         return *this;
     }
 
+    std::string table_name() {
+        return m_table_name;
+    }
+
     std::expected<std::string, SqlCreateError> to_sql() const;
-    std::string                                to_json() const;
     const std::optional<SqlCreateError>&       validation_error() const;
 
 private:

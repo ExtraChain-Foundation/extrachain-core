@@ -62,7 +62,7 @@ void VariantModel::prepend(const QVariantMap &variant) {
 }
 
 void VariantModel::append(const QVariantMap &variant) {
-    eLog("[VariantModel] Append {}", variant);
+    // eLog("[VariantModel] Append {}", variant);
     insert(m_datas.length(), variant);
 }
 

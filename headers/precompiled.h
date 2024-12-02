@@ -148,7 +148,6 @@
         #define UINT64_C(c) (c##ULL)
     #endif
 
-    #include <QtConcurrent>
     #include <QtCore>
     #include <QtNetwork>
     #include <QtWebSockets>

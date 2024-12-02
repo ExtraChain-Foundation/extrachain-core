@@ -139,9 +139,6 @@ namespace magic {
         }
     };
 
-    template <>
-    struct custom_magic<std::vector<uint8_t>>;
-
     // Member access
     template <typename T, typename M>
     auto& invoke_member(const T& obj, M member) {
@@ -199,6 +196,8 @@ namespace magic {
                 return to_string(value.value());
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return '"' + value + '"';
+            } else if constexpr (std::is_same_v<T, std::string_view>) {
+                return '"' + std::string(value) + '"';
             } else if constexpr (std::is_enum_v<T>) {
                 if constexpr (std::is_scoped_enum_v<T>) {
                     return std::string(magic_enum::enum_type_name<T>())
@@ -207,6 +206,18 @@ namespace magic {
                 return std::to_string(static_cast<std::underlying_type_t<T>>(value));
             } else if constexpr (std::is_arithmetic_v<T>) {
                 return std::to_string(value);
+            } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {
+                std::string result;
+                result.push_back('"');
+                for (uint8_t byte : value) {
+                    if (byte < 32 || byte == 127) {
+                        fmt::format_to(std::back_inserter(result), "\\x{:02x}", byte);
+                    } else {
+                        result.push_back(static_cast<char>(byte));
+                    }
+                }
+                result.push_back('"');
+                return result;
             } else if constexpr (is_uint8_array<T>::value) {
                 std::string raw(reinterpret_cast<const char*>(value.data()), value.size());
                 auto        is_empty = std::ranges::all_of(raw, [&value](const auto& x) {
@@ -327,7 +338,8 @@ namespace json_convert {
                 if (!obj.has_value())
                     return boost::json::value(nullptr);
                 return to_json(obj.value());
-            } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>) {
+            } else if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::string>
+                                 || std::is_same_v<T, std::string_view>) {
                 return boost::json::value(obj);
             } else if constexpr (std::is_enum_v<T>) {
                 return boost::json::value(static_cast<std::underlying_type_t<T>>(obj));

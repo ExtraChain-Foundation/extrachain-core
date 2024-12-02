@@ -224,11 +224,6 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     return sql;
 }
 
-std::string DbSchema::to_json() const {
-    auto json = Json::serialize(*this);
-    return json;
-}
-
 const std::optional<SqlCreateError>& DbSchema::validation_error() const {
     return m_validation_error;
 }

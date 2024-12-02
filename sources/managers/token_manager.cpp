@@ -90,7 +90,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {
-        eWarning("Database doesn't opened");
+        eWarning("Database {} doesn't opened", db.file());
         return map;
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
