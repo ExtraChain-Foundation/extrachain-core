@@ -535,15 +535,19 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     return true;
 }
 
-std::string DbConnector::hash() {
+std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size() {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
+    uint64_t total = 0;
 
     for (const auto &table : table_names()) {
         blake3_hasher_update(&hasher, table.data(), table.size());
+        total += table.size();
+
         for (const auto &col : table_columns(table)) {
             blake3_hasher_update(&hasher, col.name.data(), col.name.size());
-            blake3_hasher_update(&hasher, col.type.data(), col.type.size());
+            // blake3_hasher_update(&hasher, col.type.data(), col.type.size());
+            total += col.name.size(); // + col.type.size();
         }
 
         sqlite3_stmt *stmt;
@@ -552,6 +556,7 @@ std::string DbConnector::hash() {
             for (int i = 0; i < sqlite3_column_count(stmt); i++) {
                 auto bytes = sqlite3_column_bytes(stmt, i);
                 blake3_hasher_update(&hasher, sqlite3_column_blob(stmt, i), bytes);
+                total += bytes;
             }
         }
         sqlite3_finalize(stmt);
@@ -559,29 +564,5 @@ std::string DbConnector::hash() {
 
     uint8_t hash[BLAKE3_OUT_LEN];
     blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
-    return fmt::format("{:02x}", fmt::join(hash, hash + BLAKE3_OUT_LEN, ""));
-}
-
-uint64_t DbConnector::size() {
-    uint64_t total = 0;
-
-    for (const auto &table : table_names()) {
-        total += table.size();
-        for (const auto &col : table_columns(table)) {
-            total += col.name.size() + col.type.size();
-        }
-    }
-
-    for (const auto &table : table_names()) {
-        sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db, fmt::format("SELECT * FROM {}", table).c_str(), -1, &stmt, nullptr);
-        while (sqlite3_step(stmt) == SQLITE_ROW) {
-            for (int i = 0; i < sqlite3_column_count(stmt); i++) {
-                total += sqlite3_column_bytes(stmt, i);
-            }
-        }
-        sqlite3_finalize(stmt);
-    }
-
-    return total;
+    return { fmt::format("{:02x}", fmt::join(hash, hash + BLAKE3_OUT_LEN, "")), total };
 }

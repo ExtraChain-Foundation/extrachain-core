@@ -30,7 +30,7 @@ HistoricalCollection HistoricalCollection::create(const std::shared_ptr<Actor<Ke
 
     DbConnector db(chain.historical_path_);
     if (!db.open()) { // TODO: expection
-        eFatal("[History] Can't create historical database");
+        eFatal("[History] Can't create historical file");
     }
 
     using namespace sqlite::literals;
@@ -131,25 +131,23 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
     return historical_row;
 }
 
-std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::delete_where(
-    DbRow             &row,
-    const std::string &temp_table) {
+std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::delete_where(std::uint32_t id) {
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Remove,
-                                                    .data      = Json::serialize(row),
+                                                    .data      = std::to_string(id),
                                                     .timestamp = Utils::current_date_ms(),
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
 
-    insert_historical_row(historical_row);
+    // insert_historical_row(historical_row);
 
-    DbConnector db(file_path_);
-    db.open();
-    auto res_delete = db.delete_row(temp_table, row);
-    db.close();
+    // DbConnector db(file_path_);
+    // db.open();
+    // auto res_delete = db.delete_row(temp_table, row);
+    // db.close();
 
-    if (!res_delete) {
-        return std::unexpected(CollectionError::Deleting);
-    }
+    // if (!res_delete) {
+    //     return std::unexpected(CollectionError::Deleting);
+    // }
 
     return historical_row;
 }
@@ -172,7 +170,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::de
 // return {};
 // }
 
-std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_database_rows() {
+std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows() {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {

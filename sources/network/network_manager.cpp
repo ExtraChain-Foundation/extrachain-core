@@ -479,11 +479,17 @@ void NetworkManager::messageReceived(const std::string &message,
     std::string_view msg  = std::string_view(message).substr(0, message.size() - 64);
     std::string_view sign = std::string_view(message).substr(message.size() - 64, 64);
 
-    MessageBody   mb         = MessagePack::deserialize<MessageBody>(msg);
-    MessageType   type       = mb.message_type;
-    MessageStatus status     = mb.status;
-    std::string   serialized = mb.data;
-    std::string   messId     = mb.message_id;
+    auto message_body_expected = MessagePack::deserialize<MessageBody>(msg);
+    if (!message_body_expected.has_value()) {
+        eWarning("[NetworkManager] message_received: can't deserialize message body");
+        return;
+    }
+
+    MessageBody   message_body = message_body_expected.value();
+    MessageType   type         = message_body.message_type;
+    MessageStatus status       = message_body.status;
+    std::string   serialized   = message_body.data;
+    std::string   messId       = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
     if (status == MessageStatus::Request) {
@@ -507,58 +513,60 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, mb.sender_id);
+        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, message_body.sender_id);
 
-        auto receivedMessageIdLocked = *m_receivedMessageId;
-        auto res                     = receivedMessageIdLocked->try_emplace(messageId, std::make_pair("", false));
-        if (!res.second) {
-            if (res.first->second.second && status == MessageStatus::Response) {
-                auto identifier = res.first->second.first;
+        auto received_msg_id_locked = *m_receivedMessageId;
+        auto emplace_result         = received_msg_id_locked->try_emplace(messageId, std::make_pair("", false));
+        if (!emplace_result.second) {
+            if (emplace_result.first->second.second && status == MessageStatus::Response) {
+                auto msg_identifier = emplace_result.first->second.first;
 
-                eSuccess("Custom Response package forwarded further {} {}", messageId, identifier);
+                eSuccess("Custom Response package forwarded further {} {}", messageId, msg_identifier);
 
-                auto        mainActor = node->accountController()->mainActor();
-                MessageBody message =
-                    make_message(serialized, MessageType::Custom, status, mainActor->id(), messageId);
-                auto serialized = message.serialize();
-                auto sign       = ByteArray(mainActor->key().sign(serialized)).toString();
-                sendMessage(serialized + sign, Config::Net::TypeSend::Focused, identifier);
-
-                // TODO: how to erase if no response!
-                // receivedMessageIdLocked->erase(res.first);
+                auto        main_actor = node->accountController()->mainActor();
+                MessageBody outgoing_message =
+                    make_message(serialized, MessageType::Custom, status, main_actor->id(), messageId);
+                auto serialized_message = outgoing_message.serialize();
+                auto signature          = ByteArray(main_actor->key().sign(serialized_message)).toString();
+                sendMessage(serialized_message + signature, Config::Net::TypeSend::Focused, msg_identifier);
             }
             return;
         }
 
-        const auto custom     = MessagePack::deserialize<CustomMessage>(serialized);
-        const bool isContains = m_customPool.contains(custom.owner);
+        const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
+        if (!custom_deserialize_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for custom message", type);
+            return;
+        }
+        const auto custom_message   = custom_deserialize_result.value();
+        const bool is_owner_in_pool = m_customPool.contains(custom_message.owner);
 
-        // TODO: change when will be understanding how to work with VPN actors
-        if (/*isContains*/ true)
-            emit customMessageReceived(custom, status, messageId, mb.sender_id, identifier);
+        if (/*is_owner_in_pool*/ true)
+            emit customMessageReceived(custom_message, status, messageId, message_body.sender_id, identifier);
         else
-            sendCustomMessageFurther(custom, status, messageId, identifier);
+            sendCustomMessageFurther(custom_message, status, messageId, identifier);
 
         break;
     }
+
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
             eInfo("Achieved ShareConnections(Request) {}", messageId);
-            std::vector<std::string> ips;
+            std::vector<std::string> available_ips;
 
             {
-                auto connectionsLocked = *m_connections;
-                for (const auto &item : *connectionsLocked) {
-                    if (identifier != item->identifier().toStdString()) {
-                        if (item->ip().isEmpty())
+                auto locked_connections = *m_connections;
+                for (const auto &connection : *locked_connections) {
+                    if (identifier != connection->identifier().toStdString()) {
+                        if (connection->ip().isEmpty())
                             continue;
-                        ips.emplace_back(item->ip().toStdString());
+                        available_ips.emplace_back(connection->ip().toStdString());
                     }
                 }
             }
 
-            if (!ips.empty()) {
-                node->network()->send_message(MessagePack::serialize_container(ips),
+            if (!available_ips.empty()) {
+                node->network()->send_message(MessagePack::serialize_container(available_ips),
                                               MessageType::ShareConnections,
                                               MessageStatus::Response,
                                               messageId,
@@ -566,174 +574,312 @@ void NetworkManager::messageReceived(const std::string &message,
             }
         } else if (status == MessageStatus::Response) {
             eInfo("Achieved ShareConnections(Response) {}", messageId);
-            auto ipsInput = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            auto ips      = MessagePack::deserialize_container<std::string>(ipsInput);
-            for (const auto &item : ips) {
-                bool canConnect        = true;
-                auto connectionsLocked = *m_connections;
-                for (const auto &connItem : *connectionsLocked) {
-                    if (item == connItem->ip().toStdString()) {
-                        canConnect = false;
+            auto serialized_ips_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            if (!serialized_ips_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for ips vector in {} state", type, status);
+                return;
+            }
+            auto deserialized_ips_result =
+                MessagePack::deserialize_container<std::string>(serialized_ips_result.value());
+            if (!deserialized_ips_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for string container in {} state",
+                         type,
+                         status);
+                return;
+            }
+            for (const auto &ip_address : deserialized_ips_result.value()) {
+                bool can_connect        = true;
+                auto locked_connections = *m_connections;
+                for (const auto &existing_connection : *locked_connections) {
+                    if (ip_address == existing_connection->ip().toStdString()) {
+                        can_connect = false;
                         break;
                     }
                 }
 
-                if (canConnect)
-                    connectToNode(QString::fromStdString(item), Network::Protocol::WebSocket);
+                if (can_connect)
+                    connectToNode(QString::fromStdString(ip_address), Network::Protocol::WebSocket);
             }
         }
         break;
     }
+
     case MessageType::ResponseDfsSize: {
-        const auto msgStruct = MessagePack::deserialize<DfsP::ResponseDfsSize>(serialized);
-        if (Utils::globalVariableOfDfsSize < msgStruct.size) {
-            Utils::globalVariableOfDfsSize = msgStruct.size;
+        const auto dfs_size_result = MessagePack::deserialize<DfsP::ResponseDfsSize>(serialized);
+        if (!dfs_size_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for response dfs size", type);
+            return;
+        }
+        if (Utils::globalVariableOfDfsSize < dfs_size_result.value().size) {
+            Utils::globalVariableOfDfsSize = dfs_size_result.value().size;
         }
         break;
     }
+
     case MessageType::RequestDfsSize: {
-        const auto msgStruct = MessagePack::deserialize<DfsP::RequestDfsSize>(serialized);
-        node->dfs()->sendSizeReponseMsg(msgStruct, messageId);
+        const auto dfs_request_result = MessagePack::deserialize<DfsP::RequestDfsSize>(serialized);
+        if (!dfs_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for request dfs size", type);
+            return;
+        }
+        node->dfs()->sendSizeReponseMsg(dfs_request_result.value(), messageId);
         break;
     }
+
     case MessageType::ResponseBlockCount: {
-        const auto msgStruct = MessagePack::deserialize<DfsP::ResponseBlockCount>(serialized);
-        BigNumber  count     = msgStruct.blockCount;
-        emit       messageCountReceived(count);
+        const auto block_count_result = MessagePack::deserialize<DfsP::ResponseBlockCount>(serialized);
+        if (!block_count_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for response block count", type);
+            return;
+        }
+
+        BigNumber count = block_count_result.value().blockCount;
+        emit      messageCountReceived(count);
         break;
     }
+
     case MessageType::RequestBlockCount: {
-        const auto msgStruct = MessagePack::deserialize<DfsP::RequestBlockCount>(serialized);
-        BigNumber  dfsCount  = node->blockchain()->getBlockCount();
-        node->dfs()->sendCountReponseMsg(msgStruct, messageId, dfsCount);
+        const auto block_request_result = MessagePack::deserialize<DfsP::RequestBlockCount>(serialized);
+        if (!block_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for request block count", type);
+            return;
+        }
+        BigNumber dfs_block_count = node->blockchain()->getBlockCount();
+        node->dfs()->sendCountReponseMsg(block_request_result.value(), messageId, dfs_block_count);
         break;
     }
+
     case MessageType::NewActor: {
-        auto actor  = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-        auto result = node->actorIndex()->handleNewActor(actor);
-        if (result == Errors::FILE_NOT_EXISTS) {
-            emit accrual(actor.id());
+        auto new_actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+        if (!new_actor_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for new actor", type);
+            return;
+        }
+        auto actor_handling_result = node->actorIndex()->handleNewActor(new_actor_result.value());
+        if (actor_handling_result == Errors::FILE_NOT_EXISTS) {
+            emit accrual(new_actor_result.value().id());
         }
         break;
     }
+
     case MessageType::Actor: {
-        // actor get, test use ActorId
         if (status == MessageStatus::Request) {
-            auto actorId = MessagePack::deserialize<ActorId>(serialized);
-            node->actorIndex()->handleGetActor(actorId, messageId);
+            auto actor_id_result = MessagePack::deserialize<ActorId>(serialized);
+            if (!actor_id_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
+                break;
+            }
+            node->actorIndex()->handleGetActor(actor_id_result.value(), messageId);
         } else if (status == MessageStatus::Response) {
-            auto actor = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
-            node->actorIndex()->handleNewActor(actor);
+            auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
+            if (!actor_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for Actor in {} state", type, status);
+                break;
+            }
+            node->actorIndex()->handleNewActor(actor_result.value());
         }
         break;
     }
+
     case MessageType::ActorAll: {
         if (status == MessageStatus::Request) {
-            auto ignoredActorId = MessagePack::deserialize<ActorId>(serialized);
-            node->actorIndex()->handleGetAllActor(ignoredActorId, messageId);
+            auto ignored_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
+            if (!ignored_actor_id_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for ignored ActorId in {} state",
+                         type,
+                         status);
+                break;
+            }
+            node->actorIndex()->handleGetAllActor(ignored_actor_id_result.value(), messageId);
         } else if (status == MessageStatus::Response) {
-            auto actors = MessagePack::deserialize<std::vector<ActorId>>(serialized);
-            node->actorIndex()->handleNewAllActors(actors);
+            auto actors_list_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
+            if (!actors_list_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
+                break;
+            }
+            node->actorIndex()->handleNewAllActors(actors_list_result.value());
         }
         break;
     }
+
     case MessageType::ActorCount:
         break;
 
     case MessageType::DfsDirData: {
         if (status == MessageStatus::Request) {
-            auto actorId = MessagePack::deserialize<ActorId>(serialized); // TODO: add last modified
-            node->dfs()->sendDirData(actorId, 0, messageId);
+            auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
+            if (!dir_actor_id_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
+                break;
+            }
+            node->dfs()->sendDirData(dir_actor_id_result.value(), 0, messageId);
         } else if (status == MessageStatus::Response) {
-            auto [actorId, dirRows] =
+            auto dir_data_result =
                 MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
-            node->dfs()->addDirData(actorId, dirRows);
+            if (!dir_data_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for directory data in {} state",
+                         type,
+                         status);
+                break;
+            }
+            const auto &[actor_id, dir_rows] = dir_data_result.value();
+            node->dfs()->addDirData(actor_id, dir_rows);
         }
         break;
     }
+
     case MessageType::DfsLastModified: {
-        auto msg = MessagePack::deserialize<std::uint64_t>(serialized);
-        node->dfs()->sendSync(msg, messageId);
-        break;
-    }
-    case MessageType::DfsAddFile: {
-        auto dirRow = MessagePack::deserialize<Dfs::DirRow>(serialized);
-        node->dfs()->addFile(dirRow, true);
-        break;
-    }
-    case MessageType::DfsRequestFile: {
-        auto [actorId, fileName] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        node->dfs()->sendFile(actorId, fileName, messageId);
-        break;
-    }
-    case MessageType::DfsRequestFileSegment: {
-        auto msg = MessagePack::deserialize<DfsP::RequestFileSegmentMessage>(serialized);
-        emit fetchFragment(msg, messageId);
-        break;
-    }
-    case MessageType::DfsAddSegment: {
-        auto msg = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
-        emit addFragSignal(msg);
-        break;
-    }
-    case MessageType::DfsEditSegment: {
-        auto msg = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
-        node->dfs()->insertFragment(msg);
-        break;
-    }
-    case MessageType::DfsDeleteSegment: {
-        auto msg = MessagePack::deserialize<DfsP::DeleteSegmentMessage>(serialized);
-        node->dfs()->deleteFragment(msg);
-        break;
-    }
-    case MessageType::DfsRemoveFile: {
-        auto msg = MessagePack::deserialize<DfsP::RemoveFileMessage>(serialized);
-        node->dfs()->removeFile(msg);
-        break;
-    }
-    case MessageType::DfsSendingFileDone: { // TODO
-        auto [actorId, fileHash] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        eLog("[Dfs] File done: {} {}", actorId, fileHash);
+        auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
+        if (!last_modified_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for last modified", type);
+            break;
+        }
+        node->dfs()->sendSync(last_modified_result.value(), messageId);
         break;
     }
 
-    case MessageType::DfsDatabaseRequest: {
-        auto [actor_id, file_id] = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        eCritical("DfsDatabaseRequest {} {}", actor_id, file_id);
-        node->dfs()->network_request_database(actor_id, file_id, messageId);
+    case MessageType::DfsAddFile: {
+        auto dir_row_result = MessagePack::deserialize<Dfs::DirRow>(serialized);
+        if (!dir_row_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
+            break;
+        }
+        node->dfs()->addFile(dir_row_result.value(), true);
         break;
     }
-    case MessageType::DfsDatabaseHistory: {
-        eCritical("DfsDatabaseHistory");
-        auto [actor_id, file_id, historical_rows] =
+
+    case MessageType::DfsRequestFile: {
+        auto file_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        if (!file_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file request", type);
+            break;
+        }
+        const auto &[requesting_actor_id, requested_file_name] = file_request_result.value();
+        node->dfs()->sendFile(requesting_actor_id, requested_file_name, messageId);
+        break;
+    }
+
+    case MessageType::DfsRequestFileSegment: {
+        auto segment_request_result = MessagePack::deserialize<DfsP::RequestFileSegmentMessage>(serialized);
+        if (!segment_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file segment request", type);
+            break;
+        }
+        emit fetchFragment(segment_request_result.value(), messageId);
+        break;
+    }
+
+    case MessageType::DfsAddSegment: {
+        auto segment_add_result = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
+        if (!segment_add_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for segment message", type);
+            break;
+        }
+        emit addFragSignal(segment_add_result.value());
+        break;
+    }
+
+    case MessageType::DfsEditSegment: {
+        auto segment_edit_result = MessagePack::deserialize<DfsP::SegmentMessage>(serialized);
+        if (!segment_edit_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for edit segment", type);
+            break;
+        }
+        node->dfs()->insertFragment(segment_edit_result.value());
+        break;
+    }
+
+    case MessageType::DfsDeleteSegment: {
+        auto segment_delete_result = MessagePack::deserialize<DfsP::DeleteSegmentMessage>(serialized);
+        if (!segment_delete_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for delete segment", type);
+            break;
+        }
+        node->dfs()->deleteFragment(segment_delete_result.value());
+        break;
+    }
+
+    case MessageType::DfsRemoveFile: {
+        auto file_remove_result = MessagePack::deserialize<DfsP::RemoveFileMessage>(serialized);
+        if (!file_remove_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for remove file", type);
+            break;
+        }
+        node->dfs()->removeFile(file_remove_result.value());
+        break;
+    }
+
+    case MessageType::DfsSendingFileDone: {
+        auto file_done_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        if (!file_done_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for sending file done", type);
+            break;
+        }
+        const auto &[sender_id, file_hash] = file_done_result.value();
+        eLog("[Dfs] File done: {} {}", sender_id, file_hash);
+        break;
+    }
+
+    case MessageType::DfsCollectionRequest: {
+        auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+        if (!db_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for collection request", type);
+            break;
+        }
+        const auto &[requester_id, requested_file_id] = db_request_result.value();
+        eCritical("DfsCollectionRequest {} {}", requester_id, requested_file_id);
+        node->dfs()->network_request_collection(requester_id, requested_file_id, messageId);
+        break;
+    }
+
+    case MessageType::DfsCollectionHistory: {
+        auto db_history_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
                 serialized);
-
-        node->dfs()->network_response_historical_database(actor_id, file_id, historical_rows);
+        if (!db_history_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for collection history", type);
+            break;
+        }
+        const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
+        node->dfs()->network_response_historical_collection(actor_id, file_id, historical_rows);
         break;
     }
-    case MessageType::DfsDatabaseContent: {
-        eCritical("DfsDatabaseContent");
-        auto [actor_id, file_id, rows] =
+
+    case MessageType::DfsCollectionContent: {
+        auto db_content_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
-
-        node->dfs()->network_response_content_database(actor_id, file_id, rows);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for collection content", type);
+            break;
+        }
+        const auto &[actor_id, file_id, db_rows] = db_content_result.value();
+        node->dfs()->network_response_content_collection(actor_id, file_id, db_rows);
         break;
     }
-    case MessageType::DfsDatabaseInsert: {
-        eCritical("DfsDatabaseInsert");
-        auto [actor_id, file_id, historical_row] =
+
+    case MessageType::DfsCollectionRowAdd: {
+        auto db_add_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
+        if (!db_add_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for collection insert", type);
+            break;
+        }
+        const auto &[actor_id, file_id, historical_row] = db_add_result.value();
+        node->dfs()->network_adding_collection(actor_id, file_id, historical_row);
+        break;
+    }
 
-        node->dfs()->network_insert_database(actor_id, file_id, historical_row);
+    case MessageType::DfsCollectionRowUpdate: {
         break;
     }
-    case MessageType::DfsDatabaseUpdate: {
-        eCritical("DfsDatabaseUpdate");
-        break;
-    }
-    case MessageType::DfsDatabaseDelete: {
-        eCritical("DfsDatabaseDelete");
+
+    case MessageType::DfsCollectionRowRemove: {
+        auto db_remove_result =
+            MessagePack::deserialize<std::tuple<ActorId, std::string, std::uint32_t>>(serialized);
+        if (!db_remove_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for collection insert", type);
+            break;
+        }
         break;
     }
 
@@ -742,17 +888,41 @@ void NetworkManager::messageReceived(const std::string &message,
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            std::vector<std::string> listMessage = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
-            node->dfs()->verifyFiles(listVerifiedMessage, messageId);
+            auto serialized_messages_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            if (!serialized_messages_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for list of serialized messages in {} state",
+                         type,
+                         status);
+                break;
+            }
+            auto verify_files_result =
+                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+            if (!verify_files_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {} state",
+                         type,
+                         status);
+                break;
+            }
+            node->dfs()->verifyFiles(verify_files_result.value(), messageId);
             break;
         }
         case MessageStatus::Response: {
-            std::vector<std::string> listMessage = MessagePack::deserialize<std::vector<std::string>>(serialized);
-            std::vector<DfsP::VerifyFileMessage> listVerifiedMessage =
-                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(listMessage);
-            float percentVerified = node->dfs()->percentVerified(listVerifiedMessage);
+            auto serialized_messages_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
+            if (!serialized_messages_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for list of serialized messages in {} state",
+                         type,
+                         status);
+                break;
+            }
+            auto verify_files_result =
+                MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+            if (!verify_files_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {} state",
+                         type,
+                         status);
+                break;
+            }
+            float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
             break;
         }
         }
@@ -760,12 +930,14 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainGenesisBlock: {
-        // eLog("BlockchainGenesisBlock");
-        // TODO: why temp std::string?
-        GenesisBlock block = MessagePack::deserialize<GenesisBlock>(serialized);
-        if (!block.isEmpty()) {
-            auto blockVariant = BlockVariant(block);
-            node->blockchain()->addBlockFromNetwork(blockVariant, messageId);
+        auto genesis_block_result = MessagePack::deserialize<GenesisBlock>(serialized);
+        if (!genesis_block_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for genesis block", type);
+            break;
+        }
+        if (!genesis_block_result.value().isEmpty()) {
+            auto block_variant = BlockVariant(genesis_block_result.value());
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
         } else {
             eLog("false genesis block");
         }
@@ -773,37 +945,51 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainNewBlock: {
-        // eLog("BlockchainNewBlock");
-        Block block = MessagePack::deserialize<Block>(serialized);
-        if (!block.isEmpty()) {
-            auto blockVariant = BlockVariant(block);
-            node->blockchain()->addBlockFromNetwork(blockVariant, messageId);
+        auto new_block_result = MessagePack::deserialize<Block>(serialized);
+        if (!new_block_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for new block", type);
+            break;
+        }
+        if (!new_block_result.value().isEmpty()) {
+            auto block_variant = BlockVariant(new_block_result.value());
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
         }
         break;
     }
 
     case MessageType::BlockchainTransaction: {
         eLog("BlockchainTransaction");
-        Transaction transaction = MessagePack::deserialize<Transaction>(serialized);
-        node->transactionManager()->addTransaction(transaction);
+        auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
+        if (!transaction_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for transaction", type);
+            break;
+        }
+        node->transactionManager()->addTransaction(transaction_result.value());
         break;
     }
 
     case MessageType::BlockchainRequestBlock: {
         eLog("BlockchainRequestBlock");
-        std::pair<BlockType, BigNumber> requestData =
-            MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
-        if (requestData.first == BlockType::Data)
-            node->blockchain()->sendBlockByNumber(requestData.second);
-        else if (requestData.first == BlockType::Genesis)
+        auto block_request_result = MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
+        if (!block_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for block request", type);
+            break;
+        }
+        const auto &[block_type, block_number] = block_request_result.value();
+        if (block_type == BlockType::Data)
+            node->blockchain()->sendBlockByNumber(block_number);
+        else if (block_type == BlockType::Genesis)
             node->blockchain()->sendLastGenesisBlock();
-
         break;
     }
 
     case MessageType::BlockchainSync: {
-        auto fromBlock = MessagePack::deserialize<BigNumber>(serialized);
-        node->blockchain()->syncResponseFromNetwork(fromBlock, messageId);
+        auto sync_from_block_result = MessagePack::deserialize<BigNumber>(serialized);
+        if (!sync_from_block_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
+            break;
+        }
+        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), messageId);
         break;
     }
 
@@ -813,33 +999,46 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::FragmentDataInfo: {
-        auto msg = MessagePack::deserialize<DfsF::FragmentsInfo>(serialized);
-        msg.print();
+        auto fragment_info_result = MessagePack::deserialize<DfsF::FragmentsInfo>(serialized);
+        if (!fragment_info_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for fragment info", type);
+            break;
+        }
+        fragment_info_result.value().print();
         break;
     }
 
     case MessageType::FragmentsDataListInfo: {
-        auto fragmentsInfoList = MessagePack::deserialize<std::vector<DfsF::FragmentsInfo>>(serialized);
+        auto fragments_list_result = MessagePack::deserialize<std::vector<DfsF::FragmentsInfo>>(serialized);
+        if (!fragments_list_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for fragments info list", type);
+            break;
+        }
         eLog("Recieved fragment data info from list");
-        for (const auto &msg : fragmentsInfoList) {
-            msg.print();
+        for (const auto &fragment_info : fragments_list_result.value()) {
+            fragment_info.print();
         }
         break;
     }
 
     case MessageType::BlockchainCoinReward: {
-        auto requestReward = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
+        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
+        if (!reward_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for coin reward", type);
+            break;
+        }
+        const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::NoStatus:
             break;
         case MessageStatus::Request: {
-            node->dataMiningManager()->sendCoinsReward(requestReward);
+            node->dataMiningManager()->sendCoinsReward(reward_request);
             break;
         }
         case MessageStatus::Response: {
-            switch (requestReward.TypeFunctioningObj) {
+            switch (reward_request.TypeFunctioningObj) {
             case Dfs::Reward::TypeFunctioning::Test: {
-                eLog("[TEST] You could receive {}", requestReward.RewardAmount);
+                eLog("[TEST] You could receive {}", reward_request.RewardAmount);
                 break;
             }
             case Dfs::Reward::Base:
@@ -854,33 +1053,42 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::NewListConnections: {
-        auto connection = MessagePack::deserialize<DfsP::Connection>(serialized);
-        node->connectionsManager()->addNewConnection(connection);
-        node->connectionsManager()->addActivity(connection);
+        auto new_connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
+        if (!new_connection_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for new connection", type);
+            break;
+        }
+        node->connectionsManager()->addNewConnection(new_connection_result.value());
+        node->connectionsManager()->addActivity(new_connection_result.value());
         break;
     }
 
     case MessageType::GetListConnections: {
-        DfsP::Connection connection = MessagePack::deserialize<DfsP::Connection>(serialized);
-        node->connectionsManager()->addConnection(connection);
-        for (const auto &connection : node->connectionsManager()->getActiveConnection()) {
-            this->send_message(connection, MessageType::NewListConnections);
+        auto connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
+        if (!connection_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for get connections", type);
+            break;
+        }
+        node->connectionsManager()->addConnection(connection_result.value());
+        for (const auto &active_connection : node->connectionsManager()->getActiveConnection()) {
+            this->send_message(active_connection, MessageType::NewListConnections);
         }
         this->send_message("", MessageType::ProcessNewConnections);
-
         break;
     }
+
     case MessageType::ProcessNewConnections: {
         node->connectionsManager()->tryToNewConnect();
         break;
     }
 
-    default:
-        std::string error = fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
-        eFatal("{}", error.data());
+    default: {
+        std::string error_message =
+            fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
+        eFatal("{}", error_message.data());
         break;
     }
-    // } catch (std::exception e) { eFatal("[NetworkManager/messageReceived] Error deserialize"); }
+    }
 }
 
 void NetworkManager::removeWsConnection() {
@@ -891,7 +1099,8 @@ void NetworkManager::removeWsConnection() {
     auto removed    = m_connections->erase(connection);
     eLog("[WS] Removed {}", fmt::ptr(connection));
     //    m_reconnections.remove(NetworkReconnect {
-    //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket });
+    //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket
+    //        });
     connection->deleteLater();
     checkConnectionsStatus();
 }

@@ -140,7 +140,7 @@ namespace Dfs {
         AlreadyExists,
         DirError,
         DirValueNotExists,
-        DatabaseCreationError,
+        CollectionCreationError,
         InvalidName,
         InvalidTemplate,
         NotWritable
@@ -148,10 +148,9 @@ namespace Dfs {
 
     enum class FileType {
         Folder     = 0,
-        Bytes      = 1,
-        Collection = 2,
-        Text       = 3,
-        Json       = 4
+        File       = 10,
+        Collection = 20,
+        Dictionary = 30
     };
 
     enum class FileState {
@@ -446,7 +445,7 @@ namespace Dfs {
       "size          INTEGER          NOT NULL,"
       "created       INTEGER          NOT NULL,"
       "last_modified  INTEGER          NOT NULL,"
-      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 4),"
+      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 39),"
       "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
       "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
       "sign          TEXT             NOT NULL"

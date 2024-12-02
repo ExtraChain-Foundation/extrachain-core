@@ -59,12 +59,12 @@ enum class MessageType {
     RequestBlockCount  = 64,
     ResponseBlockCount = 65,
 
-    DfsDatabaseRequest = 70,
-    DfsDatabaseContent = 71,
-    DfsDatabaseHistory = 72,
-    DfsDatabaseInsert  = 73,
-    DfsDatabaseUpdate  = 74,
-    DfsDatabaseDelete  = 75,
+    DfsCollectionRequest = 70,
+    DfsCollectionContent = 71,
+    DfsCollectionHistory = 72,
+    DfsCollectionRowAdd  = 73,
+    DfsCollectionRowUpdate  = 74,
+    DfsCollectionRowRemove  = 75,
 
     FragmentDataInfo      = 90,
     FragmentsDataListInfo = 91,

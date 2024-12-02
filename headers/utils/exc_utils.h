@@ -358,27 +358,30 @@ namespace MessagePack {
         return std::string(buffer.data(), buffer.size());
     }
 
+    enum class DeserializeError {
+        EmptyData,
+        DeserializationFailed,
+    };
+
     template <class T, class StringContainer>
-    T deserialize(const StringContainer &data, std::size_t size = 0) {
+    std::expected<T, DeserializeError> deserialize(const StringContainer &data, std::size_t size = 0) {
         if (data.empty()) {
             eLog("[MessagePack] Empty deserialize {}", typeid(T).name());
-            eFatal("[MessagePack] Empty deserialize");
-            return T();
+            return std::unexpected(DeserializeError::EmptyData);
         }
 
         try {
             msgpack::object_handle oh           = msgpack::unpack(data.data(), data.size());
             msgpack::object        deserialized = oh.get();
-            auto                   t            = deserialized.as<T>();
-            return t;
-        } catch (std::exception &e) {
-            eLog("{}", e.what());
-        }
+            return deserialized.as<T>();
+        } catch (const std::exception &e) {
+            eWarning("[MessagePack] Exception error: {}", e.what());
 
-        auto qt_bytes = QByteArray::fromStdString(data.data());
-        eLog("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
-        eFatal("[MessagePack] Incorrect deserialize");
-        return T();
+            auto qt_bytes = QByteArray::fromStdString(data.data());
+            eWarning("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
+
+            return std::unexpected(DeserializeError::DeserializationFailed);
+        }
     }
 
     template <class T>
@@ -391,13 +394,17 @@ namespace MessagePack {
     }
 
     template <class T>
-    std::vector<T> deserialize_container(const std::vector<std::string> dataContainer) {
+    std::expected<std::vector<T>, DeserializeError> deserialize_container(
+        const std::vector<std::string> dataContainer) {
         std::vector<T> result;
 
         for (const auto &data : dataContainer) {
-            const T element = deserialize<T>(data);
-            result.push_back(element);
+            const auto element = deserialize<T>(data);
+            if (!element.has_value())
+                continue;
+            result.push_back(element.value());
         }
+
         return result;
     }
 } // namespace MessagePack

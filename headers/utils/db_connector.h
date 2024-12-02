@@ -175,8 +175,7 @@ public:
     std::vector<std::string>                   table_names();
     std::vector<DBColumn>                      table_columns(const std::string &table);
 
-    std::string hash();
-    uint64_t    size();
+    std::pair<std::string, uint64_t> hash_size();
 
 public:
     bool          query(std::string query);

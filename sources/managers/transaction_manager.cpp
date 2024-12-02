@@ -19,9 +19,6 @@
 
 #include "managers/transaction_manager.h"
 
-#include <QFuture>
-#include <QtConcurrent>
-
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "blockchain/blockchain.h"

@@ -176,7 +176,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         return false;
     }
 
-    auto store_res = m_dfs->store_database(first.id(), "tokens", first.id(), "tokens");
+    auto store_res = m_dfs->store_collection(first.id(), "tokens", first.id(), "tokens");
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         // Utils::wipeDataFiles();
@@ -193,7 +193,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
                         { "owner", first.id().to_string() },
                         { "color", "#111111" },
                         { "smart", "" } };
-    m_dfs->insert_database(store_res->actorId, store_res->fileId, tokensRow);
+    m_dfs->add_collection_row(store_res->actorId, store_res->fileId, tokensRow);
 
     eSuccess("[Node] New network created");
     return true;

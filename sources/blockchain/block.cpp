@@ -289,5 +289,7 @@ void Block::setDate(std::uint64_t value) {
 void Block::setDataServiceFromMessagePack(const std::string &value) {
     // if (m_dataService.empty())
     // return;
-    m_dataService = MessagePack::deserialize<std::set<std::string>>(value);
+    auto deserialized = MessagePack::deserialize<std::set<std::string>>(value);
+    if (deserialized.has_value())
+        m_dataService = deserialized.value();
 }

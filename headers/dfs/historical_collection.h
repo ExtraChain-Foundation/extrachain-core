@@ -87,13 +87,12 @@ public:
     std::expected<HistoricalCollectionRow, CollectionError> insert_into(DbRow& row);
     std::expected<HistoricalCollectionRow, CollectionError> update_where(DbRow&             row,
                                                                          const std::string& temp_table);
-    std::expected<HistoricalCollectionRow, CollectionError> delete_where(DbRow&             row,
-                                                                         const std::string& temp_table);
+    std::expected<HistoricalCollectionRow, CollectionError> delete_where(std::uint32_t id);
 
     // std::expected<HistoricalCollectionRow, CollectionError> insert_into_alien(DbRow&             row,
     //                                                                           const std::string& temp_table);
 
-    std::expected<std::vector<DbRow>, CollectionError>                   get_database_rows();
+    std::expected<std::vector<DbRow>, CollectionError>                   get_collection_rows();
     std::expected<std::vector<HistoricalCollectionRow>, CollectionError> get_historical_rows() {
         DbConnector db(historical_path_);
         db.open();

@@ -26,6 +26,7 @@ namespace Dfs {
         tmpl.add_fields({
             Field::Id("id").primary_key(),
             Field::Integer("timestamp").not_null(),
+            // Field::Text("actor_id").not_null().unique(),
             // Field::Text("sign").not_null().unique()
         });
         return tmpl;

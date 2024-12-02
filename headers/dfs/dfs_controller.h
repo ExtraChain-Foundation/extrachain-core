@@ -98,29 +98,35 @@ public:
     std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId          &actor_id,
                                                              const Dfs::DfsTemplate &template_body);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_database(const ActorId     &actor_id,
-                                                             const std::string &visual_name,
-                                                             const ActorId     &template_actor_id,
-                                                             const std::string &template_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId     &actor_id,
+                                                               const std::string &visual_name,
+                                                               const ActorId     &template_actor_id,
+                                                               const std::string &template_name);
 
-    ExpectedDirRow insert_database(const ActorId &actor_id, const std::string &file_id, DbRow row);
-    ExpectedDirRow update_database(const ActorId &actorId, const std::string &fileId, DbRow row);
-    ExpectedDirRow delete_database(const ActorId &actorId, const std::string &fileId, DbRow row); // uint32_t id
+    ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
+    ExpectedDirRow update_collection_row(const ActorId     &actorId,
+                                         const std::string &fileId,
+                                         uint32_t           id,
+                                         DbRow              row);
+    ExpectedDirRow remove_collection_row(const ActorId &actorId, const std::string &fileId, uint32_t id);
 
-    void network_request_database(const ActorId     &actor_id,
-                                  const std::string &file_id,
-                                  const std::string &message_id);
-    void network_response_historical_database(const ActorId                              &actor_id,
-                                              const std::string                          &file_id,
-                                              const std::vector<HistoricalCollectionRow> &historical_rows);
-    void network_response_content_database(const ActorId            &actor_id,
-                                           const std::string        &file_id,
-                                           const std::vector<DbRow> &db_rows);
-    void network_insert_database(const ActorId                 &actor_id,
-                                 const std::string             &file_id,
-                                 const HistoricalCollectionRow &row);
+    void network_request_collection(const ActorId     &actor_id,
+                                    const std::string &file_id,
+                                    const std::string &message_id);
+    void network_response_historical_collection(const ActorId                              &actor_id,
+                                                const std::string                          &file_id,
+                                                const std::vector<HistoricalCollectionRow> &historical_rows);
+    void network_response_content_collection(const ActorId            &actor_id,
+                                             const std::string        &file_id,
+                                             const std::vector<DbRow> &db_rows);
+    void network_adding_collection(const ActorId                 &actor_id,
+                                   const std::string             &file_id,
+                                   const HistoricalCollectionRow &row);
+    void network_remove_collection(const ActorId                 &actor_id,
+                                   const std::string             &file_id,
+                                   const HistoricalCollectionRow &row);
 
-    // TODO: get from database
+    // TODO: get rows from collection
 
     bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
     // visualMoveFile

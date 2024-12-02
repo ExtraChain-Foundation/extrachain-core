@@ -29,7 +29,7 @@ std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db,
 
 std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
     if (!db.is_open()) {
-        eFatal("Database not opened");
+        eFatal("Database {} not opened", db.file());
     }
 
     auto        result       = db.select(Dfs::Tables::filesTableLast);
@@ -160,7 +160,7 @@ std::filesystem::path Dfs::Path::actorPath(const ActorId &actorId) {
 int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
-        eFatal("Database error");
+        eFatal("Database {} error", db.file());
         return 0;
     }
 
@@ -177,7 +177,7 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     DbConnector db(storjDbPath(actorId, storjName).string());
     db.open();
     if (!db.is_open()) {
-        eFatal("Database error");
+        eFatal("Database error {}", db.file());
         return 0;
     }
 
@@ -195,7 +195,7 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
 bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actorId, DirRow &dirRow) {
     auto db = actorDbConnector(actorId);
     if (!db.is_open()) {
-        eFatal("Database error");
+        eFatal("Database error {}", db.file());
         return 0;
     }
 
