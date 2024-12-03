@@ -54,6 +54,13 @@ struct HistoricalCollectionRow {
 };
 BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
 
+struct CollectionTemplateLink {
+    ActorId     actor_id;
+    std::string file_id;
+    std::string name;
+};
+BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
+
 class HistoricalCollection {
 private:
     FsPath                             file_path_;
@@ -65,29 +72,23 @@ private:
 
     HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>>& actor,
                          const ActorId&                            file_actor_id,
-                         const std::string&                        file_id) {
-        this->file_path_         = DfsPath::file_path(file_actor_id, file_id).value();
-        auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), ".collection");
-        this->historical_path_   = FsPath::create(historical_path_str).value();
-        this->actor_             = actor;
-        this->file_actor_id_     = file_actor_id;
-        this->file_id_           = file_id;
-    }
+                         const std::string&                        file_id);
 
 public:
-    static HistoricalCollection create(const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
-                                       const ActorId&                            file_actor_id,
-                                       const std::string&                        file_id);
-    static HistoricalCollection load(const std::shared_ptr<Actor<KeyPrivate>>& actor,
-                                     const ActorId&                            file_actor_id,
-                                     const std::string&                        file_id);
+    static std::expected<HistoricalCollection, CollectionError> create(
+        const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
+        const ActorId&                            file_actor_id,
+        const std::string&                        file_id,
+        const ActorId&                            tempalte_actor_id,
+        const std::string&                        template_file_id);
+    static std::expected<HistoricalCollection, CollectionError> load(
+        const std::shared_ptr<Actor<KeyPrivate>>& actor,
+        const ActorId&                            file_actor_id,
+        const std::string&                        file_id);
 
-    std::expected<std::string, CollectionError> create_table(const DbSchema& schema);
-
-    std::expected<HistoricalCollectionRow, CollectionError> insert_into(DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> update_where(DbRow&             row,
-                                                                         const std::string& temp_table);
-    std::expected<HistoricalCollectionRow, CollectionError> delete_where(std::uint32_t id);
+    std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow& row);
+    std::expected<HistoricalCollectionRow, CollectionError> update_row(std::uint32_t id, DbRow& row);
+    std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
     // std::expected<HistoricalCollectionRow, CollectionError> insert_into_alien(DbRow&             row,
     //                                                                           const std::string& temp_table);
@@ -118,12 +119,15 @@ public:
                                                                     const std::string& field = "id");
 
     std::expected<HistoricalCollectionRow, CollectionError> get_last_row();
-    std::expected<DbSchema, CollectionError>                get_schema();
+    std::expected<CollectionTemplateLink, CollectionError>  get_creation();
 
     FsPath get_historical_path() const;
     FsPath get_file_path() const;
 
 private:
+    std::expected<std::string, CollectionError> create_table(const ActorId&     tempalte_actor_id,
+                                                             const std::string& template_file_id);
+
     void insert_historical_row(HistoricalCollectionRow& historical_row);
     void historical_collection_row_sign(HistoricalCollectionRow& row);
     bool historical_collection_row_verify(const HistoricalCollectionRow& row);

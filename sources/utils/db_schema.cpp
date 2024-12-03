@@ -19,7 +19,7 @@
 
 #include "utils/db_schema.h"
 
-const std::vector<std::string_view>& SQLValidator::get_reserved_words() {
+const std::vector<std::string_view>& SqlValidator::get_reserved_words() {
     static const std::vector<std::string_view> reserved_words = {
         "ADD",      "ALL",    "ALTER",  "AND",        "ANY",     "AS",       "ASC",      "BETWEEN", "BY",
         "CASE",     "CHECK",  "COLUMN", "CONSTRAINT", "CREATE",  "DATABASE", "DEFAULT",  "DELETE",  "DESC",
@@ -32,17 +32,17 @@ const std::vector<std::string_view>& SQLValidator::get_reserved_words() {
     return reserved_words;
 }
 
-const std::regex& SQLValidator::get_identifier_regex() {
+const std::regex& SqlValidator::get_identifier_regex() {
     static const std::regex identifier_regex { R"(^[a-zA-Z_][a-zA-Z0-9_]*$)" };
     return identifier_regex;
 }
 
-const std::regex& SQLValidator::get_value_regex() {
+const std::regex& SqlValidator::get_value_regex() {
     static const std::regex value_regex { R"(^[^'";]*$)" };
     return value_regex;
 }
 
-std::expected<void, SqlCreateError> SQLValidator::validate_identifier(std::string_view identifier) {
+std::expected<void, SqlCreateError> SqlValidator::validate_identifier(std::string_view identifier) {
     if (identifier.empty()) {
         return std::unexpected(SqlCreateError::EmptyIdentifier);
     }
@@ -63,14 +63,14 @@ std::expected<void, SqlCreateError> SQLValidator::validate_identifier(std::strin
     return {};
 }
 
-std::expected<void, SqlCreateError> SQLValidator::validate_value(std::string_view value) {
+std::expected<void, SqlCreateError> SqlValidator::validate_value(std::string_view value) {
     if (!std::regex_match(value.begin(), value.end(), get_value_regex())) {
         return std::unexpected(SqlCreateError::SqlInjectionRisk);
     }
     return {};
 }
 
-std::string SQLValidator::escape_string(std::string_view value) {
+std::string SqlValidator::escape_string(std::string_view value) {
     std::string result;
     result.reserve(value.size() + 2);
     result.push_back('\'');
@@ -88,9 +88,13 @@ std::string SQLValidator::escape_string(std::string_view value) {
 }
 
 // DbColumn implementation
+DbColumn::DbColumn()
+    : m_type(ColumnType::Integer) {
+}
+
 DbColumn::DbColumn(std::string_view name, ColumnType type)
     : m_type(type) {
-    if (auto validation = SQLValidator::validate_identifier(name); !validation) {
+    if (auto validation = SqlValidator::validate_identifier(name); !validation) {
         m_validation_error = validation.error();
     }
     m_name = std::string(name);
@@ -119,7 +123,7 @@ DbColumn& DbColumn::unique() {
 }
 
 DbColumn& DbColumn::default_value(std::string_view value) {
-    if (auto validation = SQLValidator::validate_value(value); !validation) {
+    if (auto validation = SqlValidator::validate_value(value); !validation) {
         m_validation_error = validation.error();
     } else {
         m_default_value = fmt::format("DEFAULT {}", value);
@@ -128,7 +132,7 @@ DbColumn& DbColumn::default_value(std::string_view value) {
 }
 
 DbColumn& DbColumn::check(std::string_view condition) {
-    if (auto validation = SQLValidator::validate_value(condition); !validation) {
+    if (auto validation = SqlValidator::validate_value(condition); !validation) {
         m_validation_error = validation.error();
     } else {
         m_checks.push_back(fmt::format("CHECK ({})", condition));
@@ -183,13 +187,23 @@ const std::optional<SqlCreateError>& DbColumn::validation_error() const {
 }
 
 // DbSchema implementation
-DbSchema::DbSchema() = default;
-
 DbSchema::DbSchema(std::string_view table_name) {
-    if (auto validation = SQLValidator::validate_identifier(table_name); !validation) {
+    if (auto validation = SqlValidator::validate_identifier(table_name); !validation) {
         m_validation_error = validation.error();
     }
     m_table_name = std::string(table_name);
+}
+
+DbSchema::DbSchema(const DbSchema& other)
+    : m_table_name(other.m_table_name)
+    , m_validation_error(other.m_validation_error) {
+    m_columns.reserve(other.m_columns.size());
+
+    for (const auto& column : other.m_columns) {
+        if (column) {
+            m_columns.push_back(std::make_unique<DbColumn>(*column));
+        }
+    }
 }
 
 DbSchema& DbSchema::add_column(DbColumn&& column) {
@@ -198,6 +212,10 @@ DbSchema& DbSchema::add_column(DbColumn&& column) {
     }
     m_columns.push_back(std::make_unique<DbColumn>(std::move(column)));
     return *this;
+}
+
+std::string DbSchema::table_name() {
+    return m_table_name;
 }
 
 std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
@@ -226,6 +244,23 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
 
 const std::optional<SqlCreateError>& DbSchema::validation_error() const {
     return m_validation_error;
+}
+
+DbSchema& DbSchema::operator=(const DbSchema& other) {
+    if (this != &other) {
+        m_table_name       = other.m_table_name;
+        m_validation_error = other.m_validation_error;
+
+        m_columns.clear();
+        m_columns.reserve(other.m_columns.size());
+
+        for (const auto& column : other.m_columns) {
+            if (column) {
+                m_columns.push_back(std::make_unique<DbColumn>(*column));
+            }
+        }
+    }
+    return *this;
 }
 
 // SQLite literals implementation

@@ -350,6 +350,10 @@ std::vector<std::string> DbConnector::table_names() {
 }
 
 std::vector<DBColumn> DbConnector::table_columns(const std::string &table) {
+    if (table.empty()) {
+        eFatal("[DbConnector] Try to get empty table columns");
+    }
+
     auto sel = select("PRAGMA table_info('" + table + "')");
     if (sel.size() == 0)
         return {};

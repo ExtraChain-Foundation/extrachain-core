@@ -47,7 +47,7 @@ using FileId         = std::string;
 using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
 
 namespace Dfs {
-    class DfsTemplate;
+    class CollectionTemplate;
 }
 
 class ThreadAddFiles;
@@ -75,11 +75,11 @@ public:
 
     // Internal use only
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actorId,
-                                                         const std::filesystem::path &filePath,
-                                                         const std::string           &visualFolder,
-                                                         const std::string           &visualName,
-                                                         Dfs::SecurityLevel           securityLevel);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actor_id,
+                                                         const std::filesystem::path &file_path,
+                                                         const std::string           &visual_folder,
+                                                         const std::string           &visual_name,
+                                                         Dfs::SecurityLevel           security_level);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(const ActorId                  &actor_id,
                                                                  const std::vector<std::uint8_t> data,
@@ -96,19 +96,19 @@ public:
                                                                 const ActorId &dmaster_id);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId          &actor_id,
-                                                             const Dfs::DfsTemplate &template_body);
+                                                             const Dfs::CollectionTemplate &template_body);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId     &actor_id,
                                                                const std::string &visual_name,
                                                                const ActorId     &template_actor_id,
-                                                               const std::string &template_name);
+                                                               const std::string &template_file_id);
 
     ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
     ExpectedDirRow update_collection_row(const ActorId     &actorId,
-                                         const std::string &fileId,
+                                         const std::string &file_id,
                                          uint32_t           id,
                                          DbRow              row);
-    ExpectedDirRow remove_collection_row(const ActorId &actorId, const std::string &fileId, uint32_t id);
+    ExpectedDirRow remove_collection_row(const ActorId &actorId, const std::string &file_id, uint32_t id);
 
     void network_request_collection(const ActorId     &actor_id,
                                     const std::string &file_id,
@@ -128,7 +128,7 @@ public:
 
     // TODO: get rows from collection
 
-    bool removeLocalFile(const ActorId &actorId, const std::string &fileId);
+    bool removeLocalFile(const ActorId &actorId, const std::string &file_id);
     // visualMoveFile
 
     // External interfaces
@@ -186,7 +186,7 @@ public:
     void        sendDirData(const ActorId &actorId, std::uint64_t last_modified, const std::string &messageId);
     void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
     void        requestFile(const ActorId &actorId, const std::string &fileName);
-    void        sendFile(const ActorId &actorId, const std::string &fileId, const std::string &messageId = "");
+    void        sendFile(const ActorId &actorId, const std::string &file_id, const std::string &messageId = "");
     void        beginFetchNextFile();
     void        requestNextFragment(const DfsP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
@@ -222,8 +222,8 @@ signals:
     void collectionUpdate(HistoricalCollectionRow);
     void collectionRemove(HistoricalCollectionRow);
 
-    void downloadProgress(ActorId actorId, std::string fileId, int progress);
-    void uploadProgress(ActorId actorId, std::string fileId, int progress);
+    void downloadProgress(ActorId actor_id, std::string file_id, int progress);
+    void uploadProgress(ActorId actor_id, std::string file_id, int progress);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

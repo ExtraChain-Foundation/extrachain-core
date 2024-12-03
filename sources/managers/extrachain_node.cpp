@@ -38,7 +38,7 @@
 #include "managers/transaction_manager.h"
 #include "managers/token_manager.h"
 #include "managers/thread_pool.h"
-#include "dfs/dfs_template.h"
+#include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
@@ -161,14 +161,14 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     using namespace sqlite::literals;
 
-    auto tokens_template =
-        Dfs::DfsTemplate::create("tokens").value().add_fields({ Dfs::Field::String("tokenId").not_null().unique(),
-                                                                Dfs::Field::String("name").not_null().unique(),
-                                                                Dfs::Field::String("ticker").not_null().unique(),
-                                                                Dfs::Field::String("count").not_null(),
-                                                                Dfs::Field::String("owner").not_null(),
-                                                                Dfs::Field::String("color").not_null(),
-                                                                Dfs::Field::String("smart") });
+    auto tokens_template = Dfs::CollectionTemplate::create("tokens").value().add_fields(
+        { Dfs::Field::String("token_id").not_null().unique(),
+          Dfs::Field::String("name").not_null().unique(),
+          Dfs::Field::String("ticker").not_null().unique(),
+          Dfs::Field::String("count").not_null(),
+          Dfs::Field::String("owner").not_null(),
+          Dfs::Field::String("color").not_null(),
+          Dfs::Field::String("smart") });
 
     auto template_res = m_dfs->store_template(first.id(), tokens_template);
     if (!template_res.has_value()) {
@@ -176,7 +176,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         return false;
     }
 
-    auto store_res = m_dfs->store_collection(first.id(), "tokens", first.id(), "tokens");
+    auto store_res = m_dfs->store_collection(first.id(), "tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         // Utils::wipeDataFiles();
@@ -186,14 +186,14 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     auto tokenId = ActorId().to_string();
 
     // DbRow for tokens
-    DbRow tokensRow = { { "tokenId", tokenId },
+    DbRow tokensRow = { { "token_id", tokenId },
                         { "name", "ExtraChain" },
                         { "ticker", "EXC" },
                         { "count", "0" },
                         { "owner", first.id().to_string() },
                         { "color", "#111111" },
                         { "smart", "" } };
-    m_dfs->add_collection_row(store_res->actorId, store_res->fileId, tokensRow);
+    m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokensRow);
 
     eSuccess("[Node] New network created");
     return true;
