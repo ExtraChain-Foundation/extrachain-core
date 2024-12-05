@@ -203,24 +203,6 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::re
     return historical_row;
 }
 
-// std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::insert_into_alien(
-// const HistoricalCollectionRow &row) {
-// function for adding from network
-// insert_historical_row(copy);
-// DbConnector db(this->file_path_);
-// db.open();
-// row["timestamp"] = std::to_string(row.timestamp);
-// // row["sign"]      = Utils::to_base64("");
-// auto res_insert = db.insert(table_name_, row);
-// db.close();
-
-// if (!res_insert) {
-//     // TODO: remove from historical
-//     return std::unexpected(CollectionError::Adding);
-// }
-// return {};
-// }
-
 std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows() {
     DbConnector db(file_path_);
     db.open();
@@ -228,7 +210,7 @@ std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_col
         return std::unexpected(CollectionError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {}", db.table_names()[0]));
+    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {}", table_name_));
     db.close();
 
     return db_rows;
@@ -313,10 +295,7 @@ void HistoricalCollection::insert_historical_row(HistoricalCollectionRow &histor
     historical_row.timestamp = Utils::current_date_ms();
     historical_collection_row_sign(historical_row);
 
-    auto historical = DbConnector(historical_path_);
-    historical.open();
-    historical.insert(Dfs::Historical::HISTORICAL_TABLE, Utils::to_dbrow(historical_row));
-    historical.close();
+    insert_row_to_database(historical_row);
 }
 
 void HistoricalCollection::historical_collection_row_sign(HistoricalCollectionRow &row) {
@@ -334,4 +313,39 @@ FsPath HistoricalCollection::get_historical_path() const {
 
 FsPath HistoricalCollection::get_file_path() const {
     return file_path_;
+}
+
+void HistoricalCollection::insert_row_to_database(const HistoricalCollectionRow &historical_row) {
+    auto historical = DbConnector(historical_path_);
+    historical.open();
+    historical.insert(Dfs::Historical::HISTORICAL_TABLE, Utils::to_dbrow(historical_row));
+    historical.close();
+}
+
+std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::change_collection(const HistoricalCollectionRow &historical_row) {
+    DbRow row;
+
+    switch (historical_row.operation) {
+    case CollectionOperation::Structural:
+        break;
+    case CollectionOperation::Add:
+        row = Json::_no_try_deserialize<DbRow>(historical_row.data).value();
+        break;
+    case CollectionOperation::Update:
+        break;
+    case CollectionOperation::Remove: {
+        row = { { "id", historical_row.data } };
+        break;
+    }
+    }
+
+    DbConnector db(file_path_);
+    db.open();
+    auto res_insert = db.insert(table_name_, row);
+    db.close();
+
+    if (!res_insert) {
+        // TODO: remove from historical
+        return std::unexpected(CollectionError::Adding);
+    }
 }

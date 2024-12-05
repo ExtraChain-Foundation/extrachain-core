@@ -112,6 +112,7 @@
     #include <barrier>
     #include <latch>
     #include <semaphore>
+    #include <charconv>
 
     #include <sodium.h>
     #include <msgpack.hpp>

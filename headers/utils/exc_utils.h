@@ -25,6 +25,9 @@
 #include <ranges>
 #include <algorithm>
 #include <expected>
+#include <charconv>
+#include <system_error>
+#include <concepts>
 
 #include <QFile>
 #include <QObject>
@@ -506,6 +509,46 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string sodiumVersion();
     EXTRACHAIN_EXPORT std::string boostVersion();
     EXTRACHAIN_EXPORT std::string boostAsioVersion();
+
+    enum class NumberParseError {
+        InvalidFormat,
+        OutOfRange,
+        Empty
+    };
+
+    // Concept to restrict numeric types
+    template <typename T>
+    concept Numeric = std::integral<T> || std::floating_point<T>;
+
+    // Generic parse function for any numeric type
+    template <Numeric T>
+    std::expected<T, NumberParseError> parse_number(std::string_view str) {
+        if (str.empty()) {
+            eWarning("Attempted to parse empty string");
+            return std::unexpected(NumberParseError::Empty);
+        }
+
+        T result {};
+        auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), result);
+
+        if (ec == std::errc::invalid_argument) {
+            eWarning("Invalid format while parsing number from string: '{}'", str);
+            return std::unexpected(NumberParseError::InvalidFormat);
+        }
+
+        if (ec == std::errc::result_out_of_range) {
+            eWarning("Number out of range while parsing from string: '{}'", str);
+            return std::unexpected(NumberParseError::OutOfRange);
+        }
+
+        // Check if we consumed all characters
+        if (ptr != str.data() + str.size()) {
+            eWarning("Extra characters found while parsing number from string: '{}'", str);
+            return std::unexpected(NumberParseError::InvalidFormat);
+        }
+
+        return result;
+    }
 
     enum PrintDebug {
         Off = 0,

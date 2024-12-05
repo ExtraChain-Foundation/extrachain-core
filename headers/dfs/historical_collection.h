@@ -88,6 +88,11 @@ public:
     std::expected<HistoricalCollectionRow, CollectionError> update_row(std::uint32_t id, DbRow& row);
     std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
+    std::expected<HistoricalCollectionRow, CollectionError> change_collection(
+        const HistoricalCollectionRow& historical_row);
+
+    // void do_something
+
     // std::expected<HistoricalCollectionRow, CollectionError> insert_into_alien(DbRow&             row,
     //                                                                           const std::string& temp_table);
 
@@ -121,6 +126,7 @@ public:
 
     FsPath get_historical_path() const;
     FsPath get_file_path() const;
+    void   insert_row_to_database(const HistoricalCollectionRow& historical_row);
 
 private:
     std::expected<std::string, CollectionError> create_table(const ActorId&     tempalte_actor_id,

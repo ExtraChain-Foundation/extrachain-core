@@ -114,7 +114,7 @@ public:
                                             const std::string &file_id,
                                             DbRow              row,
                                             uint32_t           id,
-                                            MessageType        type);
+                                            CollectionOperation type);
     ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
     ExpectedDirRow update_collection_row(const ActorId     &actor_id,
                                          const std::string &file_id,
@@ -131,7 +131,7 @@ public:
     void network_response_content_collection(const ActorId            &actor_id,
                                              const std::string        &file_id,
                                              const std::vector<DbRow> &db_rows);
-    void network_adding_collection(const ActorId                 &actor_id,
+    void network_change_collection(const ActorId                 &actor_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
     void network_remove_collection(const ActorId                 &actor_id,
@@ -181,7 +181,7 @@ private:
     std::string   extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
     void          eraseFirstUnsynchronizedDir();
     void          removeRowFromDB(const DfsP::RemoveFileMessage &msg);
-    void          requestFileSegment(const Dfs::DirRow &row);
+    void          requestFileSegment(const Dfs::DirRow &dir_row);
     void          updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
 public:

@@ -115,6 +115,10 @@ public:
     Logger() {
         main_thread_id = std::this_thread::get_id();
         open_log_file();
+
+#ifdef _WIN32
+        SetConsoleOutputCP(CP_UTF8);
+#endif
     }
 
     ~Logger() {
@@ -379,11 +383,13 @@ namespace detail {
                             log_buffer.data());
 #else
     #ifdef _WIN32
+        #ifdef _WIN32
         if (IsDebuggerPresent()) {
-            log_buffer.push_back('\n');
-            auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
-            OutputDebugStringA(log_view.data());
+            std::string debug_str(log_view.data(), log_view.size());
+            debug_str += '\n';
+            OutputDebugStringA(debug_str.c_str());
         }
+        #endif
     #endif
 
         // Console with color

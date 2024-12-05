@@ -203,8 +203,6 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
                                       .smart    = "" };
     m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
 
-    m_dfs->remove_collection_row(store_res->actor_id, store_res->file_id, 1);
-
     eSuccess("[Node] New network created");
     return true;
 }
