@@ -25,6 +25,9 @@
 #include <ranges>
 #include <algorithm>
 #include <expected>
+#include <charconv>
+#include <system_error>
+#include <concepts>
 
 #include <QFile>
 #include <QObject>
@@ -53,6 +56,8 @@
 #include <magic_enum/magic_enum_iostream.hpp>
 using namespace magic_enum::ostream_operators;
 using namespace magic_enum::bitwise_operators;
+
+#include <blake3.h>
 
 #include "utils/exc_utils_base64.h"
 
@@ -443,6 +448,13 @@ namespace Json {
     std::expected<T, std::string> deserialize(const std::vector<uint8_t> &data) {
         return deserialize<T>(std::string_view(reinterpret_cast<const char *>(data.data()), data.size()));
     }
+
+    template <typename T>
+    std::expected<T, std::string> _no_try_deserialize(std::string_view data) {
+        // for debug
+        auto parsed = boost::json::parse(data);
+        return json_convert::from_json<T>(parsed);
+    }
 } // namespace Json
 
 namespace Token {
@@ -497,6 +509,46 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string sodiumVersion();
     EXTRACHAIN_EXPORT std::string boostVersion();
     EXTRACHAIN_EXPORT std::string boostAsioVersion();
+
+    enum class NumberParseError {
+        InvalidFormat,
+        OutOfRange,
+        Empty
+    };
+
+    // Concept to restrict numeric types
+    template <typename T>
+    concept Numeric = std::integral<T> || std::floating_point<T>;
+
+    // Generic parse function for any numeric type
+    template <Numeric T>
+    std::expected<T, NumberParseError> parse_number(std::string_view str) {
+        if (str.empty()) {
+            eWarning("Attempted to parse empty string");
+            return std::unexpected(NumberParseError::Empty);
+        }
+
+        T result {};
+        auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), result);
+
+        if (ec == std::errc::invalid_argument) {
+            eWarning("Invalid format while parsing number from string: '{}'", str);
+            return std::unexpected(NumberParseError::InvalidFormat);
+        }
+
+        if (ec == std::errc::result_out_of_range) {
+            eWarning("Number out of range while parsing from string: '{}'", str);
+            return std::unexpected(NumberParseError::OutOfRange);
+        }
+
+        // Check if we consumed all characters
+        if (ptr != str.data() + str.size()) {
+            eWarning("Extra characters found while parsing number from string: '{}'", str);
+            return std::unexpected(NumberParseError::InvalidFormat);
+        }
+
+        return result;
+    }
 
     enum PrintDebug {
         Off = 0,
@@ -555,6 +607,75 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
     EXTRACHAIN_EXPORT std::string calculate_hash(const std::string &data,
                                                  HashAlgorithm      hash_algorithm = HashAlgorithm::Sha3_512);
+
+    namespace detail {
+        template <typename T>
+        void update_hasher(blake3_hasher &hasher, const T &value) {
+            if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
+                // eInfo("- '{}'", value);
+                blake3_hasher_update(&hasher, value.data(), value.size());
+            } else if constexpr (std::is_arithmetic_v<T>) {
+                auto str = std::to_string(value);
+                // eInfo("- '{}'", str);
+                blake3_hasher_update(&hasher, str.data(), str.size());
+            } else if constexpr (std::is_enum_v<T>) {
+                auto str = std::to_string(static_cast<std::underlying_type_t<T>>(value));
+                // eInfo("- '{}'", str);
+                blake3_hasher_update(&hasher, str.data(), str.size());
+            } else if constexpr (magic::is_optional<T>::value) {
+                if (value.has_value()) {
+                    update_hasher(hasher, value.value());
+                }
+            } else {
+                auto str = magic::detail::to_string(value);
+                // eInfo("- '{}'", str);
+                blake3_hasher_update(&hasher, str.data(), str.size());
+            }
+        }
+    } // namespace detail
+
+    template <typename T>
+    std::string calculate_hash_blake3(const T &value) {
+        blake3_hasher hasher;
+        blake3_hasher_init(&hasher);
+
+        if constexpr (boost::describe::has_describe_members<T>::value) {
+            boost::mp11::mp_for_each<boost::describe::describe_members<T,
+                                                                       boost::describe::mod_any_access
+                                                                           | boost::describe::mod_inherited>>(
+                [&](auto D) {
+                    if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
+                        auto field_name = magic::detail::clean_type_name(D.name);
+                        if (field_name != "sign" && field_name != "signature" && field_name != "hash") {
+                            detail::update_hasher(hasher, magic::invoke_member(value, D.pointer));
+                        }
+                    }
+                });
+        } else {
+            detail::update_hasher(hasher, value);
+        }
+
+        uint8_t output[BLAKE3_OUT_LEN];
+        blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+
+        std::string hash;
+        for (uint8_t byte : output) {
+            hash += fmt::format("{:02x}", byte);
+        }
+        return hash;
+    }
+
+    template <typename T>
+    std::string calculate_hash(const T &value, HashAlgorithm hash_algorithm = HashAlgorithm::Blake3) {
+        switch (hash_algorithm) {
+        case HashAlgorithm::Sha3_512:
+            eUnimplemented;
+        case HashAlgorithm::Blake3:
+            return calculate_hash_blake3(value);
+        default:
+            return "";
+        }
+    }
 
     /**
      * @brief Error codes for file hashing operations

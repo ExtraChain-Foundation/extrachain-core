@@ -31,7 +31,7 @@
 #include <fmt/format.h>
 #include <msgpack.hpp>
 
-#include "dfs/dfs_template.h"
+#include "dfs/collection_template.h"
 #include "utils/exc_logs.h"
 
 namespace Tools {
@@ -154,9 +154,10 @@ namespace Dfs {
     };
 
     enum class FileState {
-        Unloaded  = 0,
-        Partially = 1,
-        Loaded    = 2
+        Removed = 0,
+        Ready   = 1,
+        Known   = 2,
+        Partial = 3
     };
 
     enum class SecurityLevel {
@@ -165,10 +166,10 @@ namespace Dfs {
     };
 
     struct DirRow {
-        ActorId actorId;
+        ActorId actor_id;
 
-        std::string                fileId;
-        std::optional<std::string> fileIdPrev;
+        std::string                file_id;
+        std::optional<std::string> prev_file_id;
 
         std::string hash;
 
@@ -179,11 +180,11 @@ namespace Dfs {
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
-        Dfs::FileType      type;
-        Dfs::SecurityLevel encryption;
-        Dfs::FileState     state;
+        Dfs::FileType      type       = Dfs::FileType::File;
+        Dfs::SecurityLevel encryption = Dfs::SecurityLevel::Public;
+        Dfs::FileState     state      = Dfs::FileState::Known;
 
-        Signature sign;
+        Signature sign = Signature();
 
         std::string visualPath() const {
             if (folder.has_value())
@@ -193,7 +194,7 @@ namespace Dfs {
         }
 
         bool isLoaded() const {
-            return state == Dfs::FileState::Loaded;
+            return state == Dfs::FileState::Ready;
         }
 
         bool isEncrypted() const {
@@ -203,9 +204,9 @@ namespace Dfs {
 
     BOOST_DESCRIBE_STRUCT(DirRow,
                           (),
-                          (actorId,
-                           fileId,
-                           fileIdPrev,
+                          (actor_id,
+                           file_id,
+                           prev_file_id,
                            hash,
                            folder,
                            name,
@@ -246,25 +247,25 @@ namespace Dfs {
 
         struct RequestFileSegmentMessage {
             ActorId       actorId;
-            std::string   fileId;
+            std::string   file_id;
             std::string   hash;
             std::uint64_t offset;
-            MSGPACK_DEFINE(actorId, fileId, hash, offset)
+            MSGPACK_DEFINE(actorId, file_id, hash, offset)
         };
 
         struct RemoveFileMessage {
             ActorId     actorId;
-            std::string fileId;
-            MSGPACK_DEFINE(actorId, fileId)
+            std::string file_id;
+            MSGPACK_DEFINE(actorId, file_id)
         };
 
         struct SegmentMessage {
             ActorId       actorId;
-            std::string   fileId;
+            std::string   file_id;
             std::string   hash;
             std::string   data;
             std::uint64_t offset;
-            MSGPACK_DEFINE(actorId, fileId, hash, data, offset)
+            MSGPACK_DEFINE(actorId, file_id, hash, data, offset)
         };
 
         enum SegmentMessageType {
@@ -276,31 +277,31 @@ namespace Dfs {
 
         struct EditSegmentMessage {
             ActorId            actorId;
-            std::string        fileId;
+            std::string        file_id;
             std::string        hash;
             std::string        newHash;
             std::string        data;
             std::uint64_t      offset;
             SegmentMessageType actionType;
-            MSGPACK_DEFINE(actorId, fileId, hash, data, offset, actionType)
+            MSGPACK_DEFINE(actorId, file_id, hash, data, offset, actionType)
         };
 
         struct DeleteSegmentMessage {
             ActorId       actorId;
-            std::string   fileId;
+            std::string   file_id;
             std::string   hash;
             std::uint64_t offset;
             std::uint64_t size;
-            MSGPACK_DEFINE(actorId, fileId, hash, offset, size)
+            MSGPACK_DEFINE(actorId, file_id, hash, offset, size)
         };
 
         struct VerifyFileMessage {
             ActorId       actorId;
             std::string   hash;
-            std::string   fileId;
+            std::string   file_id;
             bool          verified = false;
             std::uint64_t size;
-            MSGPACK_DEFINE(actorId, fileId, hash, verified, size)
+            MSGPACK_DEFINE(actorId, file_id, hash, verified, size)
         };
 
         struct Connection {
@@ -436,19 +437,19 @@ namespace Dfs {
             static const std::string TableName = "Files";
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
     + "("
-      "fileId        TEXT PRIMARY KEY NOT NULL,"
-      "actorId       TEXT             NOT NULL,"
-      "fileIdPrev    TEXT                     ,"
-      "hash          TEXT             NOT NULL,"
+      "file_id       TEXT PRIMARY KEY  NOT NULL,"
+      "prev_file_id  TEXT              UNIQUE,"
+      "actor_id      TEXT              NOT NULL,"
+      "hash          TEXT              NOT NULL,"
       "folder        TEXT                     ,"
-      "name          TEXT             NOT NULL,"
-      "size          INTEGER          NOT NULL,"
-      "created       INTEGER          NOT NULL,"
-      "last_modified  INTEGER          NOT NULL,"
-      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 39),"
-      "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
-      "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 2),"
-      "sign          TEXT             NOT NULL"
+      "name          TEXT              NOT NULL,"
+      "size          INTEGER           NOT NULL,"
+      "created       INTEGER           NOT NULL,"
+      "last_modified INTEGER           NOT NULL,"
+      "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
+      "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
+      "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 3),"
+      "sign          TEXT              NOT NULL"
       ");";
 
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
@@ -457,7 +458,7 @@ namespace Dfs {
             std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
             // TODO: expected
-            DbConnector actorDbConnector(const ActorId& actorId);
+            DbConnector get_actor_dir_file(const ActorId& actorId);
 
             std::filesystem::path actorDbPath(const ActorId& actorId);
             std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
@@ -465,18 +466,23 @@ namespace Dfs {
             // TODO: field: string to enum class
             std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const ActorId&     actor_id,
                                                                                const std::string& search_value,
-                                                                               const std::string& field = "fileId");
+                                                                               const std::string& field = "file_id");
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
                                                                                 std::uint64_t  last_modified = 0);
 
             // TODO: expected
-            std::optional<Dfs::DfsTemplate> get_dfs_template(const ActorId&     actor_id,
-                                                             const std::string& template_name);
+            std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId& actor_id,
+                                                                                   std::string    file_id);
+            std::optional<Dfs::CollectionTemplate> get_collection_template_name(const ActorId&     actor_id,
+                                                                                const std::string& template_name);
+            bool                                   add_dir_row(const ActorId&                            actor_id,
+                                                               DirRow&                                   dir_row,
+                                                               const std::shared_ptr<Actor<KeyPrivate>>& signer);
+            bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
-            bool addDirRow(const ActorId& actorId, DirRow& dirRow);
-            bool addDirRows(const ActorId& actorId, const std::vector<Dfs::DirRow>& dirRows);
-
-            bool update_file_metadata(const ActorId& actorId, DirRow& dirRow);
+            std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     actor_id,
+                                                                            const std::string& file_id);
+            bool                             update_file_metadata(const ActorId& actor_id, DirRow& dir_row);
         } // namespace ActorDirFile
 
         namespace DirsFile {
@@ -497,8 +503,14 @@ namespace Dfs {
                                                    "signature  TEXT NOT NULL"
                                                    ");";
 
-        static const std::string filesTableLast =
-            "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName + " ORDER BY fileId DESC LIMIT 1";
+        static const std::string filesTableLast = "WITH end_files AS ("
+            "SELECT f1.file_id, f1.prev_file_id, COUNT(*) OVER() as cnt "
+            "FROM " + Dfs::Tables::ActorDirFile::TableName + " f1 "
+            "LEFT JOIN " + Dfs::Tables::ActorDirFile::TableName + " f2 ON f1.file_id = f2.prev_file_id "
+            "WHERE f2.prev_file_id IS NULL "
+            ") "
+            "SELECT file_id FROM end_files WHERE cnt = 1";
+
         static const std::string filesTableFull = "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName;
     } // namespace Tables
 

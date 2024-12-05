@@ -23,7 +23,7 @@
 #include "utils/fs_path.h"
 
 std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db, std::string name) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE fileId = '{}'", TableName, name);
+    std::string query = fmt::format("SELECT * FROM {} WHERE file_id = '{}'", TableName, name);
     return db->select(query);
 }
 
@@ -34,11 +34,11 @@ std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
 
     auto        result       = db.select(Dfs::Tables::filesTableLast);
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
-    std::string lastFileName = prevRowOpt ? prevRowOpt->at("fileId") : "";
+    std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
     return lastFileName;
 }
 
-DbConnector Dfs::Tables::ActorDirFile::actorDbConnector(const ActorId &actorId) {
+DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &actorId) {
     DbConnector db(actorDbPath(actorId).string());
     db.open();
     return db;
@@ -60,7 +60,7 @@ std::filesystem::path Dfs::Tables::ActorDirFile::storjDbPath(const ActorId     &
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_rows(
     const ActorId &actorId,
     std::uint64_t  last_modified) {
-    auto db = actorDbConnector(actorId);
+    auto db = get_actor_dir_file(actorId);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -72,7 +72,7 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
     for (auto &row : actrDirData) {
         auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
         if (dirRow.has_value()) {
-            dirRow->actorId = actorId;
+            dirRow->actor_id = actorId;
             dirRows.push_back(dirRow.value());
         }
     }
@@ -83,7 +83,7 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
 std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &actor_id,
                                                                                  const std::string &search_value,
                                                                                  const std::string &field) {
-    auto db = actorDbConnector(actor_id);
+    auto db = get_actor_dir_file(actor_id);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -100,44 +100,47 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
         return std::unexpected(Dfs::DfsError::DirValueNotExists);
     }
 
-    dirRow->actorId = actor_id;
+    dirRow->actor_id = actor_id;
     return dirRow.value();
 }
 
-bool Dfs::Tables::ActorDirFile::addDirRow(const ActorId &actorId, DirRow &dirRow) {
-    auto dirFile = actorDbConnector(actorId);
+bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId                            &actor_id,
+                                            DirRow                                   &dir_row,
+                                            const std::shared_ptr<Actor<KeyPrivate>> &signer) {
+    auto dir_file = get_actor_dir_file(actor_id);
 
-    if (!dirFile.is_open()) {
+    if (!dir_file.is_open()) {
         return false;
     }
 
-    auto current_ms = Utils::current_date_ms();
-    auto fileIdPrev = DfsT::ActorDirFile::getLastFileId(dirFile);
+    auto current_ms   = Utils::current_date_ms();
+    auto prev_file_id = DfsT::ActorDirFile::getLastFileId(dir_file);
 
-    dirRow.created       = current_ms;
-    dirRow.last_modified = current_ms;
-    dirRow.fileIdPrev    = fileIdPrev;
+    dir_row.created       = current_ms;
+    dir_row.last_modified = current_ms;
+    dir_row.prev_file_id  = prev_file_id;
+    dir_row.sign          = signer->key().sign(Utils::calculate_hash(dir_row));
 
-    auto dirRowDb = Utils::to_dbrow(dirRow);
-    bool res      = dirFile.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
+    auto dir_row_db = Utils::to_dbrow(dir_row);
+    bool res        = dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
 
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::addDirRows(const ActorId &actorId, const std::vector<DirRow> &dirRows) {
-    auto dirFile = actorDbConnector(actorId);
+bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std::vector<DirRow> &dir_rows) {
+    auto dir_file = get_actor_dir_file(actor_id);
 
-    if (!dirFile.is_open()) {
+    if (!dir_file.is_open()) {
         return false;
     }
 
-    for (auto &dirRow : dirRows) {
-        if (dirRow.hash.empty()) {
+    for (auto &dir_row : dir_rows) {
+        if (dir_row.hash.empty()) {
             continue;
         }
 
-        auto dirRowDb = Utils::to_dbrow(dirRow);
-        dirFile.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
+        auto dir_row_db = Utils::to_dbrow(dir_row);
+        dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
     }
 
     return true;
@@ -158,7 +161,7 @@ std::filesystem::path Dfs::Path::actorPath(const ActorId &actorId) {
 }
 
 int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
-    auto db = actorDbConnector(actorId);
+    auto db = get_actor_dir_file(actorId);
     if (!db.is_open()) {
         eFatal("Database {} error", db.file());
         return 0;
@@ -192,36 +195,39 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     return std::stoull(row["SUM(size)"]);
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actorId, DirRow &dirRow) {
-    auto db = actorDbConnector(actorId);
+std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
+    const ActorId     &actor_id,
+    const std::string &file_id) {
+    auto        dfs_path = DfsPath::file_path(actor_id, file_id);
+    DbConnector db(dfs_path->native());
+    db.open();
+    auto res = db.hash_size();
+    db.close();
+    return res;
+}
+
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actor_id, DirRow &dir_row) {
+    auto db = get_actor_dir_file(actor_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
     }
 
-    std::string query =
-        fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}' WHERE fileId = '{}'",
-                    TableName,
-                    dirRow.hash,
-                    dirRow.size,
-                    dirRow.last_modified,
-                    dirRow.fileId);
+    std::string query = fmt::
+        format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}', sign = '{}' WHERE file_id = '{}'",
+               TableName,
+               dir_row.hash,
+               dir_row.size,
+               dir_row.last_modified,
+               dir_row.file_id,
+               dir_row.sign);
     return db.update(query);
 }
 
-std::optional<Dfs::DfsTemplate> Dfs::Tables::ActorDirFile::get_dfs_template(const ActorId     &actor_id,
-                                                                            const std::string &template_name) {
-    auto dir_row_exp = get_dir_row(actor_id, template_name, "name");
-    if (!dir_row_exp.has_value()) {
-        return std::nullopt;
-    }
-    auto dir_row = dir_row_exp.value();
-
-    if (dir_row.folder != ":templates") {
-        return std::nullopt;
-    }
-
-    auto path = Path::file_path(actor_id, dir_row.fileId);
+std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection_template_file_id(
+    const ActorId &actor_id,
+    std::string    file_id) {
+    auto path = Path::file_path(actor_id, file_id);
     if (!path.has_value()) {
         eLog("Invalid path");
         return std::nullopt;
@@ -233,12 +239,33 @@ std::optional<Dfs::DfsTemplate> Dfs::Tables::ActorDirFile::get_dfs_template(cons
     }
 
     eLog("Read {} bytes", content->size());
-    auto dfs_template = Json::deserialize<Dfs::DfsTemplate>(content.value());
-    if (!dfs_template.has_value()) {
+    auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(content.value());
+    if (!collection_template_result.has_value()) {
         return std::nullopt;
     }
 
-    return dfs_template.value();
+    auto collection_template = collection_template_result.value();
+    collection_template.set_actor_file(actor_id, file_id);
+
+    return collection_template;
+}
+
+std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection_template_name(
+    const ActorId     &actor_id,
+    const std::string &template_name) {
+    auto dir_row_exp = get_dir_row(actor_id, template_name, "name");
+    if (!dir_row_exp.has_value()) {
+        return std::nullopt;
+    }
+    auto dir_row = dir_row_exp.value();
+
+    if (dir_row.folder != ":templates") {
+        return std::nullopt;
+    }
+
+    auto collection_template = get_collection_template_file_id(actor_id, dir_row.file_id);
+
+    return collection_template;
 }
 
 namespace magic {

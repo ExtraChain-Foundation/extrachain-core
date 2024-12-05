@@ -868,6 +868,13 @@ BigNumber BlockIndex::loadFileFromSection(
     }
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
+    list_stl.clear();
+    list_stl.reserve(list.size());
+
+    for (const QString &str : list) {
+        list_stl.push_back(str.toStdString());
+    }
+
     auto file = BigNumber(getFile(list_stl));
     eLog("[BlockIndex] loadFileFromSection(): lastId: {}", (list.isEmpty() ? BigNumber() : file));
     return list.isEmpty() ? BigNumber() : file;

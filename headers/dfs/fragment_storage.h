@@ -29,9 +29,9 @@
 class FragmentWriter;
 class EXTRACHAIN_EXPORT FragmentStorage {
 private:
-    DbConnector storageFile;
-    ActorId     actorId;
-    std::string fileId;
+    DbConnector fragments_file;
+    ActorId     actor_id;
+    std::string file_id;
     std::string hash;
 
 public:

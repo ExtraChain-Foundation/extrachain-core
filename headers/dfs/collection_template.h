@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "blockchain/actor.h"
 #include "utils/db_schema.h"
 #include "utils/exc_utils.h"
 #include <boost/describe.hpp>
@@ -29,10 +30,10 @@
 namespace Dfs {
     enum class FieldType {
         Id,
+        ActorId,
         Integer,
         Real,
         String,
-        Text,
         Blob,
         Json,
         Email,
@@ -178,6 +179,7 @@ namespace Dfs {
     };
 
     struct Field {
+        // TODO: ActorId
         static FieldBuilder Id(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Id);
         }
@@ -187,11 +189,12 @@ namespace Dfs {
         static FieldBuilder Real(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Real);
         }
+        static FieldBuilder ActorId(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::ActorId)
+                .length(BlockchainConst::ACTOR_SIZE, BlockchainConst::ACTOR_SIZE);
+        }
         static FieldBuilder String(std::string name) {
             return FieldBuilder(std::move(name), FieldType::String);
-        }
-        static FieldBuilder Text(std::string name) {
-            return FieldBuilder(std::move(name), FieldType::Text);
         }
         static FieldBuilder Blob(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Blob);
@@ -219,25 +222,28 @@ namespace Dfs {
         }
     };
 
-    class DfsTemplate {
+    class CollectionTemplate {
     public:
-        DfsTemplate() = default;
-        static std::expected<DfsTemplate, SqlCreateError> create(std::string name);
-        DfsTemplate&                            add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate() = default;
+        static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
+        CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
-        const std::string                       name() const {
-            return m_name;
-        }
 
-        auto operator<=>(const DfsTemplate&) const = default;
+        const std::string name() const;
+        void              set_actor_file(const ActorId& actor_id, const std::string file_id);
 
-        BOOST_DESCRIBE_CLASS(DfsTemplate, (), (), (), (m_name, m_fields));
+        auto operator<=>(const CollectionTemplate&) const = default;
+
+        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields));
+        // no need actor_id or file_id
 
     private:
-        explicit DfsTemplate(std::string name);
+        explicit CollectionTemplate(std::string name);
 
         std::string               m_name;
         std::vector<FieldBuilder> m_fields;
+        ActorId                   actor_id;
+        std::string               file_id;
 
         friend class FieldBuilder;
     };

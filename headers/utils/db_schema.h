@@ -28,8 +28,6 @@
 #include <memory>
 #include <boost/algorithm/string/join.hpp>
 
-#include "utils/exc_utils.h"
-
 enum class SqlCreateError {
     EmptyIdentifier,
     InvalidIdentifierFormat,
@@ -57,7 +55,7 @@ enum class ColumnType {
     Json
 };
 
-class SQLValidator {
+class SqlValidator {
 public:
     static std::expected<void, SqlCreateError> validate_identifier(std::string_view identifier);
     static std::expected<void, SqlCreateError> validate_value(std::string_view value);
@@ -81,11 +79,11 @@ struct Bound {
         if constexpr (std::is_arithmetic_v<T>) {
             return fmt::format("{} {} {}", column, op, value);
         } else {
-            auto validation = SQLValidator::validate_value(value);
+            auto validation = SqlValidator::validate_value(value);
             if (!validation) {
                 return std::unexpected(validation.error());
             }
-            return fmt::format("{} {} {}", column, op, SQLValidator::escape_string(value));
+            return fmt::format("{} {} {}", column, op, SqlValidator::escape_string(value));
         }
     }
 };
@@ -112,9 +110,7 @@ struct Interval {
 
 class DbColumn {
 public:
-    DbColumn()
-        : m_type(ColumnType::Integer) {
-    }
+    DbColumn();
     explicit DbColumn(std::string_view name, ColumnType type);
     virtual ~DbColumn() = default;
 
@@ -174,10 +170,10 @@ private:
         if constexpr (std::is_arithmetic_v<U>) {
             return std::to_string(value);
         } else {
-            if (auto validation = SQLValidator::validate_value(value); !validation) {
+            if (auto validation = SqlValidator::validate_value(value); !validation) {
                 return std::unexpected(validation.error());
             }
-            return SQLValidator::escape_string(value);
+            return SqlValidator::escape_string(value);
         }
     }
 
@@ -207,9 +203,10 @@ private:
 
 class DbSchema {
 public:
-    explicit DbSchema();
+    DbSchema() = default;
     explicit DbSchema(std::string_view table_name);
 
+    DbSchema(const DbSchema& other);
     DbSchema(DbSchema&& other) noexcept            = default;
     DbSchema& operator=(DbSchema&& other) noexcept = default;
 
@@ -222,19 +219,19 @@ public:
         return *this;
     }
 
-    std::string table_name() {
-        return m_table_name;
-    }
+    std::string table_name();
 
     std::expected<std::string, SqlCreateError> to_sql() const;
     const std::optional<SqlCreateError>&       validation_error() const;
+
+    DbSchema& operator=(const DbSchema& other);
 
 private:
     std::string                            m_table_name;
     std::vector<std::unique_ptr<DbColumn>> m_columns;
     std::optional<SqlCreateError>          m_validation_error;
 
-    BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns))
+    BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns, m_validation_error))
 };
 
 namespace sqlite::literals {

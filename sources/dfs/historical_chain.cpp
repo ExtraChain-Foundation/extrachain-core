@@ -139,7 +139,7 @@ DfsP::EditSegmentMessage HistoricalChain::getLastEditSegmentMessage() {
 DfsP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DfsP::SegmentMessage     &msg,
                                                                  const DfsP::SegmentMessageType &smType) {
     return DfsP::EditSegmentMessage { .actorId    = msg.actorId,
-                                      .fileId     = msg.fileId,
+                                      .file_id    = msg.file_id,
                                       .hash       = msg.hash,
                                       .data       = msg.data,
                                       .offset     = msg.offset,
@@ -150,7 +150,7 @@ DfsP::EditSegmentMessage HistoricalChain::makeEditSegmentMessage(const DfsP::Del
                                                                  const DfsP::SegmentMessageType   &smType) {
     return DfsP::EditSegmentMessage {
         .actorId    = msg.actorId,
-        .fileId     = msg.fileId,
+        .file_id    = msg.file_id,
         .hash       = msg.hash,
         .data       = "",
         .offset     = msg.offset,

@@ -827,7 +827,6 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[requester_id, requested_file_id] = db_request_result.value();
-        eCritical("DfsCollectionRequest {} {}", requester_id, requested_file_id);
         node->dfs()->network_request_collection(requester_id, requested_file_id, messageId);
         break;
     }
@@ -857,29 +856,15 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::DfsCollectionRowAdd: {
+    case MessageType::DfsCollectionRowChange: {
         auto db_add_result =
             MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
         if (!db_add_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection insert", type);
+            eWarning("[NetworkManager] {} deserialization failed for collection change", type);
             break;
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
-        node->dfs()->network_adding_collection(actor_id, file_id, historical_row);
-        break;
-    }
-
-    case MessageType::DfsCollectionRowUpdate: {
-        break;
-    }
-
-    case MessageType::DfsCollectionRowRemove: {
-        auto db_remove_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, std::uint32_t>>(serialized);
-        if (!db_remove_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection insert", type);
-            break;
-        }
+        node->dfs()->network_change_collection(actor_id, file_id, historical_row);
         break;
     }
 

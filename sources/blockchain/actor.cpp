@@ -20,7 +20,7 @@
 #include "blockchain/actor.h"
 
 ActorId::ActorId() {
-    m_id = "00000000000000000000";
+    m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
 }
 
 ActorId::ActorId(const std::string &actorId) {
@@ -36,7 +36,7 @@ ActorId::ActorId(const ActorId &other) {
 ActorId::ActorId(ActorId &&other) noexcept {
     m_id = std::move(other.m_id);
     // normalize();
-    other.m_id = "00000000000000000000";
+    other.m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
 }
 
 QByteArray ActorId::toQByteArray() const {
@@ -56,7 +56,7 @@ const std::string &ActorId::to_string() const {
 }
 
 bool ActorId::is_zero() const {
-    return m_id == "00000000000000000000" || m_id == "";
+    return m_id == std::string(BlockchainConst::ACTOR_SIZE, '0') || m_id == "";
 }
 
 ActorId &ActorId::operator=(const std::string &actorId) {
@@ -75,7 +75,7 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
     if (this != &other) {
         m_id = std::move(other.m_id);
         normalize();
-        other.m_id = "00000000000000000000";
+        other.m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
     }
 
     return *this;

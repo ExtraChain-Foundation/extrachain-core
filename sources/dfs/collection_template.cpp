@@ -17,31 +17,33 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "dfs/dfs_template.h"
+#include "dfs/collection_template.h"
 #include <boost/algorithm/string/join.hpp>
 
 namespace Dfs {
-    std::expected<DfsTemplate, SqlCreateError> DfsTemplate::create(std::string name) {
-        auto tmpl = DfsTemplate(std::move(name));
+    std::expected<CollectionTemplate, SqlCreateError> CollectionTemplate::create(std::string name) {
+        auto tmpl = CollectionTemplate(std::move(name));
         tmpl.add_fields({
             Field::Id("id").primary_key(),
             Field::Integer("timestamp").not_null(),
-            // Field::Text("actor_id").not_null().unique(),
-            // Field::Text("sign").not_null().unique()
+            /*
+            Field::Text("actor_id").not_null().unique(),
+            Field::Text("sign").not_null().unique()
+            */
         });
         return tmpl;
     }
 
-    DfsTemplate::DfsTemplate(std::string name)
+    CollectionTemplate::CollectionTemplate(std::string name)
         : m_name(std::move(name)) {
     }
 
-    DfsTemplate& DfsTemplate::add_fields(const std::initializer_list<FieldBuilder>& fields) {
+    CollectionTemplate& CollectionTemplate::add_fields(const std::initializer_list<FieldBuilder>& fields) {
         m_fields.insert(m_fields.end(), fields);
         return *this;
     }
 
-    std::expected<DbSchema, SqlCreateError> DfsTemplate::to_db_schema() const {
+    std::expected<DbSchema, SqlCreateError> CollectionTemplate::to_db_schema() const {
         DbSchema schema(m_name);
 
         for (const auto& field : m_fields) {
@@ -98,7 +100,7 @@ namespace Dfs {
 
         // Length checks for string types
         if ((m_min_length || m_max_length)
-            && (m_type == FieldType::String || m_type == FieldType::Text || m_type == FieldType::Email
+            && (m_type == FieldType::String || m_type == FieldType::ActorId || m_type == FieldType::Email
                 || m_type == FieldType::Url || m_type == FieldType::Username)) {
             checks.push_back(fmt::format("length({}) BETWEEN {} AND {}",
                                          m_name,
@@ -137,5 +139,14 @@ namespace Dfs {
         }
 
         return column;
+    }
+
+    const std::string CollectionTemplate::name() const {
+        return m_name;
+    }
+
+    void CollectionTemplate::set_actor_file(const ActorId& actor_id, const std::string file_id) {
+        this->actor_id = actor_id;
+        this->file_id  = file_id;
     }
 } // namespace Dfs

@@ -95,9 +95,10 @@ namespace Utils {
 
                                 if constexpr (magic::is_optional<MemberType>::value) {
                                     if (value.empty()) {
-                                        json[key] = nullptr;
+                                        json[key] = boost::json::value(nullptr);
                                     } else {
-                                        json[key] = stringToJsonValue(value, typeid(MemberType));
+                                        using BaseType = typename MemberType::value_type;
+                                        json[key]      = stringToJsonValue(value, typeid(BaseType));
                                     }
                                 } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
                                     json[key] = value;
