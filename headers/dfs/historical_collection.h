@@ -88,8 +88,7 @@ public:
     std::expected<HistoricalCollectionRow, CollectionError> update_row(std::uint32_t id, DbRow& row);
     std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
-    std::expected<HistoricalCollectionRow, CollectionError> change_collection(
-        const HistoricalCollectionRow& historical_row);
+    std::expected<void, CollectionError> change_collection(const HistoricalCollectionRow& historical_row);
 
     // void do_something
 

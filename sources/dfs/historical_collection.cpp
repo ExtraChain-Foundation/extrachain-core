@@ -322,7 +322,8 @@ void HistoricalCollection::insert_row_to_database(const HistoricalCollectionRow 
     historical.close();
 }
 
-std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::change_collection(const HistoricalCollectionRow &historical_row) {
+std::expected<void, CollectionError> HistoricalCollection::change_collection(
+    const HistoricalCollectionRow &historical_row) {
     DbRow row;
 
     switch (historical_row.operation) {
@@ -348,4 +349,6 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ch
         // TODO: remove from historical
         return std::unexpected(CollectionError::Adding);
     }
+
+    return {};
 }
