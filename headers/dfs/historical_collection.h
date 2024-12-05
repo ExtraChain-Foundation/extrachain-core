@@ -42,15 +42,13 @@ enum class CollectionError {
 };
 
 struct HistoricalCollectionRow {
-    uint32_t                id;
+    uint32_t                id = 0;
     std::optional<uint32_t> prev_id;
-    CollectionOperation     operation;
+    CollectionOperation     operation = CollectionOperation::Structural;
     std::string             data;
-    std::uint64_t           timestamp;
+    std::uint64_t           timestamp = 0;
     ActorId                 actor_id;
-    Signature               sign;
-
-    std::string calculate_hash();
+    Signature               sign = Signature();
 };
 BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
 

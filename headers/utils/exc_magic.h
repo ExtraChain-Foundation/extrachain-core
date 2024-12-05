@@ -171,29 +171,31 @@ namespace magic {
 
         inline std::string clean_field_name(const char* name) {
             std::string result = name;
-
             if (result.length() > 2 && result.substr(0, 2) == "m_") {
-                result.erase(0, 2);
+                result = result.substr(2);
             }
 
-            return result;
+            size_t start = result.find_first_not_of('_');
+            size_t end   = result.find_last_not_of('_');
+
+            return (start == std::string::npos) ? "" : result.substr(start, end - start + 1);
         }
 
         template <typename T>
-        std::string to_string(const T& value) {
+        std::string to_log_string(const T& value) {
             if constexpr (is_unique_ptr_v<T>) {
                 if (!value)
                     return "null";
-                return to_string(*value);
+                return to_log_string(*value);
             } else if constexpr (is_shared_ptr_v<T>) {
                 if (!value)
                     return "null";
-                return to_string(*value);
+                return to_log_string(*value);
             } else if constexpr (is_optional<T>::value) {
                 if (!value.has_value()) {
                     return "null";
                 }
-                return to_string(value.value());
+                return to_log_string(value.value());
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return '"' + value + '"';
             } else if constexpr (std::is_same_v<T, std::string_view>) {
@@ -238,7 +240,7 @@ namespace magic {
                     for (const auto& pair : value) {
                         if (!first)
                             result += ", ";
-                        result += to_string(pair.first) + ": " + to_string(pair.second);
+                        result += to_log_string(pair.first) + ": " + to_log_string(pair.second);
                         first = false;
                     }
                     return result + " }";
@@ -248,11 +250,42 @@ namespace magic {
                     for (const auto& item : value) {
                         if (!first)
                             result += ", ";
-                        result += to_string(item);
+                        result += to_log_string(item);
                         first = false;
                     }
                     return result + " ]";
                 }
+            } else {
+                return custom_magic<T>::read(value);
+            }
+        }
+
+        template <typename T>
+        std::string to_string(const T& value) {
+            if constexpr (is_unique_ptr_v<T>) {
+                if (!value)
+                    return "";
+                return to_string(*value);
+            } else if constexpr (is_shared_ptr_v<T>) {
+                if (!value)
+                    return "";
+                return to_string(*value);
+            } else if constexpr (is_optional<T>::value) {
+                if (!value.has_value())
+                    return "";
+                return to_string(value.value());
+            } else if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
+                return std::string(value);
+            } else if constexpr (std::is_arithmetic_v<T>) {
+                return std::to_string(value);
+            } else if constexpr (std::is_enum_v<T>) {
+                return std::to_string(static_cast<std::underlying_type_t<T>>(value));
+            } else if constexpr (is_container<T>::value) {
+                std::string result;
+                for (const auto& item : value) {
+                    result += to_string(item);
+                }
+                return result;
             } else {
                 return custom_magic<T>::read(value);
             }
@@ -275,14 +308,14 @@ namespace magic {
                         if (!first)
                             result += ", ";
                         result += detail::clean_field_name(D.name) + ": "
-                                  + detail::to_string(invoke_member(obj, D.pointer));
+                                  + detail::to_log_string(invoke_member(obj, D.pointer));
                         first = false;
                     }
                 });
 
             return result + " }";
         } else {
-            return detail::to_string(obj);
+            return detail::to_log_string(obj);
         }
     }
 
@@ -388,8 +421,7 @@ namespace json_convert {
 
         template <typename T>
         T from_json_impl(const boost::json::value& json) {
-            // eInfo("JSON: {} {} {}", typeid(T).name(), json,
-            // std::string(magic_enum::enum_name(json.kind())));
+            // eLog("JSON: {} {} {}", typeid(T).name(), json, json.kind());
 
             if constexpr (magic::is_shared_ptr_v<T>) {
                 if (json.is_null()) {

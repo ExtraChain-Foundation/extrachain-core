@@ -168,7 +168,10 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
 
     DbConnector db(file_path_);
     db.open();
-    auto res_update = false; // db.update(temp_table, row);
+    row["id"]        = std::to_string(historical_row.id);
+    row["timestamp"] = std::to_string(historical_row.timestamp);
+
+    auto res_update = false; // db.update(table_name_, id, row);
     db.close();
 
     if (!res_update) {
@@ -184,17 +187,18 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::re
                                                     .timestamp = Utils::current_date_ms(),
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
+    // TODO: check if id exists
+    static auto db_row_id = DbRow { { "id", std::to_string(id) } };
+    insert_historical_row(historical_row);
 
-    // insert_historical_row(historical_row);
+    DbConnector db(file_path_);
+    db.open();
+    auto res_delete = db.delete_row(table_name_, db_row_id);
+    db.close();
 
-    // DbConnector db(file_path_);
-    // db.open();
-    // auto res_delete = db.delete_row(temp_table, row);
-    // db.close();
-
-    // if (!res_delete) {
-    //     return std::unexpected(CollectionError::Deleting);
-    // }
+    if (!res_delete) {
+        return std::unexpected(CollectionError::Deleting);
+    }
 
     return historical_row;
 }
@@ -316,7 +320,7 @@ void HistoricalCollection::insert_historical_row(HistoricalCollectionRow &histor
 }
 
 void HistoricalCollection::historical_collection_row_sign(HistoricalCollectionRow &row) {
-    auto hash = row.calculate_hash();
+    auto hash = Utils::calculate_hash(row);
     row.sign  = this->actor_->key().sign(hash);
 }
 
@@ -330,30 +334,4 @@ FsPath HistoricalCollection::get_historical_path() const {
 
 FsPath HistoricalCollection::get_file_path() const {
     return file_path_;
-}
-
-std::string HistoricalCollectionRow::calculate_hash() {
-    blake3_hasher hasher;
-    blake3_hasher_init(&hasher);
-    std::string id_str = std::to_string(id);
-    blake3_hasher_update(&hasher, id_str.data(), id_str.size());
-    if (prev_id.has_value()) {
-        std::string prev_id_str = std::to_string(prev_id.value());
-        blake3_hasher_update(&hasher, prev_id_str.data(), prev_id_str.size());
-    }
-    std::string op = std::to_string(std::to_underlying(operation));
-    blake3_hasher_update(&hasher, op.data(), op.size());
-    blake3_hasher_update(&hasher, data.data(), data.size());
-    std::string tp = std::to_string(timestamp);
-    blake3_hasher_update(&hasher, tp.data(), tp.size());
-    blake3_hasher_update(&hasher, actor_id.to_string().data(), BlockchainConst::ACTOR_SIZE);
-
-    uint8_t output[BLAKE3_OUT_LEN];
-    blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
-
-    std::string hash;
-    for (uint8_t byte : output) {
-        hash += fmt::format("{:02x}", byte);
-    }
-    return hash;
 }

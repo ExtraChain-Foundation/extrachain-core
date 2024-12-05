@@ -95,7 +95,7 @@ public:
     std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &actor_id,
                                                                 const ActorId &dmaster_id);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId          &actor_id,
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId                 &actor_id,
                                                              const Dfs::CollectionTemplate &template_body);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId     &actor_id,
@@ -103,12 +103,24 @@ public:
                                                                const ActorId     &template_actor_id,
                                                                const std::string &template_file_id);
 
+    template <typename T>
+    ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, T row) {
+        auto db_row  = Utils::to_dbrow(row);
+        auto dir_row = this->add_collection_row(actor_id, file_id, db_row);
+        return dir_row;
+    }
+
+    ExpectedDirRow universal_collection_row(const ActorId     &actor_id,
+                                            const std::string &file_id,
+                                            DbRow              row,
+                                            uint32_t           id,
+                                            MessageType        type);
     ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
-    ExpectedDirRow update_collection_row(const ActorId     &actorId,
+    ExpectedDirRow update_collection_row(const ActorId     &actor_id,
                                          const std::string &file_id,
                                          uint32_t           id,
                                          DbRow              row);
-    ExpectedDirRow remove_collection_row(const ActorId &actorId, const std::string &file_id, uint32_t id);
+    ExpectedDirRow remove_collection_row(const ActorId &actor_id, const std::string &file_id, uint32_t id);
 
     void network_request_collection(const ActorId     &actor_id,
                                     const std::string &file_id,

@@ -180,11 +180,11 @@ namespace Dfs {
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
-        Dfs::FileType      type;
-        Dfs::SecurityLevel encryption;
-        Dfs::FileState     state;
+        Dfs::FileType      type       = Dfs::FileType::File;
+        Dfs::SecurityLevel encryption = Dfs::SecurityLevel::Public;
+        Dfs::FileState     state      = Dfs::FileState::Known;
 
-        Signature sign;
+        Signature sign = Signature();
 
         std::string visualPath() const {
             if (folder.has_value())
@@ -437,19 +437,19 @@ namespace Dfs {
             static const std::string TableName = "Files";
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
     + "("
-      "file_id        TEXT PRIMARY KEY NOT NULL,"
-      "actor_id       TEXT             NOT NULL,"
-      "prev_file_id    TEXT                     ,"
-      "hash          TEXT             NOT NULL,"
+      "file_id       TEXT PRIMARY KEY  NOT NULL,"
+      "prev_file_id  TEXT              UNIQUE,"
+      "actor_id      TEXT              NOT NULL,"
+      "hash          TEXT              NOT NULL,"
       "folder        TEXT                     ,"
-      "name          TEXT             NOT NULL,"
-      "size          INTEGER          NOT NULL,"
-      "created       INTEGER          NOT NULL,"
-      "last_modified  INTEGER          NOT NULL,"
-      "type          INTEGER          NOT NULL CHECK (type BETWEEN 0 AND 39),"
-      "encryption    INTEGER          NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
-      "state         INTEGER          NOT NULL CHECK (state BETWEEN 0 AND 3),"
-      "sign          TEXT             NOT NULL"
+      "name          TEXT              NOT NULL,"
+      "size          INTEGER           NOT NULL,"
+      "created       INTEGER           NOT NULL,"
+      "last_modified INTEGER           NOT NULL,"
+      "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
+      "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
+      "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 3),"
+      "sign          TEXT              NOT NULL"
       ");";
 
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
@@ -475,10 +475,14 @@ namespace Dfs {
                                                                                    std::string    file_id);
             std::optional<Dfs::CollectionTemplate> get_collection_template_name(const ActorId&     actor_id,
                                                                                 const std::string& template_name);
-            bool                                   add_dir_row(const ActorId& actor_id, DirRow& dir_row);
+            bool                                   add_dir_row(const ActorId&                            actor_id,
+                                                               DirRow&                                   dir_row,
+                                                               const std::shared_ptr<Actor<KeyPrivate>>& signer);
             bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
-            bool update_file_metadata(const ActorId& actorId, DirRow& dirRow);
+            std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     actor_id,
+                                                                            const std::string& file_id);
+            bool                             update_file_metadata(const ActorId& actor_id, DirRow& dir_row);
         } // namespace ActorDirFile
 
         namespace DirsFile {
@@ -499,8 +503,14 @@ namespace Dfs {
                                                    "signature  TEXT NOT NULL"
                                                    ");";
 
-        static const std::string filesTableLast =
-            "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName + " ORDER BY file_id DESC LIMIT 1";
+        static const std::string filesTableLast = "WITH end_files AS ("
+            "SELECT f1.file_id, f1.prev_file_id, COUNT(*) OVER() as cnt "
+            "FROM " + Dfs::Tables::ActorDirFile::TableName + " f1 "
+            "LEFT JOIN " + Dfs::Tables::ActorDirFile::TableName + " f2 ON f1.file_id = f2.prev_file_id "
+            "WHERE f2.prev_file_id IS NULL "
+            ") "
+            "SELECT file_id FROM end_files WHERE cnt = 1";
+
         static const std::string filesTableFull = "SELECT * FROM " + Dfs::Tables::ActorDirFile::TableName;
     } // namespace Tables
 

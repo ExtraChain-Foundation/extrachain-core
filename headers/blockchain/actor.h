@@ -82,7 +82,7 @@ private:
 
         if (!Utils::is_hex_string_lower(m_id)) {
             eFatal("[ActorId] Not correct hex: {}", m_id);
-            m_id = "0000000000000000000000000000000000000000";
+            m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
         }
     }
 

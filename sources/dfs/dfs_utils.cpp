@@ -104,7 +104,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
     return dirRow.value();
 }
 
-bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId &actor_id, DirRow &dir_row) {
+bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId                            &actor_id,
+                                            DirRow                                   &dir_row,
+                                            const std::shared_ptr<Actor<KeyPrivate>> &signer) {
     auto dir_file = get_actor_dir_file(actor_id);
 
     if (!dir_file.is_open()) {
@@ -117,9 +119,10 @@ bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId &actor_id, DirRow &dir
     dir_row.created       = current_ms;
     dir_row.last_modified = current_ms;
     dir_row.prev_file_id  = prev_file_id;
+    dir_row.sign          = signer->key().sign(Utils::calculate_hash(dir_row));
 
-    auto dirRowDb = Utils::to_dbrow(dir_row);
-    bool res      = dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dirRowDb);
+    auto dir_row_db = Utils::to_dbrow(dir_row);
+    bool res        = dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
 
     return res;
 }
@@ -192,20 +195,32 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     return std::stoull(row["SUM(size)"]);
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actorId, DirRow &dirRow) {
-    auto db = get_actor_dir_file(actorId);
+std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
+    const ActorId     &actor_id,
+    const std::string &file_id) {
+    auto        dfs_path = DfsPath::file_path(actor_id, file_id);
+    DbConnector db(dfs_path->native());
+    db.open();
+    auto res = db.hash_size();
+    db.close();
+    return res;
+}
+
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actor_id, DirRow &dir_row) {
+    auto db = get_actor_dir_file(actor_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
     }
 
-    std::string query =
-        fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}' WHERE file_id = '{}'",
-                    TableName,
-                    dirRow.hash,
-                    dirRow.size,
-                    dirRow.last_modified,
-                    dirRow.file_id);
+    std::string query = fmt::
+        format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}', sign = '{}' WHERE file_id = '{}'",
+               TableName,
+               dir_row.hash,
+               dir_row.size,
+               dir_row.last_modified,
+               dir_row.file_id,
+               dir_row.sign);
     return db.update(query);
 }
 

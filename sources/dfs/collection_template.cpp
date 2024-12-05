@@ -100,7 +100,7 @@ namespace Dfs {
 
         // Length checks for string types
         if ((m_min_length || m_max_length)
-            && (m_type == FieldType::String || m_type == FieldType::Text || m_type == FieldType::Email
+            && (m_type == FieldType::String || m_type == FieldType::ActorId || m_type == FieldType::Email
                 || m_type == FieldType::Url || m_type == FieldType::Username)) {
             checks.push_back(fmt::format("length({}) BETWEEN {} AND {}",
                                          m_name,

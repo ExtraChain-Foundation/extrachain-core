@@ -30,10 +30,10 @@
 namespace Dfs {
     enum class FieldType {
         Id,
+        ActorId,
         Integer,
         Real,
         String,
-        Text,
         Blob,
         Json,
         Email,
@@ -179,6 +179,7 @@ namespace Dfs {
     };
 
     struct Field {
+        // TODO: ActorId
         static FieldBuilder Id(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Id);
         }
@@ -188,11 +189,12 @@ namespace Dfs {
         static FieldBuilder Real(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Real);
         }
+        static FieldBuilder ActorId(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::ActorId)
+                .length(BlockchainConst::ACTOR_SIZE, BlockchainConst::ACTOR_SIZE);
+        }
         static FieldBuilder String(std::string name) {
             return FieldBuilder(std::move(name), FieldType::String);
-        }
-        static FieldBuilder Text(std::string name) {
-            return FieldBuilder(std::move(name), FieldType::Text);
         }
         static FieldBuilder Blob(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Blob);
@@ -224,7 +226,7 @@ namespace Dfs {
     public:
         CollectionTemplate() = default;
         static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
-        CollectionTemplate&                            add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
         const std::string name() const;

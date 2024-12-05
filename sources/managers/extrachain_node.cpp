@@ -42,6 +42,17 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 
+struct TokensDataRow {
+    TokenId        token_id;
+    std::string    name;
+    std::string    ticker;
+    BigNumberFloat count;
+    ActorId        owner;
+    std::string    color;
+    std::string    smart;
+};
+BOOST_DESCRIBE_STRUCT(TokensDataRow, (), (token_id, name, ticker, count, owner, name, color, smart))
+
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
                                              bool     allowRunRestApiServer,
@@ -162,11 +173,11 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     using namespace sqlite::literals;
 
     auto tokens_template = Dfs::CollectionTemplate::create("tokens").value().add_fields(
-        { Dfs::Field::String("token_id").not_null().unique(),
-          Dfs::Field::String("name").not_null().unique(),
-          Dfs::Field::String("ticker").not_null().unique(),
+        { Dfs::Field::ActorId("token_id").not_null().unique(),
+          Dfs::Field::String("name").not_null().unique().length(3, 20),
+          Dfs::Field::String("ticker").not_null().unique().length(2, 5),
           Dfs::Field::String("count").not_null(),
-          Dfs::Field::String("owner").not_null(),
+          Dfs::Field::ActorId("owner").not_null(),
           Dfs::Field::String("color").not_null(),
           Dfs::Field::String("smart") });
 
@@ -179,21 +190,20 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     auto store_res = m_dfs->store_collection(first.id(), "tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
-        // Utils::wipeDataFiles();
+        Utils::wipeDataFiles();
         return false;
     }
 
-    auto tokenId = ActorId().to_string();
+    auto tokens_row = TokensDataRow { .token_id = ActorId(),
+                                      .name     = "ExtraChain",
+                                      .ticker   = "EXC",
+                                      .count    = BigNumberFloat(0),
+                                      .owner    = first.id(),
+                                      .color    = "#111111",
+                                      .smart    = "" };
+    m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
 
-    // DbRow for tokens
-    DbRow tokensRow = { { "token_id", tokenId },
-                        { "name", "ExtraChain" },
-                        { "ticker", "EXC" },
-                        { "count", "0" },
-                        { "owner", first.id().to_string() },
-                        { "color", "#111111" },
-                        { "smart", "" } };
-    m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokensRow);
+    m_dfs->remove_collection_row(store_res->actor_id, store_res->file_id, 1);
 
     eSuccess("[Node] New network created");
     return true;
