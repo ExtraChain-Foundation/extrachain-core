@@ -43,12 +43,19 @@
 #include "dfs/dfs_utils.h"
 #include "dfs/historical_collection.h"
 
-using FileId         = std::string;
-using ExpectedDirRow = std::expected<Dfs::DirRow, Dfs::DfsError>;
+using FileId                   = std::string;
+using ExpectedDirRow           = std::expected<Dfs::DirRow, Dfs::DfsError>;
+using ExpectedDirHistoricalRow = std::expected<std::pair<Dfs::DirRow, HistoricalCollectionRow>, Dfs::DfsError>;
 
 namespace Dfs {
     class CollectionTemplate;
-}
+
+    enum class ServiceFolder {
+        Collection,
+        CollectionTemplate,
+        Chat
+    };
+} // namespace Dfs
 
 class ThreadAddFiles;
 
@@ -81,6 +88,12 @@ public:
                                                          const std::string           &visual_name,
                                                          Dfs::SecurityLevel           security_level);
 
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actor_id,
+                                                         const std::filesystem::path &file_path,
+                                                         Dfs::ServiceFolder           service_folder,
+                                                         const std::string           &visual_name,
+                                                         Dfs::SecurityLevel           security_level);
+
     std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(const ActorId                  &actor_id,
                                                                  const std::vector<std::uint8_t> data,
                                                                  const std::string              &visual_folder,
@@ -96,31 +109,40 @@ public:
                                                                 const ActorId &dmaster_id);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId                 &actor_id,
-                                                             const Dfs::CollectionTemplate &template_body);
+                                                             const Dfs::CollectionTemplate &collection_template);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId     &actor_id,
                                                                const std::string &visual_name,
                                                                const ActorId     &template_actor_id,
                                                                const std::string &template_file_id);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId                 &actor_id,
+                                                               const std::string             &visual_name,
+                                                               const Dfs::CollectionTemplate &collection_template);
+
+    std::expected<DbRow, CollectionError>              get_collection_row(const ActorId     &actor_id,
+                                                                          const std::string &file_id,
+                                                                          std::uint32_t      id);
+    std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(const ActorId     &actor_id,
+                                                                           const std::string &file_id);
 
     template <typename T>
-    ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, T row) {
+    ExpectedDirHistoricalRow add_collection_row(const ActorId &actor_id, const std::string &file_id, T row) {
         auto db_row  = Utils::to_dbrow(row);
         auto dir_row = this->add_collection_row(actor_id, file_id, db_row);
         return dir_row;
     }
 
-    ExpectedDirRow universal_collection_row(const ActorId     &actor_id,
-                                            const std::string &file_id,
-                                            DbRow              row,
-                                            uint32_t           id,
-                                            CollectionOperation type);
-    ExpectedDirRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
-    ExpectedDirRow update_collection_row(const ActorId     &actor_id,
-                                         const std::string &file_id,
-                                         uint32_t           id,
-                                         DbRow              row);
-    ExpectedDirRow remove_collection_row(const ActorId &actor_id, const std::string &file_id, uint32_t id);
+    ExpectedDirHistoricalRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
+    ExpectedDirHistoricalRow update_collection_row(const ActorId     &actor_id,
+                                                   const std::string &file_id,
+                                                   uint32_t           id,
+                                                   DbRow              row);
+    ExpectedDirHistoricalRow remove_collection_row(const ActorId     &actor_id,
+                                                   const std::string &file_id,
+                                                   uint32_t           id);
+
+    // get collection size
+    // get collection(from, to)
 
     void network_request_collection(const ActorId     &actor_id,
                                     const std::string &file_id,
@@ -170,6 +192,12 @@ public:
     void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
 
 private:
+    ExpectedDirHistoricalRow universal_collection_row(const ActorId      &actor_id,
+                                                      const std::string  &file_id,
+                                                      DbRow               row,
+                                                      uint32_t            id,
+                                                      CollectionOperation type);
+
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
     bool          removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file);
     std::uint64_t calculateSizeTaken(const std::string &folder = DfsB::fsActrRoot) const;
@@ -230,9 +258,7 @@ signals:
     void uploaded(Dfs::DirRow dirRow);
     void downloaded(Dfs::DirRow dirRow);
 
-    void collectionAdding(HistoricalCollectionRow);
-    void collectionUpdate(HistoricalCollectionRow);
-    void collectionRemove(HistoricalCollectionRow);
+    void collectionChange(Dfs::DirRow, HistoricalCollectionRow);
 
     void downloadProgress(ActorId actor_id, std::string file_id, int progress);
     void uploadProgress(ActorId actor_id, std::string file_id, int progress);

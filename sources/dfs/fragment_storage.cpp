@@ -476,7 +476,7 @@ void FragmentWriter::run() {
 
     auto dirRow = dirRowExp.value();
 
-    std::string   virtualPath     = dirRow.visualPath();
+    std::string   virtualPath     = dirRow.visual_path();
     std::uint64_t fileSize        = dirRow.size;
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {

@@ -87,9 +87,13 @@ namespace Dfs {
         static const std::uint64_t historicalChainSectionSize = 209715200;
 
         static const std::uint64_t encSectionSize   = 256;
-        static std::wstring        separator        = std::wstring(1, std::filesystem::path::preferred_separator);
+        static const std::wstring  separator        = std::wstring(1, std::filesystem::path::preferred_separator);
         static const int           miningReward     = 1;
         static const std::string   dsStoreExtention = ".DS_Store";
+
+        static const std::string TEMPLATE_COLLECTION          = ":Collection";
+        static const std::string TEMPLATE_COLLECTION_TEMPLATE = ":CollectionTemplate";
+        static const std::string TEMPLATE_CHAT                = ":Chat";
     } // namespace Basic
 
     enum class FileIdError {
@@ -143,7 +147,8 @@ namespace Dfs {
         CollectionCreationError,
         InvalidName,
         InvalidTemplate,
-        NotWritable
+        NotWritable,
+        WrongTemplate
     };
 
     enum class FileType {
@@ -186,19 +191,23 @@ namespace Dfs {
 
         Signature sign = Signature();
 
-        std::string visualPath() const {
+        std::string visual_path() const {
             if (folder.has_value())
                 return folder.value() + "/" + name;
             else
                 return name;
         }
 
-        bool isLoaded() const {
+        bool loaded() const {
             return state == Dfs::FileState::Ready;
         }
 
-        bool isEncrypted() const {
+        bool encrypted() const {
             return encryption == Dfs::SecurityLevel::Encrypted;
+        }
+
+        bool empty() const {
+            return file_id.empty() || name.empty();
         }
     };
 
@@ -449,7 +458,8 @@ namespace Dfs {
       "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
       "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
       "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 3),"
-      "sign          TEXT              NOT NULL"
+      "sign          TEXT              NOT NULL,"
+      "UNIQUE(folder, name)"
       ");";
 
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
@@ -469,6 +479,8 @@ namespace Dfs {
                                                                                const std::string& field = "file_id");
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
                                                                                 std::uint64_t  last_modified = 0);
+
+            // TODO: search in dir row: by file type, by name, get folder, ...
 
             // TODO: expected
             std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId& actor_id,
