@@ -41,6 +41,7 @@
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
+#include "chat/chat_manager.h"
 
 struct TokensDataRow {
     TokenId        token_id;
@@ -117,6 +118,7 @@ void ExtraChainNode::process() {
     auto port            = "1212";
     m_connectionsManager = new ConnectionsManager(address, port, key, this);
     m_tokenManager       = new TokenManager(this);
+    chat_manager_        = new ChatManager(this);
 
     auto thread = ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_transactionManager, thread);
@@ -147,6 +149,7 @@ void ExtraChainNode::cleanUp() {
     // m_blockchain->deleteLater();
     // m_transactionManager->deleteLater();
     m_dfs->deleteLater();
+    delete chat_manager_;
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
@@ -170,9 +173,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
     }
 
-    using namespace sqlite::literals;
-
-    auto tokens_template = Dfs::CollectionTemplate::create("tokens").value().add_fields(
+    auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
         { Dfs::Field::ActorId("token_id").not_null().unique(),
           Dfs::Field::String("name").not_null().unique().length(3, 20),
           Dfs::Field::String("ticker").not_null().unique().length(2, 5),
@@ -187,7 +188,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         return false;
     }
 
-    auto store_res = m_dfs->store_collection(first.id(), "tokens", template_res->actor_id, template_res->file_id);
+    auto store_res = m_dfs->store_collection(first.id(), "Tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         Utils::wipeDataFiles();
@@ -283,6 +284,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
 TokenManager* ExtraChainNode::tokenManager() const {
     return m_tokenManager;
+}
+
+ChatManager* ExtraChainNode::chat_manager() {
+    return chat_manager_;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(ActorId        receiver,

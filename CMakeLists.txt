@@ -51,12 +51,14 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/version_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_collection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/collection_template.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_id.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/genesis_block.h
@@ -104,15 +106,19 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/collection_template.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/version_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_id.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/genesis_block.cpp
@@ -149,6 +155,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     )
 
 # add_library(extrachainc

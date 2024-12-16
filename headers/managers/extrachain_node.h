@@ -54,6 +54,7 @@ class ExtraChainNode;
 enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
+class ChatManager;
 // class RestApiServerManager;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
@@ -92,6 +93,7 @@ private:
     DataMiningManager*  m_dmm                = nullptr;
     ConnectionsManager* m_connectionsManager = nullptr;
     TokenManager*       m_tokenManager       = nullptr;
+    ChatManager*        chat_manager_        = nullptr;
     QTimer*             timer                = nullptr;
 
     bool                        started               = false;
@@ -162,6 +164,8 @@ public:
     void          InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager* tokenManager() const;
     bool          isRaccoon;
+
+    ChatManager* chat_manager();
 
     VPNConfigStorage vpnConfigStorage;
 

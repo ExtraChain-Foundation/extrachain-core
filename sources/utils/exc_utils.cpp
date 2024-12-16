@@ -682,7 +682,7 @@ boost::json::value Utils::stringToJsonValue(const std::string &value, const std:
     return boost::json::value(std::string(value));
 }
 
-std::expected<std::vector<uint8_t>, Utils::FileError> Utils::read_file_content(const FsPath &path) {
+std::expected<std::vector<std::uint8_t>, Utils::FileError> Utils::read_file_content(const FsPath &path) {
     // Get file size
     const auto size = path.file_size();
     if (!size.has_value()) {

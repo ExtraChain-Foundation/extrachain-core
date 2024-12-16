@@ -59,6 +59,17 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                                     const std::string           &visual_folder,
                                                                     const std::string           &visual_name,
                                                                     Dfs::SecurityLevel           security_level) {
+    // if (!visual_folder.empty()) {
+    //     if (visual_folder.front() == ':') {
+    //         if (visual_folder == Dfs::Basic::TEMPLATE_COLLECTION
+    //             || visual_folder == Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE)
+    //             return std::unexpected(Dfs::DfsError::WrongTemplate);
+    //         if (visual_folder != Dfs::Basic::TEMPLATE_CHAT)
+    //             return std::unexpected(Dfs::DfsError::WrongTemplate);
+    //         // if (:DApp) -> Check if :ActorId is DAppMaster && allow to create his folder everyone
+    //     }
+    // }
+
     auto fpath         = FsPath::create(file_path).value();
     auto new_file_path = fpath;
 
@@ -192,6 +203,28 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     // return addFile(msg, false);
 }
 
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &actor_id,
+                                                                    const std::filesystem::path &file_path,
+                                                                    Dfs::ServiceFolder           service_folder,
+                                                                    const std::string           &visual_name,
+                                                                    Dfs::SecurityLevel           security_level) {
+    std::string visual_path;
+
+    switch (service_folder) {
+    case Dfs::ServiceFolder::Collection:
+        visual_path = Dfs::Basic::TEMPLATE_COLLECTION;
+        break;
+    case Dfs::ServiceFolder::CollectionTemplate:
+        visual_path = Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE;
+        break;
+    case Dfs::ServiceFolder::Chat:
+        visual_path = Dfs::Basic::TEMPLATE_CHAT;
+        break;
+    }
+
+    return store_file(actor_id, file_path, visual_path, visual_name, security_level);
+}
+
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(const ActorId &actor_id,
                                                                             const std::vector<std::uint8_t> data,
                                                                             const std::string &visual_folder,
@@ -230,15 +263,15 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder_dapp(const
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_template(
     const ActorId                 &actor_id,
-    const Dfs::CollectionTemplate &template_body) {
-    if (!template_body.to_db_schema().has_value()) {
+    const Dfs::CollectionTemplate &collection_template) {
+    if (!collection_template.to_db_schema().has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
     // TODO: check if another dublicate template exists
     // need new function in utils
 
-    auto schema = template_body.to_db_schema();
+    auto schema = collection_template.to_db_schema();
     if (!schema.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -247,34 +280,28 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_template(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto json = Json::serialize(template_body);
+    auto json = Json::serialize(collection_template);
     return store_data_as_file(actor_id,
                               ByteArray(json).toVector(),
-                              ":templates",
-                              template_body.name(),
+                              Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                              collection_template.name(),
                               Dfs::SecurityLevel::Public);
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(const ActorId     &actor_id,
-                                                                          const std::string &visual_name,
-                                                                          const ActorId     &template_actor_id,
-                                                                          const std::string &template_file_id) {
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
+    const ActorId                 &actor_id,
+    const std::string             &visual_name,
+    const Dfs::CollectionTemplate &collection_template) {
     std::string file_id  = createFileIdFromData("db");
     auto        dfs_path = DfsPath::file_path(actor_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().getActor(actor_id);
 
-    auto collection_template =
-        Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
-
-    if (!collection_template.has_value()) {
-        return std::unexpected(Dfs::DfsError::Unknown);
-    }
-
-    auto chain = HistoricalCollection::create(actor, actor->id(), file_id, template_actor_id, template_file_id);
+    auto chain = HistoricalCollection::create(actor, actor->id(), file_id, collection_template);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
-    auto schema = collection_template->to_db_schema();
+
+    auto schema = collection_template.to_db_schema();
     if (!schema.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -293,7 +320,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(const 
                                        .file_id       = file_id,
                                        .prev_file_id  = "",
                                        .hash          = collection_hash,
-                                       .folder        = ":collection",
+                                       .folder        = Dfs::Basic::TEMPLATE_COLLECTION,
                                        .name          = visual_name,
                                        .size          = collection_size,
                                        .created       = 0,
@@ -314,14 +341,47 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(const 
     return dir_row;
 }
 
-ExpectedDirRow DfsController::universal_collection_row(const ActorId      &actor_id,
-                                                       const std::string  &file_id,
-                                                       DbRow               row,
-                                                       std::uint32_t       id,
-                                                       CollectionOperation type) {
+std::expected<DbRow, CollectionError> DfsController::get_collection_row(const ActorId     &actor_id,
+                                                                        const std::string &file_id,
+                                                                        uint32_t           id) {
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::load(main_actor, main_actor->id(), file_id);
+    auto row        = chain->get_collection_row(id);
+    return row;
+}
+
+std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection_rows(const ActorId     &actor_id,
+                                                                                      const std::string &file_id) {
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = HistoricalCollection::load(main_actor, main_actor->id(), file_id);
+    auto row        = chain->get_collection_rows();
+    return row;
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(const ActorId     &actor_id,
+                                                                          const std::string &visual_name,
+                                                                          const ActorId     &template_actor_id,
+                                                                          const std::string &template_file_id) {
+    // if visual_name empty -> return
+    // if template not exists -> return
+    auto collection_template =
+        Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
+
+    if (!collection_template.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    return store_collection(actor_id, visual_name, collection_template.value());
+}
+
+ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId      &actor_id,
+                                                                 const std::string  &file_id,
+                                                                 DbRow               row,
+                                                                 std::uint32_t       id,
+                                                                 CollectionOperation type) {
     auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
     if (!dirRowExp.has_value()) {
-        return dirRowExp;
+        return std::unexpected(dirRowExp.error());
     }
     // TODO: check fields
 
@@ -357,24 +417,41 @@ ExpectedDirRow DfsController::universal_collection_row(const ActorId      &actor
     node->network()->send_message(std::make_tuple(actor_id, file_id, historical_row.value()),
                                   MessageType::DfsCollectionRowChange);
 
-    return dirRowExp;
+    return std::pair { dirRowExp.value(), historical_row.value() };
 }
 
-ExpectedDirRow DfsController::add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row) {
-    return universal_collection_row(actor_id, file_id, row, 0, CollectionOperation::Add);
+ExpectedDirHistoricalRow DfsController::add_collection_row(const ActorId     &actor_id,
+                                                           const std::string &file_id,
+                                                           DbRow              row) {
+    auto res = universal_collection_row(actor_id, file_id, row, 0, CollectionOperation::Add);
+    if (res.has_value()) {
+        auto &res_ = res.value();
+        emit  collectionChange(res_.first, res_.second);
+    }
+    return res;
 }
 
-ExpectedDirRow DfsController::update_collection_row(const ActorId     &actor_id,
-                                                    const std::string &file_id,
-                                                    uint32_t           id,
-                                                    DbRow              row) {
-    return universal_collection_row(actor_id, file_id, row, id, CollectionOperation::Update);
+ExpectedDirHistoricalRow DfsController::update_collection_row(const ActorId     &actor_id,
+                                                              const std::string &file_id,
+                                                              uint32_t           id,
+                                                              DbRow              row) {
+    auto res = universal_collection_row(actor_id, file_id, row, id, CollectionOperation::Update);
+    if (res.has_value()) {
+        auto &res_ = res.value();
+        emit  collectionChange(res_.first, res_.second);
+    }
+    return res;
 }
 
-ExpectedDirRow DfsController::remove_collection_row(const ActorId     &actor_id,
-                                                    const std::string &file_id,
-                                                    uint32_t           id) {
-    return universal_collection_row(actor_id, file_id, {}, id, CollectionOperation::Remove);
+ExpectedDirHistoricalRow DfsController::remove_collection_row(const ActorId     &actor_id,
+                                                              const std::string &file_id,
+                                                              uint32_t           id) {
+    auto res = universal_collection_row(actor_id, file_id, {}, id, CollectionOperation::Remove);
+    if (res.has_value()) {
+        auto &res_ = res.value();
+        emit  collectionChange(res_.first, res_.second);
+    }
+    return res;
 }
 
 void DfsController::network_request_collection(const ActorId     &actor_id,
@@ -422,10 +499,44 @@ void DfsController::network_response_historical_collection(
     const ActorId                              &actor_id,
     const std::string                          &file_id,
     const std::vector<HistoricalCollectionRow> &historical_rows) {
-    auto main_actor    = node->accountController()->mainActor();
-    auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
-    auto chain =
-        HistoricalCollection::create(main_actor, actor_id, file_id, template_link.actor_id, template_link.file_id);
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
+    if (!dir_row.has_value()) {
+        return;
+    }
+    // TODO: check state
+
+    auto main_actor = node->accountController()->mainActor();
+    // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
+    // collection
+    auto first_row = historical_rows.begin(); // where id = 0
+
+    Dfs::CollectionTemplate collection_template;
+    if (first_row->operation == CollectionOperation::StructuralTemplated) {
+        auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(first_row->data);
+        if (!collection_template_result.has_value()) {
+            return;
+        }
+        collection_template = collection_template_result.value();
+    } else if (first_row->operation == CollectionOperation::Structural) {
+        auto template_link = Json::deserialize<CollectionTemplateLink>(first_row->data);
+        if (!template_link.has_value()) {
+            return;
+        }
+
+        auto collection_template_result =
+            Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_link->actor_id,
+                                                                       template_link->file_id);
+        if (!collection_template_result.has_value()) {
+            return;
+        }
+        collection_template = collection_template_result.value();
+    }
+
+    auto chain = HistoricalCollection::create(main_actor, actor_id, file_id, collection_template);
+
+    if (!chain.has_value()) {
+        return;
+    }
 
     auto dfs_path = DfsPath::file_path(actor_id, file_id);
     if (!dfs_path->exists()) {
@@ -446,6 +557,12 @@ void DfsController::network_response_historical_collection(
 void DfsController::network_response_content_collection(const ActorId            &actor_id,
                                                         const std::string        &file_id,
                                                         const std::vector<DbRow> &db_rows) {
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
+    if (!dir_row.has_value()) {
+        return;
+    }
+    // TODO: check state
+
     auto main_actor = node->accountController()->mainActor();
 
     auto chain_opt = HistoricalCollection::load(main_actor, actor_id, file_id);
@@ -460,14 +577,23 @@ void DfsController::network_response_content_collection(const ActorId           
         return;
     }
 
-    auto collection_template_opt =
-        Dfs::Tables::ActorDirFile::get_collection_template_file_id(creation_result->actor_id,
-                                                                   creation_result->file_id);
-    if (!collection_template_opt.has_value()) {
-        return;
-    }
-    auto collection_template = collection_template_opt.value();
-    auto schema_opt          = collection_template.to_db_schema();
+    Dfs::CollectionTemplate collection_template;
+
+    std::visit(
+        [&](const auto &value) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, CollectionTemplateLink>) {
+                auto template_opt =
+                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.actor_id, value.file_id);
+                if (template_opt.has_value()) {
+                    collection_template = template_opt.value();
+                }
+            } else if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplate>) {
+                collection_template = value;
+            }
+        },
+        creation_result.value());
+
+    auto schema_opt = collection_template.to_db_schema();
     if (!schema_opt.has_value()) {
         return;
     }
@@ -479,18 +605,34 @@ void DfsController::network_response_content_collection(const ActorId           
         // TODO: verify
         db.insert(schema_opt->table_name(), db_row);
     }
+
+    // check if history and file ok
+    emit downloaded(dir_row.value());
 }
 
 void DfsController::network_change_collection(const ActorId                 &actor_id,
                                               const std::string             &file_id,
                                               const HistoricalCollectionRow &row) {
+    // TODO: need verify
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(main_actor, actor_id, file_id);
+    auto dir_row    = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
+
+    if (!dir_row.has_value()) {
+        return;
+    }
+
+    if (dir_row->state != Dfs::FileState::Ready) {
+        // return;
+    }
+
+    auto chain = HistoricalCollection::load(main_actor, actor_id, file_id);
     if (!chain.has_value()) {
         return;
     }
     chain->insert_row_to_database(row);
     chain->change_collection(row);
+
+    emit collectionChange(dir_row.value(), row);
 }
 
 bool DfsController::removeLocalFile(const ActorId &actorId, const std::string &fileId) {
@@ -916,10 +1058,10 @@ void DfsController::exportFile(const std::string &pathTo,
                 auto lowerNameFile = nameFile;
                 transform(lowerNameFile.begin(), lowerNameFile.end(), lowerNameFile.begin(), ::tolower);
                 if (dirRow.file_id == lowerNameFile) {
-                    if (!std::filesystem::exists(pathTo + "/" + dirRow.visualPath())) {
-                        std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dirRow.visualPath());
+                    if (!std::filesystem::exists(pathTo + "/" + dirRow.visual_path())) {
+                        std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dirRow.visual_path());
                     } else {
-                        const auto pathFile = std::filesystem::path(pathTo + "/" + dirRow.visualPath());
+                        const auto pathFile = std::filesystem::path(pathTo + "/" + dirRow.visual_path());
                         for (int index = 2; index < 100; index++) {
                             std::string possibleNewFile = pathTo + "/" + pathFile.stem().string() + "_"
                                                           + std::to_string(index) + pathFile.extension().string();
@@ -929,7 +1071,7 @@ void DfsController::exportFile(const std::string &pathTo,
                             }
                         }
                     }
-                    eLog("File {} of actor {} extracted", dirRow.visualPath(), actorId);
+                    eLog("File {} of actor {} extracted", dirRow.visual_path(), actorId);
                     return true;
                 }
                 return false;
@@ -1446,7 +1588,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     }
     auto dirRow = dirRowExp.value();
 
-    std::string   virtualPath     = dirRow.visualPath();
+    std::string   virtualPath     = dirRow.visual_path();
     std::uint64_t fileSize        = dirRow.size;
     auto          currentFileSize = std::filesystem::file_size(fileName);
     if (fileSize == currentFileSize) {

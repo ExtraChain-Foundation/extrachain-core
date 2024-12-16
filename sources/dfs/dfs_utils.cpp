@@ -224,9 +224,33 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actor_id, Di
     return db.update(query);
 }
 
+std::expected<std::vector<std::uint8_t>, Utils::FileError> Dfs::Tables::ActorDirFile::get_file_content(
+    const ActorId     &actor_id,
+    const std::string &file_id) {
+    auto path = Path::file_path(actor_id, file_id);
+
+    if (!path.has_value()) {
+        eLog("Invalid path");
+        return std::unexpected(Utils::FileError::InvalidFile);
+    }
+
+    auto content = Utils::read_file_content(path.value());
+    if (!content.has_value()) {
+        return std::unexpected(Utils::FileError::InvalidFile);
+    }
+
+    if (content->empty()) {
+        return std::unexpected(Utils::FileError::InvalidFile);
+    }
+
+    eLog("[Dfs] Read {} bytes from actor {} and file {}", content->size(), actor_id, file_id);
+
+    return content;
+}
+
 std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection_template_file_id(
-    const ActorId &actor_id,
-    std::string    file_id) {
+    const ActorId     &actor_id,
+    const std::string &file_id) {
     auto path = Path::file_path(actor_id, file_id);
     if (!path.has_value()) {
         eLog("Invalid path");
@@ -238,7 +262,7 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
         return std::nullopt;
     }
 
-    eLog("Read {} bytes", content->size());
+    eLog("[Dfs] Read {} from collection template bytes", content->size());
     auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(content.value());
     if (!collection_template_result.has_value()) {
         return std::nullopt;

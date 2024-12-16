@@ -81,6 +81,19 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
     return *this;
 }
 
+void ActorId::normalize() {
+    if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
+        eFatal("[ActorId] Not correct size: %zu", m_id.size());
+    }
+
+    m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
+
+    if (!Utils::is_hex_string_lower(m_id)) {
+        eFatal("[ActorId] Not correct hex: {}", m_id);
+        m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
+    }
+}
+
 namespace magic {
     std::string custom_magic<ActorId>::read(const ActorId &value) {
         return value.to_string();

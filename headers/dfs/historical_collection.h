@@ -26,6 +26,7 @@
 
 enum class CollectionOperation {
     Structural,
+    StructuralTemplated,
     Add,
     Update,
     Remove
@@ -68,6 +69,7 @@ private:
     std::string                        file_id_;
     std::string                        table_name_;
 
+    HistoricalCollection() = default;
     HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>>& actor,
                          const ActorId&                            file_actor_id,
                          const std::string&                        file_id);
@@ -77,15 +79,21 @@ public:
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
-        const ActorId&                            tempalte_actor_id,
+        const ActorId&                            template_actor_id,
         const std::string&                        template_file_id);
+    static std::expected<HistoricalCollection, CollectionError> create(
+        const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
+        const ActorId&                            file_actor_id,
+        const std::string&                        file_id,
+        const Dfs::CollectionTemplate&            collection_template);
+
     static std::expected<HistoricalCollection, CollectionError> load(
         const std::shared_ptr<Actor<KeyPrivate>>& actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id);
 
     std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> update_row(std::uint32_t id, DbRow& row);
+    std::expected<HistoricalCollectionRow, CollectionError> update_row(uint32_t id, DbRow& row);
     std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
     std::expected<void, CollectionError> change_collection(const HistoricalCollectionRow& historical_row);
@@ -94,6 +102,8 @@ public:
 
     // std::expected<HistoricalCollectionRow, CollectionError> insert_into_alien(DbRow&             row,
     //                                                                           const std::string& temp_table);
+
+    std::expected<DbRow, CollectionError> get_collection_row(std::uint32_t id);
 
     std::expected<std::vector<DbRow>, CollectionError>                   get_collection_rows();
     std::expected<std::vector<HistoricalCollectionRow>, CollectionError> get_historical_rows() {
@@ -120,16 +130,17 @@ public:
     std::expected<HistoricalCollectionRow, CollectionError> get_row(const std::string& search_value,
                                                                     const std::string& field = "id");
 
-    std::expected<HistoricalCollectionRow, CollectionError> get_last_row();
-    std::expected<CollectionTemplateLink, CollectionError>  get_creation();
+    std::expected<HistoricalCollectionRow, CollectionError>                                       get_last_row();
+    std::expected<std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError> get_creation();
 
     FsPath get_historical_path() const;
     FsPath get_file_path() const;
     void   insert_row_to_database(const HistoricalCollectionRow& historical_row);
 
 private:
-    std::expected<std::string, CollectionError> create_table(const ActorId&     tempalte_actor_id,
+    std::expected<std::string, CollectionError> create_table(const ActorId&     template_actor_id,
                                                              const std::string& template_file_id);
+    std::expected<std::string, CollectionError> create_table(const Dfs::CollectionTemplate& collection_template);
 
     void insert_historical_row(HistoricalCollectionRow& historical_row);
     void historical_collection_row_sign(HistoricalCollectionRow& row);

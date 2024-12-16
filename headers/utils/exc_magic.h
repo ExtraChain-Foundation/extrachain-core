@@ -115,6 +115,17 @@ namespace magic {
     struct is_associative_container<T, std::void_t<typename T::key_type, typename T::mapped_type>>
         : std::true_type { };
 
+    template <typename T, typename = void>
+    struct is_pair : std::false_type { };
+
+    template <typename T>
+    struct is_pair<T,
+                   std::void_t<typename T::first_type,
+                               typename T::second_type,
+                               decltype(std::declval<T>().first),
+                               decltype(std::declval<T>().second)>>
+        : std::is_same<T, std::pair<typename T::first_type, typename T::second_type>> { };
+
     // Custom magic interface
     struct custom_magic_tag { };
 
@@ -378,6 +389,11 @@ namespace json_convert {
                 return boost::json::value(static_cast<std::underlying_type_t<T>>(obj));
             } else if constexpr (magic::is_uint8_array<T>::value) {
                 return array_uint8_to_json(obj);
+            } else if constexpr (magic::is_pair<T>::value) {
+                boost::json::array result;
+                result.push_back(to_json(obj.first));
+                result.push_back(to_json(obj.second));
+                return result;
             } else if constexpr (magic::is_container<T>::value) {
                 if constexpr (magic::is_associative_container<T>::value) {
                     boost::json::object result;
@@ -451,6 +467,13 @@ namespace json_convert {
                                                        : json.as_int64());
             } else if constexpr (magic::is_uint8_array<T>::value) {
                 return array_uint8_from_json<std::tuple_size_v<T>>(json);
+            } else if constexpr (magic::is_pair<T>::value) {
+                if (!json.is_array() || json.as_array().size() != 2) {
+                    throw std::runtime_error("JSON value is not an array of size 2 for pair conversion");
+                }
+                const auto& arr = json.as_array();
+                return std::make_pair(from_json<typename T::first_type>(arr[0]),
+                                      from_json<typename T::second_type>(arr[1]));
             } else if constexpr (magic::is_container<T>::value) {
                 T result;
                 if constexpr (magic::is_associative_container<T>::value) {

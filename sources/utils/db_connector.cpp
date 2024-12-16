@@ -235,6 +235,89 @@ bool DbConnector::update(const std::string &query) {
     return this->query(query);
 }
 
+bool DbConnector::update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data) {
+    if (!is_open()) {
+        eFatal("[DbConnector] Database not open");
+    }
+    if (set_data.size() == 0) {
+        eWarning("[DbConnector] {}(false): [ImplementationUpdate] SET data is empty", file());
+        return false;
+    }
+    if (where_data.size() == 0) {
+        eWarning("[DbConnector] {}(false): [ImplementationUpdate] WHERE conditions are empty", file());
+        return false;
+    }
+
+    std::string query = fmt::format("UPDATE {} SET ", table_name);
+    std::string set_clause;
+    for (auto &el : set_data) {
+        set_clause += fmt::format("{} = ?, ", el.first);
+    }
+    set_clause.erase(set_clause.size() - 2, 2);
+    query += set_clause;
+
+    query += " WHERE ";
+    std::string where_clause;
+    for (auto &el : where_data) {
+        where_clause += fmt::format("{} = ? AND ", el.first);
+    }
+    where_clause.erase(where_clause.size() - 5, 5);
+    query += where_clause;
+
+    dbmutex.lock();
+    sqlite3_stmt *stmt = NULL;
+    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    dbmutex.unlock();
+
+    int bind_index = 1;
+    for (auto &el : set_data) {
+        dbmutex.lock();
+        sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        dbmutex.unlock();
+    }
+
+    for (auto &el : where_data) {
+        dbmutex.lock();
+        sqlite3_bind_text(stmt, bind_index++, el.second.c_str(), -1, SQLITE_TRANSIENT);
+        dbmutex.unlock();
+    }
+
+    dbmutex.lock();
+    if (rc != SQLITE_OK) {
+        eWarning("[DbConnector] {}(false): {}", file(), query);
+        eWarning("[DbConnector] ImplementationUpdate: prepare failed: {}", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        eWarning("[DbConnector] ImplementationUpdate: Execution failed: {}", sqlite3_errmsg(db));
+        eWarning("[DbConnector] {}(false): {}", file(), query);
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+    int changes = sqlite3_changes(db);
+    if (changes == 0) {
+        eWarning("[DbConnector] ImplementationUpdate: No rows affected: {}", sqlite3_errmsg(db));
+        eWarning("[DbConnector] {}(false): {}", file(), query);
+        sqlite3_finalize(stmt);
+        dbmutex.unlock();
+        return false;
+    }
+
+#ifdef ENABLE_SQLITE_TRUE_LOGS
+    eLog("[DbConnector] {}(true): {}", file(), query);
+#endif
+
+    sqlite3_finalize(stmt);
+    dbmutex.unlock();
+    return true;
+}
+
 bool DbConnector::create_table(const std::string &query) {
     QString queryTemp = QString::fromStdString(query).replace(QRegularExpression("\\s+"), " ");
     return this->query(queryTemp.toStdString());

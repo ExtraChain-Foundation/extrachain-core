@@ -25,73 +25,10 @@
 
 #include <msgpack.hpp>
 
+#include "blockchain/actor_id.h"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
-// #include "utils/exc_utils.h"
-
-/**
- * Acting entity.
- * Users, Smart-contracts
- */
-
-enum class ActorType {
-    User       = 0,
-    DAppMaster = 1,
-    Service    = 2
-};
-MSGPACK_ADD_ENUM(ActorType)
-// FORMAT_ENUM(ActorType)
-
-class EXTRACHAIN_EXPORT ActorId final {
-public:
-    ActorId();
-    explicit ActorId(const std::string &actorId);
-    ActorId(const ActorId &other);
-    ActorId(ActorId &&other) noexcept;
-
-    QByteArray toQByteArray() const;
-    QString    toQString() const;
-
-    const std::string &value() const;
-    const std::string &to_string() const;
-    bool               is_zero() const;
-
-    auto     operator<=>(const ActorId &) const = default;
-    ActorId &operator=(const ActorId &actorId);
-    ActorId &operator=(const std::string &actorId);
-    ActorId &operator=(ActorId &&other) noexcept;
-
-    template <typename Packer>
-    void msgpack_pack(Packer &msgpack_pk) const {
-        msgpack_pk.pack_str(m_id.size());
-        msgpack_pk.pack_str_body(m_id.data(), m_id.size());
-    }
-
-    void msgpack_unpack(msgpack::object const &msgpack_o) {
-        m_id = msgpack_o.as<std::string>();
-    }
-
-private:
-    void normalize() {
-        if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
-            eFatal("[ActorId] Not correct size: %zu", m_id.size());
-        }
-
-        m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
-
-        if (!Utils::is_hex_string_lower(m_id)) {
-            eFatal("[ActorId] Not correct hex: {}", m_id);
-            m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
-        }
-    }
-
-    std::string m_id;
-};
-
-MAKE_CUSTOM_MAGICAL(ActorId)
-
-using TokenId = ActorId;
 
 template <typename T>
 class EXTRACHAIN_EXPORT Actor final {

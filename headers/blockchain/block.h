@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "actor.h"
+#include "blockchain/actor.h"
 #include "blockchain/transaction.h"
 #include "utils/bignumber.h"
 #include "utils/exc_utils.h"
