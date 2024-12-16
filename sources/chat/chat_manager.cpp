@@ -7,9 +7,42 @@
 
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
+    QObject::connect(node->dfs(), &DfsController::downloaded, [this](Dfs::DirRow dir_row) {
+        if (dir_row.folder == CHAT_DAPP_INVITE_FOLDER) {
+            auto content = Dfs::Tables::ActorDirFile::get_file_content(dir_row.actor_id, dir_row.file_id);
+            if (!content.has_value()) {
+                return;
+            }
+
+            auto chat = Json::deserialize<Chat::Chat>(content.value());
+            if (!chat.has_value()) {
+                return;
+            }
+
+            if (!chat->another.has_value()) {
+                return;
+            }
+
+            ActorId temp  = chat->another.value();
+            chat->another = chat->myself;
+            chat->myself  = temp;
+
+            this->insert_chat_to_mychats(chat.value());
+        }
+
+        // if MyChats downloaded
+    });
+
+    QObject::connect(node->dfs(),
+                     &DfsController::collectionChange,
+                     [this](Dfs::DirRow dir_row, HistoricalCollectionRow row) {
+                         if (dir_row.name == chats_template().name()) {
+                             // update chat to ui
+                         }
+                     });
 }
 
-EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat() {
+EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
     KeyBytes key        = Cryptography::keygen();
     auto     main_actor = node->accountController()->mainActor();
     chat_actor_         = node->accountController()->mainActor()->id();
@@ -28,7 +61,7 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
     auto chat = Chat::Chat { .myself = chat_actor_, .chat_key = key };
 
     auto store_chat_res =
-        node->dfs()->store_collection(chat_actor_, fmt::format("chat-{}", chat.myself), chat_template());
+        node->dfs()->store_collection(chat_actor_, fmt::format("chat-{}", chat.another), chat_template());
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -36,18 +69,49 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
     chat.file_actor_id = store_chat_res->actor_id;
     chat.file_id       = store_chat_res->file_id;
 
-    insert_chat_to_mychats(chat);
+    if (save_chat) {
+        insert_chat_to_mychats(chat);
+    }
+
     return chat;
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) {
-    return std::unexpected(ChatError::Unknown);
+    auto chat = create_chat(false);
+
+    if (!chat.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    chat->another = with.to_string();
+    insert_chat_to_mychats(chat.value());
+    invite(chat.value());
+
+    return chat;
 }
 
-std::expected<Chat::Chat, ChatError> ChatManager::invite(const ActorId& actor) {
+std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat) {
     // check if with this person chat exists
-    // create invite (file) ":DApp:Chat/Invite"
-    return std::unexpected(ChatError::Unknown);
+    auto main_actor = node->accountController()->mainActor();
+
+    if (!chat.another.has_value()) {
+        return chat;
+    }
+
+    auto json = Json::serialize(chat);
+
+    auto res = node->dfs()->store_data_as_file(chat.another.value(),
+                                               ByteArray(json).toBytes(),
+                                               CHAT_DAPP_INVITE_FOLDER,
+                                               fmt::format("ChatFrom_{}", main_actor->id()),
+                                               Dfs::SecurityLevel::Public);
+
+    if (!res.has_value()) {
+        eFatal("Invite error");
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    return chat;
 }
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
@@ -118,10 +182,10 @@ std::expected<HistoricalCollectionRow, ChatError> ChatManager::add_new_message(c
 
 Dfs::CollectionTemplate& ChatManager::chats_template() {
     static auto my_chats_template = Dfs::CollectionTemplate::create("MyChats").value().add_fields(
-        { Dfs::Field::ActorId("myself").not_null().unique(),
-          Dfs::Field::ActorId("another").unique(),
-          Dfs::Field::ActorId("file_actor_id").unique(),
-          Dfs::Field::String("file_id").unique(),
+        { Dfs::Field::ActorId("myself").not_null(),        // .unique(),
+          Dfs::Field::ActorId("another"),                  // .unique(),
+          Dfs::Field::ActorId("file_actor_id").not_null(), //.unique(),
+          Dfs::Field::String("file_id").not_null(),        // .unique(),
           Dfs::Field::String("chat_key").not_null() });
     return my_chats_template;
 }
@@ -155,6 +219,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
     }
 
     auto main_actor = node->accountController()->mainActor();
+    chat_actor_     = main_actor->id();
     auto rows       = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor->id());
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);

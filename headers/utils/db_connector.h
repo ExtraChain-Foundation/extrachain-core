@@ -165,6 +165,7 @@ public:
     bool               insert(const std::string &tableName, const DbRow &data);
     bool               replace(const std::string &tableName, const DbRow &data);
     bool               update(const std::string &query);
+    bool               update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data);
     bool               create_table(const std::string &query);
     std::expected<std::string, SqlCreateError> create_table(const DbSchema &query);
     bool                                       delete_row(const std::string &tableName, const DbRow &data);

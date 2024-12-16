@@ -38,7 +38,7 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
     const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
     const ActorId                            &file_actor_id,
     const std::string                        &file_id,
-    const ActorId                            &tempalte_actor_id,
+    const ActorId                            &template_actor_id,
     const std::string                        &template_file_id) {
     HistoricalCollection chain(main_actor, file_actor_id, file_id);
 
@@ -62,7 +62,7 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
         return std::unexpected(CollectionError::StructuralCreation);
     }
 
-    auto created = chain.create_table(tempalte_actor_id, template_file_id);
+    auto created = chain.create_table(template_actor_id, template_file_id);
     if (!created.has_value()) {
         return std::unexpected(CollectionError::Unknown);
     }
@@ -139,10 +139,10 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
 }
 
 std::expected<std::string, CollectionError> HistoricalCollection::create_table(
-    const ActorId     &tempalte_actor_id,
+    const ActorId     &template_actor_id,
     const std::string &template_file_id) {
     auto collection_template =
-        Dfs::Tables::ActorDirFile::get_collection_template_file_id(tempalte_actor_id, template_file_id);
+        Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
     if (!collection_template.has_value()) {
         return std::unexpected(CollectionError::Unknown);
     }
@@ -153,7 +153,7 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     }
 
     this->table_name_        = collection_template->name();
-    auto collection_creation = CollectionTemplateLink { .actor_id = tempalte_actor_id,
+    auto collection_creation = CollectionTemplateLink { .actor_id = template_actor_id,
                                                         .file_id  = template_file_id,
                                                         .name     = collection_template->name() };
 
@@ -231,9 +231,10 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ad
     return historical_row;
 }
 
-std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::update_row(uint32_t id, DbRow &row) {
+std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::update_row(std::uint32_t id,
+                                                                                         DbRow        &row) {
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Update,
-                                                    .data      = Json::serialize(row),
+                                                    .data      = Json::serialize(std::make_pair(id, row)),
                                                     .timestamp = Utils::current_date_ms(),
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
@@ -242,10 +243,17 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
 
     DbConnector db(file_path_);
     db.open();
-    row["id"]        = std::to_string(historical_row.id);
-    row["timestamp"] = std::to_string(historical_row.timestamp);
 
-    auto res_update = false; // db.update(table_name_, id, row);
+    if (row.find("id") != row.end()) {
+        row.erase("id");
+    }
+    if (row.find("timestamp") != row.end()) {
+        row.erase("timestamp");
+    }
+
+    // TODO: select from db, check changes
+
+    auto res_update = db.update(table_name_, row, { { "id", std::to_string(id) } });
     db.close();
 
     if (!res_update) {
@@ -301,7 +309,7 @@ std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_col
         return std::unexpected(CollectionError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {}", table_name_));
+    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} ORDER by id", table_name_));
     db.close();
 
     return db_rows;
@@ -434,6 +442,8 @@ std::expected<void, CollectionError> HistoricalCollection::change_collection(
     switch (historical_row.operation) {
     case CollectionOperation::Structural:
         break;
+    case CollectionOperation::StructuralTemplated:
+        break;
     case CollectionOperation::Add:
         row = Json::_no_try_deserialize<DbRow>(historical_row.data).value();
         break;
@@ -444,6 +454,9 @@ std::expected<void, CollectionError> HistoricalCollection::change_collection(
         break;
     }
     }
+
+    row["id"]        = std::to_string(historical_row.id);
+    row["timestamp"] = std::to_string(historical_row.timestamp);
 
     DbConnector db(file_path_);
     db.open();

@@ -22,6 +22,7 @@
 
 namespace Dfs {
     std::expected<CollectionTemplate, SqlCreateError> CollectionTemplate::create(std::string name) {
+        // TODO: CamelCase, A-Za-z
         auto tmpl = CollectionTemplate(std::move(name));
         tmpl.add_fields({
             Field::Id("id").primary_key(),

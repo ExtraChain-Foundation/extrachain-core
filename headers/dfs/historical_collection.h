@@ -69,6 +69,7 @@ private:
     std::string                        file_id_;
     std::string                        table_name_;
 
+    HistoricalCollection() = default;
     HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>>& actor,
                          const ActorId&                            file_actor_id,
                          const std::string&                        file_id);
@@ -78,7 +79,7 @@ public:
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
-        const ActorId&                            tempalte_actor_id,
+        const ActorId&                            template_actor_id,
         const std::string&                        template_file_id);
     static std::expected<HistoricalCollection, CollectionError> create(
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
@@ -92,7 +93,7 @@ public:
         const std::string&                        file_id);
 
     std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> update_row(std::uint32_t id, DbRow& row);
+    std::expected<HistoricalCollectionRow, CollectionError> update_row(uint32_t id, DbRow& row);
     std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
     std::expected<void, CollectionError> change_collection(const HistoricalCollectionRow& historical_row);
@@ -137,7 +138,7 @@ public:
     void   insert_row_to_database(const HistoricalCollectionRow& historical_row);
 
 private:
-    std::expected<std::string, CollectionError> create_table(const ActorId&     tempalte_actor_id,
+    std::expected<std::string, CollectionError> create_table(const ActorId&     template_actor_id,
                                                              const std::string& template_file_id);
     std::expected<std::string, CollectionError> create_table(const Dfs::CollectionTemplate& collection_template);
 

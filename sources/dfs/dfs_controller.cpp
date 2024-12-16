@@ -505,10 +505,38 @@ void DfsController::network_response_historical_collection(
     }
     // TODO: check state
 
-    auto main_actor    = node->accountController()->mainActor();
-    auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
-    auto chain =
-        HistoricalCollection::create(main_actor, actor_id, file_id, template_link.actor_id, template_link.file_id);
+    auto main_actor = node->accountController()->mainActor();
+    // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
+    // collection
+    auto first_row = historical_rows.begin(); // where id = 0
+
+    Dfs::CollectionTemplate collection_template;
+    if (first_row->operation == CollectionOperation::StructuralTemplated) {
+        auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(first_row->data);
+        if (!collection_template_result.has_value()) {
+            return;
+        }
+        collection_template = collection_template_result.value();
+    } else if (first_row->operation == CollectionOperation::Structural) {
+        auto template_link = Json::deserialize<CollectionTemplateLink>(first_row->data);
+        if (!template_link.has_value()) {
+            return;
+        }
+
+        auto collection_template_result =
+            Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_link->actor_id,
+                                                                       template_link->file_id);
+        if (!collection_template_result.has_value()) {
+            return;
+        }
+        collection_template = collection_template_result.value();
+    }
+
+    auto chain = HistoricalCollection::create(main_actor, actor_id, file_id, collection_template);
+
+    if (!chain.has_value()) {
+        return;
+    }
 
     auto dfs_path = DfsPath::file_path(actor_id, file_id);
     if (!dfs_path->exists()) {
@@ -585,6 +613,7 @@ void DfsController::network_response_content_collection(const ActorId           
 void DfsController::network_change_collection(const ActorId                 &actor_id,
                                               const std::string             &file_id,
                                               const HistoricalCollectionRow &row) {
+    // TODO: need verify
     auto main_actor = node->accountController()->mainActor();
     auto dir_row    = Dfs::Tables::ActorDirFile::get_dir_row(actor_id, file_id);
 

@@ -31,6 +31,8 @@ namespace Dfs {
     enum class FieldType {
         Id,
         ActorId,
+        // FileId
+        // TransactionLink
         Integer,
         Real,
         String,

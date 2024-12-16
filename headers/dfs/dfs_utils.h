@@ -482,9 +482,12 @@ namespace Dfs {
 
             // TODO: search in dir row: by file type, by name, get folder, ...
 
+            std::expected<std::vector<uint8_t>, Utils::FileError> get_file_content(const ActorId&     actor_id,
+                                                                                   const std::string& file_id);
+
             // TODO: expected
-            std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId& actor_id,
-                                                                                   std::string    file_id);
+            std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
+                                                                                   const std::string& file_id);
             std::optional<Dfs::CollectionTemplate> get_collection_template_name(const ActorId&     actor_id,
                                                                                 const std::string& template_name);
             bool                                   add_dir_row(const ActorId&                            actor_id,

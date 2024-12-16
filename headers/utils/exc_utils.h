@@ -705,7 +705,8 @@ namespace Utils {
     enum class FileError {
         ReadError,
         SizeTooLarge,
-        EmptyFile
+        EmptyFile,
+        InvalidFile
     };
 
     /**
@@ -713,7 +714,7 @@ namespace Utils {
      * @param path File path to read
      * @return Expected vector with file contents or FileError
      */
-    EXTRACHAIN_EXPORT std::expected<std::vector<uint8_t>, FileError> read_file_content(const FsPath &path);
+    EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, FileError> read_file_content(const FsPath &path);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);
