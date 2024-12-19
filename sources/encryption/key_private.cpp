@@ -19,117 +19,93 @@
 
 #include "encryption/key_private.h"
 #include "encryption/encryption_tools.h"
-#include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 
 #include <sodium.h>
 
-#include <fstream>
-
 KeyPrivate::KeyPrivate(const PrivateKey &secret_key, const PublicKey &public_key) {
-    m_secretKey = secret_key;
-    m_publicKey = public_key;
+    secret_key_ = secret_key;
+    public_key_ = public_key;
 }
 
 KeyPrivate::KeyPrivate(const std::string &secret_key, const std::string &public_key) {
-    m_secretKey = ByteArray(secret_key).toArray<64>();
-    m_publicKey = ByteArray(public_key).toArray<32>();
+    secret_key_ = ByteArray(secret_key).toArray<crypto_sign_SECRETKEYBYTES>();
+    public_key_ = ByteArray(public_key).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
 KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
-    m_secretKey = keyPrivate.secretKey();
-    m_publicKey = keyPrivate.publicKey();
+    secret_key_ = keyPrivate.secret_key();
+    public_key_ = keyPrivate.public_key();
 }
 
 void KeyPrivate::generate() {
-    auto [secretKey, publicKey] = Cryptography::createAsymmetricPair();
-    m_secretKey                 = secretKey;
-    m_publicKey                 = publicKey;
+    auto [secret_key, public_key] = Cryptography::asymmetric_create_pair();
+    secret_key_                   = secret_key;
+    public_key_                   = public_key;
 }
 
-Bytes KeyPrivate::encrypt(const Bytes &data, const PublicKey &receiverPublicKey, const Nonce &nonce) const {
-    return Cryptography::encryptAsymmetric(data, m_secretKey, receiverPublicKey, nonce);
+Bytes KeyPrivate::encrypt(const Bytes &data, const PublicKey &receiver_public_key, const Nonce &nonce) const {
+    return Cryptography::asymmetric_encrypt(data, secret_key_, receiver_public_key, nonce);
 }
 
-Bytes KeyPrivate::decrypt(const Bytes &data, const PublicKey &senderPublicKey, const Nonce &nonce) const {
-    return Cryptography::decryptAsymmetric(data, m_secretKey, senderPublicKey, nonce);
+Bytes KeyPrivate::decrypt(const Bytes &data, const PublicKey &sender_public_key, const Nonce &nonce) const {
+    return Cryptography::asymmetric_decrypt(data, secret_key_, sender_public_key, nonce);
 }
 
-Bytes KeyPrivate::encryptSelf(const Bytes &data) const {
-    Nonce nonce;
-    std::copy_n(m_secretKey.begin(), std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()), nonce.begin());
-
-    return this->encrypt(data, this->m_publicKey, nonce);
+std::expected<bool, FsError> KeyPrivate::encrypt_file(const FsPath    &file,
+                                                      const FsPath    &result_file,
+                                                      const PublicKey &receiver_public_key,
+                                                      const Nonce     &nonce) const {
+    return Cryptography::asymmetric_encrypt_file(file, result_file, secret_key_, receiver_public_key, nonce);
 }
 
-Bytes KeyPrivate::decryptSelf(const Bytes &data) const {
-    Nonce nonce;
-    std::copy_n(m_secretKey.begin(), std::min(size_t(crypto_box_NONCEBYTES), m_secretKey.size()), nonce.begin());
-
-    return this->decrypt(data, this->m_publicKey, nonce);
+std::expected<bool, FsError> KeyPrivate::decrypt_file(const FsPath    &file,
+                                                      const FsPath    &result_file,
+                                                      const PublicKey &sender_public_key,
+                                                      const Nonce     &nonce) const {
+    return Cryptography::asymmetric_decrypt_file(file, result_file, secret_key_, sender_public_key, nonce);
 }
 
-void KeyPrivate::encryptFile(const std::filesystem::path &input, const std::filesystem::path &output) const {
-    std::ifstream in(input, std::ios::binary);
-    std::ofstream out(output, std::ios::binary);
-
-    if (!in || !out) {
-        eFatal("[encryptFile] Cannot open files");
-    }
-
-    Bytes buffer(DfsB::encSectionSize);
-    while (in.read(reinterpret_cast<char *>(buffer.data()), buffer.size())) {
-        Bytes    encrypted = encryptSelf({ buffer.begin(), buffer.begin() + in.gcount() });
-        uint32_t size      = encrypted.size();
-
-        out.write(reinterpret_cast<char *>(&size), sizeof(size));
-        out.write(reinterpret_cast<char *>(encrypted.data()), size);
-    }
+Bytes KeyPrivate::encrypt_self(const Bytes &data) const {
+    return Cryptography::asymmetric_encrypt_self(data, secret_key_, public_key_);
 }
 
-void KeyPrivate::decryptFile(const std::filesystem::path &input, const std::filesystem::path &output) const {
-    std::ifstream in(input, std::ios::binary);
-    std::ofstream out(output, std::ios::binary);
+Bytes KeyPrivate::decrypt_self(const Bytes &data) const {
+    return Cryptography::asymmetric_decrypt_self(data, secret_key_, public_key_);
+}
 
-    if (!in || !out) {
-        eFatal("[decryptFile] Cannot open files");
-    }
+std::expected<bool, FsError> KeyPrivate::encrypt_self_file(const FsPath &input, const FsPath &result_file) const {
+    return Cryptography::asymmetric_encrypt_self_file(input, result_file, secret_key_, public_key_);
+}
 
-    uint32_t size;
-    while (in.read(reinterpret_cast<char *>(&size), sizeof(size))) {
-        Bytes encrypted(size);
-
-        if (in.read(reinterpret_cast<char *>(encrypted.data()), size)) {
-            Bytes decrypted = decryptSelf(encrypted);
-            out.write(reinterpret_cast<char *>(decrypted.data()), decrypted.size());
-        }
-    }
+std::expected<bool, FsError> KeyPrivate::decrypt_self_file(const FsPath &input, const FsPath &result_file) const {
+    return Cryptography::asymmetric_decrypt_self_file(input, result_file, secret_key_, public_key_);
 }
 
 Signature KeyPrivate::sign(const Bytes &data) const {
-    return Cryptography::sign(data, m_secretKey);
+    return Cryptography::sign(data, secret_key_);
 }
 
 bool KeyPrivate::verify(const Bytes &data, const Signature &signature) const {
-    return Cryptography::verify(data, m_publicKey, signature);
+    return Cryptography::verify(data, public_key_, signature);
 }
 
 Signature KeyPrivate::sign(const std::string &data) const {
-    return Cryptography::sign(ByteArray(data).toBytes(), m_secretKey);
+    return Cryptography::sign(ByteArray(data).toBytes(), secret_key_);
 }
 
 bool KeyPrivate::verify(const std::string &data, const Signature &signature) const {
-    return Cryptography::verify(ByteArray(data).toBytes(), m_publicKey, signature);
+    return Cryptography::verify(ByteArray(data).toBytes(), public_key_, signature);
 }
 
-const PrivateKey &KeyPrivate::secretKey() const {
-    return m_secretKey;
+const PrivateKey &KeyPrivate::secret_key() const {
+    return secret_key_;
 }
 
-const PublicKey &KeyPrivate::publicKey() const {
-    return m_publicKey;
+const PublicKey &KeyPrivate::public_key() const {
+    return public_key_;
 }
 
 bool KeyPrivate::empty() const {
-    return Utils::isAllEmpty(m_secretKey) || Utils::isAllEmpty(m_publicKey);
+    return Utils::is_container_empty(secret_key_) || Utils::is_container_empty(public_key_);
 }

@@ -64,6 +64,7 @@ void TransactionManager::makeBlock() {
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
         eLog("[TransactionManager] last or real last block is not exists");
+        // TODO: request once!
         node->blockchain()->sync();
         return;
     }

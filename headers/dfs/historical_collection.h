@@ -39,7 +39,8 @@ enum class CollectionError {
     StructuralCreation,
     Adding,
     Updating,
-    Deleting
+    Deleting,
+    IncorrectEncryption
 };
 
 struct HistoricalCollectionRow {
@@ -68,11 +69,15 @@ private:
     ActorId                            file_actor_id_;
     std::string                        file_id_;
     std::string                        table_name_;
+    Dfs::DataSecurity                  data_security_;
+    Dfs::DataSecurityData              security_data_;
 
     HistoricalCollection() = default;
     HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>>& actor,
                          const ActorId&                            file_actor_id,
-                         const std::string&                        file_id);
+                         const std::string&                        file_id,
+                         Dfs::DataSecurity                         data_security,
+                         const Dfs::DataSecurityData&              security_data);
 
 public:
     static std::expected<HistoricalCollection, CollectionError> create(
@@ -80,20 +85,31 @@ public:
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
         const ActorId&                            template_actor_id,
-        const std::string&                        template_file_id);
+        const std::string&                        template_file_id,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
     static std::expected<HistoricalCollection, CollectionError> create(
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
-        const Dfs::CollectionTemplate&            collection_template);
+        const Dfs::CollectionTemplate&            collection_template,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
 
     static std::expected<HistoricalCollection, CollectionError> load(
         const std::shared_ptr<Actor<KeyPrivate>>& actor,
         const ActorId&                            file_actor_id,
-        const std::string&                        file_id);
+        const std::string&                        file_id,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
 
-    std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> update_row(uint32_t id, DbRow& row);
+    std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow&                       row,
+                                                                    Dfs::DataSecurity            data_security,
+                                                                    const Dfs::DataSecurityData& security_data);
+    std::expected<HistoricalCollectionRow, CollectionError> update_row(uint32_t                     id,
+                                                                       DbRow&                       row,
+                                                                       Dfs::DataSecurity            data_security,
+                                                                       const Dfs::DataSecurityData& security_data);
     std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
 
     std::expected<void, CollectionError> change_collection(const HistoricalCollectionRow& historical_row);
@@ -138,6 +154,10 @@ public:
     void   insert_row_to_database(const HistoricalCollectionRow& historical_row);
 
 private:
+    std::expected<DbRow, CollectionError> encrypt_data(const DbRow&                 row,
+                                                       Dfs::DataSecurity            data_security,
+                                                       const Dfs::DataSecurityData& security_data);
+
     std::expected<std::string, CollectionError> create_table(const ActorId&     template_actor_id,
                                                              const std::string& template_file_id);
     std::expected<std::string, CollectionError> create_table(const Dfs::CollectionTemplate& collection_template);

@@ -60,6 +60,7 @@ using namespace magic_enum::bitwise_operators;
 #include <blake3.h>
 
 #include "utils/exc_utils_base64.h"
+#include "utils/fs_path.h"
 
 class ByteArray {
 public:
@@ -738,7 +739,7 @@ namespace Utils {
      * @see isAllZeros for a specialized version checking for zeros
      */
     template <Container C>
-    constexpr bool isAllValue(const C &container, const std::ranges::range_value_t<C> &value) {
+    constexpr bool is_container_value(const C &container, const std::ranges::range_value_t<C> &value) {
         return std::ranges::all_of(container, [&value](const auto &x) {
             return x == value;
         });
@@ -758,20 +759,12 @@ namespace Utils {
      */
     template <Container C>
         requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
-    constexpr bool isAllEmpty(const C &container) {
-        return isAllValue(container, std::ranges::range_value_t<C> { '\0' });
+    constexpr bool is_container_empty(const C &container) {
+        return is_container_value(container, std::ranges::range_value_t<C> { '\0' });
     }
 
-    EXTRACHAIN_EXPORT bool encryptFile(const QString    &originalName,
-                                       const QString    &encryptName,
-                                       const QByteArray &key,
-                                       int               blockSize = 60007);
-    EXTRACHAIN_EXPORT bool decryptFile(const QString    &encryptName,
-                                       const QString    &decryptName,
-                                       const QByteArray &key,
-                                       int               blockSize = 60007);
-    QString                fileMimeType(const QString &filePath);
-    QString                fileMimeSuffix(const QString &filePath);
+    QString fileMimeType(const QString &filePath);
+    QString fileMimeSuffix(const QString &filePath);
 
     std::vector<std::string> split(const std::string &s, char c);
 

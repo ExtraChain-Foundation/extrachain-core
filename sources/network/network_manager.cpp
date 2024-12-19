@@ -18,6 +18,7 @@
  */
 
 #include "blockchain/blockchain.h"
+#include "blockchain/actor_index.h"
 #include "dfs/dfs_controller.h"
 #include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
@@ -27,7 +28,6 @@
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
-#include "utils/exc_logs_extra.h"
 
 #include <filesystem>
 #include <fstream>
@@ -739,12 +739,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DfsAddFile: {
-        auto dir_row_result = MessagePack::deserialize<Dfs::DirRow>(serialized);
-        if (!dir_row_result.has_value()) {
+        auto dfs_add_result = MessagePack::deserialize<std::pair<ActorId, Dfs::DirRow>>(serialized);
+        if (!dfs_add_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
             break;
         }
-        node->dfs()->addFile(dir_row_result.value(), true);
+        node->dfs()->network_add_file(dfs_add_result->first, dfs_add_result->second, true);
         break;
     }
 
@@ -1169,7 +1169,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     KeyPrivate key;
     key.generate();
     m_networkHashForVPN =
-        Utils::calculate_hash(ByteArray(key.publicKey()).toString()
+        Utils::calculate_hash(ByteArray(key.public_key()).toString()
                                   + node->accountController()->mainActor()->id().to_string() + salt,
                               Utils::HashAlgorithm::Sha3_512)
             .substr(0, 64);

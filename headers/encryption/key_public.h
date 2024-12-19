@@ -21,34 +21,34 @@
 
 #include <string>
 
+#include <boost/core/demangle.hpp>
 #include <msgpack.hpp>
 
 #include "extrachain_global.h"
-#include "utils/exc_magic.h"
 #include "encryption/encryption_tools.h"
 
 class EXTRACHAIN_EXPORT KeyPublic {
 private:
-    PublicKey m_publicKey = PublicKey();
+    PublicKey public_key_ = PublicKey();
 
 public:
     explicit KeyPublic() = default;
-    explicit KeyPublic(const PublicKey &publicKey);
-    explicit KeyPublic(const std::string &publicKey);
+    explicit KeyPublic(const PublicKey &public_key);
+    explicit KeyPublic(const std::string &public_key);
     KeyPublic(const KeyPublic &keyPublic);
     ~KeyPublic() = default;
 
     KeyPublic &operator=(const KeyPublic &other) = default;
 
-    std::string encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const;
+    std::string encrypt(const Bytes &data, const PrivateKey &sender_private_key) const;
 
     bool verify(const Bytes &data, const Signature &signature) const;
     bool verify(const std::string &data, const Signature &signature) const;
 
-    const PublicKey &publicKey() const;
+    const PublicKey &public_key() const;
 
     bool empty() const;
 
-    MSGPACK_DEFINE(m_publicKey)
-    BOOST_DESCRIBE_CLASS(KeyPublic, (), (), (), (m_publicKey))
+    MSGPACK_DEFINE(public_key_)
+    BOOST_DESCRIBE_CLASS(KeyPublic, (), (), (), (public_key_))
 };

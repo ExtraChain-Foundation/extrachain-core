@@ -910,7 +910,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
             // return TransactionProveError::ZeroProducer;
         }
 
-        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<64>())) {
+        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<crypto_sign_BYTES>())) {
             // return TransactionProveError::ProducerVerify;
         }
 

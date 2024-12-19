@@ -35,6 +35,7 @@
 #include "extrachain_global.h"
 #include "utils/exc_utils.h"
 #include "utils/db_schema.h"
+#include "utils/db_iterator.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -158,15 +159,16 @@ public:
 public:
     static QString sqlite_version();
 
-    bool               open();
-    bool               close();
-    std::vector<DbRow> select(std::string query, std::string tableName = "", DbRow binds = {});
-    std::vector<DbRow> select_all(std::string table, int limit = -1);
-    bool               insert(const std::string &tableName, const DbRow &data);
-    bool               replace(const std::string &tableName, const DbRow &data);
-    bool               update(const std::string &query);
-    bool               update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data);
-    bool               create_table(const std::string &query);
+    bool                        open();
+    bool                        close();
+    std::vector<DbRow>          select(std::string query, std::string tableName = "", DbRow binds = {});
+    std::vector<DbRow>          select_all(std::string table, int limit = -1);
+    std::unique_ptr<DbIterator> select_while(std::string query, std::string table_name, DbRow binds = {});
+    bool                        insert(const std::string &tableName, const DbRow &data);
+    bool                        replace(const std::string &tableName, const DbRow &data);
+    bool                        update(const std::string &query);
+    bool update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data);
+    bool create_table(const std::string &query);
     std::expected<std::string, SqlCreateError> create_table(const DbSchema &query);
     bool                                       delete_row(const std::string &tableName, const DbRow &data);
     bool                                       table_exists(const std::string &table);
@@ -190,4 +192,6 @@ public:
 private:
     bool implementation_prepare(const std::string &tableName, const DbRow &data, sqlite3_stmt *stmt);
     bool implementation_insert(const std::string &tableName, const DbRow &data, bool isReplace);
+
+    BOOST_DESCRIBE_CLASS(DbConnector, (), (), (), (m_file, m_open, m_type))
 };

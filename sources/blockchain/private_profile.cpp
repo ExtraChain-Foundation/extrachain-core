@@ -129,7 +129,7 @@ QJsonObject PrivateProfile::toJson() const {
 
 void PrivateProfile::save() {
     auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
-    auto encrypted = Cryptography::encryptWithPassword(Bytes(jsonBytes.begin(), jsonBytes.end()), m_hash);
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(jsonBytes.begin(), jsonBytes.end()), m_hash);
     auto data      = QByteArray(reinterpret_cast<const char *>(encrypted.data()), encrypted.size());
 
     // eLog("Save data: {}", data);
@@ -144,7 +144,7 @@ void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
     auto data        = file.readAll().toStdString();
-    auto jsonBytes   = Cryptography::decryptWithPassword(Bytes(data.begin(), data.end()), m_hash);
+    auto jsonBytes   = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), m_hash);
     auto jsonBytesQt = QByteArray(reinterpret_cast<const char *>(jsonBytes.data()), jsonBytes.size());
 
     auto json              = QJsonDocument::fromJson(jsonBytesQt).object();

@@ -25,13 +25,17 @@
 
 HistoricalCollection::HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>> &actor,
                                            const ActorId                            &file_actor_id,
-                                           const std::string                        &file_id) {
+                                           const std::string                        &file_id,
+                                           Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+                                           const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->file_path_         = DfsPath::file_path(file_actor_id, file_id).value();
     auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), ".collection");
     this->historical_path_   = FsPath::create(historical_path_str).value();
     this->actor_             = actor;
     this->file_actor_id_     = file_actor_id;
     this->file_id_           = file_id;
+    data_security_           = data_security;
+    security_data_           = security_data;
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
@@ -39,8 +43,10 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
     const ActorId                            &file_actor_id,
     const std::string                        &file_id,
     const ActorId                            &template_actor_id,
-    const std::string                        &template_file_id) {
-    HistoricalCollection chain(main_actor, file_actor_id, file_id);
+    const std::string                        &template_file_id,
+    Dfs::DataSecurity                         data_security,
+    const Dfs::DataSecurityData              &security_data) {
+    HistoricalCollection chain(main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
     if (!db.open()) { // TODO: expection
@@ -74,8 +80,10 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
     const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
     const ActorId                            &file_actor_id,
     const std::string                        &file_id,
-    const Dfs::CollectionTemplate            &collection_template) {
-    HistoricalCollection chain(main_actor, file_actor_id, file_id);
+    const Dfs::CollectionTemplate            &collection_template,
+    Dfs::DataSecurity                         data_security,
+    const Dfs::DataSecurityData              &security_data) {
+    HistoricalCollection chain(main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
     if (!db.open()) { // TODO: expection
@@ -108,9 +116,10 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
     const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
     const ActorId                            &file_actor_id,
-    const std::string                        &file_id) {
-
-    HistoricalCollection chain(main_actor, file_actor_id, file_id);
+    const std::string                        &file_id,
+    Dfs::DataSecurity                         data_security,
+    const Dfs::DataSecurityData              &security_data) {
+    HistoricalCollection chain(main_actor, file_actor_id, file_id, data_security, security_data);
     // check db exists
     auto creation = chain.get_creation();
     if (!creation.has_value()) {
@@ -204,11 +213,13 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     return res_create.value();
 }
 
-std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::add_row(DbRow &row) {
+std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::add_row(
+    DbRow                       &row,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
     // TODO: check db row in dfs template
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Add,
                                                     .data      = Json::serialize(row),
-                                                    .timestamp = 111,
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
 
@@ -231,11 +242,13 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ad
     return historical_row;
 }
 
-std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::update_row(std::uint32_t id,
-                                                                                         DbRow        &row) {
+std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::update_row(
+    std::uint32_t                id,
+    DbRow                       &row,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Update,
                                                     .data      = Json::serialize(std::make_pair(id, row)),
-                                                    .timestamp = Utils::current_date_ms(),
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
 
@@ -266,7 +279,6 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
 std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::remove_row(std::uint32_t id) {
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Remove,
                                                     .data      = std::to_string(id),
-                                                    .timestamp = Utils::current_date_ms(),
                                                     .actor_id  = this->actor_->id(),
                                                     .sign      = Signature() };
     // TODO: check if id exists
@@ -433,6 +445,40 @@ void HistoricalCollection::insert_row_to_database(const HistoricalCollectionRow 
     historical.open();
     historical.insert(Dfs::Historical::HISTORICAL_TABLE, Utils::to_dbrow(historical_row));
     historical.close();
+}
+
+std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
+    const DbRow                 &row,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
+    DbRow encrypted_row;
+
+    for (const auto &[key, value] : row) {
+        if (data_security == Dfs::DataSecurity::Self) {
+            if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+                auto res           = actor_->key().encrypt_self(ByteArray(value).toBytes());
+                encrypted_row[key] = ByteArray(res).toBase64();
+            }
+
+            if (data_security == Dfs::DataSecurity::Actor) {
+                if (auto *security_actor = std::get_if<Dfs::DataSecurityFullActor>(&security_data)) {
+                    // TODO: checks
+                    auto res           = security_actor->sender.key().encrypt(ByteArray(value).toBytes(),
+                                                                    security_actor->receiver.key().public_key());
+                    encrypted_row[key] = ByteArray(res).toBase64();
+                }
+            }
+
+            if (data_security == Dfs::DataSecurity::Key) {
+                if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+                    auto res = Cryptography::symmetric_encrypt(ByteArray(value).toBytes(), security_key->key);
+                    encrypted_row[key] = ByteArray(res).toBase64();
+                }
+            }
+        }
+    }
+
+    return encrypted_row;
 }
 
 std::expected<void, CollectionError> HistoricalCollection::change_collection(

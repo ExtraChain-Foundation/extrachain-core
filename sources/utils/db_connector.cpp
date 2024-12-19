@@ -20,12 +20,12 @@
 #include "utils/db_connector.h"
 
 #include "sqlite3.h"
+#include <blake3.h>
+
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
-
-#include <blake3.h>
 
 #include "utils/exc_logs.h"
 
@@ -221,6 +221,31 @@ std::vector<DbRow> DbConnector::select_all(std::string table, int limit) {
     std::string query =
         fmt::format("SELECT * FROM {}{}", table, limit > 0 ? " LIMIT " + std::to_string(limit) : "");
     return select(query);
+}
+
+std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::string table_name, DbRow binds) {
+    if (!is_open()) {
+        qFatal("[DBConnector] Database not open");
+    }
+
+    dbmutex.lock();
+    sqlite3_stmt      *stmt;
+    std::vector<DbRow> res;
+    sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
+
+    if (!binds.empty()) {
+        dbmutex.unlock();
+        if (!implementation_prepare(table_name, binds, stmt)) {
+            qDebug() << "[DBConnector] Select bind error";
+            return {};
+        }
+        dbmutex.lock();
+    }
+
+    // TODO
+    dbmutex.unlock();
+
+    return std::make_unique<DbIterator>(stmt);
 }
 
 bool DbConnector::insert(const std::string &tableName, const DbRow &data) {

@@ -36,13 +36,11 @@
 #include <filesystem>
 #include <QThread>
 
-#include "blockchain/actor.h"
-#include "blockchain/actor_index.h"
-#include "managers/account_controller.h"
-#include "managers/extrachain_node.h"
+#include "blockchain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/historical_collection.h"
 
+class ExtraChainNode;
 using FileId                   = std::string;
 using ExpectedDirRow           = std::expected<Dfs::DirRow, Dfs::DfsError>;
 using ExpectedDirHistoricalRow = std::expected<std::pair<Dfs::DirRow, HistoricalCollectionRow>, Dfs::DfsError>;
@@ -82,98 +80,130 @@ public:
 
     // Internal use only
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actor_id,
-                                                         const std::filesystem::path &file_path,
-                                                         const std::string           &visual_folder,
-                                                         const std::string           &visual_name,
-                                                         Dfs::SecurityLevel           security_level);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
+        const ActorId               &owner_id,
+        const std::filesystem::path &file_path,
+        const std::string           &visual_folder,
+        const std::string           &visual_name,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(const ActorId               &actor_id,
-                                                         const std::filesystem::path &file_path,
-                                                         Dfs::ServiceFolder           service_folder,
-                                                         const std::string           &visual_name,
-                                                         Dfs::SecurityLevel           security_level);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
+        const ActorId               &owner_id,
+        const std::filesystem::path &file_path,
+        Dfs::ServiceFolder           service_folder,
+        const std::string           &visual_name,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(const ActorId                  &actor_id,
-                                                                 const std::vector<std::uint8_t> data,
-                                                                 const std::string              &visual_folder,
-                                                                 const std::string              &visual_name,
-                                                                 Dfs::SecurityLevel              security_level);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(
+        const ActorId                  &owner_id,
+        const std::vector<std::uint8_t> data,
+        const std::string              &visual_folder,
+        const std::string              &visual_name,
+        Dfs::DataSecurity               data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData    &security_data = Dfs::DataSecurityData());
 
     // TODO
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(const ActorId     &actor_id,
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(const ActorId     &owner_id,
                                                            const std::string &visual_folder);
 
     // TODO
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &actor_id,
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &owner_id,
                                                                 const ActorId &dmaster_id);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_template(const ActorId                 &actor_id,
                                                              const Dfs::CollectionTemplate &collection_template);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId     &actor_id,
-                                                               const std::string &visual_name,
-                                                               const ActorId     &template_actor_id,
-                                                               const std::string &template_file_id);
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(const ActorId                 &actor_id,
-                                                               const std::string             &visual_name,
-                                                               const Dfs::CollectionTemplate &collection_template);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(
+        const ActorId               &owner_id,
+        const std::string           &visual_name,
+        const ActorId               &template_actor_id,
+        const std::string           &template_file_id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(
+        const ActorId                 &owner_id,
+        const std::string             &visual_name,
+        const Dfs::CollectionTemplate &collection_template,
+        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
-    std::expected<DbRow, CollectionError>              get_collection_row(const ActorId     &actor_id,
-                                                                          const std::string &file_id,
-                                                                          std::uint32_t      id);
-    std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(const ActorId     &actor_id,
-                                                                           const std::string &file_id);
+    // TODO: function: get collection size
+
+    std::expected<DbRow, CollectionError> get_collection_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        std::uint32_t                id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    // TODO: get collection(from, to)
+    std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     template <typename T>
-    ExpectedDirHistoricalRow add_collection_row(const ActorId &actor_id, const std::string &file_id, T row) {
+    ExpectedDirHistoricalRow add_collection_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        T                            row,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_collection_row(actor_id, file_id, db_row);
+        auto dir_row = this->add_collection_row(owner_id, file_id, db_row);
         return dir_row;
     }
 
-    ExpectedDirHistoricalRow add_collection_row(const ActorId &actor_id, const std::string &file_id, DbRow row);
-    ExpectedDirHistoricalRow update_collection_row(const ActorId     &actor_id,
-                                                   const std::string &file_id,
-                                                   uint32_t           id,
-                                                   DbRow              row);
-    ExpectedDirHistoricalRow remove_collection_row(const ActorId     &actor_id,
+    ExpectedDirHistoricalRow add_collection_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        DbRow                        row,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    ExpectedDirHistoricalRow update_collection_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        uint32_t                     id,
+        DbRow                        row,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    ExpectedDirHistoricalRow remove_collection_row(const ActorId     &owner_id,
                                                    const std::string &file_id,
                                                    uint32_t           id);
 
-    // get collection size
-    // get collection(from, to)
-
-    void network_request_collection(const ActorId     &actor_id,
+    void network_request_collection(const ActorId     &owner_id,
                                     const std::string &file_id,
                                     const std::string &message_id);
-    void network_response_historical_collection(const ActorId                              &actor_id,
+    void network_response_historical_collection(const ActorId                              &owner_id,
                                                 const std::string                          &file_id,
                                                 const std::vector<HistoricalCollectionRow> &historical_rows);
-    void network_response_content_collection(const ActorId            &actor_id,
+    void network_response_content_collection(const ActorId            &owner_id,
                                              const std::string        &file_id,
                                              const std::vector<DbRow> &db_rows);
-    void network_change_collection(const ActorId                 &actor_id,
+    void network_change_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
-    void network_remove_collection(const ActorId                 &actor_id,
+    void network_remove_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
     // TODO: get rows from collection
 
-    bool removeLocalFile(const ActorId &actorId, const std::string &file_id);
+    bool removeLocalFile(const ActorId &owner_id, const std::string &file_id);
     // visualMoveFile
 
     // External interfaces
-    std::string addFile(const Dfs::DirRow &dirRow, bool loadBytes);
-    std::string getFileFromStorage(ActorId owner, std::string fileName);
+    std::string network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes);
+    std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
     bool        removeFile(const DfsP::RemoveFileMessage &msg);
     bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
     // Unique file ID: hash+msec+salt
-    std::string   createFileId(std::filesystem::path file);
-    std::string   createFileIdFromData(const std::string &data);
+    std::string   create_file_id(std::filesystem::path file);
+    std::string   create_file_id_from(const std::string &data);
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
@@ -192,11 +222,13 @@ public:
     void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
 
 private:
-    ExpectedDirHistoricalRow universal_collection_row(const ActorId      &actor_id,
-                                                      const std::string  &file_id,
-                                                      DbRow               row,
-                                                      uint32_t            id,
-                                                      CollectionOperation type);
+    ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
+                                                      const std::string           &file_id,
+                                                      DbRow                        row,
+                                                      uint32_t                     id,
+                                                      CollectionOperation          type,
+                                                      Dfs::DataSecurity            data_security,
+                                                      const Dfs::DataSecurityData &security_data);
 
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
     bool          removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file);
@@ -226,7 +258,7 @@ public:
     void        sendDirData(const ActorId &actorId, std::uint64_t last_modified, const std::string &messageId);
     void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
     void        requestFile(const ActorId &actorId, const std::string &fileName);
-    void        sendFile(const ActorId &actorId, const std::string &file_id, const std::string &messageId = "");
+    void        sendFile(const ActorId &owner_id, const std::string &file_id, const std::string &message_id = "");
     void        beginFetchNextFile();
     void        requestNextFragment(const DfsP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
@@ -251,17 +283,17 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
-    void added(Dfs::DirRow dirRow);
-    void updated(Dfs::DirRow dirRow);
-    void removed(Dfs::DirRow dirRow);
+    void added(ActorId owner_id, Dfs::DirRow dirRow);
+    void updated(ActorId owner_id, Dfs::DirRow dirRow);
+    void removed(ActorId owner_id, Dfs::DirRow dirRow);
 
-    void uploaded(Dfs::DirRow dirRow);
-    void downloaded(Dfs::DirRow dirRow);
+    void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
 
-    void collectionChange(Dfs::DirRow, HistoricalCollectionRow);
+    void collectionChange(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
 
-    void downloadProgress(ActorId actor_id, std::string file_id, int progress);
-    void uploadProgress(ActorId actor_id, std::string file_id, int progress);
+    void downloadProgress(ActorId owner_id, std::string file_id, int progress);
+    void uploadProgress(ActorId owner_id, std::string file_id, int progress);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

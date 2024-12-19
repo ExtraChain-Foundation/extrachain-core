@@ -27,7 +27,7 @@ FragmentStorage::FragmentStorage(ActorId actorId, std::string fileId, std::strin
     : fragments_file(DfsPath::filePath(actorId, fileId).string() + DfsF::Extension) {
     this->actor_id = actorId;
     this->file_id  = fileId;
-    this->hash    = hash;
+    this->hash     = hash;
     fragments_file.open();
     fragments_file.query(DfsF::CreateTableQueryFragments);
 }
@@ -66,7 +66,7 @@ bool FragmentStorage::editFragment(DfsP::EditSegmentMessage msg) {
     case DfsP::SegmentMessageType::Insert: {
         //        checkRenameFile(msg);
         return insertFragment(DfsP::SegmentMessage { .actorId = msg.actorId,
-                                                     .file_id  = msg.file_id,
+                                                     .file_id = msg.file_id,
                                                      .hash    = msg.hash,
                                                      .data    = msg.data,
                                                      .offset  = msg.offset });
@@ -74,7 +74,7 @@ bool FragmentStorage::editFragment(DfsP::EditSegmentMessage msg) {
     case DfsP::SegmentMessageType::Add: {
         //        checkRenameFile(msg);
         return insertFragment(DfsP::SegmentMessage { .actorId = msg.actorId,
-                                                     .file_id  = msg.file_id,
+                                                     .file_id = msg.file_id,
                                                      .hash    = msg.hash,
                                                      .data    = msg.data,
                                                      .offset  = msg.offset });
@@ -92,7 +92,7 @@ bool FragmentStorage::editFragment(DfsP::EditSegmentMessage msg) {
         auto                              fileSize = std::filesystem::file_size(realFilePath);
 
         return removeFragment(DfsP::DeleteSegmentMessage { .actorId = msg.actorId,
-                                                           .file_id  = msg.file_id,
+                                                           .file_id = msg.file_id,
                                                            .hash    = msg.hash,
                                                            .offset  = msg.offset,
                                                            .size    = fileSize });
@@ -168,9 +168,9 @@ bool FragmentStorage::applyChanges(const std::string &data, std::uint64_t pos) {
     auto               filePath = DfsPath::filePath(actor_id, file_id);
     std::vector<DbRow> frags =
         fragments_file.select(fmt::format("SELECT * FROM {} WHERE pos + size > {} AND pos < {}",
-                                       DfsF::TableNameFragments,
-                                       std::to_string(pos),
-                                       std::to_string(endPos)));
+                                          DfsF::TableNameFragments,
+                                          std::to_string(pos),
+                                          std::to_string(endPos)));
 
     for (int i = 0; i < frags.size(); i++) {
         std::uint64_t fragpos    = std::stoull(frags[i].at("pos"));
@@ -305,9 +305,9 @@ void FragmentStorage::moveRows(DbRow curRow, std::uint64_t moveSize) {
         return;
     } else {
         fragments_file.update(fmt::format("UPDATE {} SET storedPos = '{}' WHERE pos = '{}'",
-                                       DfsF::TableNameFragments,
-                                       std::to_string(curPos + moveSize),
-                                       nextFragment["pos"]));
+                                          DfsF::TableNameFragments,
+                                          std::to_string(curPos + moveSize),
+                                          nextFragment["pos"]));
         moveRows(nextFragment, moveSize);
     }
 }
@@ -493,7 +493,7 @@ void FragmentWriter::run() {
         if (m_msg.hash == Utils::calculate_hash_file(FsPath::create(fileName).value()).value()) {
             eLog("[Dfs] File {} done", fileName);
             emit eraseFromFiles(m_msg);
-            emit downloadedFile(dirRow);
+            emit downloadedFile(m_msg.actorId, dirRow);
             emit sendFile(m_msg.actorId, m_msg.file_id);
             //            fs.initHistoricalChain();
             eLog("File {} downloaded", fileName);
@@ -503,7 +503,7 @@ void FragmentWriter::run() {
     } else {
         DfsP::RequestFileSegmentMessage requestMsg {
             .actorId = m_msg.actorId,
-            .file_id  = m_msg.file_id,
+            .file_id = m_msg.file_id,
             .hash    = m_msg.hash,
             .offset  = m_msg.offset,
         };

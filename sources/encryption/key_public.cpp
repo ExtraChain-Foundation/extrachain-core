@@ -19,35 +19,35 @@
 
 #include "encryption/key_public.h"
 
-KeyPublic::KeyPublic(const PublicKey &publicKey) {
-    m_publicKey = publicKey;
+KeyPublic::KeyPublic(const PublicKey &public_key) {
+    public_key_ = public_key;
 }
 
-KeyPublic::KeyPublic(const KeyPublic &keyPublic) {
-    m_publicKey = keyPublic.publicKey();
+KeyPublic::KeyPublic(const KeyPublic &key_public) {
+    public_key_ = key_public.public_key();
 }
 
-KeyPublic::KeyPublic(const std::string &publicKey) {
-    m_publicKey = ByteArray(publicKey).toArray<crypto_sign_PUBLICKEYBYTES>();
+KeyPublic::KeyPublic(const std::string &public_key) {
+    public_key_ = ByteArray(public_key).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
-std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &senderPrivateKey) const {
-    auto res = Cryptography::encryptAsymmetric(data, senderPrivateKey, m_publicKey);
+std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &sender_private_key) const {
+    auto res = Cryptography::asymmetric_encrypt(data, sender_private_key, public_key_);
     return std::string(res.begin(), res.end());
 }
 
 bool KeyPublic::verify(const Bytes &data, const Signature &signature) const {
-    return Cryptography::verify(data, m_publicKey, signature);
+    return Cryptography::verify(data, public_key_, signature);
 }
 
 bool KeyPublic::verify(const std::string &data, const Signature &signature) const {
-    return Cryptography::verify(ByteArray(data).toBytes(), m_publicKey, signature);
+    return Cryptography::verify(ByteArray(data).toBytes(), public_key_, signature);
 }
 
-const PublicKey &KeyPublic::publicKey() const {
-    return m_publicKey;
+const PublicKey &KeyPublic::public_key() const {
+    return public_key_;
 }
 
 bool KeyPublic::empty() const {
-    return Utils::isAllEmpty(m_publicKey);
+    return Utils::is_container_empty(public_key_);
 }

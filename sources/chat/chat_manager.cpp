@@ -4,17 +4,34 @@
 #include "dfs/dfs_controller.h"
 #include "encryption/encryption_tools.h"
 #include "managers/extrachain_node.h"
+#include "managers/account_controller.h"
+#include "blockchain/actor_index.h"
 
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
-    QObject::connect(node->dfs(), &DfsController::downloaded, [this](Dfs::DirRow dir_row) {
+    QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
         if (dir_row.folder == CHAT_DAPP_INVITE_FOLDER) {
-            auto content = Dfs::Tables::ActorDirFile::get_file_content(dir_row.actor_id, dir_row.file_id);
-            if (!content.has_value()) {
+            if (dir_row.encryption != Dfs::DataSecurity::Actor) {
                 return;
             }
 
-            auto chat = Json::deserialize<Chat::Chat>(content.value());
+            auto encrypted = Dfs::Tables::ActorDirFile::get_file_content(owner_id, dir_row.file_id);
+            if (!encrypted.has_value()) {
+                return;
+            }
+
+            constexpr std::string_view prefix  = "From_";
+            std::string                from_id = dir_row.name;
+            if (from_id.length() < prefix.length() || from_id.compare(0, prefix.length(), prefix) != 0) {
+                eCritical("[ChatManager] Name must start with 'From_'");
+            }
+            from_id = from_id.substr(prefix.length());
+
+            auto main_actor = this->node->accountController()->mainActor();
+            auto from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
+
+            auto content = main_actor->key().decrypt(encrypted.value(), from_actor.key().public_key());
+            auto chat    = Json::deserialize<Chat::Chat>(content);
             if (!chat.has_value()) {
                 return;
             }
@@ -35,7 +52,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
     QObject::connect(node->dfs(),
                      &DfsController::collectionChange,
-                     [this](Dfs::DirRow dir_row, HistoricalCollectionRow row) {
+                     [this](ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow row) {
                          if (dir_row.name == chats_template().name()) {
                              // update chat to ui
                          }
@@ -103,11 +120,13 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     auto res = node->dfs()->store_data_as_file(chat.another.value(),
                                                ByteArray(json).toBytes(),
                                                CHAT_DAPP_INVITE_FOLDER,
-                                               fmt::format("ChatFrom_{}", main_actor->id()),
-                                               Dfs::SecurityLevel::Public);
+                                               fmt::format("From_{}", main_actor->id()),
+                                               Dfs::DataSecurity::Actor,
+                                               Dfs::DataSecurityActor { .sender   = chat.myself,
+                                                                        .receiver = chat.another.value() });
 
     if (!res.has_value()) {
-        eFatal("Invite error");
+        eCritical("[ChatManager] Invite error: {}", res.error());
         return std::unexpected(ChatError::Unknown);
     }
 
