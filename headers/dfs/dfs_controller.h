@@ -135,14 +135,12 @@ public:
         const ActorId               &owner_id,
         const std::string           &file_id,
         std::uint32_t                id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     // TODO: get collection(from, to)
     std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
         const ActorId               &owner_id,
         const std::string           &file_id,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     template <typename T>
@@ -150,10 +148,9 @@ public:
         const ActorId               &owner_id,
         const std::string           &file_id,
         T                            row,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_collection_row(owner_id, file_id, db_row);
+        auto dir_row = this->add_collection_row(owner_id, file_id, db_row, security_data);
         return dir_row;
     }
 
@@ -161,14 +158,12 @@ public:
         const ActorId               &owner_id,
         const std::string           &file_id,
         DbRow                        row,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     ExpectedDirHistoricalRow update_collection_row(
         const ActorId               &owner_id,
         const std::string           &file_id,
         uint32_t                     id,
         DbRow                        row,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     ExpectedDirHistoricalRow remove_collection_row(const ActorId     &owner_id,
                                                    const std::string &file_id,
@@ -227,7 +222,6 @@ private:
                                                       DbRow                        row,
                                                       uint32_t                     id,
                                                       CollectionOperation          type,
-                                                      Dfs::DataSecurity            data_security,
                                                       const Dfs::DataSecurityData &security_data);
 
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);

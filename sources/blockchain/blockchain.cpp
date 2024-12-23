@@ -24,6 +24,7 @@
 #include "blockchain/actor_index.h"
 #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
+#include "network/network_manager.h"
 
 Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)

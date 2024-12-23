@@ -20,6 +20,7 @@
 #include "blockchain/actor_index.h"
 
 #include "dfs/dfs_controller.h"
+#include "network/network_manager.h"
 
 ActorId ActorIndex::firstId() {
     return m_firstId;
@@ -54,6 +55,23 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
         sendGetActorMessage(id);
         eWarning("[ActorIndex] There no actor with id: {}", id);
         return Actor<KeyPublic>();
+    }
+}
+
+std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const ActorId &id) {
+    if (id.is_zero()) {
+        eWarning("[ActorIndex] Error: try get actor with id: {}", id);
+        return std::unexpected(ActorIndexError::ZeroActor);
+    }
+
+    std::string serialized_actor = this->getById(id).toStdString();
+    if (!serialized_actor.empty()) {
+        auto actor = Actor<KeyPublic>::fromJson(serialized_actor);
+        return actor;
+    } else {
+        sendGetActorMessage(id);
+        eWarning("[ActorIndex] There no actor with id: {}", id);
+        return std::unexpected(ActorIndexError::NoActor);
     }
 }
 

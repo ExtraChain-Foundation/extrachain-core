@@ -158,43 +158,44 @@ std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_create_pair() {
     return { sk, pk };
 }
 
-Bytes Cryptography::asymmetric_encrypt(const Bytes      &data,
-                                       const PrivateKey &sender_secret_key,
-                                       const PublicKey  &receiver_public_key,
-                                       const Nonce      &nonce) {
+Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes                   &data,
+                                                            const PrivateKey              &sender_secret_key,
+                                                            const PublicKey               &receiver_public_key,
+                                                            const Nonce                   &nonce,
+                                                            const Cryptography::NonceWrite nonce_write) {
     if (data.empty()) {
-        eFatal("[SecretKey::encryptAsymmetric] data is empty");
+        return std::unexpected(CryptoError::EmptyData);
     }
 
     Curve25519Key x_secret_key;
     Curve25519Key x_public_key;
+    int           res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), sender_secret_key.data());
+    int           res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), receiver_public_key.data());
 
-    int res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), sender_secret_key.data());
-    int res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), receiver_public_key.data());
+    if (res1 != 0 || res2 != 0) {
+        return std::unexpected(CryptoError::KeyConversionFailed);
+    }
 
-    // Подготовка nonce
     Nonce working_nonce;
-    bool  isNonceEmpty = Utils::is_container_empty(nonce);
-    if (!isNonceEmpty) {
+    bool  should_generate_nonce = Utils::is_container_empty(nonce);
+    if (!should_generate_nonce) {
         working_nonce = nonce;
     } else {
         randombytes_buf(working_nonce.data(), working_nonce.size());
     }
 
     Bytes encrypted_message(crypto_box_MACBYTES + data.size());
-
-    int res = crypto_box_easy(encrypted_message.data(),
+    int   res = crypto_box_easy(encrypted_message.data(),
                               data.data(),
                               data.size(),
                               working_nonce.data(),
                               x_public_key.data(),
                               x_secret_key.data());
     if (res != 0) {
-        eLog("[SecretKey::encryptAsymmetric] Encryption failed");
-        return Bytes {};
+        return std::unexpected(CryptoError::EncryptionFailed);
     }
 
-    if (isNonceEmpty) {
+    if (nonce_write == NonceWrite::Enable && should_generate_nonce) {
         Bytes result(working_nonce.size() + encrypted_message.size());
         std::copy(working_nonce.begin(), working_nonce.end(), result.begin());
         std::copy(encrypted_message.begin(), encrypted_message.end(), result.begin() + working_nonce.size());
@@ -204,75 +205,81 @@ Bytes Cryptography::asymmetric_encrypt(const Bytes      &data,
     return encrypted_message;
 }
 
-Bytes Cryptography::asymmetric_decrypt(const Bytes      &encrypted_data,
-                                       const PrivateKey &receiver_secret_key,
-                                       const PublicKey  &sender_public_key,
-                                       const Nonce      &nonce) {
+Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes                   &encrypted_data,
+                                                            const PrivateKey              &receiver_secret_key,
+                                                            const PublicKey               &sender_public_key,
+                                                            const Nonce                   &nonce,
+                                                            const Cryptography::NonceWrite nonce_write) {
     if (encrypted_data.empty()) {
-        eFatal("[SecretKey::decryptAsymmetric] encrypted data is empty");
+        return std::unexpected(CryptoError::EmptyData);
     }
 
     Nonce working_nonce;
     Bytes encrypted_message;
-    bool  isNonceEmpty = Utils::is_container_empty(nonce);
+    bool  external_nonce = !Utils::is_container_empty(nonce);
 
-    if (!isNonceEmpty) {
+    if (external_nonce) {
         working_nonce     = nonce;
         encrypted_message = encrypted_data;
     } else {
-        if (encrypted_data.size() < crypto_box_NONCEBYTES) {
-            eFatal("[SecretKey::decryptAsymmetric] Data too short to contain nonce");
+        if (nonce_write == NonceWrite::Enable) {
+            if (encrypted_data.size() < crypto_box_NONCEBYTES) {
+                return std::unexpected(CryptoError::DataTooShort);
+            }
+            std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, working_nonce.begin());
+            encrypted_message = Bytes(encrypted_data.begin() + crypto_box_NONCEBYTES, encrypted_data.end());
+        } else {
+            return std::unexpected(CryptoError::NoNonceProvided);
         }
-        std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, working_nonce.begin());
-        encrypted_message = Bytes(encrypted_data.begin() + crypto_box_NONCEBYTES, encrypted_data.end());
     }
 
     if (encrypted_message.size() < crypto_box_MACBYTES) {
-        eFatal("[SecretKey::decryptAsymmetric] Encrypted message too short");
+        return std::unexpected(CryptoError::DataTooShort);
     }
 
     Curve25519Key x_secret_key;
     Curve25519Key x_public_key;
+    int           res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), receiver_secret_key.data());
+    int           res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), sender_public_key.data());
 
-    int res1 = crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), receiver_secret_key.data());
-    int res2 = crypto_sign_ed25519_pk_to_curve25519(x_public_key.data(), sender_public_key.data());
+    if (res1 != 0 || res2 != 0) {
+        return std::unexpected(CryptoError::KeyConversionFailed);
+    }
 
     Bytes decrypted_message(encrypted_message.size() - crypto_box_MACBYTES);
-
-    int res = crypto_box_open_easy(decrypted_message.data(),
+    int   res = crypto_box_open_easy(decrypted_message.data(),
                                    encrypted_message.data(),
                                    encrypted_message.size(),
                                    working_nonce.data(),
                                    x_public_key.data(),
                                    x_secret_key.data());
     if (res != 0) {
-        eLog("[SecretKey::decryptAsymmetric] Decryption failed");
-        return Bytes {};
+        return std::unexpected(CryptoError::DecryptionFailed);
     }
 
     return decrypted_message;
 }
 
-Bytes Cryptography::asymmetric_encrypt_self(const Bytes      &data,
-                                            const PrivateKey &self_secret_key,
-                                            const PublicKey  &self_public_key) {
+Cryptography::CryptoResult Cryptography::asymmetric_encrypt_self(const Bytes      &data,
+                                                                 const PrivateKey &self_secret_key,
+                                                                 const PublicKey  &self_public_key) {
     Nonce nonce;
     std::copy_n(self_secret_key.begin(),
                 std::min(size_t(crypto_box_NONCEBYTES), self_secret_key.size()),
                 nonce.begin());
 
-    return asymmetric_encrypt(data, self_secret_key, self_public_key, nonce);
+    return asymmetric_encrypt(data, self_secret_key, self_public_key, nonce, Cryptography::NonceWrite::Disable);
 }
 
-Bytes Cryptography::asymmetric_decrypt_self(const Bytes      &data,
-                                            const PrivateKey &self_secret_key,
-                                            const PublicKey  &self_public_key) {
+Cryptography::CryptoResult Cryptography::asymmetric_decrypt_self(const Bytes      &data,
+                                                                 const PrivateKey &self_secret_key,
+                                                                 const PublicKey  &self_public_key) {
     Nonce nonce;
     std::copy_n(self_secret_key.begin(),
                 std::min(size_t(crypto_box_NONCEBYTES), self_secret_key.size()),
                 nonce.begin());
 
-    return asymmetric_decrypt(data, self_secret_key, self_public_key, nonce);
+    return asymmetric_decrypt(data, self_secret_key, self_public_key, nonce, Cryptography::NonceWrite::Disable);
 }
 
 std::expected<bool, FsError> validate_file(const FsPath &path) {
@@ -284,7 +291,6 @@ std::expected<bool, FsError> validate_file(const FsPath &path) {
         return is_file;
     return *is_file;
 }
-
 std::expected<bool, FsError> Cryptography::symmetric_encrypt_file(const FsPath   &original_path,
                                                                   const FsPath   &encrypt_path,
                                                                   const KeyBytes &key,
@@ -293,16 +299,20 @@ std::expected<bool, FsError> Cryptography::symmetric_encrypt_file(const FsPath  
     if (!valid)
         return valid;
 
-    std::ifstream orig(original_path.native(), std::ios::binary);
-    std::ofstream encrypt(encrypt_path.native(), std::ios::binary);
+    std::ifstream orig(original_path.native(), std::ios::binary | std::ios::in);
+    std::ofstream encrypt(encrypt_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
     if (!orig || !encrypt)
         return std::unexpected(FsError::IoError);
 
+    block_size = ((block_size / 8) + 1) * 8;
     auto rkey =
         Cryptography::key_from_password(std::string(reinterpret_cast<const char *>(key.data()), key.size()));
+    if (rkey.empty()) {
+        return std::unexpected(FsError::IoError);
+    }
 
     std::vector<uint8_t> buffer(block_size);
-    while (orig) {
+    while (orig.good()) {
         orig.read(reinterpret_cast<char *>(buffer.data()), block_size);
         auto bytes_read = orig.gcount();
         if (bytes_read <= 0)
@@ -310,12 +320,24 @@ std::expected<bool, FsError> Cryptography::symmetric_encrypt_file(const FsPath  
 
         buffer.resize(bytes_read);
         auto encrypted = Cryptography::symmetric_encrypt(buffer, rkey);
+        if (encrypted.empty()) {
+            return std::unexpected(FsError::IoError);
+        }
+
         if (!encrypt.write(reinterpret_cast<const char *>(encrypted.data()), encrypted.size())) {
             return std::unexpected(FsError::IoError);
         }
     }
 
-    return encrypt_path.exists();
+    if (!orig.eof()) {
+        return std::unexpected(FsError::IoError);
+    }
+
+    encrypt.flush();
+    auto size_result = encrypt_path.file_size();
+    if (!size_result)
+        return size_result;
+    return *size_result > 0;
 }
 
 std::expected<bool, FsError> Cryptography::symmetric_decrypt_file(const FsPath   &encrypt_path,
@@ -326,31 +348,54 @@ std::expected<bool, FsError> Cryptography::symmetric_decrypt_file(const FsPath  
     if (!valid)
         return valid;
 
-    block_size = ((block_size / 8) + 1) * 8;
-
-    std::ifstream encrypt(encrypt_path.native(), std::ios::binary);
-    std::ofstream decrypt(decrypt_path.native(), std::ios::binary);
+    std::ifstream encrypt(encrypt_path.native(), std::ios::binary | std::ios::in);
+    std::ofstream decrypt(decrypt_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
     if (!encrypt || !decrypt)
         return std::unexpected(FsError::IoError);
 
+    block_size                        = ((block_size / 8) + 1) * 8;
+    const size_t encrypted_block_size = block_size + crypto_secretbox_MACBYTES;
+
     auto rkey =
         Cryptography::key_from_password(std::string(reinterpret_cast<const char *>(key.data()), key.size()));
+    if (rkey.empty()) {
+        return std::unexpected(FsError::IoError);
+    }
 
-    std::vector<uint8_t> buffer(block_size);
-    while (encrypt) {
-        encrypt.read(reinterpret_cast<char *>(buffer.data()), block_size);
+    std::vector<uint8_t> buffer(encrypted_block_size);
+    while (encrypt.good()) {
+        encrypt.read(reinterpret_cast<char *>(buffer.data()), encrypted_block_size);
         auto bytes_read = encrypt.gcount();
         if (bytes_read <= 0)
             break;
 
-        buffer.resize(bytes_read);
+        if (bytes_read < crypto_secretbox_MACBYTES) {
+            return std::unexpected(FsError::IoError);
+        }
+
+        if (bytes_read != encrypted_block_size) {
+            buffer.resize(bytes_read);
+        }
+
         auto decrypted = Cryptography::symmetric_decrypt(buffer, rkey);
+        if (decrypted.empty()) {
+            return std::unexpected(FsError::IoError);
+        }
+
         if (!decrypt.write(reinterpret_cast<const char *>(decrypted.data()), decrypted.size())) {
             return std::unexpected(FsError::IoError);
         }
     }
 
-    return decrypt_path.exists();
+    if (!encrypt.eof()) {
+        return std::unexpected(FsError::IoError);
+    }
+
+    decrypt.flush();
+    auto size_result = decrypt_path.file_size();
+    if (!size_result)
+        return size_result;
+    return *size_result > 0;
 }
 
 std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath     &input_path,
@@ -378,12 +423,19 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath 
             break;
 
         buffer.resize(bytes_read);
-        auto encrypted = Cryptography::asymmetric_encrypt(buffer, sender_secret_key, receiver_public_key, nonce);
-        if (encrypted.empty()) {
+        auto encrypted = Cryptography::asymmetric_encrypt(buffer,
+                                                          sender_secret_key,
+                                                          receiver_public_key,
+                                                          nonce,
+                                                          NonceWrite::Disable);
+        if (!encrypted.has_value()) {
+            return std::unexpected(FsError::IoError);
+        }
+        if (encrypted->empty()) {
             return std::unexpected(FsError::IoError);
         }
 
-        if (!out.write(reinterpret_cast<char *>(encrypted.data()), encrypted.size())) {
+        if (!out.write(reinterpret_cast<char *>(encrypted->data()), encrypted->size())) {
             return std::unexpected(FsError::IoError);
         }
     }
@@ -394,7 +446,7 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath 
 
     out.flush();
     auto size_result = output_path.file_size();
-    if (!size_result)
+    if (!size_result.has_value())
         return size_result;
     return *size_result > 0;
 }
@@ -432,13 +484,19 @@ std::expected<bool, FsError> Cryptography::asymmetric_decrypt_file(const FsPath 
             encrypted.resize(bytes_read);
         }
 
-        auto decrypted =
-            Cryptography::asymmetric_decrypt(encrypted, receiver_secret_key, sender_public_key, nonce);
-        if (decrypted.empty()) {
+        auto decrypted = Cryptography::asymmetric_decrypt(encrypted,
+                                                          receiver_secret_key,
+                                                          sender_public_key,
+                                                          nonce,
+                                                          NonceWrite::Disable);
+        if (!decrypted.has_value()) {
+            return std::unexpected(FsError::IoError);
+        }
+        if (decrypted->empty()) {
             return std::unexpected(FsError::IoError);
         }
 
-        if (!out.write(reinterpret_cast<char *>(decrypted.data()), decrypted.size())) {
+        if (!out.write(reinterpret_cast<char *>(decrypted->data()), decrypted->size())) {
             return std::unexpected(FsError::IoError);
         }
     }

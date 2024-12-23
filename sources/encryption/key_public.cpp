@@ -31,11 +31,6 @@ KeyPublic::KeyPublic(const std::string &public_key) {
     public_key_ = ByteArray(public_key).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
-std::string KeyPublic::encrypt(const Bytes &data, const PrivateKey &sender_private_key) const {
-    auto res = Cryptography::asymmetric_encrypt(data, sender_private_key, public_key_);
-    return std::string(res.begin(), res.end());
-}
-
 bool KeyPublic::verify(const Bytes &data, const Signature &signature) const {
     return Cryptography::verify(data, public_key_, signature);
 }

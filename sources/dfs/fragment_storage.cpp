@@ -321,7 +321,7 @@ std::uint64_t FragmentStorage::write(std::filesystem::path filePath, std::uint64
         return pos;
     }
     std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = "temp" + pathDelim + filePath.stem().string();
+    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + filePath.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + filePath.stem().string();
     std::ofstream                     ofs(tempFilePath.string(), std::ios::binary);
@@ -387,7 +387,7 @@ std::string FragmentStorage::extract(std::filesystem::path filePath, std::uint64
 
 std::uint64_t FragmentStorage::remove(std::filesystem::path filePath, std::uint64_t pos, std::size_t size) {
     std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = "temp" + pathDelim + filePath.stem().string();
+    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + filePath.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + filePath.stem().string();
     std::ofstream ofs(tempFilePath.string());

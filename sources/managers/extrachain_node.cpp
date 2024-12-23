@@ -325,7 +325,8 @@ std::string ExtraChainNode::exportUser() {
 bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
     auto hash = Utils::calculate_hash(login + password);
 
-    auto json = ByteArray(Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash)).toQByteArray();
+    auto json =
+        ByteArray(Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash)).toQByteArray();
     if (hash.empty() || json.isEmpty()) {
         return false;
     }
@@ -587,7 +588,7 @@ void ExtraChainNode::prepareFolders() {
                                          + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
                                          + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
-    QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
+    // QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     if (!QFile(".settings").exists())

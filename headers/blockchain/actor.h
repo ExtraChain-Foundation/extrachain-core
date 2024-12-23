@@ -176,6 +176,10 @@ public:
         return actor;
     }
 
+    static Actor<T> fromJson(const std::string &serialized) {
+        return fromJson(QByteArray::fromStdString(serialized));
+    }
+
     MSGPACK_DEFINE(id_, type_, key_)
     BOOST_DESCRIBE_CLASS(Actor, (), (), (), (id_, type_, key_))
 };

@@ -99,6 +99,21 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId 
     return nullptr;
 }
 
+const std::expected<std::shared_ptr<Actor<KeyPrivate>>, PrivateProfileError> PrivateProfile::get_actor(
+    const ActorId &actorId) const {
+    if (actorId == ActorId()) {
+        return std::unexpected(PrivateProfileError::ZeroActor);
+    }
+
+    for (const auto &actor : std::as_const(m_actors)) {
+        if (actorId == actor->id()) {
+            return actor;
+        }
+    }
+
+    return std::unexpected(PrivateProfileError::NoActor);
+}
+
 bool PrivateProfile::loaded() {
     return !m_main.is_zero() && !m_actors.empty();
 }

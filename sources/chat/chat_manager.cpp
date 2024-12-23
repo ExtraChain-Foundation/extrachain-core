@@ -50,7 +50,10 @@ ChatManager::ChatManager(ExtraChainNode* node)
             auto from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
 
             auto content = main_actor->key().decrypt(encrypted.value(), from_actor.key().public_key());
-            auto chat    = Json::deserialize<Chat::Chat>(content);
+            if (!content.has_value()) {
+                return;
+            }
+            auto chat = Json::deserialize<Chat::Chat>(content.value());
             if (!chat.has_value()) {
                 return;
             }
@@ -59,6 +62,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
                 return;
             }
 
+            // TODO: check if myself == myself? if i have ~ devices
             ActorId temp  = chat->another.value();
             chat->another = chat->myself;
             chat->myself  = temp;
@@ -141,8 +145,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
                                                CHAT_DAPP_INVITE_FOLDER,
                                                fmt::format("From_{}", main_actor->id()),
                                                Dfs::DataSecurity::Actor,
-                                               Dfs::DataSecurityActor { .sender   = chat.myself,
-                                                                        .receiver = chat.another.value() });
+                                               Dfs::DataSecurityActor { .sender_id   = chat.myself,
+                                                                        .receiver_id = chat.another.value() });
 
     if (!res.has_value()) {
         eCritical("[ChatManager] Invite error: {}", res.error());
@@ -160,7 +164,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto chain = HistoricalCollection::load(main_actor, my_chats->actor_id, my_chats->file_id);
+    auto chain = HistoricalCollection::load(node, main_actor, my_chats->actor_id, my_chats->file_id);
     if (!chain.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -277,6 +281,8 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
 }
 
 std::expected<HistoricalCollectionRow, ChatError> ChatManager::insert_chat_to_mychats(const Chat::Chat& chat) {
+    // TODO: checks if chat exists
+
     auto my_chats = get_my_chats();
     if (!my_chats.has_value()) {
         auto my_chats_result = create_mychats();

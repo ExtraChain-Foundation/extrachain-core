@@ -40,8 +40,6 @@ public:
 
     KeyPublic &operator=(const KeyPublic &other) = default;
 
-    std::string encrypt(const Bytes &data, const PrivateKey &sender_private_key) const;
-
     bool verify(const Bytes &data, const Signature &signature) const;
     bool verify(const std::string &data, const Signature &signature) const;
 

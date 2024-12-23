@@ -44,11 +44,15 @@ void KeyPrivate::generate() {
     public_key_                   = public_key;
 }
 
-Bytes KeyPrivate::encrypt(const Bytes &data, const PublicKey &receiver_public_key, const Nonce &nonce) const {
+Cryptography::CryptoResult KeyPrivate::encrypt(const Bytes     &data,
+                                               const PublicKey &receiver_public_key,
+                                               const Nonce     &nonce) const {
     return Cryptography::asymmetric_encrypt(data, secret_key_, receiver_public_key, nonce);
 }
 
-Bytes KeyPrivate::decrypt(const Bytes &data, const PublicKey &sender_public_key, const Nonce &nonce) const {
+Cryptography::CryptoResult KeyPrivate::decrypt(const Bytes     &data,
+                                               const PublicKey &sender_public_key,
+                                               const Nonce     &nonce) const {
     return Cryptography::asymmetric_decrypt(data, secret_key_, sender_public_key, nonce);
 }
 
@@ -66,11 +70,11 @@ std::expected<bool, FsError> KeyPrivate::decrypt_file(const FsPath    &file,
     return Cryptography::asymmetric_decrypt_file(file, result_file, secret_key_, sender_public_key, nonce);
 }
 
-Bytes KeyPrivate::encrypt_self(const Bytes &data) const {
+Cryptography::CryptoResult KeyPrivate::encrypt_self(const Bytes &data) const {
     return Cryptography::asymmetric_encrypt_self(data, secret_key_, public_key_);
 }
 
-Bytes KeyPrivate::decrypt_self(const Bytes &data) const {
+Cryptography::CryptoResult KeyPrivate::decrypt_self(const Bytes &data) const {
     return Cryptography::asymmetric_decrypt_self(data, secret_key_, public_key_);
 }
 

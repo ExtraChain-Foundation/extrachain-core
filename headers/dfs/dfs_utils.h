@@ -180,24 +180,17 @@ namespace Dfs {
     BOOST_DESCRIBE_STRUCT(DataSecuritySelf, (), (my_actor))
 
     struct DataSecurityActor {
-        ActorId sender;
-        ActorId receiver;
+        ActorId sender_id;
+        ActorId receiver_id;
     };
-    BOOST_DESCRIBE_STRUCT(DataSecurityActor, (), (sender, receiver))
-
-    struct DataSecurityFullActor {
-        Actor<KeyPrivate> sender;
-        Actor<KeyPublic>  receiver;
-    };
-    BOOST_DESCRIBE_STRUCT(DataSecurityFullActor, (), (sender, receiver))
+    BOOST_DESCRIBE_STRUCT(DataSecurityActor, (), (sender_id, receiver_id))
 
     struct DataSecurityKey {
         KeyBytes key;
     };
     BOOST_DESCRIBE_STRUCT(DataSecurityKey, (), (key))
 
-    using DataSecurityData =
-        std::variant<std::monostate, DataSecuritySelf, DataSecurityActor, DataSecurityKey, DataSecurityFullActor>;
+    using DataSecurityData = std::variant<std::monostate, DataSecuritySelf, DataSecurityActor, DataSecurityKey>;
 
     struct DirRow {
         ActorId actor_id;

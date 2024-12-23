@@ -171,19 +171,23 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->accountController()->currentProfile().getActor(security_actor->sender);
-            auto receiver = node->actorIndex()->getActor(security_actor->receiver);
+            auto sender   = node->accountController()->currentProfile().getActor(security_actor->sender_id);
+            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
             // TODO: checks
             auto res = sender->key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
         }
     }
 
     if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
             auto res = Cryptography::symmetric_encrypt_file(new_file_path, dfs_path, security_key->key);
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
         }
     }
 
@@ -329,7 +333,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     auto        dfs_path = DfsPath::file_path(owner_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().getActor(owner_id);
 
-    auto chain = HistoricalCollection::create(actor, actor->id(), file_id, collection_template);
+    auto chain = HistoricalCollection::create(node, actor, actor->id(), file_id, collection_template);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -359,7 +363,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
                                        .created       = 0,
                                        .last_modified = 0,
                                        .type          = Dfs::FileType::Collection,
-                                       .encryption    = Dfs::DataSecurity::Public,
+                                       .encryption    = data_security,
                                        .state         = Dfs::FileState::Ready };
     bool        add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, main_actor);
 
@@ -378,10 +382,9 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     const ActorId               &owner_id,
     const std::string           &file_id,
     uint32_t                     id,
-    Dfs::DataSecurity            data_security,
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
     auto row        = chain->get_collection_row(id);
     return row;
 }
@@ -389,10 +392,9 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
 std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection_rows(
     const ActorId               &owner_id,
     const std::string           &file_id,
-    Dfs::DataSecurity            data_security,
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
     auto row        = chain->get_collection_rows();
     return row;
 }
@@ -413,7 +415,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    return store_collection(owner_id, visual_name, collection_template.value());
+    return store_collection(owner_id, visual_name, collection_template.value(), data_security, security_data);
 }
 
 ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId               &owner_id,
@@ -421,17 +423,16 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
                                                                  DbRow                        row,
                                                                  std::uint32_t                id,
                                                                  CollectionOperation          type,
-                                                                 Dfs::DataSecurity            data_security,
                                                                  const Dfs::DataSecurityData &security_data) {
-    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
-    if (!dirRowExp.has_value()) {
-        return std::unexpected(dirRowExp.error());
+    auto dir_row_result = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dir_row_result.has_value()) {
+        return std::unexpected(dir_row_result.error());
     }
     // TODO: check fields
 
     // TODO: choose sign actor from args
     auto main_actor = node->accountController()->currentProfile().main();
-    auto chain      = HistoricalCollection::load(main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -439,10 +440,10 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     std::expected<HistoricalCollectionRow, CollectionError> historical_row;
     switch (type) {
     case CollectionOperation::Add:
-        historical_row = chain->add_row(row, data_security, security_data);
+        historical_row = chain->add_row(row, dir_row_result->encryption, security_data);
         break;
     case CollectionOperation::Update:
-        historical_row = chain->update_row(id, row, data_security, security_data);
+        historical_row = chain->update_row(id, row, dir_row_result->encryption, security_data);
         break;
     case CollectionOperation::Remove:
         historical_row = chain->remove_row(id);
@@ -455,7 +456,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto dir_row          = dirRowExp.value();
+    auto dir_row          = dir_row_result.value();
     dir_row.last_modified = historical_row.value().timestamp;
     auto [hash, size]     = Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
     dir_row.hash          = hash;
@@ -466,21 +467,14 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_row.value()),
                                   MessageType::DfsCollectionRowChange);
 
-    return std::pair { dirRowExp.value(), historical_row.value() };
+    return std::pair { dir_row_result.value(), historical_row.value() };
 }
 
 ExpectedDirHistoricalRow DfsController::add_collection_row(const ActorId               &owner_id,
                                                            const std::string           &file_id,
                                                            DbRow                        row,
-                                                           Dfs::DataSecurity            data_security,
                                                            const Dfs::DataSecurityData &security_data) {
-    auto res = universal_collection_row(owner_id,
-                                        file_id,
-                                        row,
-                                        0,
-                                        CollectionOperation::Add,
-                                        data_security,
-                                        security_data);
+    auto res = universal_collection_row(owner_id, file_id, row, 0, CollectionOperation::Add, security_data);
     if (res.has_value()) {
         auto &res_ = res.value();
 
@@ -493,15 +487,8 @@ ExpectedDirHistoricalRow DfsController::update_collection_row(const ActorId     
                                                               const std::string           &file_id,
                                                               uint32_t                     id,
                                                               DbRow                        row,
-                                                              Dfs::DataSecurity            data_security,
                                                               const Dfs::DataSecurityData &security_data) {
-    auto res = universal_collection_row(owner_id,
-                                        file_id,
-                                        row,
-                                        id,
-                                        CollectionOperation::Update,
-                                        data_security,
-                                        security_data);
+    auto res = universal_collection_row(owner_id, file_id, row, id, CollectionOperation::Update, security_data);
     if (res.has_value()) {
         auto &res_ = res.value();
 
@@ -513,13 +500,8 @@ ExpectedDirHistoricalRow DfsController::update_collection_row(const ActorId     
 ExpectedDirHistoricalRow DfsController::remove_collection_row(const ActorId     &owner_id,
                                                               const std::string &file_id,
                                                               uint32_t           id) {
-    auto res = universal_collection_row(owner_id,
-                                        file_id,
-                                        {},
-                                        id,
-                                        CollectionOperation::Remove,
-                                        Dfs::DataSecurity::Public,
-                                        Dfs::DataSecurityData());
+    auto res =
+        universal_collection_row(owner_id, file_id, {}, id, CollectionOperation::Remove, Dfs::DataSecurityData());
     if (res.has_value()) {
         auto &res_ = res.value();
 
@@ -538,7 +520,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
     auto dirRow = dirRowExp.value();
 
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(main_actor, owner_id, file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
         return;
@@ -606,7 +588,7 @@ void DfsController::network_response_historical_collection(
         collection_template = collection_template_result.value();
     }
 
-    auto chain = HistoricalCollection::create(main_actor, owner_id, file_id, collection_template);
+    auto chain = HistoricalCollection::create(node, main_actor, owner_id, file_id, collection_template);
 
     if (!chain.has_value()) {
         return;
@@ -639,7 +621,7 @@ void DfsController::network_response_content_collection(const ActorId           
 
     auto main_actor = node->accountController()->mainActor();
 
-    auto chain_opt = HistoricalCollection::load(main_actor, owner_id, file_id);
+    auto chain_opt = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain_opt.has_value()) {
         return;
     }
@@ -699,7 +681,7 @@ void DfsController::network_change_collection(const ActorId                 &own
         // return;
     }
 
-    auto chain = HistoricalCollection::load(main_actor, owner_id, file_id);
+    auto chain = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain.has_value()) {
         return;
     }
@@ -976,7 +958,7 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
 
 bool DfsController::insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file) {
     std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
+    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
     std::ofstream                     ofs(tempFilePath.string(), std::ios::binary);
@@ -1031,7 +1013,7 @@ bool DfsController::insertDataChunk(std::string data, std::uint64_t position, st
 
 bool DfsController::removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file) {
     std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = "temp" + pathDelim + file.stem().string();
+    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + file.stem().string();
     std::filesystem::create_directories(tempFilePath.remove_filename());
     tempFilePath = tempFilePath.string() + file.stem().string();
     std::ofstream                     ofs(tempFilePath.string());
