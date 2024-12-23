@@ -165,7 +165,7 @@ void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
-    if (Utils::isAllEmpty(m_signature)) {
+    if (Utils::is_container_empty(m_signature)) {
         return false;
     }
 

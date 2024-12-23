@@ -16,3 +16,41 @@
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
+#ifndef DB_ITERATOR_H
+#define DB_ITERATOR_H
+
+enum class DbColumnType {
+    Integer = 1,
+    Float = 2,
+    Text = 3,
+    Blob = 4,
+    Null = 5
+};
+
+struct sqlite3_stmt;
+
+class DbIterator {
+public:
+    DbIterator(sqlite3_stmt* stmt);
+    ~DbIterator();
+
+    bool next();
+
+    std::string getString(int column);
+    int64_t getInt64(int column);
+    double getDouble(int column);
+    std::string getBlob(int column);
+
+    int columnCount();
+    std::string columnName(int column);
+    DbColumnType columnType(int column);
+
+    std::string getValue(int column);
+    std::unordered_map<std::string, std::string> dbRow();
+
+private:
+    sqlite3_stmt* m_stmt;
+    bool m_done;
+};
+#endif // DB_ITERATOR_H

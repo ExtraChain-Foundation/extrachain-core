@@ -36,24 +36,24 @@ class EXTRACHAIN_EXPORT Actor final {
                   "Type is not supported. Only Keys are supported");
 
 private:
-    ActorId   m_id;
-    T         m_key;
-    ActorType m_type = ActorType::User;
+    ActorId   id_;
+    T         key_;
+    ActorType type_ = ActorType::User;
 
 public:
     Actor()  = default;
     ~Actor() = default;
 
     Actor(const Actor<T> &copyActor) {
-        m_id   = copyActor.id();
-        m_key  = copyActor.key();
-        m_type = ActorType(copyActor.type());
+        id_   = copyActor.id();
+        key_  = copyActor.key();
+        type_ = ActorType(copyActor.type());
     }
 
     Actor &operator=(const Actor<T> &copyActor) {
-        m_id   = copyActor.id();
-        m_key  = copyActor.key();
-        m_type = copyActor.type();
+        id_   = copyActor.id();
+        key_  = copyActor.key();
+        type_ = copyActor.type();
         return *this;
     }
 
@@ -66,68 +66,68 @@ public:
         static_assert(std::is_same<T, KeyPrivate>::value,
                       "Сannot be created with a public key. Only private is supported");
 
-        this->m_type = type;
-        this->m_key.generate();
-        auto        publicKey = this->m_key.publicKey();
-        std::string hash = Utils::calculate_hash(ByteArray(publicKey).toString(), Utils::HashAlgorithm::Sha3_512);
+        this->type_ = type;
+        this->key_.generate();
+        auto public_key = this->key_.public_key();
+        auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Sha3_512);
 
         if (hash.size() >= BlockchainConst::ACTOR_SIZE)
-            m_id = hash.substr(0, BlockchainConst::ACTOR_SIZE);
+            id_ = hash.substr(0, BlockchainConst::ACTOR_SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
 
     bool empty() const {
-        if (m_key.empty())
+        if (key_.empty())
             return true;
 
-        return m_id.is_zero();
+        return id_.is_zero();
     }
 
     bool operator==(const Actor<T> &other) {
-        return this->m_id == other.m_id && *m_key == *other.m_key && m_type == other.m_type;
+        return this->id_ == other.id_ && *key_ == *other.key_ && type_ == other.type_;
     }
 
     const ActorId &id() const {
-        return m_id;
+        return id_;
     }
 
     const T &key() const {
-        return m_key;
+        return key_;
     }
 
     ActorType type() const {
-        return m_type;
+        return type_;
     }
 
     Actor<KeyPublic> to_public() const {
         Actor<KeyPublic> actor;
 
-        actor.setId(m_id);
-        actor.set_public_key(m_key.publicKey());
-        actor.setType(m_type);
+        actor.set_id(id_);
+        actor.set_public_key(key_.public_key());
+        actor.set_type(type_);
 
         return actor;
     }
 
-    void setId(const ActorId &id) {
-        m_id = id;
+    void set_id(const ActorId &id) {
+        id_ = id;
     }
 
     void set_secret_key(const PrivateKey &secretKey, const PublicKey &publicKey) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(isPrivate);
-        m_key = KeyPrivate(secretKey, publicKey);
+        key_ = KeyPrivate(secretKey, publicKey);
     }
 
     void set_public_key(const PublicKey &key) {
         bool isPrivate = std::is_same<T, KeyPrivate>::value;
         Q_ASSERT(!isPrivate);
-        m_key = KeyPublic(key);
+        key_ = KeyPublic(key);
     }
 
-    void setType(const ActorType &type) {
-        m_type = type;
+    void set_type(const ActorType &type) {
+        type_ = type;
     }
 
     QByteArray toJson() const {
@@ -142,12 +142,12 @@ public:
         }
 
         QJsonArray array;
-        QString    pub = QString::fromStdString(Utils::to_base64(m_key.publicKey()));
+        QString    pub = QString::fromStdString(Utils::to_base64(key_.public_key()));
 
-        array << m_id.toQString() << int(m_type) << pub;
+        array << id_.toQString() << int(type_) << pub;
 
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            QString secret = QString::fromStdString(Utils::to_base64(m_key.secretKey()));
+            QString secret = QString::fromStdString(Utils::to_base64(key_.secret_key()));
             array << secret;
         }
 
@@ -161,21 +161,25 @@ public:
 
         Actor<T> actor;
         auto     array = QJsonDocument::fromJson(serialized).array();
-        actor.setId(ActorId(array[0].toString().toStdString()));
-        actor.setType(ActorType(array[1].toInt()));
-        auto pub = ByteArray::fromBase64(array[2].toString()).toArray<32>();
+        actor.set_id(ActorId(array[0].toString().toStdString()));
+        actor.set_type(ActorType(array[1].toInt()));
+        auto pub = ByteArray::fromBase64(array[2].toString()).toArray<crypto_sign_PUBLICKEYBYTES>();
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
             actor.set_public_key(pub);
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
-            auto sec = ByteArray::fromBase64(array[3].toString()).toArray<64>();
+            auto sec = ByteArray::fromBase64(array[3].toString()).toArray<crypto_sign_SECRETKEYBYTES>();
             actor.set_secret_key(sec, pub);
         }
 
         return actor;
     }
 
-    MSGPACK_DEFINE(m_id, m_type, m_key)
-    BOOST_DESCRIBE_CLASS(Actor, (), (), (), (m_id, m_type, m_key))
+    static Actor<T> fromJson(const std::string &serialized) {
+        return fromJson(QByteArray::fromStdString(serialized));
+    }
+
+    MSGPACK_DEFINE(id_, type_, key_)
+    BOOST_DESCRIBE_CLASS(Actor, (), (), (), (id_, type_, key_))
 };

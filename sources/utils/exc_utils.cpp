@@ -301,64 +301,6 @@ std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(cons
     return result;
 }
 
-bool Utils::encryptFile(const QString    &originalName,
-                        const QString    &encryptName,
-                        const QByteArray &key,
-                        int               blockSize) {
-    QFile orig(originalName);
-    if (!orig.exists())
-        return false;
-    QFile encrypt(encryptName);
-    bool  origOpen    = orig.open(QFile::ReadOnly);
-    bool  encryptOpen = encrypt.open(QFile::WriteOnly);
-    if (!origOpen || !encryptOpen) {
-        eLog("[Utils::encryptFile] Error while loading files {} {}", origOpen, encryptOpen);
-        return false;
-    }
-    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
-    while (!orig.atEnd()) {
-        QByteArray part      = orig.read(blockSize);
-        QByteArray encrypted = ByteArray(Cryptography::encrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
-        encrypt.write(encrypted);
-        // eLog("encrypted {} {}", part.size(), encrypted.size());
-    }
-
-    eLog("[Dfs] Encrypted file {} to {} with sizes {} {}", originalName, encryptName, orig.size(), encrypt.size());
-    orig.close();
-    encrypt.close();
-    return QFile::exists(encryptName);
-}
-
-bool Utils::decryptFile(const QString    &encryptName,
-                        const QString    &decryptName,
-                        const QByteArray &key,
-                        int               blockSize) //
-{
-    blockSize = (blockSize / 8 + 1) * 8;
-    QFile encrypt(encryptName);
-    if (!encrypt.exists())
-        return false;
-    QFile decrypt(decryptName);
-
-    bool encryptOpen = encrypt.open(QFile::ReadOnly);
-    bool decryptOpen = decrypt.open(QFile::WriteOnly);
-    if (!encryptOpen || !decryptOpen) {
-        eLog("[Utils::decryptFile] Error while loading files {} {}", encryptOpen, decryptOpen);
-        return false;
-    }
-    auto rkey = Cryptography::getKeyPassFromPassword(key.toStdString());
-    while (!encrypt.atEnd()) {
-        QByteArray part      = encrypt.read(blockSize);
-        QByteArray decrypted = ByteArray(Cryptography::decrypt(ByteArray(part).toBytes(), rkey)).toQByteArray();
-        decrypt.write(decrypted);
-        eLog("Utils::decryptFile] Decrypted {} {}", part.size(), decrypted.size());
-    }
-
-    encrypt.close();
-    decrypt.close();
-    return QFile::exists(decryptName);
-}
-
 QString Utils::fileMimeType(const QString &filePath) {
     QMimeDatabase db;
     QMimeType     type = db.mimeTypeForFile(filePath);

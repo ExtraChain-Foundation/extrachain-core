@@ -24,9 +24,14 @@
 #include "blockchain/actor.h"
 #include "blockchain/block_variant.h"
 #include "managers/extrachain_node.h"
-#include "network/network_manager.h"
 
 class ExtraChainNode;
+
+enum class ActorIndexError {
+    Unknown,
+    NoActor,
+    ZeroActor
+};
 
 /**
  * @brief Actors that stored in blockchain
@@ -86,6 +91,8 @@ public:
      * @return Found actor, or empty actor (if not found)
      */
     Actor<KeyPublic> getActor(const ActorId &id);
+
+    std::expected<Actor<KeyPublic>, ActorIndexError> get_actor(const ActorId &id);
 
     /**
      * @brief Validates block digital signature

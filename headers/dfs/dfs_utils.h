@@ -148,7 +148,9 @@ namespace Dfs {
         InvalidName,
         InvalidTemplate,
         NotWritable,
-        WrongTemplate
+        WrongTemplate,
+        IncorrectSecurityData,
+        IncorrectEncryption
     };
 
     enum class FileType {
@@ -165,10 +167,30 @@ namespace Dfs {
         Partial = 3
     };
 
-    enum class SecurityLevel {
-        Public    = 0,
-        Encrypted = 1
+    enum class DataSecurity {
+        Public = 0,
+        Self   = 1,
+        Actor  = 2,
+        Key    = 3
     };
+
+    struct DataSecuritySelf {
+        ActorId my_actor;
+    };
+    BOOST_DESCRIBE_STRUCT(DataSecuritySelf, (), (my_actor))
+
+    struct DataSecurityActor {
+        ActorId sender_id;
+        ActorId receiver_id;
+    };
+    BOOST_DESCRIBE_STRUCT(DataSecurityActor, (), (sender_id, receiver_id))
+
+    struct DataSecurityKey {
+        KeyBytes key;
+    };
+    BOOST_DESCRIBE_STRUCT(DataSecurityKey, (), (key))
+
+    using DataSecurityData = std::variant<std::monostate, DataSecuritySelf, DataSecurityActor, DataSecurityKey>;
 
     struct DirRow {
         ActorId actor_id;
@@ -185,9 +207,9 @@ namespace Dfs {
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
-        Dfs::FileType      type       = Dfs::FileType::File;
-        Dfs::SecurityLevel encryption = Dfs::SecurityLevel::Public;
-        Dfs::FileState     state      = Dfs::FileState::Known;
+        Dfs::FileType     type       = Dfs::FileType::File;
+        Dfs::DataSecurity encryption = Dfs::DataSecurity::Public;
+        Dfs::FileState    state      = Dfs::FileState::Known;
 
         Signature sign = Signature();
 
@@ -203,7 +225,7 @@ namespace Dfs {
         }
 
         bool encrypted() const {
-            return encryption == Dfs::SecurityLevel::Encrypted;
+            return encryption != Dfs::DataSecurity::Public;
         }
 
         bool empty() const {
@@ -456,7 +478,7 @@ namespace Dfs {
       "created       INTEGER           NOT NULL,"
       "last_modified INTEGER           NOT NULL,"
       "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
-      "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
+      "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 3),"
       "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 3),"
       "sign          TEXT              NOT NULL,"
       "UNIQUE(folder, name)"
@@ -482,8 +504,9 @@ namespace Dfs {
 
             // TODO: search in dir row: by file type, by name, get folder, ...
 
-            std::expected<std::vector<uint8_t>, Utils::FileError> get_file_content(const ActorId&     actor_id,
-                                                                                   const std::string& file_id);
+            std::expected<std::vector<std::uint8_t>, Utils::FileError> get_file_content(
+                const ActorId&     actor_id,
+                const std::string& file_id);
 
             // TODO: expected
             std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
@@ -554,6 +577,6 @@ namespace DfsPath = Dfs::Path;
 
 MSGPACK_ADD_ENUM(Dfs::FileType)
 MSGPACK_ADD_ENUM(Dfs::FileState)
-MSGPACK_ADD_ENUM(Dfs::SecurityLevel)
+MSGPACK_ADD_ENUM(Dfs::DataSecurity)
 MSGPACK_ADD_ENUM(Dfs::Packets::SegmentMessageType)
 MSGPACK_ADD_ENUM(Dfs::Reward::TypeFunctioning)

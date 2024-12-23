@@ -24,6 +24,7 @@
 #include "blockchain/actor_index.h"
 #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
+#include "network/network_manager.h"
 
 Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)
@@ -910,7 +911,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
             // return TransactionProveError::ZeroProducer;
         }
 
-        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<64>())) {
+        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<crypto_sign_BYTES>())) {
             // return TransactionProveError::ProducerVerify;
         }
 

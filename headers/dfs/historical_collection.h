@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "utils/db_schema.h"
 #include "dfs/dfs_utils.h"
 #include "blockchain/actor.h"
 #include "utils/fs_path.h"
@@ -39,7 +38,8 @@ enum class CollectionError {
     StructuralCreation,
     Adding,
     Updating,
-    Deleting
+    Deleting,
+    IncorrectEncryption
 };
 
 struct HistoricalCollectionRow {
@@ -60,41 +60,63 @@ struct CollectionTemplateLink {
 };
 BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
 
+class ExtraChainNode;
+
 class HistoricalCollection {
 private:
+    ExtraChainNode*                    node;
     FsPath                             file_path_;
     FsPath                             historical_path_;
     std::shared_ptr<Actor<KeyPrivate>> actor_;
     ActorId                            file_actor_id_;
     std::string                        file_id_;
     std::string                        table_name_;
+    Dfs::DataSecurity                  data_security_;
+    Dfs::DataSecurityData              security_data_;
 
     HistoricalCollection() = default;
-    HistoricalCollection(const std::shared_ptr<Actor<KeyPrivate>>& actor,
+    HistoricalCollection(ExtraChainNode*                           node,
+                         const std::shared_ptr<Actor<KeyPrivate>>& actor,
                          const ActorId&                            file_actor_id,
-                         const std::string&                        file_id);
+                         const std::string&                        file_id,
+                         Dfs::DataSecurity                         data_security,
+                         const Dfs::DataSecurityData&              security_data);
 
 public:
     static std::expected<HistoricalCollection, CollectionError> create(
+        ExtraChainNode*                           node,
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
         const ActorId&                            template_actor_id,
-        const std::string&                        template_file_id);
+        const std::string&                        template_file_id,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
     static std::expected<HistoricalCollection, CollectionError> create(
+        ExtraChainNode*                           node,
         const std::shared_ptr<Actor<KeyPrivate>>& main_actor,
         const ActorId&                            file_actor_id,
         const std::string&                        file_id,
-        const Dfs::CollectionTemplate&            collection_template);
+        const Dfs::CollectionTemplate&            collection_template,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
 
     static std::expected<HistoricalCollection, CollectionError> load(
+        ExtraChainNode*                           node,
         const std::shared_ptr<Actor<KeyPrivate>>& actor,
         const ActorId&                            file_actor_id,
-        const std::string&                        file_id);
+        const std::string&                        file_id,
+        Dfs::DataSecurity                         data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData&              security_data = Dfs::DataSecurityData());
 
-    std::expected<HistoricalCollectionRow, CollectionError> add_row(DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> update_row(uint32_t id, DbRow& row);
-    std::expected<HistoricalCollectionRow, CollectionError> remove_row(std::uint32_t id);
+    std::expected<HistoricalCollectionRow, CollectionError> add_row(const DbRow&                 row,
+                                                                    Dfs::DataSecurity            data_security,
+                                                                    const Dfs::DataSecurityData& security_data);
+    std::expected<HistoricalCollectionRow, CollectionError> update_row(const uint32_t               id,
+                                                                       const DbRow&                 row,
+                                                                       Dfs::DataSecurity            data_security,
+                                                                       const Dfs::DataSecurityData& security_data);
+    std::expected<HistoricalCollectionRow, CollectionError> remove_row(const uint32_t id);
 
     std::expected<void, CollectionError> change_collection(const HistoricalCollectionRow& historical_row);
 
@@ -145,4 +167,11 @@ private:
     void insert_historical_row(HistoricalCollectionRow& historical_row);
     void historical_collection_row_sign(HistoricalCollectionRow& row);
     bool historical_collection_row_verify(const HistoricalCollectionRow& row);
+
+    std::expected<DbRow, CollectionError> encrypt_data(const DbRow&                 row,
+                                                       Dfs::DataSecurity            data_security,
+                                                       const Dfs::DataSecurityData& security_data);
+    std::expected<DbRow, CollectionError> decrypt_data(const DbRow&                 row,
+                                                       Dfs::DataSecurity            data_security,
+                                                       const Dfs::DataSecurityData& security_data);
 };

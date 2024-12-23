@@ -318,14 +318,15 @@ std::string ExtraChainNode::exportUser() {
     array << privateProfile; // 3
 
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
-    auto data = Cryptography::encryptWithPassword(ByteArray(json).toBytes(), hash);
+    auto data = Cryptography::symmetric_encrypt_password(ByteArray(json).toBytes(), hash);
     return ByteArray(data).toString();
 }
 
 bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
     auto hash = Utils::calculate_hash(login + password);
 
-    auto json = ByteArray(Cryptography::decryptWithPassword(ByteArray(data).toBytes(), hash)).toQByteArray();
+    auto json =
+        ByteArray(Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash)).toQByteArray();
     if (hash.empty() || json.isEmpty()) {
         return false;
     }
@@ -339,7 +340,7 @@ bool ExtraChainNode::importUser(const std::string& data, const std::string& logi
     auto date                  = array[1].toInteger();
     auto profile               = array[2].toObject();
     auto profileBytes          = QJsonDocument(profile).toJson(QJsonDocument::Compact);
-    auto profileBytesEncrypted = Cryptography::encryptWithPassword(ByteArray(profileBytes).toBytes(), hash);
+    auto profileBytesEncrypted = Cryptography::symmetric_encrypt_password(ByteArray(profileBytes).toBytes(), hash);
 
     Q_UNUSED(extrachainVersion)
     Q_UNUSED(date)
@@ -471,7 +472,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     if (first.empty())
         return;
     auto& mainKey   = m_accountController->mainActor()->key();
-    auto& publicKey = first.key().publicKey();
+    auto& publicKey = first.key().public_key();
 
     // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
     //                                            { "token", mainKey.encrypt(token.toStdString(),
@@ -573,7 +574,7 @@ void ExtraChainNode::connectSignals() {
                                   pathToJson.toStdString(),
                                   "contract",
                                   "token-description.json",
-                                  Dfs::SecurityLevel::Public);
+                                  Dfs::DataSecurity::Public);
             });
 }
 
@@ -587,7 +588,7 @@ void ExtraChainNode::prepareFolders() {
                                          + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
                                          + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
-    QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
+    // QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     if (!QFile(".settings").exists())

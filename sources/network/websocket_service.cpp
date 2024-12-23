@@ -98,7 +98,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
               json.toJson(QJsonDocument::Compact),
               m_isConstant);
 
-        pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
+        pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<crypto_sign_PUBLICKEYBYTES>());
         if (pub.empty()) { // or incorrect
             eFatal("Incorrect public key in socket");
         }
@@ -106,7 +106,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         QJsonObject jsonAnswer;
         jsonAnswer["isRequest"]        = false;
         jsonAnswer["canUseConnection"] = !m_needToDelete;
-        jsonAnswer["pub"]              = ByteArray(priv.publicKey()).toBase64QString();
+        jsonAnswer["pub"]              = ByteArray(priv.public_key()).toBase64QString();
 
         auto firstMessage  = generateFirstMessage();
         auto prepared      = prepareSendMessage(firstMessage);
@@ -135,7 +135,8 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
     bool canUseConnection = json["canUseConnection"].toBool();
 
     auto tempPub = json["pub"].toString();
-    pub          = KeyPublic(ByteArray::fromBase64(tempPub).toArray<32>());
+    pub          = KeyPublic(ByteArray::fromBase64(tempPub).toArray<crypto_sign_PUBLICKEYBYTES>());
+
     if (pub.empty()) {
         eLog("Incorrect public key in socket");
         emit error(Network::SocketServiceError::IncorrectPublicKey, "");
@@ -213,7 +214,7 @@ void WebSocketService::handshake() {
     QJsonObject json;
     json["isRequest"]  = true;
     json["isConstant"] = m_isConstant.load();
-    json["pub"]        = ByteArray(priv.publicKey()).toBase64QString();
+    json["pub"]        = ByteArray(priv.public_key()).toBase64QString();
     json["identifier"] = QString(Network::currentIdentifier());
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);

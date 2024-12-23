@@ -180,7 +180,11 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
     if (pub.empty())
         eFatal("Socket encrypt error");
 
-    auto result = ByteArray(priv.encrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
+    auto encrypt_result = priv.encrypt(ByteArray(message).toBytes(), pub.public_key());
+    if (!encrypt_result.has_value()) {
+        return "";
+    }
+    auto result = ByteArray(encrypt_result.value()).toQByteArray();
     m_bytesOutgoing += result.length();
     return result;
 }
@@ -189,7 +193,11 @@ QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (pub.empty())
         eFatal("Socket decrypt error");
 
-    auto result = ByteArray(priv.decrypt(ByteArray(message).toBytes(), pub.publicKey())).toQByteArray();
+    auto decrypt_result = priv.decrypt(ByteArray(message).toBytes(), pub.public_key());
+    if (!decrypt_result.has_value()) {
+        return "";
+    }
+    auto result = ByteArray(decrypt_result.value()).toQByteArray();
     if (result.isEmpty())
         return "";
     m_bytesIncoming += message.length();

@@ -18,11 +18,12 @@
  */
 
 #include "managers/data_mining_manager.h"
+#include "managers/account_controller.h"
 #include "blockchain/blockchain.h"
 #include "dfs/dfs_controller.h"
 #include "managers/transaction_manager.h"
+#include "network/network_manager.h"
 #include "utils/bignumber_float.h"
-#include "utils/exc_utils.h"
 
 DataMiningManager::DataMiningManager(ExtraChainNode *node, QObject *parent)
     : QObject(parent) {

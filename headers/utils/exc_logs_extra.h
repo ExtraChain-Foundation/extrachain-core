@@ -88,7 +88,11 @@ struct fmt::formatter<std::variant<Types...>> {
         return std::visit(
             [&ctx](const auto& value) {
                 using T = std::decay_t<decltype(value)>;
-                return fmt::format_to(ctx.out(), "{}({})", std::string_view(typeid(T).name()), value);
+                if constexpr (std::is_same_v<T, std::monostate>) {
+                    return fmt::format_to(ctx.out(), "{}({})", std::string_view(typeid(T).name()), "monostate");
+                } else {
+                    return fmt::format_to(ctx.out(), "{}({})", std::string_view(typeid(T).name()), value);
+                }
             },
             var);
     }

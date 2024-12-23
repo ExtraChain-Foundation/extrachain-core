@@ -81,7 +81,7 @@ protected:
     void run() override;
 
 signals:
-    void downloadedFile(Dfs::DirRow dirRow);
+    void downloadedFile(ActorId owner_id, Dfs::DirRow dirRow);
     void eraseFromFiles(const DfsP::SegmentMessage m_msg);
     void sendFile(const ActorId& actor, const std::string& fileName, const std::string& messageId = "");
     void downloadProgress(const ActorId& actor, const std::string& fileName, const double progress);

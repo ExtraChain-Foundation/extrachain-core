@@ -21,6 +21,12 @@
 
 #include "blockchain/actor.h"
 
+enum class PrivateProfileError {
+    Unknown,
+    NoActor,
+    ZeroActor
+};
+
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
     static PrivateProfile                    create(const Actor<KeyPrivate> &actor, const std::string &hash);
@@ -32,9 +38,11 @@ public:
     void                                                   addWallet(const Actor<KeyPrivate> &actor);
     bool                                     renameWallet(const ActorId &actorId, const std::string &walletName);
     const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
-    bool                                     loaded();
-    const std::string                       &hash() const;
-    QJsonObject                              toJson() const;
+    const std::expected<std::shared_ptr<Actor<KeyPrivate>>, PrivateProfileError> get_actor(
+        const ActorId &actorId) const;
+    bool               loaded();
+    const std::string &hash() const;
+    QJsonObject        toJson() const;
 
     std::map<ActorId, std::string> getWalletNames() const;
 
