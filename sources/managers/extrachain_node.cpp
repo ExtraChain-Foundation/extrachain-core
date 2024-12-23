@@ -188,7 +188,8 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         return false;
     }
 
-    auto store_res = m_dfs->store_collection(first.id(), "Tokens", template_res->actor_id, template_res->file_id);
+    auto store_res =
+        m_dfs->store_collection(first.id(), first.id(), "Tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         Utils::wipeDataFiles();
@@ -569,9 +570,10 @@ void ExtraChainNode::connectSignals() {
     connect(m_tokenManager,
             &TokenManager::sendToken,
             this,
-            [=, this](const ActorId& actorId, const QString& pathToJson) {
-                m_dfs->store_file(actorId,
-                                  pathToJson.toStdString(),
+            [=, this](const ActorId& actor_id, const QString& json_path) {
+                m_dfs->store_file(actor_id,
+                                  actor_id,
+                                  json_path.toStdString(),
                                   "contract",
                                   "token-description.json",
                                   Dfs::DataSecurity::Public);

@@ -59,6 +59,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
+                                                                    const ActorId               &author_id,
                                                                     const std::filesystem::path &file_path,
                                                                     const std::string           &visual_folder,
                                                                     const std::string           &visual_name,
@@ -198,21 +199,25 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     }
 
     // create new dir row
-    auto        main_actor = node->accountController()->currentProfile().main();
-    Dfs::DirRow dir_row    = { .actor_id      = main_actor->id(),
-                               .file_id       = file_id,
-                               .prev_file_id  = "",
-                               .hash          = file_hash,
-                               .folder        = visual_folder,
-                               .name          = visual_name,
-                               .size          = file_size_dfs.value(),
-                               .created       = 0,
-                               .last_modified = 0,
-                               .type          = Dfs::FileType::File,
-                               .encryption    = data_security,
-                               .state         = Dfs::FileState::Ready };
+    Dfs::DirRow dir_row = { .actor_id      = author_id,
+                            .file_id       = file_id,
+                            .prev_file_id  = "",
+                            .hash          = file_hash,
+                            .folder        = visual_folder,
+                            .name          = visual_name,
+                            .size          = file_size_dfs.value(),
+                            .created       = 0,
+                            .last_modified = 0,
+                            .type          = Dfs::FileType::File,
+                            .encryption    = data_security,
+                            .state         = Dfs::FileState::Ready };
 
-    auto res = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, main_actor);
+    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    if (!author_actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoAuthorActor);
+    }
+
+    auto res = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
     if (!res) {
         // TODO: remove file?
         return std::unexpected(Dfs::DfsError::DirError);
@@ -236,6 +241,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
+                                                                    const ActorId               &author_id,
                                                                     const std::filesystem::path &file_path,
                                                                     Dfs::ServiceFolder           service_folder,
                                                                     const std::string           &visual_name,
@@ -255,11 +261,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         break;
     }
 
-    return store_file(owner_id, file_path, visual_path, visual_name, data_security, security_data);
+    return store_file(owner_id, author_id, file_path, visual_path, visual_name, data_security, security_data);
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(
     const ActorId                  &owner_id,
+    const ActorId                  &author_id,
     const std::vector<std::uint8_t> data,
     const std::string              &visual_folder,
     const std::string              &visual_name,
@@ -277,7 +284,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(
     temp_file.write(reinterpret_cast<const char *>(data.data()), data.size());
     temp_file.close();
 
-    auto result = store_file(owner_id, temp_path, visual_folder, visual_name, data_security, security_data);
+    auto result =
+        store_file(owner_id, author_id, temp_path, visual_folder, visual_name, data_security, security_data);
 
     std::filesystem::remove(temp_path);
 
@@ -317,6 +325,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_template(
 
     auto json = Json::serialize(collection_template);
     return store_data_as_file(owner_id,
+                              owner_id,
                               ByteArray(json).toVector(),
                               Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
                               collection_template.name(),
@@ -325,6 +334,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_template(
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const ActorId                 &owner_id,
+    const ActorId                 &author_id,
     const std::string             &visual_name,
     const Dfs::CollectionTemplate &collection_template,
     Dfs::DataSecurity              data_security,
@@ -351,21 +361,24 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     }
     db.close();
 
-    auto main_actor = node->accountController()->currentProfile().main();
+    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    if (!author_actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoAuthorActor);
+    }
 
-    Dfs::DirRow dir_row            = { .actor_id      = main_actor->id(),
-                                       .file_id       = file_id,
-                                       .prev_file_id  = "",
-                                       .hash          = collection_hash,
-                                       .folder        = Dfs::Basic::TEMPLATE_COLLECTION,
-                                       .name          = visual_name,
-                                       .size          = collection_size,
-                                       .created       = 0,
-                                       .last_modified = 0,
-                                       .type          = Dfs::FileType::Collection,
-                                       .encryption    = data_security,
-                                       .state         = Dfs::FileState::Ready };
-    bool        add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, main_actor);
+    Dfs::DirRow dir_row     = { .actor_id      = author_id,
+                                .file_id       = file_id,
+                                .prev_file_id  = "",
+                                .hash          = collection_hash,
+                                .folder        = Dfs::Basic::TEMPLATE_COLLECTION,
+                                .name          = visual_name,
+                                .size          = collection_size,
+                                .created       = 0,
+                                .last_modified = 0,
+                                .type          = Dfs::FileType::Collection,
+                                .encryption    = data_security,
+                                .state         = Dfs::FileState::Ready };
+    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
 
     if (!add_dir_row_result) {
         return std::unexpected(Dfs::DfsError::DirError);
@@ -376,6 +389,31 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     sendFile(owner_id, file_id);
 
     return dir_row;
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
+    const ActorId               &owner_id,
+    const ActorId               &author_id,
+    const std::string           &visual_name,
+    const ActorId               &template_actor_id,
+    const std::string           &template_file_id,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
+    // if visual_name empty -> return
+    // if template not exists -> return
+    auto collection_template =
+        Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
+
+    if (!collection_template.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    return store_collection(owner_id,
+                            author_id,
+                            visual_name,
+                            collection_template.value(),
+                            data_security,
+                            security_data);
 }
 
 std::expected<DbRow, CollectionError> DfsController::get_collection_row(
@@ -397,25 +435,6 @@ std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection
     auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
     auto row        = chain->get_collection_rows();
     return row;
-}
-
-std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
-    const ActorId               &owner_id,
-    const std::string           &visual_name,
-    const ActorId               &template_actor_id,
-    const std::string           &template_file_id,
-    Dfs::DataSecurity            data_security,
-    const Dfs::DataSecurityData &security_data) {
-    // if visual_name empty -> return
-    // if template not exists -> return
-    auto collection_template =
-        Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
-
-    if (!collection_template.has_value()) {
-        return std::unexpected(Dfs::DfsError::Unknown);
-    }
-
-    return store_collection(owner_id, visual_name, collection_template.value(), data_security, security_data);
 }
 
 ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId               &owner_id,

@@ -150,7 +150,9 @@ namespace Dfs {
         NotWritable,
         WrongTemplate,
         IncorrectSecurityData,
-        IncorrectEncryption
+        IncorrectEncryption,
+        NoOwnerActor,
+        NoAuthorActor
     };
 
     enum class FileType {
