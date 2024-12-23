@@ -494,6 +494,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
     eLog("[Blockchain] Block {} is added, {}", blockId, blockType);
 
+    emit blockAdded(newBlock);
+
     if (blockId > 0 && blockId % Dfs::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
     }

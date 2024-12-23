@@ -327,35 +327,49 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::re
     return historical_row;
 }
 
-std::expected<DbRow, CollectionError> HistoricalCollection::get_collection_row(uint32_t id) {
+std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows(
+    const std::vector<std::pair<std::string, std::string>> &unique_key_values_match_search) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
         return std::unexpected(CollectionError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} WHERE id = {}", table_name_, id));
+    std::string where_statement;
+    if (!unique_key_values_match_search.empty()) {
+        where_statement = "WHERE ";
+        bool isFirst    = true;
+        for (const auto &[key, value] : unique_key_values_match_search) {
+            if (isFirst) {
+                where_statement = "WHERE " + key + "='" + value + "'";
+                isFirst         = false;
+            } else
+                where_statement += " AND " + key + "='" + value + "'";
+        }
+    }
+
+    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} {}", table_name_, where_statement));
     db.close();
 
     if (db_rows.empty()) {
         return std::unexpected(CollectionError::Unknown);
     }
 
-    return db_rows[0];
-}
-
-std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows() {
-    DbConnector db(file_path_);
-    db.open();
-    if (!db.is_open()) {
-        return std::unexpected(CollectionError::CollectionNotFound);
-    }
-
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} ORDER by id", table_name_));
-    db.close();
-
     return db_rows;
 }
+
+// std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows() {
+//     DbConnector db(file_path_);
+//     db.open();
+//     if (!db.is_open()) {
+//         return std::unexpected(CollectionError::CollectionNotFound);
+//     }
+
+//     std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} ORDER by id", table_name_));
+//     db.close();
+
+//     return db_rows;
+// }
 
 std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::get_row(
     const std::string &search_value,

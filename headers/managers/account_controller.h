@@ -44,7 +44,8 @@ public:
     Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
                                    const std::string &walletName   = std::string());
     // createDAppMaster
-    Actor<KeyPrivate> createService(const ActorId &profileActor = ActorId());
+    Actor<KeyPrivate> createService(const ActorId                     &profileActor     = ActorId(),
+                                    std::shared_ptr<Actor<KeyPrivate>> predefined_actor = nullptr);
 
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 

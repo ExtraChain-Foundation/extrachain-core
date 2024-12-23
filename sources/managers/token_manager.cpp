@@ -154,7 +154,8 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::
                                                                      const std::string &name,
                                                                      const std::string &ticker,
                                                                      const ActorId     &owner,
-                                                                     const std::string &color) {
+                                                                     const std::string &color,
+                                                                     const std::string &predefine_token_id) {
     if (!node->network()->isActiveConnectionExists()) {
         eLog("[TokenManager] No connections");
     }
@@ -199,7 +200,14 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::
         return std::unexpected(CreateTokenError::ExistToken);
     }
 
-    auto    actor        = node->accountController()->createService();
+    Actor<KeyPrivate> actor;
+    if (predefine_token_id.empty())
+        actor = node->accountController()->createService();
+    else {
+        auto temp_actor = std::make_shared<Actor<KeyPrivate>>();
+        *temp_actor     = actor.fromJson(QByteArray::fromStdString(predefine_token_id));
+        actor           = node->accountController()->createService({}, temp_actor);
+    }
     QString actorId      = QString(actor.id().toQString());
     QString jsonFilePath = QString("tmp/%1.json").arg(name.c_str());
 

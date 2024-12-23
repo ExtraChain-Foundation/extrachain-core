@@ -77,7 +77,8 @@ public slots:
                                                            const std::string &tokenName,
                                                            const std::string &symbol,
                                                            const ActorId     &owner,
-                                                           const std::string &color);
+                                                           const std::string &color,
+                                                           const std::string &predefine_token_id = "");
     void                                       checkIsContract(const QString &pathToFile);
 
 protected:
