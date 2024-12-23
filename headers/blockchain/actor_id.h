@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <msgpack.hpp>
 #include "extrachain_global.h"
 #include "utils/exc_magic.h"
 
