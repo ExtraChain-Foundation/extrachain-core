@@ -100,10 +100,11 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
 
     auto chat = Chat::Chat { .myself = chat_actor_, .chat_key = key };
 
-    auto store_chat_res = node->dfs()->store_collection(chat_actor_,
-                                                        chat_actor_,
-                                                        fmt::format("chat-{}", chat.another),
-                                                        chat_template());
+    auto store_chat_res =
+        node->dfs()->store_collection(chat_actor_,
+                                      chat_actor_,
+                                      fmt::format("chat-{}", node->dfs()->create_file_id_from("chat")),
+                                      chat_template());
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
