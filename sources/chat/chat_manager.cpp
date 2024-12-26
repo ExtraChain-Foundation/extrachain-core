@@ -103,8 +103,10 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
 
     auto chat = Chat::Chat { .myself = chat_actor_, .chat_key = key };
 
-    auto store_chat_res =
-        node->dfs()->store_collection(chat_actor_, fmt::format("chat-{}", chat.another), chat_template());
+    auto store_chat_res = node->dfs()->store_collection(chat_actor_,
+                                                        chat_actor_,
+                                                        fmt::format("chat-{}", chat.another),
+                                                        chat_template());
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -144,6 +146,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     auto json = Json::serialize(chat);
 
     auto res = node->dfs()->store_data_as_file(chat.another.value(),
+                                               chat.myself,
                                                ByteArray(json).toBytes(),
                                                CHAT_DAPP_INVITE_FOLDER,
                                                fmt::format("From_{}", main_actor->id()),
@@ -247,9 +250,11 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return my_chats_result.value();
     }
 
-    auto main_actor = node->accountController()->mainActor();
-    auto store_chats_res =
-        node->dfs()->store_collection(main_actor->id(), chats_template().name(), chats_template());
+    auto main_actor      = node->accountController()->mainActor();
+    auto store_chats_res = node->dfs()->store_collection(main_actor->id(),
+                                                         main_actor->id(),
+                                                         chats_template().name(),
+                                                         chats_template());
     if (!store_chats_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }

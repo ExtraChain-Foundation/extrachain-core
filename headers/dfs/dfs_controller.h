@@ -82,6 +82,7 @@ public:
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
+        const ActorId               &author_id,
         const std::filesystem::path &file_path,
         const std::string           &visual_folder,
         const std::string           &visual_name,
@@ -90,6 +91,7 @@ public:
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
+        const ActorId               &author_id,
         const std::filesystem::path &file_path,
         Dfs::ServiceFolder           service_folder,
         const std::string           &visual_name,
@@ -98,6 +100,7 @@ public:
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_data_as_file(
         const ActorId                  &owner_id,
+        const ActorId                  &author_id,
         const std::vector<std::uint8_t> data,
         const std::string              &visual_folder,
         const std::string              &visual_name,
@@ -117,6 +120,7 @@ public:
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(
         const ActorId               &owner_id,
+        const ActorId               &author_id,
         const std::string           &visual_name,
         const ActorId               &template_actor_id,
         const std::string           &template_file_id,
@@ -124,6 +128,7 @@ public:
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     std::expected<Dfs::DirRow, Dfs::DfsError> store_collection(
         const ActorId                 &owner_id,
+        const ActorId                 &author_id,
         const std::string             &visual_name,
         const Dfs::CollectionTemplate &collection_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,

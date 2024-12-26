@@ -72,7 +72,6 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
     for (auto &row : actrDirData) {
         auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
         if (dirRow.has_value()) {
-            dirRow->actor_id = actorId;
             dirRows.push_back(dirRow.value());
         }
     }
@@ -100,7 +99,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
         return std::unexpected(Dfs::DfsError::DirValueNotExists);
     }
 
-    dirRow->actor_id = actor_id;
     return dirRow.value();
 }
 

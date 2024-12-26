@@ -50,7 +50,6 @@ namespace Utils {
     DbRow to_dbrow(const T &obj) {
         auto  json = Json::serialize_value(obj);
         DbRow result;
-
         boost::mp11::mp_for_each<
             boost::describe::describe_members<T,
                                               boost::describe::mod_any_access | boost::describe::mod_inherited>>(
@@ -58,8 +57,7 @@ namespace Utils {
                 if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                     const auto &field_value = obj.*D.pointer;
                     const auto  field_name  = magic::detail::clean_field_name(D.name);
-
-                    using FieldType = std::remove_reference_t<decltype(field_value)>;
+                    using FieldType         = std::remove_reference_t<decltype(field_value)>;
                     if constexpr (magic::is_optional<FieldType>::value) {
                         if (!field_value.has_value()) {
                             result[field_name] = "";
@@ -74,11 +72,12 @@ namespace Utils {
                 result[field.key()] = std::string(value.as_string());
             } else if (value.is_null()) {
                 result[field.key()] = "";
+            } else if (value.is_bool()) {
+                result[field.key()] = value.as_bool() ? "1" : "0";
             } else {
                 result[field.key()] = boost::json::serialize(value);
             }
         }
-
         return result;
     }
 
