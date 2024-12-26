@@ -49,10 +49,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
             auto main_actor = this->node->accountController()->mainActor();
             auto from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
 
-            auto content = main_actor->key().decrypt(encrypted.value(),
-                                                     from_actor.key().public_key(),
-                                                     ByteArray(dir_row.file_id).toArray<24>(),
-                                                     Cryptography::NonceWrite::Disable);
+            auto content = main_actor->key().decrypt(encrypted.value(), from_actor.key().public_key());
             if (!content.has_value()) {
                 return;
             }

@@ -175,10 +175,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             auto sender   = node->accountController()->currentProfile().getActor(security_actor->sender_id);
             auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
             // TODO: checks
-            auto res = sender->key().encrypt_file(new_file_path,
-                                                  dfs_path,
-                                                  receiver.key().public_key(),
-                                                  ByteArray(file_id).toArray<24>());
+            auto res = sender->key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -189,10 +186,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
-            auto res = Cryptography::symmetric_encrypt_file(new_file_path,
-                                                            dfs_path,
-                                                            security_key->key,
-                                                            ByteArray(file_id).toArray<24>());
+            auto res = Cryptography::symmetric_encrypt_file(new_file_path, dfs_path, security_key->key);
         } else {
             return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
         }

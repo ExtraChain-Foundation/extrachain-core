@@ -20,9 +20,16 @@
 #pragma once
 
 #include <string>
-
+#include <array>
+#include <vector>
+#include <expected>
 #include <utils/exc_utils.h>
 #include <sodium.h>
+
+static_assert(crypto_box_NONCEBYTES == crypto_secretbox_NONCEBYTES,
+              "Nonce sizes must match between crypto_box and crypto_secretbox");
+static_assert(crypto_box_NONCEBYTES >= 24, "Nonce size must be at least 24 bytes for security");
+static_assert(crypto_secretbox_KEYBYTES >= 32, "Key size must be at least 32 bytes");
 
 using Bytes         = std::vector<std::uint8_t>;
 using PrivateKey    = std::array<std::uint8_t, crypto_sign_SECRETKEYBYTES>;
@@ -42,18 +49,19 @@ namespace Cryptography {
         EncryptionFailed,
         DecryptionFailed,
         DataTooShort,
-        NoNonceProvided,
-        KeyConversionFailed
+        DataTooLarge,
+        KeyConversionFailed,
+        AuthenticationFailed,
+        InvalidPath,
+        FileAccessError
     };
+
     using CryptoResult = std::expected<Bytes, CryptoError>;
 
-    enum class NonceWrite {
-        Disable,
-        Enable
-    };
+    constexpr size_t MIN_ENCRYPTED_SIZE_SYMMETRIC  = crypto_secretbox_MACBYTES + crypto_secretbox_NONCEBYTES;
+    constexpr size_t MIN_ENCRYPTED_SIZE_ASYMMETRIC = crypto_box_MACBYTES + crypto_box_NONCEBYTES;
 
     EXTRACHAIN_EXPORT KeyBytes keygen();
-
     EXTRACHAIN_EXPORT std::expected<KeyPass, CryptoError> key_from_password(const std::string &password,
                                                                             const Salt        &salt = Salt());
 
@@ -62,89 +70,58 @@ namespace Cryptography {
                                                               const PublicKey &public_key,
                                                               const Signature &signature);
 
-    // TODO: expected return error, nonce as var
-    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt(const Bytes     &data,
-                                                     const KeyPass   &secret_key,
-                                                     const Nonce     &nonce,
-                                                     const NonceWrite nonce_write);
-    EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt(const Bytes     &data,
-                                                     const KeyPass   &secret_key,
-                                                     const Nonce     &nonce,
-                                                     const NonceWrite nonce_write);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt(const Bytes &data, const KeyPass &secret_key);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt(const Bytes &data, const KeyPass &secret_key);
 
-    [[deprecated("Use Bytes functions")]]
-    EXTRACHAIN_EXPORT std::string symmetric_encrypt(const std::string &data,
-                                                    const KeyPass     &secret_key,
-                                                    const Nonce       &nonce,
-                                                    const NonceWrite   nonce_write);
-    [[deprecated("Use Bytes functions")]]
-    EXTRACHAIN_EXPORT std::string symmetric_decrypt(const std::string &data,
-                                                    const KeyPass     &secret_key,
-                                                    const Nonce       &nonce,
-                                                    const NonceWrite   nonce_write);
-
-    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes       &data,
-                                                              const std::string &password,
-                                                              const Nonce       &nonce,
-                                                              const NonceWrite   nonce_write);
-    EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt_password(const Bytes       &data,
-                                                              const std::string &password,
-                                                              const Nonce       &nonce,
-                                                              const NonceWrite   nonce_write);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes &data, const std::string &password);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt_password(const Bytes &data, const std::string &password);
 
     EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> asymmetric_create_pair();
 
     EXTRACHAIN_EXPORT CryptoResult asymmetric_encrypt(const Bytes      &data,
                                                       const PrivateKey &sender_secret_key,
-                                                      const PublicKey  &receiver_public_key,
-                                                      const Nonce      &nonce,
-                                                      const NonceWrite  nonce_write);
-    EXTRACHAIN_EXPORT CryptoResult asymmetric_decrypt(const Bytes      &encrypted_data,
+                                                      const PublicKey  &receiver_public_key);
+    EXTRACHAIN_EXPORT CryptoResult asymmetric_decrypt(const Bytes      &data,
                                                       const PrivateKey &receiver_secret_key,
-                                                      const PublicKey  &sender_public_key,
-                                                      const Nonce      &nonce,
-                                                      const NonceWrite  nonce_write);
+                                                      const PublicKey  &sender_public_key);
 
-    CryptoResult asymmetric_encrypt_self(const Bytes      &data,
-                                         const PrivateKey &self_secret_key,
-                                         const PublicKey  &self_public_key);
-    CryptoResult asymmetric_decrypt_self(const Bytes      &data,
-                                         const PrivateKey &self_secret_key,
-                                         const PublicKey  &self_public_key);
+    EXTRACHAIN_EXPORT CryptoResult asymmetric_encrypt_self(const Bytes      &data,
+                                                           const PrivateKey &self_secret_key,
+                                                           const PublicKey  &self_public_key);
+    EXTRACHAIN_EXPORT CryptoResult asymmetric_decrypt_self(const Bytes      &data,
+                                                           const PrivateKey &self_secret_key,
+                                                           const PublicKey  &self_public_key);
+
+    EXTRACHAIN_EXPORT std::expected<bool, FsError> validate_encryption_paths(const FsPath &input_path,
+                                                                             const FsPath &output_path);
 
     EXTRACHAIN_EXPORT std::expected<bool, FsError> symmetric_encrypt_file(const FsPath  &original_path,
                                                                           const FsPath  &encrypt_path,
                                                                           const KeyPass &key,
-                                                                          const Nonce   &nonce,
                                                                           size_t         block_size = 60000);
     EXTRACHAIN_EXPORT std::expected<bool, FsError> symmetric_decrypt_file(const FsPath  &encrypt_path,
                                                                           const FsPath  &decrypt_path,
                                                                           const KeyPass &key,
-                                                                          const Nonce   &nonce,
                                                                           size_t         block_size = 60000);
 
     EXTRACHAIN_EXPORT std::expected<bool, FsError> symmetric_encrypt_file_password(const FsPath &original_path,
                                                                                    const FsPath &encrypt_path,
-                                                                                   const std::string &key,
-                                                                                   const Nonce       &nonce,
+                                                                                   const std::string &password,
                                                                                    size_t block_size = 60000);
     EXTRACHAIN_EXPORT std::expected<bool, FsError> symmetric_decrypt_file_password(const FsPath      &encrypt_path,
                                                                                    const FsPath      &decrypt_path,
                                                                                    const std::string &password,
-                                                                                   const Nonce       &nonce,
                                                                                    size_t block_size = 60000);
 
     EXTRACHAIN_EXPORT std::expected<bool, FsError> asymmetric_encrypt_file(const FsPath     &input_path,
                                                                            const FsPath     &output_path,
-                                                                           const PrivateKey &receiver_secret_key,
-                                                                           const PublicKey  &sender_public_key,
-                                                                           const Nonce      &nonce,
+                                                                           const PrivateKey &sender_secret_key,
+                                                                           const PublicKey  &receiver_public_key,
                                                                            size_t            block_size = 60000);
     EXTRACHAIN_EXPORT std::expected<bool, FsError> asymmetric_decrypt_file(const FsPath     &input_path,
                                                                            const FsPath     &output_path,
                                                                            const PrivateKey &receiver_secret_key,
                                                                            const PublicKey  &sender_public_key,
-                                                                           const Nonce      &nonce,
                                                                            size_t            block_size = 60000);
 
     EXTRACHAIN_EXPORT std::expected<bool, FsError> asymmetric_encrypt_self_file(const FsPath     &input_path,

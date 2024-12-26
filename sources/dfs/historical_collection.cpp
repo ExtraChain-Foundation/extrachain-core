@@ -523,7 +523,6 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
     const DbRow                 &row,
     Dfs::DataSecurity            data_security,
     const Dfs::DataSecurityData &security_data) {
-    // TODO: use nonce as id and timestamp
     std::function<Cryptography::CryptoResult(const ByteArray &)> encryptor;
 
     if (data_security == Dfs::DataSecurity::Self) {
@@ -544,19 +543,13 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
                 return DbRow {};
             }
             encryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s->key().encrypt(data.toBytes(),
-                                        r.key().public_key(),
-                                        ByteArray(file_id_).toArray<24>(),
-                                        Cryptography::NonceWrite::Disable);
+                return s->key().encrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
             encryptor = [key = security_key->key, this](const ByteArray &data) {
-                return Cryptography::symmetric_encrypt(data.toBytes(),
-                                                       key,
-                                                       ByteArray(file_id_).toArray<24>(),
-                                                       Cryptography::NonceWrite::Disable);
+                return Cryptography::symmetric_encrypt(data.toBytes(), key);
             };
         }
     }
@@ -605,19 +598,13 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
                 return DbRow {};
             }
             decryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s->key().decrypt(data.toBytes(),
-                                        r.key().public_key(),
-                                        ByteArray(file_id_).toArray<24>(),
-                                        Cryptography::NonceWrite::Disable);
+                return s->key().decrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
             decryptor = [key = security_key->key, this](const ByteArray &data) {
-                return Cryptography::symmetric_decrypt(data.toBytes(),
-                                                       key,
-                                                       ByteArray(file_id_).toArray<24>(),
-                                                       Cryptography::NonceWrite::Disable);
+                return Cryptography::symmetric_decrypt(data.toBytes(), key);
             };
         }
     }

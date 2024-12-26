@@ -50,23 +50,15 @@ public:
 public:
     void generate();
 
-    Cryptography::CryptoResult encrypt(const Bytes                   &data,
-                                       const PublicKey               &receiver_public_key,
-                                       const Nonce                   &nonce,
-                                       const Cryptography::NonceWrite nonce_write) const;
-    Cryptography::CryptoResult decrypt(const Bytes                   &data,
-                                       const PublicKey               &sender_public_key,
-                                       const Nonce                   &nonce,
-                                       const Cryptography::NonceWrite nonce_write) const;
+    Cryptography::CryptoResult encrypt(const Bytes &data, const PublicKey &receiver_public_key) const;
+    Cryptography::CryptoResult decrypt(const Bytes &data, const PublicKey &sender_public_key) const;
 
     std::expected<bool, FsError> encrypt_file(const FsPath    &file,
                                               const FsPath    &result_file,
-                                              const PublicKey &receiver_public_key,
-                                              const Nonce     &nonce) const;
+                                              const PublicKey &receiver_public_key) const;
     std::expected<bool, FsError> decrypt_file(const FsPath    &file,
                                               const FsPath    &result_file,
-                                              const PublicKey &sender_public_key,
-                                              const Nonce     &nonce) const;
+                                              const PublicKey &sender_public_key) const;
 
     Cryptography::CryptoResult encrypt_self(const Bytes &data) const;
     Cryptography::CryptoResult decrypt_self(const Bytes &data) const;

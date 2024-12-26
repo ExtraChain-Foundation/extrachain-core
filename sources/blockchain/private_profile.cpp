@@ -144,10 +144,7 @@ QJsonObject PrivateProfile::toJson() const {
 
 void PrivateProfile::save() {
     auto json_bytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
-    auto encrypted  = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()),
-                                                              m_hash,
-                                                              ByteArray(m_hash).toArray<24>(),
-                                                              Cryptography::NonceWrite::Disable);
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()), m_hash);
     if (!encrypted.has_value()) {
         eFatal("Incorrect private profile save");
     }
@@ -165,10 +162,7 @@ void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
     auto data       = file.readAll().toStdString();
-    auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()),
-                                                               m_hash,
-                                                               ByteArray(m_hash).toArray<24>(),
-                                                               Cryptography::NonceWrite::Disable);
+    auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), m_hash);
     if (!json_bytes.has_value()) {
         eFatal("Incorrect private profile load");
     }
