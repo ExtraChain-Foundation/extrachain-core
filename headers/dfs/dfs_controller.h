@@ -284,7 +284,7 @@ signals:
     void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
 
-    void collectionChange(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
+    void collectionChanged(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
 
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);

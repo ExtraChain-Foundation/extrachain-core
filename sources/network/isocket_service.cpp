@@ -180,7 +180,11 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
     if (pub.empty())
         eFatal("Socket encrypt error");
 
-    auto encrypt_result = priv.encrypt(ByteArray(message).toBytes(), pub.public_key());
+    // TODO: maybe random nonce?
+    auto encrypt_result = priv.encrypt(ByteArray(message).toBytes(),
+                                       pub.public_key(),
+                                       ByteArray(priv.public_key()).toArray<24>(),
+                                       Cryptography::NonceWrite::Disable);
     if (!encrypt_result.has_value()) {
         return "";
     }
@@ -193,7 +197,10 @@ QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
     if (pub.empty())
         eFatal("Socket decrypt error");
 
-    auto decrypt_result = priv.decrypt(ByteArray(message).toBytes(), pub.public_key());
+    auto decrypt_result = priv.decrypt(ByteArray(message).toBytes(),
+                                       pub.public_key(),
+                                       ByteArray(pub.public_key()).toArray<24>(),
+                                       Cryptography::NonceWrite::Disable);
     if (!decrypt_result.has_value()) {
         return "";
     }

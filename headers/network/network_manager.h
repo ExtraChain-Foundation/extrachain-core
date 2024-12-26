@@ -282,8 +282,12 @@ public:
         auto&       mainActor = node->accountController()->mainActor();
         MessageBody message =
             make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
-        auto        serialized = message.serialize();
-        auto        sign       = ByteArray(mainActor->key().sign(serialized)).toString();
+        auto serialized  = message.serialize();
+        auto sign_result = mainActor->key().sign(serialized);
+        if (!sign_result.has_value()) {
+            return "";
+        }
+        auto        sign = ByteArray(sign_result.value()).toString();
         std::string receiver_identifier;
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages[to_message_id];

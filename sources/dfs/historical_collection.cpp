@@ -455,7 +455,11 @@ void HistoricalCollection::insert_historical_row(HistoricalCollectionRow &histor
 
 void HistoricalCollection::historical_collection_row_sign(HistoricalCollectionRow &row) {
     auto hash = Utils::calculate_hash(row);
-    row.sign  = this->actor_->key().sign(hash);
+    auto sign = this->actor_->key().sign(hash);
+    if (!sign.has_value()) {
+        return;
+    }
+    row.sign = sign.value();
 }
 
 bool HistoricalCollection::historical_collection_row_verify(const HistoricalCollectionRow &row) {
@@ -539,14 +543,20 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};
             }
-            encryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
-                return s->key().encrypt(data.toBytes(), r.key().public_key());
+            encryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
+                return s->key().encrypt(data.toBytes(),
+                                        r.key().public_key(),
+                                        ByteArray(file_id_).toArray<24>(),
+                                        Cryptography::NonceWrite::Disable);
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
-            encryptor = [key = security_key->key](const ByteArray &data) {
-                return Cryptography::symmetric_encrypt(data.toBytes(), key);
+            encryptor = [key = security_key->key, this](const ByteArray &data) {
+                return Cryptography::symmetric_encrypt(data.toBytes(),
+                                                       key,
+                                                       ByteArray(file_id_).toArray<24>(),
+                                                       Cryptography::NonceWrite::Disable);
             };
         }
     }
@@ -594,14 +604,20 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};
             }
-            decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
-                return s->key().decrypt(data.toBytes(), r.key().public_key());
+            decryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
+                return s->key().decrypt(data.toBytes(),
+                                        r.key().public_key(),
+                                        ByteArray(file_id_).toArray<24>(),
+                                        Cryptography::NonceWrite::Disable);
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
-            decryptor = [key = security_key->key](const ByteArray &data) {
-                return Cryptography::symmetric_decrypt(data.toBytes(), key);
+            decryptor = [key = security_key->key, this](const ByteArray &data) {
+                return Cryptography::symmetric_decrypt(data.toBytes(),
+                                                       key,
+                                                       ByteArray(file_id_).toArray<24>(),
+                                                       Cryptography::NonceWrite::Disable);
             };
         }
     }

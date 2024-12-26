@@ -527,7 +527,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 MessageBody outgoing_message =
                     make_message(serialized, MessageType::Custom, status, main_actor->id(), messageId);
                 auto serialized_message = outgoing_message.serialize();
-                auto signature          = ByteArray(main_actor->key().sign(serialized_message)).toString();
+                auto signature          = ByteArray(main_actor->key().sign(serialized_message).value()).toString();
                 sendMessage(serialized_message + signature, Config::Net::TypeSend::Focused, msg_identifier);
             }
             return;

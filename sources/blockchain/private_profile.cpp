@@ -143,10 +143,16 @@ QJsonObject PrivateProfile::toJson() const {
 }
 
 void PrivateProfile::save() {
-    auto jsonBytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
-    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(jsonBytes.begin(), jsonBytes.end()), m_hash);
-    auto data      = QByteArray(reinterpret_cast<const char *>(encrypted.data()), encrypted.size());
+    auto json_bytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
+    auto encrypted  = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()),
+                                                              m_hash,
+                                                              ByteArray(m_hash).toArray<24>(),
+                                                              Cryptography::NonceWrite::Disable);
+    if (!encrypted.has_value()) {
+        eFatal("Incorrect private profile save");
+    }
 
+    auto data = QByteArray(reinterpret_cast<const char *>(encrypted->data()), encrypted->size());
     // eLog("Save data: {}", data);
     QFile file(path().string().c_str());
     file.open(QFile::WriteOnly);
@@ -158,11 +164,17 @@ void PrivateProfile::save() {
 void PrivateProfile::load() {
     QFile file(path().string().c_str());
     file.open(QFile::ReadOnly);
-    auto data        = file.readAll().toStdString();
-    auto jsonBytes   = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), m_hash);
-    auto jsonBytesQt = QByteArray(reinterpret_cast<const char *>(jsonBytes.data()), jsonBytes.size());
+    auto data       = file.readAll().toStdString();
+    auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()),
+                                                               m_hash,
+                                                               ByteArray(m_hash).toArray<24>(),
+                                                               Cryptography::NonceWrite::Disable);
+    if (!json_bytes.has_value()) {
+        eFatal("Incorrect private profile load");
+    }
+    auto json_bytes_qt = QByteArray(reinterpret_cast<const char *>(json_bytes->data()), json_bytes->size());
 
-    auto json              = QJsonDocument::fromJson(jsonBytesQt).object();
+    auto json              = QJsonDocument::fromJson(json_bytes_qt).object();
     m_main                 = json["main"].toString().toStdString();
     const auto actors      = json["actors"].toArray();
     const auto walletNames = json["walletNames"].toObject();
@@ -174,9 +186,9 @@ void PrivateProfile::load() {
     }
 
     for (auto it = walletNames.begin(); it != walletNames.end(); ++it) {
-        auto actorId = it.key().toStdString();
-        auto name    = it.value().toString().toStdString();
-        this->walletNames.insert({ ActorId(actorId), name });
+        auto actor_id = it.key().toStdString();
+        auto name     = it.value().toString().toStdString();
+        this->walletNames.insert({ ActorId(actor_id), name });
     }
 }
 

@@ -49,7 +49,10 @@ ChatManager::ChatManager(ExtraChainNode* node)
             auto main_actor = this->node->accountController()->mainActor();
             auto from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
 
-            auto content = main_actor->key().decrypt(encrypted.value(), from_actor.key().public_key());
+            auto content = main_actor->key().decrypt(encrypted.value(),
+                                                     from_actor.key().public_key(),
+                                                     ByteArray(dir_row.file_id).toArray<24>(),
+                                                     Cryptography::NonceWrite::Disable);
             if (!content.has_value()) {
                 return;
             }
@@ -74,7 +77,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
     });
 
     QObject::connect(node->dfs(),
-                     &DfsController::collectionChange,
+                     &DfsController::collectionChanged,
                      [this](ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow row) {
                          if (dir_row.name == chats_template().name()) {
                              // update chat to ui
