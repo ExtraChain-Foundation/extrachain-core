@@ -197,6 +197,8 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
             case SQLITE_FLOAT:
                 t = std::to_string(sqlite3_column_double(stmt, i));
                 break;
+            case SQLITE_NULL:
+                continue;
             default:
                 break;
             }

@@ -1392,7 +1392,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
 }
 
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
-    eLog("{}", fileName);
+    eLog("[Dfs] Request file: {} / {}", actorId, fileName);
     if (fileName.empty())
         return;
 
@@ -1453,10 +1453,10 @@ void DfsController::requestFileSegment(const Dfs::DirRow &dir_row) {
 }
 
 void DfsController::beginFetchNextFile() {
-    eLog("begin fetch next file");
+    // eLog("begin fetch next file");
 
-    if (m_dirRows.empty())
-        return;
+    // if (m_dirRows.empty())
+    return;
 
     m_dirRows.erase(m_dirRows.begin());
     if (!m_dirRows.empty()) {
