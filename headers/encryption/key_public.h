@@ -40,8 +40,10 @@ public:
 
     KeyPublic &operator=(const KeyPublic &other) = default;
 
-    bool verify(const Bytes &data, const Signature &signature) const;
-    bool verify(const std::string &data, const Signature &signature) const;
+    std::expected<bool, Cryptography::CryptoError> verify(const Bytes &data, const Signature &signature) const;
+    [[deprecated("Use verify version with Bytes")]]
+    std::expected<bool, Cryptography::CryptoError> verify(const std::string &data,
+                                                          const Signature   &signature) const;
 
     const PublicKey &public_key() const;
 

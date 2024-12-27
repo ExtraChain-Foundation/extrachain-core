@@ -146,6 +146,7 @@ public:
     [[nodiscard]] std::expected<bool, FsError>              has_read_permission() const;
     [[nodiscard]] std::expected<DirectoryIterator, FsError> begin() const;
     [[nodiscard]] std::expected<DirectoryIterator, FsError> end() const;
+    [[nodiscard]] bool                                      exists_and_size_not_zero() const;
 
     FsPath&                                    operator/=(const FsPath& other);
     friend FsPath                              operator/(const FsPath& lhs, const FsPath& rhs);

@@ -309,6 +309,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
 }
 
 std::string ExtraChainNode::exportUser() {
+    /*
     auto hash = m_accountController->currentProfile().hash();
 
     QJsonArray array;
@@ -321,9 +322,12 @@ std::string ExtraChainNode::exportUser() {
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact).toStdString();
     auto data = Cryptography::symmetric_encrypt_password(ByteArray(json).toBytes(), hash);
     return ByteArray(data).toString();
+    */
+    return "";
 }
 
 bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
+    /*
     auto hash = Utils::calculate_hash(login + password);
 
     auto json =
@@ -356,6 +360,9 @@ bool ExtraChainNode::importUser(const std::string& data, const std::string& logi
     m_accountController->addToProfileList(ActorId(profile["main"].toString().toStdString()));
 
     return true;
+    */
+
+    return false;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,

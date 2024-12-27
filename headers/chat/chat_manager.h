@@ -45,6 +45,7 @@ public:
     ChatManager(ExtraChainNode *node);
 
     std::expected<Chat::Chat, ChatError> create_chat(bool save_chat = true);
+    std::expected<Chat::Chat, ChatError> create_myself();
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 

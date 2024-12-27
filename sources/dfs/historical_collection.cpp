@@ -128,7 +128,18 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
     Dfs::DataSecurity                         data_security,
     const Dfs::DataSecurityData              &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
-    // check db exists
+
+    if (!chain.historical_path_.exists_and_size_not_zero()) {
+        eWarning("[HistoricalCollection] Can't find historical file, or size == 0: {}",
+                 chain.historical_path_.native());
+        return std::unexpected(CollectionError::HistoryNotFound);
+    }
+
+    if (!chain.file_path_.exists_and_size_not_zero()) {
+        eWarning("[HistoricalCollection] Can't find collection file, or size == 0: {}", chain.file_path_.native());
+        return std::unexpected(CollectionError::CollectionNotFound);
+    }
+
     auto creation = chain.get_creation();
     if (!creation.has_value()) {
         return std::unexpected(creation.error());
@@ -455,7 +466,11 @@ void HistoricalCollection::insert_historical_row(HistoricalCollectionRow &histor
 
 void HistoricalCollection::historical_collection_row_sign(HistoricalCollectionRow &row) {
     auto hash = Utils::calculate_hash(row);
-    row.sign  = this->actor_->key().sign(hash);
+    auto sign = this->actor_->key().sign(hash);
+    if (!sign.has_value()) {
+        return;
+    }
+    row.sign = sign.value();
 }
 
 bool HistoricalCollection::historical_collection_row_verify(const HistoricalCollectionRow &row) {
@@ -519,7 +534,6 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
     const DbRow                 &row,
     Dfs::DataSecurity            data_security,
     const Dfs::DataSecurityData &security_data) {
-    // TODO: use nonce as id and timestamp
     std::function<Cryptography::CryptoResult(const ByteArray &)> encryptor;
 
     if (data_security == Dfs::DataSecurity::Self) {
@@ -539,13 +553,13 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};
             }
-            encryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+            encryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
                 return s->key().encrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
-            encryptor = [key = security_key->key](const ByteArray &data) {
+            encryptor = [key = security_key->key, this](const ByteArray &data) {
                 return Cryptography::symmetric_encrypt(data.toBytes(), key);
             };
         }
@@ -594,13 +608,13 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};
             }
-            decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+            decryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
                 return s->key().decrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
         if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
-            decryptor = [key = security_key->key](const ByteArray &data) {
+            decryptor = [key = security_key->key, this](const ByteArray &data) {
                 return Cryptography::symmetric_decrypt(data.toBytes(), key);
             };
         }

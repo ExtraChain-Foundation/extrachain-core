@@ -161,7 +161,12 @@ void Transaction::setType(TransactionType newType) {
 void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     this->m_approver = actor->id();
     calculate_hash();
-    this->m_signature = actor->key().sign(m_hash);
+
+    auto sign = actor->key().sign(m_hash);
+    if (!sign.has_value()) {
+        return;
+    }
+    this->m_signature = sign.value();
 }
 
 bool Transaction::verify(const Actor<KeyPublic> &actor) const {
@@ -170,7 +175,10 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
     }
 
     auto verify = actor.key().verify(m_hash, m_signature);
-    return verify;
+    if (!verify.has_value()) {
+        return false;
+    }
+    return verify.value();
 }
 
 void Transaction::setPrevBlock(const BigNumber &value) {

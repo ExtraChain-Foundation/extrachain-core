@@ -31,11 +31,13 @@ KeyPublic::KeyPublic(const std::string &public_key) {
     public_key_ = ByteArray(public_key).toArray<crypto_sign_PUBLICKEYBYTES>();
 }
 
-bool KeyPublic::verify(const Bytes &data, const Signature &signature) const {
+std::expected<bool, Cryptography::CryptoError> KeyPublic::verify(const Bytes     &data,
+                                                                 const Signature &signature) const {
     return Cryptography::verify(data, public_key_, signature);
 }
 
-bool KeyPublic::verify(const std::string &data, const Signature &signature) const {
+std::expected<bool, Cryptography::CryptoError> KeyPublic::verify(const std::string &data,
+                                                                 const Signature   &signature) const {
     return Cryptography::verify(ByteArray(data).toBytes(), public_key_, signature);
 }
 
