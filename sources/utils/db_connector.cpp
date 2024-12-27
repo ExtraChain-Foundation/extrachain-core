@@ -127,6 +127,10 @@ bool DbConnector::close() {
     } else {
         m_open = false;
 
+        if (std::filesystem::exists(m_file) && std::filesystem::file_size(m_file) == 0) {
+            QFile(m_file.c_str()).remove();
+        }
+
         if (m_type == DbConnectorType::Compressed) {
             QFile file(m_file.c_str());
             if (!file.open(QFile::ReadOnly)) {

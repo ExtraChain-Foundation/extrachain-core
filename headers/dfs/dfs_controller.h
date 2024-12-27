@@ -78,8 +78,6 @@ public:
 
     void initializeActor(const ActorId &actorId);
 
-    // Internal use only
-
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,
@@ -185,7 +183,8 @@ public:
                                              const std::vector<DbRow> &db_rows);
     void network_change_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
-                                   const HistoricalCollectionRow &row);
+                                   const HistoricalCollectionRow &row,
+                                   const std::string             &message_id);
     void network_remove_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);

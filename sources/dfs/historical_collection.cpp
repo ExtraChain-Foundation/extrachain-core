@@ -128,7 +128,18 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
     Dfs::DataSecurity                         data_security,
     const Dfs::DataSecurityData              &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
-    // check db exists
+
+    if (!chain.historical_path_.exists_and_size_not_zero()) {
+        eWarning("[HistoricalCollection] Can't find historical file, or size == 0: {}",
+                 chain.historical_path_.native());
+        return std::unexpected(CollectionError::HistoryNotFound);
+    }
+
+    if (!chain.file_path_.exists_and_size_not_zero()) {
+        eWarning("[HistoricalCollection] Can't find collection file, or size == 0: {}", chain.file_path_.native());
+        return std::unexpected(CollectionError::CollectionNotFound);
+    }
+
     auto creation = chain.get_creation();
     if (!creation.has_value()) {
         return std::unexpected(creation.error());

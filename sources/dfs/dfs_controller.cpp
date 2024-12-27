@@ -695,7 +695,8 @@ void DfsController::network_response_content_collection(const ActorId           
 
 void DfsController::network_change_collection(const ActorId                 &owner_id,
                                               const std::string             &file_id,
-                                              const HistoricalCollectionRow &row) {
+                                              const HistoricalCollectionRow &row,
+                                              const std::string             &message_id) {
     // TODO: need verify
     auto main_actor = node->accountController()->mainActor();
     auto dir_row    = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
@@ -714,6 +715,12 @@ void DfsController::network_change_collection(const ActorId                 &own
     }
     chain->insert_row_to_database(row);
     chain->change_collection(row);
+
+    node->network()->send_message(std::make_tuple(owner_id, file_id, row),
+                                  MessageType::DfsCollectionRowChange,
+                                  MessageStatus::NoStatus,
+                                  message_id,
+                                  Config::Net::TypeSend::Except);
 
     emit collectionChanged(owner_id, dir_row.value(), row);
 }
@@ -1316,8 +1323,13 @@ void DfsController::requestSync() {
 
 void DfsController::requestDirFileAllActors() {
     m_unsynchonizedDirs = node->actorIndex()->allActors();
-    if (!m_unsynchonizedDirs.empty())
-        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+    eTemp("--- {}", m_unsynchonizedDirs);
+    // if (!m_unsynchonizedDirs.empty())
+    // requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
+    for (const auto &actor : m_unsynchonizedDirs) {
+        eTemp("---! {}", actor);
+        requestDirData(ActorId(actor));
+    }
 }
 
 void DfsController::sendSync(std::uint64_t last_modified, const std::string &messageId) {
@@ -1360,6 +1372,7 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
     bool res = DfsT::ActorDirFile::add_dir_rows(actorId, dirRows);
     m_dirRows.insert(std::end(m_dirRows), std::begin(dirRows), std::end(dirRows));
 
+    /*
     if (!m_dirRows.empty()) {
         // start fetch fragment
         auto row = m_dirRows[0];
@@ -1368,6 +1381,13 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
             requestFileSegment(row);
         }
         //
+    }
+    */
+
+    for (const auto &row : m_dirRows) {
+        if (row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection) {
+            requestFileSegment(row);
+        }
     }
 }
 
@@ -1409,6 +1429,13 @@ void DfsController::requestFileSegment(const Dfs::DirRow &dir_row) {
     const auto path      = DfsPath::filePath(dir_row.actor_id, dir_row.file_id);
     const bool fileExist = std::filesystem::exists(path);
     if (!fileExist) {
+        if (dir_row.type == Dfs::FileType::Collection) {
+            // node->network()->send_message(std::make_pair(dir_row.actor_id, dir_row.file_id),
+            //                               MessageType::DfsCollectionRequest,
+            //                               MessageStatus::Request);
+            // return;
+        }
+
         requestFile(dir_row.actor_id, dir_row.file_id);
     } else {
         if (dir_row.type == Dfs::FileType::File) {

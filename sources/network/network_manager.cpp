@@ -864,7 +864,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
-        node->dfs()->network_change_collection(actor_id, file_id, historical_row);
+        node->dfs()->network_change_collection(actor_id, file_id, historical_row, messageId);
         break;
     }
 
@@ -943,7 +943,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainTransaction: {
-        eLog("BlockchainTransaction");
+        // eLog("BlockchainTransaction");
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);

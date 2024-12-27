@@ -437,5 +437,6 @@ namespace detail {
 #define eSuccess(...)  ::detail::println_impl(LogLevel::Success, std::source_location::current(), __VA_ARGS__)
 #define eLog(...)      eDebug(__VA_ARGS__)
 #define eUnimplemented eFatal("Unimplemented function: {}", std::source_location::current().function_name())
+#define eTemp(...)     eDebug(__VA_ARGS__)
 
 #include "utils/exc_logs_extra.h"
