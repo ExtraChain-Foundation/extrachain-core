@@ -143,6 +143,8 @@ bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std:
         }
 
         auto dir_row_db = Utils::to_dbrow(dir_row);
+        // TODO: temp, because this function used only for loads
+        dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
         dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
     }
 

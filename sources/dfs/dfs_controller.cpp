@@ -433,7 +433,10 @@ std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
     auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
-    auto row        = chain->get_collection_rows();
+    if (!chain.has_value()) {
+        return std::unexpected(CollectionError::CollectionNotFound);
+    }
+    auto row = chain->get_collection_rows();
     return row;
 }
 
@@ -1361,9 +1364,10 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
         // start fetch fragment
         auto row = m_dirRows[0];
 
-        if (row.type == Dfs::FileType::File) {
+        if (row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection) {
             requestFileSegment(row);
         }
+        //
     }
 }
 
