@@ -181,8 +181,10 @@ NetworkManager::~NetworkManager() {
     auto connectionsLocked = *m_connections;
     for (const auto &connection : *connectionsLocked) {
         connection->final();
-        emit connection->close();
-        emit connection->finished();
+        if (connection->isActive()) {
+            emit connection->close();
+            emit connection->finished();
+        }
     }
     connectionsLocked->clear();
 }
@@ -826,8 +828,9 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for collection request", type);
             break;
         }
-        const auto &[requester_id, requested_file_id] = db_request_result.value();
-        node->dfs()->network_request_collection(requester_id, requested_file_id, messageId);
+        const auto &[actor_id, file_id] = db_request_result.value();
+        node->dfs()->network_request_collection(actor_id, file_id, messageId);
+
         break;
     }
 

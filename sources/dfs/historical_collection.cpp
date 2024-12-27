@@ -486,9 +486,13 @@ FsPath HistoricalCollection::get_file_path() const {
 }
 
 void HistoricalCollection::insert_row_to_database(const HistoricalCollectionRow &historical_row) {
-    auto historical = DbConnector(historical_path_);
+    auto historical  = DbConnector(historical_path_);
+    auto row         = Utils::to_dbrow(historical_row);
+    row["id"]        = std::to_string(historical_row.id);
+    row["timestamp"] = std::to_string(historical_row.timestamp);
+
     historical.open();
-    historical.insert(Dfs::Historical::HISTORICAL_TABLE, Utils::to_dbrow(historical_row));
+    historical.insert(Dfs::Historical::HISTORICAL_TABLE, row);
     historical.close();
 }
 

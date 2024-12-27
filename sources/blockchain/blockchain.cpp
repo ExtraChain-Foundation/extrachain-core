@@ -339,7 +339,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     auto mergedVariant = BlockVariant(merged.value());
-    eLog("me {}", mergedVariant);
+    // eLog("me {}", mergedVariant);
     this->replaceBlock(mergedVariant);
 
     return mergedVariant;
@@ -422,7 +422,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
         if (nextBlock.has_value()) {
-            eLog("[Blockchain] Already chained");
+            // eLog("[Blockchain] Already chained");
             return std::unexpected(BlockError::AlreadyChained);
         }
 
