@@ -423,17 +423,18 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
     auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
-    auto row        = chain->get_collection_rows({ { "id", std::to_string(id) } });
+    auto row        = chain->get_collection_rows("WHERE id=" + std::to_string(id));
     return row.value()[0];
 }
 
 std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection_rows(
     const ActorId               &owner_id,
     const std::string           &file_id,
-    const Dfs::DataSecurityData &security_data) {
+    const Dfs::DataSecurityData &security_data,
+    const std::string           &where_statement) {
     auto main_actor = node->accountController()->mainActor();
     auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
-    auto row        = chain->get_collection_rows();
+    auto row        = chain->get_collection_rows(where_statement);
     return row;
 }
 

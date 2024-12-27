@@ -28,12 +28,17 @@ AccountController::AccountController(ExtraChainNode *node)
     , node(node) {
 }
 
-Actor<KeyPrivate> AccountController::createProfile(const std::string &hash, ActorType type) {
+Actor<KeyPrivate> AccountController::createProfile(const std::string               &hash,
+                                                   ActorType                        type,
+                                                   std::optional<Actor<KeyPrivate>> predefine_actor) {
     if (hash.empty())
         eFatal("[Accounts] Create actor: hash is empty");
 
     Actor<KeyPrivate> actor;
-    actor.create(type);
+    if (predefine_actor.has_value())
+        actor = predefine_actor.value();
+    else
+        actor.create(type);
     auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();

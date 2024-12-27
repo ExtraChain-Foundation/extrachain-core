@@ -45,8 +45,6 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 
-std::array<std::string, 3> subscriptionPrices { "50", "100", "200" };
-
 struct TokensDataRow {
     TokenId        token_id;
     std::string    name;

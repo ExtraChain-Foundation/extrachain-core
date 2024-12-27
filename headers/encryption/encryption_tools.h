@@ -19,9 +19,10 @@
 
 #pragma once
 
+#include <expected>
 #include <string>
 
-#include <utils/exc_utils.h>
+#include "utils/exc_utils.h"
 #include <sodium.h>
 
 using Bytes         = std::vector<std::uint8_t>;

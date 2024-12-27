@@ -125,11 +125,9 @@ public:
     // std::expected<HistoricalCollectionRow, CollectionError> insert_into_alien(DbRow&             row,
     //                                                                           const std::string& temp_table);
 
-    // std::expected<DbRow, CollectionError> get_collection_row(std::uint32_t id);
     std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
-        const std::vector<std::pair<std::string, std::string>>& unique_key_values_match_search = {});
+        const std::string& where_statement = "");
 
-    // std::expected<std::vector<DbRow>, CollectionError>                   get_collection_rows();
     std::expected<std::vector<HistoricalCollectionRow>, CollectionError> get_historical_rows() {
         DbConnector db(historical_path_);
         db.open();

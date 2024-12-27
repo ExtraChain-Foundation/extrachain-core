@@ -17,6 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <expected>
 #include "encryption/encryption_tools.h"
 
 KeyBytes Cryptography::keygen() {
@@ -336,7 +337,7 @@ std::expected<bool, FsError> Cryptography::symmetric_encrypt_file(const FsPath  
     encrypt.flush();
     auto size_result = encrypt_path.file_size();
     if (!size_result)
-        return size_result;
+        return std::unexpected(size_result.error());
     return *size_result > 0;
 }
 
@@ -394,7 +395,7 @@ std::expected<bool, FsError> Cryptography::symmetric_decrypt_file(const FsPath  
     decrypt.flush();
     auto size_result = decrypt_path.file_size();
     if (!size_result)
-        return size_result;
+        return std::unexpected(size_result.error());
     return *size_result > 0;
 }
 
@@ -447,7 +448,7 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath 
     out.flush();
     auto size_result = output_path.file_size();
     if (!size_result.has_value())
-        return size_result;
+        return std::unexpected(size_result.error());
     return *size_result > 0;
 }
 
@@ -508,7 +509,7 @@ std::expected<bool, FsError> Cryptography::asymmetric_decrypt_file(const FsPath 
     out.flush();
     auto size_result = output_path.file_size();
     if (!size_result)
-        return size_result;
+        return std::unexpected(size_result.error());
     return *size_result > 0;
 }
 

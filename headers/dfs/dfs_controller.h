@@ -146,7 +146,8 @@ public:
     std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
         const ActorId               &owner_id,
         const std::string           &file_id,
-        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData(),
+        const std::string           &where_statement = "");
 
     template <typename T>
     ExpectedDirHistoricalRow add_collection_row(
