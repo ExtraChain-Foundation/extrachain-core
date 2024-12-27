@@ -336,7 +336,7 @@ void NetworkManager::sendCustomMessageFurther(const CustomMessage &customMessage
                                               const std::string   &identifier) {
     auto receivedMessageIdLocked = *m_receivedMessageId;
     auto it                      = receivedMessageIdLocked->find(messageId);
-    if (it != receivedMessageIdLocked->end() || !it->second.second) {
+    if (it != receivedMessageIdLocked->end() && !it->second.second) {
         node->network()->send_message(customMessage,
                                       MessageType::Custom,
                                       status,
@@ -513,10 +513,19 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, message_body.sender_id);
+        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {}",
+                 messageId,
+                 message_body.sender_id,
+                 magic_enum::enum_name(status));
 
         auto received_msg_id_locked = *m_receivedMessageId;
         auto emplace_result         = received_msg_id_locked->try_emplace(messageId, std::make_pair("", false));
+
+        const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
+
+        // if (custom_deserialize_result.has_value() && status == MessageStatus::Response && ) {
+
+        // }
         if (!emplace_result.second) {
             if (emplace_result.first->second.second && status == MessageStatus::Response) {
                 auto msg_identifier = emplace_result.first->second.first;
@@ -530,10 +539,9 @@ void NetworkManager::messageReceived(const std::string &message,
                 auto signature          = ByteArray(main_actor->key().sign(serialized_message)).toString();
                 sendMessage(serialized_message + signature, Config::Net::TypeSend::Focused, msg_identifier);
             }
-            return;
+            // return;
         }
 
-        const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
         if (!custom_deserialize_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for custom message", type);
             return;
