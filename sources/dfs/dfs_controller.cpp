@@ -76,7 +76,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    auto fpath         = FsPath::create(file_path).value();
+    auto fpath_result = FsPath::create(file_path);
+    if (!fpath_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::InvalidName);
+    }
+    auto fpath         = fpath_result.value();
     auto new_file_path = fpath;
 
     // TODO: check path, check :***
@@ -114,7 +118,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     }
     my_file.close();
 
-    auto file_size = new_file_path.file_size().value();
+    auto file_size_result = new_file_path.file_size();
+    if (!file_size_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto file_size = file_size_result.value();
     // if size == 0 -> return
     if (!writeAvailable(file_size)) {
         return std::unexpected(Dfs::DfsError::StorageFull);
@@ -192,7 +200,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         }
     }
 
-    std::string file_hash     = Utils::calculate_hash_file(dfs_path).value();
+    auto file_hash_result = Utils::calculate_hash_file(dfs_path);
+    if (!file_hash_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    std::string file_hash     = file_hash_result.value();
     auto        file_size_dfs = dfs_path.file_size();
     if (!file_size_dfs.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -339,9 +351,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const Dfs::CollectionTemplate &collection_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
-    std::string file_id  = create_file_id_from("db");
-    auto        dfs_path = DfsPath::file_path(owner_id, file_id).value();
-    auto        actor    = node->accountController()->currentProfile().getActor(owner_id);
+    std::string file_id         = create_file_id_from("db");
+    auto        dfs_path_result = DfsPath::file_path(owner_id, file_id);
+    if (!dfs_path_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto dfs_path = dfs_path_result.value();
+    auto actor    = node->accountController()->currentProfile().getActor(owner_id);
 
     auto chain = HistoricalCollection::create(node, actor, actor->id(), file_id, collection_template);
     if (!chain.has_value()) {
@@ -423,7 +439,10 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
     auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
-    auto row        = chain->get_collection_row(id);
+    if (!chain.has_value()) {
+        return std::unexpected(CollectionError::CollectionNotFound);
+    }
+    auto row = chain->get_collection_row(id);
     return row;
 }
 
@@ -691,6 +710,7 @@ void DfsController::network_response_content_collection(const ActorId           
 
     // check if history and file ok
     emit downloaded(owner_id, dir_row.value());
+    emit collectionDownloaded();
 }
 
 void DfsController::network_change_collection(const ActorId                 &owner_id,
@@ -733,7 +753,10 @@ bool DfsController::removeLocalFile(const ActorId &owner_id, const std::string &
     return res;
 }
 
-std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes) {
+std::string DfsController::network_add_file(const ActorId     &owner_id,
+                                            const Dfs::DirRow &dir_row,
+                                            bool               load_bytes,
+                                            const std::string &message_id) {
     std::string pathDelim       = Utils::platformDelimeter();
     std::string actorFolderPath = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
     std::string actrDirFilePath = actorFolderPath + DfsB::fsMapName;
@@ -817,14 +840,20 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
                                                            .file_id = dir_row.file_id,
                                                            .hash    = dir_row.hash,
                                                            .offset  = 0 };
-            node->network()->send_message(reqMessage, MessageType::DfsRequestFileSegment, MessageStatus::Request);
+            node->network()->send_message(reqMessage,
+                                          MessageType::DfsRequestFileSegment,
+                                          MessageStatus::Request,
+                                          message_id,
+                                          Config::Net::TypeSend::Except);
         }
     }
 
     if (load_bytes && dir_row.type == Dfs::FileType::Collection) {
         node->network()->send_message(std::make_pair(owner_id, dir_row.file_id),
                                       MessageType::DfsCollectionRequest,
-                                      MessageStatus::Request);
+                                      MessageStatus::Request,
+                                      message_id,
+                                      Config::Net::TypeSend::Except);
     }
 
     insertToFiles(dir_row);
@@ -963,7 +992,16 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
     }
     insertDataChunk(msg.data, msg.offset, realFilePath);
     actrDirFile.close();
-    return Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
+
+    auto fs_path_result = FsPath::create(realFilePath);
+    if (!fs_path_result.has_value()) {
+        return "";
+    }
+    auto hash_result = Utils::calculate_hash_file(fs_path_result.value());
+    if (!hash_result.has_value()) {
+        return "";
+    }
+    return hash_result.value();
 }
 
 // void DfsController::addListFiles(const QStringList &files) {
@@ -1145,7 +1183,11 @@ void DfsController::exportFile(const std::string &pathTo,
             std::filesystem::copy(pathFile, pathTo);
             auto dirRowsExp = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
             // TODO: error
-            auto dirRows = Dfs::Tables::ActorDirFile::get_dir_rows(actorId).value();
+            auto dirRows_result = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
+            if (!dirRows_result.has_value()) {
+                return;
+            }
+            auto dirRows = dirRows_result.value();
             auto it      = std::find_if(dirRows.begin(), dirRows.end(), [&](Dfs::DirRow &dirRow) {
                 transform(dirRow.file_id.begin(), dirRow.file_id.end(), dirRow.file_id.begin(), ::tolower);
                 auto lowerNameFile = nameFile;
@@ -1372,17 +1414,15 @@ void DfsController::addDirData(const ActorId &actorId, const std::vector<Dfs::Di
     bool res = DfsT::ActorDirFile::add_dir_rows(actorId, dirRows);
     m_dirRows.insert(std::end(m_dirRows), std::begin(dirRows), std::end(dirRows));
 
-    /*
-    if (!m_dirRows.empty()) {
-        // start fetch fragment
-        auto row = m_dirRows[0];
+    // if (!m_dirRows.empty()) {
+    //     // start fetch fragment
+    //     auto row = m_dirRows[0];
 
-        if (row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection) {
-            requestFileSegment(row);
-        }
-        //
-    }
-    */
+    //     if (row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection) {
+    //         requestFileSegment(row);
+    //     }
+    //     //
+    // }
 
     for (const auto &row : m_dirRows) {
         if (row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection) {
@@ -1430,15 +1470,29 @@ void DfsController::requestFileSegment(const Dfs::DirRow &dir_row) {
     const bool fileExist = std::filesystem::exists(path);
     if (!fileExist) {
         if (dir_row.type == Dfs::FileType::Collection) {
-            // node->network()->send_message(std::make_pair(dir_row.actor_id, dir_row.file_id),
-            //                               MessageType::DfsCollectionRequest,
-            //                               MessageStatus::Request);
+            node->network()->send_message(std::make_pair(dir_row.actor_id, dir_row.file_id),
+                                          MessageType::DfsCollectionRequest,
+                                          MessageStatus::Request);
             // return;
         }
 
         requestFile(dir_row.actor_id, dir_row.file_id);
     } else {
         if (dir_row.type == Dfs::FileType::File) {
+            auto file_path = Dfs::Path::file_path(dir_row.actor_id, dir_row.file_id);
+            if (!file_path.has_value()) {
+                return;
+            }
+            auto hash_result = Utils::calculate_hash_file(file_path.value());
+            if (!hash_result.has_value()) {
+                return;
+            }
+
+            std::string hash = hash_result.value();
+            if (dir_row.hash == hash) {
+                return;
+            }
+
             DfsP::RequestFileSegmentMessage reqMessage = { .actorId = dir_row.actor_id,
                                                            .file_id = dir_row.file_id,
                                                            .hash    = dir_row.hash,
@@ -1448,6 +1502,7 @@ void DfsController::requestFileSegment(const Dfs::DirRow &dir_row) {
             node->network()->send_message(std::make_pair(dir_row.actor_id, dir_row.file_id),
                                           MessageType::DfsCollectionRequest,
                                           MessageStatus::Request);
+            return;
         }
     }
 }
@@ -1619,7 +1674,17 @@ void DfsController::verifyFiles(std::vector<Dfs::Packets::VerifyFileMessage> &fi
             eLog("File by path {} doesn't exist", realFilePath);
             continue;
         }
-        std::string fileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
+
+        auto file_path = FsPath::create(realFilePath);
+        if (!file_path.has_value()) {
+            return;
+        }
+        auto hash_result = Utils::calculate_hash_file(file_path.value());
+        if (!hash_result.has_value()) {
+            return;
+        }
+
+        std::string fileHash = hash_result.value();
         if (fileHash == file.hash) {
             file.verified = true;
         }
@@ -1717,7 +1782,15 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     currentFileSize = std::filesystem::file_size(fileName);
     emit downloadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
     if (fileSize == currentFileSize) {
-        const auto file_hash = Utils::calculate_hash_file(FsPath::create(fileName).value()).value();
+        auto fs_path = FsPath::create(fileName);
+        if (!fs_path.has_value()) {
+            return "";
+        }
+        auto hash_result = Utils::calculate_hash_file(fs_path.value());
+        if (!hash_result.has_value()) {
+            return "";
+        }
+        const auto file_hash = hash_result.value();
         if (msg.hash == file_hash) {
             eLog("[Dfs] File {} done", fileName);
             auto dirRow = files.at({ msg.actorId, msg.file_id });
@@ -1764,6 +1837,7 @@ void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
         m_compliteFiles.push_back(fileName);
     });
     connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
+    connect(this, &DfsController::collectionDownloaded, this, &DfsController::beginFetchNextFile);
 
     fw.start();
     fw.wait();
@@ -1792,7 +1866,15 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
         return "";
     }
     removeDataChunk(msg.offset, msg.size, realFilePath);
-    std::string newFileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
+    auto fs_path_result = FsPath::create(realFilePath);
+    if (!fs_path_result.has_value()) {
+        return "";
+    }
+    auto hash_result = Utils::calculate_hash_file(fs_path_result.value());
+    if (!hash_result.has_value()) {
+        return "";
+    }
+    std::string newFileHash = hash_result.value();
     // std::uint64_t newFileSize = std::filesystem::file_size(realFilePath);
 
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {

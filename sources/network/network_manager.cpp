@@ -746,7 +746,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
             break;
         }
-        node->dfs()->network_add_file(dfs_add_result->first, dfs_add_result->second, true);
+        node->dfs()->network_add_file(dfs_add_result->first, dfs_add_result->second, true, messageId);
         break;
     }
 

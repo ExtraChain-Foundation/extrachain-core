@@ -505,9 +505,14 @@ std::expected<void, CollectionError> HistoricalCollection::change_collection(
         break;
     case CollectionOperation::StructuralTemplated:
         break;
-    case CollectionOperation::Add:
-        row = Json::deserialize<DbRow>(historical_row.data).value();
+    case CollectionOperation::Add: {
+        auto json_result = Json::deserialize<DbRow>(historical_row.data);
+        if (!json_result.has_value()) {
+            return std::unexpected(CollectionError::Adding);
+        }
+        row = json_result.value();
         break;
+    }
     case CollectionOperation::Update:
         // ???
         break;

@@ -195,7 +195,10 @@ public:
     // visualMoveFile
 
     // External interfaces
-    std::string network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes);
+    std::string network_add_file(const ActorId     &owner_id,
+                                 const Dfs::DirRow &dir_row,
+                                 bool               load_bytes,
+                                 const std::string &message_id);
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
     bool        removeFile(const DfsP::RemoveFileMessage &msg);
     bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
@@ -292,6 +295,9 @@ signals:
 
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);
+
+    // only for batch
+    void collectionDownloaded();
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

@@ -203,7 +203,10 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
 std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
     const ActorId     &actor_id,
     const std::string &file_id) {
-    auto        dfs_path = DfsPath::file_path(actor_id, file_id);
+    auto dfs_path = DfsPath::file_path(actor_id, file_id);
+    if (!dfs_path.has_value()) {
+        // eFatal("calculate_collection_hash_size");
+    }
     DbConnector db(dfs_path->native());
     db.open();
     auto res = db.hash_size();
