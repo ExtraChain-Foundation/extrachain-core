@@ -887,7 +887,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
     }
 
     auto block = getLastRealBlock();
-    if (!block.has_value() && block->isEmpty()) {
+    if (!block.has_value()) {
+        return TransactionProveError::EmptyBlockchain;
+    }
+    if (block->isEmpty()) {
         return TransactionProveError::EmptyBlockchain;
     }
 
