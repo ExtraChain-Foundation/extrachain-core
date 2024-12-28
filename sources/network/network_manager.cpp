@@ -66,6 +66,18 @@ void NetworkManager::unsubscribeCustom(const ActorId &actorId) {
     this->m_customPool.erase(actorId);
 }
 
+bool NetworkManager::message_pause() const {
+    return message_pause_;
+}
+
+void NetworkManager::set_message_pause(bool newMessage_pause) {
+    message_pause_ = newMessage_pause;
+
+    if (!message_pause_) {
+        readFromPauseCache();
+    }
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -434,6 +446,67 @@ void NetworkManager::sendFromCache() {
     }
 }
 
+void NetworkManager::saveToPauseCache(const std::string &message,
+                                      const std::string &ip,
+                                      const std::string &identifier) {
+    std::ofstream file;
+    file.open(MessagePauseCacheFile, std::ios_base::out | std::ios_base::app | std::ios_base::binary);
+    if (!file.is_open()) {
+        eFatal("[NetworkManager/saveToCache] Error open cache file");
+    }
+    auto size = std::filesystem::file_size(MessagePauseCacheFile);
+
+    if (size == 0) {
+        std::string serializedMessage =
+            Serialization::serialize(std::vector<std::string> { message, ip, identifier });
+        file << Serialization::serialize(std::vector<std::string> { serializedMessage });
+        file.flush();
+        file.close();
+    } else {
+        std::ifstream inputFile;
+        inputFile.open(MessagePauseCacheFile, std::ios::binary);
+        std::string data;
+        if (inputFile.is_open()) {
+            inputFile >> data;
+        }
+        inputFile.close();
+
+        std::vector<std::string> list = Serialization::deserialize(data);
+        std::string              serializedMessage =
+            Serialization::serialize(std::vector<std::string> { message, ip, identifier });
+        list.push_back(serializedMessage);
+        file.close();
+        file.open(MessagePauseCacheFile, std::ofstream::out | std::ofstream::trunc);
+        file << Serialization::serialize(list);
+        file.close();
+    }
+}
+
+void NetworkManager::readFromPauseCache() {
+    eLog("[NetworkManager] Load from message pause cache");
+
+    QFile file(QString::fromStdString(MessagePauseCacheFile));
+    if (!file.exists() || !file.open(QFile::ReadOnly)) {
+        return;
+    }
+
+    std::vector<std::string> allPackages = Serialization::deserialize(file.readAll().toStdString());
+    file.close();
+    file.remove();
+
+    for (int numberPackage = 0; numberPackage < allPackages.size(); numberPackage++) {
+        const std::vector<std::string> deserializedList = Serialization::deserialize(allPackages[numberPackage]);
+        if (deserializedList.size() < 3) {
+            eWarning("Size deserialized data in not correct");
+            continue;
+        }
+        const std::string deserialized_message = deserializedList[0];
+        const std::string ip                   = deserializedList[1];
+        const std::string identifier           = deserializedList[2];
+        messageReceived(deserialized_message, ip, identifier);
+    }
+}
+
 bool NetworkManager::isActiveConnectionExists() {
     auto connectionsLocked = *m_connections;
     if (connectionsLocked->empty())
@@ -509,6 +582,11 @@ void NetworkManager::messageReceived(const std::string &message,
 #endif
 
     calculateTraffic->addBytesReceived(ip, message.size());
+
+    if (type != MessageType::Custom && message_pause_) {
+        saveToPauseCache(message, ip, identifier);
+        return;
+    }
 
     // try {
     switch (type) {
