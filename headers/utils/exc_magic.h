@@ -217,6 +217,8 @@ namespace magic {
                            + "::" + std::string(magic_enum::enum_name(value));
                 }
                 return std::to_string(static_cast<std::underlying_type_t<T>>(value));
+            } else if constexpr (std::is_same_v<T, bool>) {
+                return value ? "true" : "false";
             } else if constexpr (std::is_arithmetic_v<T>) {
                 return std::to_string(value);
             } else if constexpr (std::is_same_v<T, std::vector<uint8_t>>) {

@@ -117,7 +117,12 @@ bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId                       
     dir_row.created       = current_ms;
     dir_row.last_modified = current_ms;
     dir_row.prev_file_id  = prev_file_id;
-    dir_row.sign          = signer->key().sign(Utils::calculate_hash(dir_row));
+
+    auto sign = signer->key().sign(Utils::calculate_hash(dir_row));
+    if (!sign.has_value()) {
+        return false;
+    }
+    dir_row.sign = sign.value();
 
     auto dir_row_db = Utils::to_dbrow(dir_row);
     bool res        = dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
@@ -138,6 +143,8 @@ bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std:
         }
 
         auto dir_row_db = Utils::to_dbrow(dir_row);
+        // TODO: temp, because this function used only for loads
+        dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
         dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
     }
 

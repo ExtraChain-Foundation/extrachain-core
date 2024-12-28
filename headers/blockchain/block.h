@@ -138,6 +138,7 @@ public:
 
     Transaction getTransactionByHash(std::string hash) const;
 
+    // TODO: sign/verify - as expected
     // digital signature
     void           sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
     BlockSignError verify(const Actor<KeyPublic> &actor) const;
