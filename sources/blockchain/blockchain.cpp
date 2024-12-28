@@ -339,7 +339,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     auto mergedVariant = BlockVariant(merged.value());
-    eLog("me {}", mergedVariant);
+    // eLog("me {}", mergedVariant);
     this->replaceBlock(mergedVariant);
 
     return mergedVariant;
@@ -756,17 +756,17 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
-                syncResponse(block.getIndex(), messageId);
-            } else {
-                node->network()->send_message("",
-                                              MessageType::BlockchainAnarchy,
-                                              MessageStatus::Response,
-                                              messageId,
-                                              Config::Net::TypeSend::Focused);
-            }
+            // if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
+            //     syncResponse(block.getIndex(), messageId);
+            // } else {
+            //     node->network()->send_message("",
+            //                                   MessageType::BlockchainAnarchy,
+            //                                   MessageStatus::Response,
+            //                                   messageId,
+            //                                   Config::Net::TypeSend::Focused);
+            // }
 
-            return;
+            // return;
         }
         default:
             break;

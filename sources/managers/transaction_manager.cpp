@@ -138,7 +138,7 @@ void TransactionManager::makeBlock() {
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
-    return;
+    // return;
     makeBlock();
     proveTransactions();
 }

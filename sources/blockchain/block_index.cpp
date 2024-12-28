@@ -106,7 +106,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const Bi
         id -= Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
     }
 
-    eFatal("No genesis?");
+    // eFatal("No genesis?");
     return std::unexpected(BlockError::NoGenesis); // BlockError::BlockNotExists?
 }
 
