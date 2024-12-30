@@ -421,6 +421,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto lastRealBlock = this->getLastRealBlock();
         auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
+        auto now_block = this->getBlockByIndex(blockId);
+        if (now_block.has_value() && now_block->getHash() == block.getHash()) {
+            return std::unexpected(BlockError::BlockEqual);
+        }
+
         if (nextBlock.has_value()) {
             eLog("[Blockchain] Already chained");
             return std::unexpected(BlockError::AlreadyChained);
@@ -756,9 +761,9 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            // if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
-            //     syncResponse(block.getIndex(), messageId);
-            // } else {
+            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
+                syncResponse(block.getIndex(), messageId);
+            } // else {
             //     node->network()->send_message("",
             //                                   MessageType::BlockchainAnarchy,
             //                                   MessageStatus::Response,
@@ -766,7 +771,7 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
             //                                   Config::Net::TypeSend::Focused);
             // }
 
-            // return;
+            return;
         }
         default:
             break;
