@@ -1604,7 +1604,6 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
     if (!std::filesystem::exists(realFilePath)) {
         return;
     }
-
     auto fileSize = std::filesystem::file_size(realFilePath);
     if (fileSize == 0) {
         return;
@@ -1612,30 +1611,32 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
     boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
     std::string                       data;
     bool                              lastFragment = false;
-    std::uint64_t                     totalOffset  = msg.offset;
+    uint64_t                          newOffset    = msg.offset;
 
-    std::uint64_t limitSectionSize = 0;
-    while (limitSectionSize <= DfsB::maxSectionSize && !lastFragment) {
-        if (fileSize - totalOffset > DfsB::sectionSize) {
-            data += std::move(extractFragment(fmapTarget, totalOffset, DfsB::sectionSize));
-            totalOffset += DfsB::sectionSize;
-            limitSectionSize += DfsB::sectionSize;
-            eLog("[Dfs] Progress for {} / {}: {}%",
-                 msg.actorId,
-                 msg.file_id,
-                 (double(totalOffset) / double(fileSize) * 100));
-            emit uploadProgress(msg.actorId, msg.file_id, double(totalOffset) / double(fileSize) * 100);
-        } else {
-            lastFragment = true;
-            data += std::move(extractFragment(fmapTarget, totalOffset));
-        }
+    if (fileSize - msg.offset > DfsB::sectionSize) {
+        data         = extractFragment(fmapTarget, msg.offset, DfsB::sectionSize);
+        newOffset    = msg.offset + DfsB::sectionSize;
+        lastFragment = false;
+    } else {
+        data         = extractFragment(fmapTarget, msg.offset);
+        newOffset    = fileSize;
+        lastFragment = true;
     }
 
-    DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
-                                      .file_id = msg.file_id,
-                                      .hash    = msg.hash,
-                                      .data    = std::move(data),
-                                      .offset  = totalOffset };
+    // eLog("[Dfs] Progress for {} / {}: {}%",
+    //      msg.actorId,
+    //      msg.file_id,
+    //      (double(msg.offset) / double(fileSize) * 100));
+
+    // emit uploadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
+
+    DfsP::SegmentMessage fragment = {
+        .actorId = msg.actorId,
+        .file_id = msg.file_id,
+        .hash    = msg.hash,
+        .data    = std::move(data),
+        .offset  = newOffset
+    };
 
     node->network()->send_message(fragment,
                                   MessageType::DfsAddSegment,
@@ -1649,7 +1650,7 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
             emit uploaded(msg.actorId, dirRow.value());
         }
     } else {
-        emit uploadProgress(msg.actorId, msg.file_id, double(totalOffset) / double(fileSize) * 100);
+        emit uploadProgress(msg.actorId, msg.file_id, double(newOffset) / double(fileSize) * 100);
     }
 }
 
