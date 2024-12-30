@@ -1330,7 +1330,11 @@ void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg,
                                        const std::string                  &messageId) const {
     const auto            dfsSize = calculateSizeTaken();
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
-    node->network()->send_message(response, MessageType::ResponseDfsSize, MessageStatus::Response, messageId);
+    node->network()->send_message(response,
+                                  MessageType::ResponseDfsSize,
+                                  MessageStatus::Response,
+                                  messageId,
+                                  Config::Net::TypeSend::Focused);
 }
 
 void DfsController::sendCountRequestMsg(const ActorId &actorId) const {

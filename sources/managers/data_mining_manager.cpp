@@ -190,8 +190,11 @@ void DataMiningManager::sendCoinsReward(const Dfs::Reward::RequestReward &reques
         transaction.setDate(QDateTime::currentMSecsSinceEpoch());
         transaction.setType(TransactionType::Reward);
 
-        if (transaction.amount() <= 0)
-            return;
+        // TODO: temp
+        if (transaction.amount() <= 0) {
+            transaction.setAmount(BigNumberFloat(1));
+            // return;
+        }
 
         node->sendTransaction(transaction, node->accountController()->mainActor());
     }
