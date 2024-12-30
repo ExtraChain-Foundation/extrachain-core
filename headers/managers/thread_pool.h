@@ -62,7 +62,7 @@ public:
                 for (QThread *thread : threads) {
                     eLog("[ThreadPool] Remove thread {}", fmt::ptr(thread));
                     thread->quit();
-                    thread->wait();
+                    thread->wait(2000);
                 }
                 threads.clear();
             });

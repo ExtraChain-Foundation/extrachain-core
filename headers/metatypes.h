@@ -39,6 +39,7 @@ Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ActorType)
 Q_DECLARE_METATYPE(Network::Protocol)
 Q_DECLARE_METATYPE(Network::SocketServiceError)
+Q_DECLARE_METATYPE(DfsP::RequestFileSegmentMessage)
 
 void registerMetaTypes() {
     qRegisterMetaType<BigNumber>();
@@ -55,4 +56,5 @@ void registerMetaTypes() {
     qRegisterMetaType<ActorType>();
     qRegisterMetaType<Network::Protocol>();
     qRegisterMetaType<Network::SocketServiceError>();
+    qRegisterMetaType<DfsP::RequestFileSegmentMessage>();
 }

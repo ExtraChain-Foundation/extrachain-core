@@ -194,7 +194,7 @@ NetworkManager::~NetworkManager() {
     for (const auto &connection : *connectionsLocked) {
         connection->final();
         emit connection->close();
-        emit connection->finished();
+        // emit connection->finished();
     }
     connectionsLocked->clear();
 }
@@ -808,8 +808,8 @@ void NetworkManager::messageReceived(const std::string &message,
                          status);
                 break;
             }
-            const auto &[actor_id, dir_rows] = dir_data_result.value();
-            node->dfs()->addDirData(actor_id, dir_rows);
+            const auto &[owner_id, dir_rows] = dir_data_result.value();
+            node->dfs()->addDirData(owner_id, dir_rows);
         }
         break;
     }
