@@ -40,7 +40,11 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         connections();
     }
 
-    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
+    // connect(this,
+    //         &WebSocketService::sendMessageInternal,
+    //         this,
+    //         &WebSocketService::sendMessageInternalSlot,
+    //         Qt::QueuedConnection);
 }
 
 WebSocketService::~WebSocketService() {
@@ -174,7 +178,70 @@ void WebSocketService::sendMessage(const QByteArray &data) {
     if (data.isEmpty())
         eFatal("[WS] Error send size");
 
+    eFatal("!!!");
     emit sendMessageInternal(data);
+}
+
+void WebSocketService::sendMessageQuality(const QByteArray &data, Priority priority) {
+    if (!isActive()) {
+        eLog("[WS] Try to send without activation {}", data.left(35));
+        return;
+    }
+    if (data.isEmpty()) {
+        eFatal("[WS] Error send size");
+        return;
+    }
+
+    {
+        QMutexLocker locker(&m_queueMutex);
+        switch (priority) {
+        case Priority::High:
+            m_highQueue.enqueue(data);
+            break;
+        case Priority::Normal:
+            m_normalQueue.enqueue(data);
+            break;
+        case Priority::Low:
+            m_lowQueue.enqueue(data);
+            break;
+        }
+    }
+
+    if (!m_waitingForBufferSpace) {
+        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+    }
+}
+
+bool WebSocketService::canSendMore() const {
+    return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
+}
+
+void WebSocketService::tryDequeueMessage() {
+    if (!canSendMore()) {
+        m_waitingForBufferSpace = true;
+        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        return;
+    }
+
+    m_waitingForBufferSpace = false;
+    QMutexLocker locker(&m_queueMutex);
+
+    QByteArray data;
+    if (!m_highQueue.isEmpty()) {
+        data = m_highQueue.dequeue();
+    } else if (!m_normalQueue.isEmpty()) {
+        data = m_normalQueue.dequeue();
+    } else if (!m_lowQueue.isEmpty()) {
+        data = m_lowQueue.dequeue();
+    }
+
+    if (!data.isEmpty()) {
+        sendMessageInternalSlot(data);
+
+        if (!m_highQueue.isEmpty() || !m_normalQueue.isEmpty() || !m_lowQueue.isEmpty()) {
+            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        }
+    }
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
@@ -204,10 +271,19 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::connected, this, &WebSocketService::onConnected);
     connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
-    connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
+    connect(m_ws,
+            &QWebSocket::binaryMessageReceived,
+            this,
+            &WebSocketService::onBinaryMessage,
+            Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
     connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
+    connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
+        if (m_waitingForBufferSpace) {
+            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        }
+    });
 }
 
 void WebSocketService::handshake() {

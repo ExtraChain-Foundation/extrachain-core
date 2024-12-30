@@ -333,7 +333,15 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
         if (service->isActive()
             && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
-            service->sendMessage(QByteArray::fromStdString(serialized_message));
+
+            SocketService::Priority priority = type_info == MessageType::DfsAddSegment
+                                                   ? SocketService::Priority::Low
+                                                   : SocketService::Priority::Normal;
+            if (type_info == MessageType::Custom || type_info == MessageType::BlockchainNewBlock) {
+                priority = SocketService::Priority::High;
+            }
+
+            service->sendMessageQuality(QByteArray::fromStdString(serialized_message), priority);
         }
     }
 }
