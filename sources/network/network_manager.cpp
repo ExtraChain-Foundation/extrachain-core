@@ -190,13 +190,13 @@ void NetworkManager::removeConnection(const QString &identifier) {
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
-    auto connectionsLocked = *m_connections;
-    for (const auto &connection : *connectionsLocked) {
-        connection->final();
-        emit connection->close();
-        emit connection->finished();
-    }
-    connectionsLocked->clear();
+    // auto connectionsLocked = *m_connections;
+    // for (const auto &connection : *connectionsLocked) {
+    //     connection->final();
+    //     emit connection->close();
+    //     emit connection->finished();
+    // }
+    m_connections->clear();
 }
 
 void NetworkManager::checkConnectionsStatus() {
@@ -1377,7 +1377,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
 
         QString    ip, country, output;
         QEventLoop loop;
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit, Qt::QueuedConnection);
 
         QString errorText;
         QObject::connect(reply, &QNetworkReply::finished, [&]() {

@@ -1704,31 +1704,31 @@ void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
     eLog("add segment. Thread: {}", QThread::currentThreadId());
     FragmentWriter fw(msg, m_compliteFiles);
 
-    connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
+    connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment, Qt::QueuedConnection);
     connect(&fw,
             &FragmentWriter::downloadProgress,
             this,
             [=, this](const ActorId &actor, const std::string &fileName, const double progress) {
                 emit this->downloadProgress(ActorId(actor), fileName, progress);
                 this->updateFileState(msg.actorId, msg.file_id, Dfs::FileState::Partial);
-            });
+            }, Qt::QueuedConnection);
     connect(&fw, &FragmentWriter::eraseFromFiles, this, [=, this](DfsP::SegmentMessage msg) {
         files.erase({ msg.actorId, msg.file_id });
-    });
-    connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
-    connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
-    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
+    }, Qt::QueuedConnection);
+    connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile, Qt::QueuedConnection);
+    connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile, Qt::QueuedConnection);
+    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded, Qt::QueuedConnection);
     connect(&fw,
             &FragmentWriter::downloadedFile,
             this,
             [this](const ActorId &owner_id, const Dfs::DirRow &dirRow) {
                 this->updateFileState(owner_id, dirRow.file_id, Dfs::FileState::Ready);
-            });
+            }, Qt::QueuedConnection);
 
     connect(&fw, &FragmentWriter::compliteFile, this, [this](const std::string &fileName) {
         m_compliteFiles.push_back(fileName);
-    });
-    connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
+    }, Qt::QueuedConnection);
+    connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile, Qt::QueuedConnection);
 
     fw.start();
     fw.wait();

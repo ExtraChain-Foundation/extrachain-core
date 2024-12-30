@@ -161,10 +161,10 @@ void TransactionManager::proveTransactions() {
 }
 
 void TransactionManager::process() {
-    connect(this, &TransactionManager::addTransaction, this, &TransactionManager::addTransactionNetwork);
+    connect(this, &TransactionManager::addTransaction, this, &TransactionManager::addTransactionNetwork, Qt::QueuedConnection);
 
     blockTimer = new QTimer(this);
-    connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread);
+    connect(blockTimer, &QTimer::timeout, this, &TransactionManager::makeBlockAndProveTransactionsInThread, Qt::QueuedConnection);
 
     int milliseconds      = QDateTime::currentDateTime().time().msec();
     int seconds           = QDateTime::currentDateTime().time().second();

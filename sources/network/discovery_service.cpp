@@ -28,7 +28,7 @@ DiscoveryService::DiscoveryService(quint16 discoveryPort, quint16 networkPort, Q
     port    = discoveryPort;
     socket  = new QUdpSocket();
     socket->bind(QHostAddress::Any, port);
-    connect(socket, &QUdpSocket::readyRead, this, &DiscoveryService::recieveMsg);
+    connect(socket, &QUdpSocket::readyRead, this, &DiscoveryService::recieveMsg, Qt::QueuedConnection);
 }
 
 DiscoveryService::~DiscoveryService() {

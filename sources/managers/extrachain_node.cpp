@@ -79,9 +79,9 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
     if (makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
-        connect(m_thread, &QThread::started, node, &ExtraChainNode::process);
-        connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
-        connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
+        connect(m_thread, &QThread::started, node, &ExtraChainNode::process, Qt::QueuedConnection);
+        connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp, Qt::QueuedConnection);
+        connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater, Qt::QueuedConnection);
         m_thread->start();
     } else
         node->process();
@@ -126,7 +126,7 @@ void ExtraChainNode::process() {
     ThreadPool::addThread(m_transactionManager, thread);
 
     timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall, Qt::QueuedConnection);
     timer->start(30000);
 
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
@@ -519,9 +519,9 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
-    connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
-    connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
+    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment, Qt::QueuedConnection);
+    connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment, Qt::QueuedConnection);
+    connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork, Qt::QueuedConnection);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
     // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
@@ -540,24 +540,24 @@ void ExtraChainNode::connectSignals() {
     connectActorIndex();
     dfsConnection();
 
-    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall, Qt::QueuedConnection);
 
     // temp for tests, maybe only for console
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, [this]() {
         emit readyInitLocalizationFiles();
         m_dfs->requestDirFileAllActors();
         m_dfs->requestSync();
-    });
+    }, Qt::QueuedConnection);
 
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->mainActor()->id());
-    });
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+    }, Qt::QueuedConnection);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, [this]() {
         m_dfs->sendCountRequestMsg(m_accountController->mainActor()->id());
-    });
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
+    }, Qt::QueuedConnection);
+    connect(m_networkManager, &NetworkManager::newSocketActivated, this, [this]() {
         m_blockchain->sync();
-    });
+    }, Qt::QueuedConnection);
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
@@ -567,7 +567,7 @@ void ExtraChainNode::connectSignals() {
             [&](const ActorId& actorId, const Transaction& tx) {
                 auto actor = m_accountController->currentProfile().getActor(actorId);
                 this->sendTransaction(tx, actor);
-            });
+            }, Qt::QueuedConnection);
 
     connect(m_tokenManager,
             &TokenManager::sendToken,
@@ -579,7 +579,7 @@ void ExtraChainNode::connectSignals() {
                                   "contract",
                                   "token-description.json",
                                   Dfs::DataSecurity::Public);
-            });
+            }, Qt::QueuedConnection);
 }
 
 void ExtraChainNode::prepareFolders() {

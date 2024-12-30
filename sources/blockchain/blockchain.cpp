@@ -985,8 +985,8 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
 }
 
 void Blockchain::process() {
-    connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
-    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
+    connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork, Qt::QueuedConnection);
+    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse, Qt::QueuedConnection);
 }
 
 // Other //
