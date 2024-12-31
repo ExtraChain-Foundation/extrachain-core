@@ -305,10 +305,10 @@ void NetworkManager::connectToWebSocket(const QString &ip,
 void NetworkManager::sendMessage(const std::string    &serialized_message,
                                  Config::Net::TypeSend type_send,
                                  const std::string    &receiver_identifier,
-                                 MessageType           type_info,
+                                 MessageType           message_type,
                                  MessageStatus         status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] Save message to cache {} {}", type_info, status_info);
+        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
@@ -334,10 +334,10 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
 
-            SocketService::Priority priority = type_info == MessageType::DfsAddSegment
+            SocketService::Priority priority = message_type == MessageType::DfsAddSegment
                                                    ? SocketService::Priority::Low
                                                    : SocketService::Priority::Normal;
-            if (type_info == MessageType::Custom || type_info == MessageType::BlockchainNewBlock) {
+            if (message_type == MessageType::Custom) {
                 priority = SocketService::Priority::High;
             }
 

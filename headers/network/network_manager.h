@@ -242,7 +242,7 @@ public:
     void sendMessage(const std::string&    serialized_message,
                      Config::Net::TypeSend typeSend,
                      const std::string&    receiver_identifier,
-                     MessageType           type_info   = MessageType::Unknown,
+                     MessageType           message_type   = MessageType::Unknown,
                      MessageStatus         status_info = MessageStatus::NoStatus);
 
     void saveCustomMessage(const std::string& messageId, const std::string& identifier);
