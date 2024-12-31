@@ -454,7 +454,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
             m_actorIndex->getAllActors(actorId, true);
 
         // TODO: temp
-        dataMiningManager()->requestCoinReward();
+        // dataMiningManager()->requestCoinReward();
     }
 }
 
