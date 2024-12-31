@@ -75,9 +75,11 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 
 void WebSocketService::closeSocket() {
     eLog("[WS] Close socket");
-    m_activated = false;
-    if (m_ws->isValid())
+    if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
         m_ws->close();
+    }
+
+    m_activated = false;
     emit disconnected();
 }
 
@@ -127,8 +129,16 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         });
         m_timer.start(1000);
 
+        if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+            closeSocket();
+            return;
+        }
+
         m_ws->sendTextMessage(result);
-        m_ws->flush();
+        if (m_ws->bytesToWrite() > 0) {
+            m_ws->flush();
+        }
+
         if (m_needToDelete)
             closeSocket();
         return;
@@ -255,7 +265,7 @@ void WebSocketService::tryDequeueMessage() {
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
-    if (!m_ws || !m_ws->isValid()) {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
 
@@ -263,10 +273,17 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    auto prepared = prepareSendMessage(data);
+    if (prepared.isEmpty()) {
+        return;
+    }
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
 void WebSocketService::final() {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
     if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
         m_ws->flush();
 }
@@ -312,6 +329,12 @@ void WebSocketService::handshake() {
     json["identifier"] = QString(Network::currentIdentifier());
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        closeSocket();
+        return;
+    }
+
     m_ws->sendTextMessage(result);
 }
 

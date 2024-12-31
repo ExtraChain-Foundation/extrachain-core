@@ -1481,11 +1481,11 @@ bool DfsController::requestFileSegment(const ActorId &owner_id, const Dfs::DirRo
 }
 
 void DfsController::beginFetchNextFile() {
-    eLog("begin fetch next file");
 
     if (m_dirRows.empty())
         return;
 
+    eLog("begin fetch next file");
     m_dirRows.erase(m_dirRows.begin());
     process_next_file();
 }
@@ -1505,7 +1505,7 @@ void DfsController::process_next_file() {
 }
 
 void DfsController::requestNextFragment(const Dfs::Packets::RequestFileSegmentMessage &msg) {
-    eLog("request next fragment");
+    // eLog("request next fragment");
     node->network()->send_message(msg, MessageType::DfsRequestFileSegment, MessageStatus::Request);
 }
 
@@ -1630,13 +1630,11 @@ void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, 
 
     // emit uploadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
 
-    DfsP::SegmentMessage fragment = {
-        .actorId = msg.actorId,
-        .file_id = msg.file_id,
-        .hash    = msg.hash,
-        .data    = std::move(data),
-        .offset  = newOffset
-    };
+    DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
+                                      .file_id = msg.file_id,
+                                      .hash    = msg.hash,
+                                      .data    = std::move(data),
+                                      .offset  = newOffset };
 
     node->network()->send_message(fragment,
                                   MessageType::DfsAddSegment,
@@ -1779,7 +1777,7 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
 }
 
 void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
-    eLog("add segment. Thread: {}", QThread::currentThreadId());
+    // eLog("add segment. Thread: {}", QThread::currentThreadId());
     FragmentWriter fw(msg, m_compliteFiles);
 
     connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
