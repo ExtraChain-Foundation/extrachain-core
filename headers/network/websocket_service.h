@@ -81,4 +81,8 @@ private:
 
     void tryDequeueMessage();
     bool canSendMore() const;
+
+    QQueue<QByteArray> m_messageCache;
+    void               processMessage(const QByteArray &message);
+    void               processCachedMessages();
 };

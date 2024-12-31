@@ -119,6 +119,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
 
         m_activated = true;
+        processCachedMessages();
         m_timer.setSingleShot(true);
         connect(&m_timer, &QTimer::timeout, this, [this] {
             eLog("[Socket] Emit activation after timeout: {} {} {}", fmt::ptr(this), ip(), protocol());
@@ -159,15 +160,23 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
-    if (!m_activated)
+    if (!m_activated) {
+        QMutexLocker locker(&m_queueMutex);
+        m_messageCache.enqueue(message);
+        eLog("[WS] Message cached until activation. Cache size: {}", m_messageCache.size());
         return;
+    }
     // eFatal("[WS] Binary: not activated");
 
+    processMessage(message);
+}
+
+void WebSocketService::processMessage(const QByteArray &message) {
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), m_ip.toStdString(), m_identifier.toStdString());
     } else {
-        eFatal("[WS] Messsage is empty after prepare");
+        eFatal("[WS] Message is empty after prepare");
     }
 }
 
@@ -246,6 +255,14 @@ void WebSocketService::tryDequeueMessage() {
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
+    if (!m_ws || !m_ws->isValid()) {
+        return;
+    }
+
+    if (data.isEmpty()) {
+        return;
+    }
+
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
@@ -307,4 +324,12 @@ quint16 WebSocketService::port() const {
 
 quint16 WebSocketService::serverPort() const {
     return node->network()->wsPort;
+}
+
+void WebSocketService::processCachedMessages() {
+    while (!m_messageCache.isEmpty()) {
+        auto message = m_messageCache.dequeue();
+        processMessage(message);
+    }
+    m_messageCache.clear();
 }
