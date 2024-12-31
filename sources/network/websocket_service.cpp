@@ -160,7 +160,8 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
     if (!m_activated)
-        eFatal("[WS] Binary: not activated");
+        return;
+    // eFatal("[WS] Binary: not activated");
 
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
@@ -270,7 +271,7 @@ void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
 void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::connected, this, &WebSocketService::onConnected);
     connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
-    connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
+    connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage, Qt::QueuedConnection);
     connect(m_ws,
             &QWebSocket::binaryMessageReceived,
             this,
