@@ -40,7 +40,11 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         connections();
     }
 
-    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
+    connect(this,
+            &WebSocketService::sendMessageInternal,
+            this,
+            &WebSocketService::sendMessageInternalSlot,
+            Qt::DirectConnection);
     connect(this,
             &WebSocketService::needToTryDequeue,
             this,
@@ -75,6 +79,13 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 }
 
 void WebSocketService::closeSocket() {
+    {
+        QMutexLocker locker(&m_queueMutex);
+        m_highQueue.clear();
+        m_normalQueue.clear();
+        m_lowQueue.clear();
+    }
+
     eLog("[WS] Close socket");
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
         m_ws->close();
@@ -328,6 +339,9 @@ void WebSocketService::handshake() {
     }
 
     m_ws->sendTextMessage(result);
+    if (m_ws->bytesToWrite() > 0) {
+        m_ws->flush();
+    }
 }
 
 quint16 WebSocketService::port() const {
@@ -343,6 +357,7 @@ quint16 WebSocketService::serverPort() const {
 
 void WebSocketService::processCachedMessages() {
     while (!m_messageCache.isEmpty()) {
+        eLog("-------------------------------- processCachedMessages");
         auto message = m_messageCache.dequeue();
         processMessage(message);
     }
