@@ -40,11 +40,12 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         connections();
     }
 
-    // connect(this,
-    //         &WebSocketService::sendMessageInternal,
-    //         this,
-    //         &WebSocketService::sendMessageInternalSlot,
-    //         Qt::QueuedConnection);
+    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
+    connect(this,
+            &WebSocketService::needToTryDequeue,
+            this,
+            &WebSocketService::tryDequeueMessage,
+            Qt::QueuedConnection);
 }
 
 WebSocketService::~WebSocketService() {
@@ -190,19 +191,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
     }
 }
 
-void WebSocketService::sendMessage(const QByteArray &data) {
-    if (!isActive()) {
-        eLog("[WS] Try to send without activation {}", data.left(35));
-        return;
-    }
-    if (data.isEmpty())
-        eFatal("[WS] Error send size");
-
-    eFatal("!!!");
-    emit sendMessageInternal(data);
-}
-
-void WebSocketService::sendMessageQuality(const QByteArray &data, Priority priority) {
+void WebSocketService::sendMessage(const QByteArray &data, Priority priority) {
     if (!isActive()) {
         eLog("[WS] Try to send without activation {}", data.left(35));
         return;
@@ -228,18 +217,19 @@ void WebSocketService::sendMessageQuality(const QByteArray &data, Priority prior
     }
 
     if (!m_waitingForBufferSpace) {
-        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        emit needToTryDequeue();
     }
 }
 
 bool WebSocketService::canSendMore() const {
-    return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
+    return m_ws && m_ws->isValid() && m_ws->state() == QAbstractSocket::ConnectedState
+           && m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
 }
 
 void WebSocketService::tryDequeueMessage() {
     if (!canSendMore()) {
         m_waitingForBufferSpace = true;
-        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        emit needToTryDequeue();
         return;
     }
 
@@ -256,19 +246,15 @@ void WebSocketService::tryDequeueMessage() {
     }
 
     if (!data.isEmpty()) {
-        sendMessageInternalSlot(data);
+        emit sendMessageInternal(data);
 
         if (!m_highQueue.isEmpty() || !m_normalQueue.isEmpty() || !m_lowQueue.isEmpty()) {
-            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+            emit needToTryDequeue();
         }
     }
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        return;
-    }
-
     if (data.isEmpty()) {
         return;
     }
@@ -277,15 +263,19 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     if (prepared.isEmpty()) {
         return;
     }
-    m_ws->sendBinaryMessage(prepareSendMessage(data));
-}
 
-void WebSocketService::final() {
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
-    if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
+
+    m_ws->sendBinaryMessage(prepared);
+}
+
+void WebSocketService::final() {
+    if (!m_ws || !m_ws->isValid()
+        || m_ws->state() != QAbstractSocket::ConnectedState && this->m_activated && m_ws->bytesToWrite() > 0) {
         m_ws->flush();
+    }
 }
 
 void WebSocketService::onConnected() {
@@ -316,7 +306,7 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
         if (m_waitingForBufferSpace) {
-            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+            emit needToTryDequeue();
         }
     });
 }
