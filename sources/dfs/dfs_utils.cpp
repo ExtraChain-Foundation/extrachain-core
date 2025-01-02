@@ -158,6 +158,7 @@ std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::st
 
 std::expected<FsPath, FsError> Dfs::Path::file_path(const ActorId &actor_id, const std::string &file_id) {
     auto path = fmt::format("{}/{}/{}", DfsB::fsActrRoot, actor_id, file_id);
+    // TODO: validate file id
     return FsPath::create(path);
 }
 
@@ -201,12 +202,12 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
 }
 
 std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
-    const ActorId     &actor_id,
+    const ActorId     &owner_id,
     const std::string &file_id) {
-    auto        dfs_path = DfsPath::file_path(actor_id, file_id);
+    auto        dfs_path = DfsPath::file_path(owner_id, file_id);
     DbConnector db(dfs_path->native());
     db.open();
-    auto res = db.hash_size();
+    auto res = db.hash_size("id");
     db.close();
     return res;
 }

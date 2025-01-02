@@ -653,7 +653,7 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
     return true;
 }
 
-std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size() {
+std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size(const std::string &order_by) {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
     uint64_t total = 0;
@@ -669,7 +669,11 @@ std::pair<std::string, uint64_t> DbConnector::DbConnector::hash_size() {
         }
 
         sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db, fmt::format("SELECT * FROM {} ORDER BY rowid", table).c_str(), -1, &stmt, nullptr);
+        sqlite3_prepare_v2(db,
+                           fmt::format("SELECT * FROM {} ORDER BY {}", table, order_by).c_str(),
+                           -1,
+                           &stmt,
+                           nullptr);
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             for (int i = 0; i < sqlite3_column_count(stmt); i++) {
                 auto bytes = sqlite3_column_bytes(stmt, i);

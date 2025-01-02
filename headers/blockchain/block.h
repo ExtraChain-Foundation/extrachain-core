@@ -68,6 +68,7 @@ enum class BlockError {
     AlreadyChained,
 
     CantMerge,
+    BlockEqual,
     MergeEqual
 };
 // FORMAT_ENUM(BlockError)

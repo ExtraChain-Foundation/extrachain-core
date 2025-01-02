@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <expected>
 #include <string>
 #include <array>
 #include <vector>

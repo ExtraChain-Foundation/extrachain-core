@@ -19,6 +19,8 @@
 
 #include "managers/extrachain_node.h"
 
+#include <array>
+
 #include <QJsonObject>
 #include <sodium/core.h>
 
@@ -457,6 +459,9 @@ void ExtraChainNode::getAllActorsTimerCall() {
 
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
+
+        // TODO: temp
+        // dataMiningManager()->requestCoinReward();
     }
 }
 

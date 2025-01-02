@@ -27,7 +27,8 @@
 enum class TransactionType {
     Regular      = 0,
     InitContract = 1,
-    Reward       = 2
+    Reward       = 2,
+    Repeatable   = 3
 };
 MSGPACK_ADD_ENUM(TransactionType)
 // FORMAT_ENUM(TransactionType)

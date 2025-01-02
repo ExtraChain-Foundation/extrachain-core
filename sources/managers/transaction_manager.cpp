@@ -107,6 +107,8 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
+        // TODO: temp
+        /*
         static BigNumber prevDummy = BigNumber(-1);
 
         // if (prevDummy == lastBlock.getIndex() + 1) {
@@ -124,6 +126,7 @@ void TransactionManager::makeBlock() {
         node->blockchain()->signBlock(dummyBlockVariant);
         node->blockchain()->sendBlock(dummyBlockVariant);
         prevDummy = lastBlock->getIndex() + 1;
+        */
         return;
     }
 
@@ -138,6 +141,7 @@ void TransactionManager::makeBlock() {
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
+    // return;
     makeBlock();
     proveTransactions();
 }

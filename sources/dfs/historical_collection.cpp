@@ -338,32 +338,21 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::re
     return historical_row;
 }
 
-std::expected<DbRow, CollectionError> HistoricalCollection::get_collection_row(uint32_t id) {
+std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows(
+    const std::string &where_statement) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
         return std::unexpected(CollectionError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} WHERE id = {}", table_name_, id));
+    std::vector<DbRow> db_rows =
+        db.select(fmt::format("SELECT * FROM {} {} ORDER by id", table_name_, where_statement));
     db.close();
 
     if (db_rows.empty()) {
         return std::unexpected(CollectionError::Unknown);
     }
-
-    return db_rows[0];
-}
-
-std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_collection_rows() {
-    DbConnector db(file_path_);
-    db.open();
-    if (!db.is_open()) {
-        return std::unexpected(CollectionError::CollectionNotFound);
-    }
-
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} ORDER by id", table_name_));
-    db.close();
 
     return db_rows;
 }

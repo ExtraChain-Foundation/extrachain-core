@@ -421,6 +421,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto lastRealBlock = this->getLastRealBlock();
         auto lastGenesis   = blockIndex.getLastGenesisBlock(blockId - 1);
 
+        auto now_block = this->getBlockByIndex(blockId);
+        if (now_block.has_value() && now_block->getHash() == block.getHash()) {
+            return std::unexpected(BlockError::BlockEqual);
+        }
+
         if (nextBlock.has_value()) {
             // eLog("[Blockchain] Already chained");
             return std::unexpected(BlockError::AlreadyChained);
@@ -493,6 +498,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     eLog("[Blockchain] Block {} is added, {}", blockId, blockType);
+
+    emit blockAdded(newBlock);
 
     if (blockId > 0 && blockId % Dfs::Reward::coinProductionAlgorithmTick == 0) {
         node->dataMiningManager()->requestCoinReward();
@@ -756,13 +763,13 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
         case BlockError::AlreadyChained: {
             if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
                 syncResponse(block.getIndex(), messageId);
-            } else {
-                node->network()->send_message("",
-                                              MessageType::BlockchainAnarchy,
-                                              MessageStatus::Response,
-                                              messageId,
-                                              Config::Net::TypeSend::Focused);
-            }
+            } // else {
+            //     node->network()->send_message("",
+            //                                   MessageType::BlockchainAnarchy,
+            //                                   MessageStatus::Response,
+            //                                   messageId,
+            //                                   Config::Net::TypeSend::Focused);
+            // }
 
             return;
         }
@@ -885,7 +892,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
     }
 
     auto block = getLastRealBlock();
-    if (!block.has_value() && block->isEmpty()) {
+    if (!block.has_value()) {
+        return TransactionProveError::EmptyBlockchain;
+    }
+    if (block->isEmpty()) {
         return TransactionProveError::EmptyBlockchain;
     }
 

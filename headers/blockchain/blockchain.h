@@ -256,6 +256,7 @@ signals:
     void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
+    void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
     void addBlockFromNetwork(const BlockVariant &block, const std::string &messageId);
     void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);

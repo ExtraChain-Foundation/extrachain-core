@@ -56,6 +56,7 @@ public:
 
 public:
     virtual void sendMessage(const QByteArray &data) override;
+    void         sendMessageQuality(const QByteArray &data, Priority priority = Priority::High) override;
     virtual void final() override;
 
 signals:
@@ -77,4 +78,11 @@ private:
     QWebSocket *m_ws = nullptr;
 
     QTimer m_timer;
+
+    void tryDequeueMessage();
+    bool canSendMore() const;
+
+    QQueue<QByteArray> m_messageCache;
+    void               processMessage(const QByteArray &message);
+    void               processCachedMessages();
 };

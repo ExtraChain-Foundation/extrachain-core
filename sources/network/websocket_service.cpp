@@ -40,7 +40,11 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         connections();
     }
 
-    connect(this, &WebSocketService::sendMessageInternal, this, &WebSocketService::sendMessageInternalSlot);
+    // connect(this,
+    //         &WebSocketService::sendMessageInternal,
+    //         this,
+    //         &WebSocketService::sendMessageInternalSlot,
+    //         Qt::QueuedConnection);
 }
 
 WebSocketService::~WebSocketService() {
@@ -71,9 +75,11 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 
 void WebSocketService::closeSocket() {
     eLog("[WS] Close socket");
-    m_activated = false;
-    if (m_ws->isValid())
+    if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
         m_ws->close();
+    }
+
+    m_activated = false;
     emit disconnected();
 }
 
@@ -115,6 +121,7 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
 
         m_activated = true;
+        processCachedMessages();
         m_timer.setSingleShot(true);
         connect(&m_timer, &QTimer::timeout, this, [this] {
             eLog("[Socket] Emit activation after timeout: {} {} {}", fmt::ptr(this), ip(), protocol());
@@ -122,8 +129,16 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
         });
         m_timer.start(1000);
 
+        if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+            closeSocket();
+            return;
+        }
+
         m_ws->sendTextMessage(result);
-        m_ws->flush();
+        if (m_ws->bytesToWrite() > 0) {
+            m_ws->flush();
+        }
+
         if (m_needToDelete)
             closeSocket();
         return;
@@ -155,14 +170,23 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
-    if (!m_activated)
-        eFatal("[WS] Binary: not activated");
+    if (!m_activated) {
+        QMutexLocker locker(&m_queueMutex);
+        m_messageCache.enqueue(message);
+        eLog("[WS] Message cached until activation. Cache size: {}", m_messageCache.size());
+        return;
+    }
+    // eFatal("[WS] Binary: not activated");
 
+    processMessage(message);
+}
+
+void WebSocketService::processMessage(const QByteArray &message) {
     auto mess = prepareReceiveMessage(message);
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), m_ip.toStdString(), m_identifier.toStdString());
     } else {
-        eFatal("[WS] Messsage is empty after prepare");
+        eFatal("[WS] Message is empty after prepare");
     }
 }
 
@@ -174,14 +198,92 @@ void WebSocketService::sendMessage(const QByteArray &data) {
     if (data.isEmpty())
         eFatal("[WS] Error send size");
 
+    eFatal("!!!");
     emit sendMessageInternal(data);
 }
 
+void WebSocketService::sendMessageQuality(const QByteArray &data, Priority priority) {
+    if (!isActive()) {
+        eLog("[WS] Try to send without activation {}", data.left(35));
+        return;
+    }
+    if (data.isEmpty()) {
+        eFatal("[WS] Error send size");
+        return;
+    }
+
+    {
+        QMutexLocker locker(&m_queueMutex);
+        switch (priority) {
+        case Priority::High:
+            m_highQueue.enqueue(data);
+            break;
+        case Priority::Normal:
+            m_normalQueue.enqueue(data);
+            break;
+        case Priority::Low:
+            m_lowQueue.enqueue(data);
+            break;
+        }
+    }
+
+    if (!m_waitingForBufferSpace) {
+        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+    }
+}
+
+bool WebSocketService::canSendMore() const {
+    return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
+}
+
+void WebSocketService::tryDequeueMessage() {
+    if (!canSendMore()) {
+        m_waitingForBufferSpace = true;
+        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        return;
+    }
+
+    m_waitingForBufferSpace = false;
+    QMutexLocker locker(&m_queueMutex);
+
+    QByteArray data;
+    if (!m_highQueue.isEmpty()) {
+        data = m_highQueue.dequeue();
+    } else if (!m_normalQueue.isEmpty()) {
+        data = m_normalQueue.dequeue();
+    } else if (!m_lowQueue.isEmpty()) {
+        data = m_lowQueue.dequeue();
+    }
+
+    if (!data.isEmpty()) {
+        sendMessageInternalSlot(data);
+
+        if (!m_highQueue.isEmpty() || !m_normalQueue.isEmpty() || !m_lowQueue.isEmpty()) {
+            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        }
+    }
+}
+
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
+
+    if (data.isEmpty()) {
+        return;
+    }
+
+    auto prepared = prepareSendMessage(data);
+    if (prepared.isEmpty()) {
+        return;
+    }
     m_ws->sendBinaryMessage(prepareSendMessage(data));
 }
 
 void WebSocketService::final() {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
     if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
         m_ws->flush();
 }
@@ -203,11 +305,20 @@ void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
 void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::connected, this, &WebSocketService::onConnected);
     connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
-    connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage);
-    connect(m_ws, &QWebSocket::binaryMessageReceived, this, &WebSocketService::onBinaryMessage);
+    connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage, Qt::QueuedConnection);
+    connect(m_ws,
+            &QWebSocket::binaryMessageReceived,
+            this,
+            &WebSocketService::onBinaryMessage,
+            Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
     connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
+    connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
+        if (m_waitingForBufferSpace) {
+            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        }
+    });
 }
 
 void WebSocketService::handshake() {
@@ -218,6 +329,12 @@ void WebSocketService::handshake() {
     json["identifier"] = QString(Network::currentIdentifier());
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        closeSocket();
+        return;
+    }
+
     m_ws->sendTextMessage(result);
 }
 
@@ -230,4 +347,12 @@ quint16 WebSocketService::port() const {
 
 quint16 WebSocketService::serverPort() const {
     return node->network()->wsPort;
+}
+
+void WebSocketService::processCachedMessages() {
+    while (!m_messageCache.isEmpty()) {
+        auto message = m_messageCache.dequeue();
+        processMessage(message);
+    }
+    m_messageCache.clear();
 }

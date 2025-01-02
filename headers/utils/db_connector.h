@@ -179,7 +179,7 @@ public:
     std::vector<std::string>                   table_names();
     std::vector<DBColumn>                      table_columns(const std::string &table);
 
-    std::pair<std::string, uint64_t> hash_size();
+    std::pair<std::string, uint64_t> hash_size(const std::string &order_by = "rowid");
 
 public:
     bool          query(std::string query);

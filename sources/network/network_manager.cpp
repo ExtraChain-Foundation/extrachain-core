@@ -181,10 +181,8 @@ NetworkManager::~NetworkManager() {
     auto connectionsLocked = *m_connections;
     for (const auto &connection : *connectionsLocked) {
         connection->final();
-        if (connection->isActive()) {
-            emit connection->close();
-            emit connection->finished();
-        }
+        emit connection->close();
+        // emit connection->finished();
     }
     connectionsLocked->clear();
 }
@@ -295,10 +293,10 @@ void NetworkManager::connectToWebSocket(const QString &ip,
 void NetworkManager::sendMessage(const std::string    &serialized_message,
                                  Config::Net::TypeSend type_send,
                                  const std::string    &receiver_identifier,
-                                 MessageType           type_info,
+                                 MessageType           message_type,
                                  MessageStatus         status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] Save message to cache {} {}", type_info, status_info);
+        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
@@ -323,7 +321,15 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
         if (service->isActive()
             && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
-            service->sendMessage(QByteArray::fromStdString(serialized_message));
+
+            SocketService::Priority priority = message_type == MessageType::DfsAddSegment
+                                                   ? SocketService::Priority::Low
+                                                   : SocketService::Priority::Normal;
+            if (message_type == MessageType::Custom) {
+                priority = SocketService::Priority::High;
+            }
+
+            service->sendMessageQuality(QByteArray::fromStdString(serialized_message), priority);
         }
     }
 }
@@ -338,7 +344,7 @@ void NetworkManager::sendCustomMessageFurther(const CustomMessage &customMessage
                                               const std::string   &identifier) {
     auto receivedMessageIdLocked = *m_receivedMessageId;
     auto it                      = receivedMessageIdLocked->find(messageId);
-    if (it != receivedMessageIdLocked->end() || !it->second.second) {
+    if (it != receivedMessageIdLocked->end() && !it->second.second) {
         node->network()->send_message(customMessage,
                                       MessageType::Custom,
                                       status,
@@ -515,10 +521,19 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {}", messageId, message_body.sender_id);
+        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {}",
+                 messageId,
+                 message_body.sender_id,
+                 magic_enum::enum_name(status));
 
         auto received_msg_id_locked = *m_receivedMessageId;
         auto emplace_result         = received_msg_id_locked->try_emplace(messageId, std::make_pair("", false));
+
+        const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
+
+        // if (custom_deserialize_result.has_value() && status == MessageStatus::Response && ) {
+
+        // }
         if (!emplace_result.second) {
             if (emplace_result.first->second.second && status == MessageStatus::Response) {
                 auto msg_identifier = emplace_result.first->second.first;
@@ -532,10 +547,9 @@ void NetworkManager::messageReceived(const std::string &message,
                 auto signature          = ByteArray(main_actor->key().sign(serialized_message).value()).toString();
                 sendMessage(serialized_message + signature, Config::Net::TypeSend::Focused, msg_identifier);
             }
-            return;
+            // return;
         }
 
-        const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
         if (!custom_deserialize_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for custom message", type);
             return;
@@ -724,8 +738,8 @@ void NetworkManager::messageReceived(const std::string &message,
                          status);
                 break;
             }
-            const auto &[actor_id, dir_rows] = dir_data_result.value();
-            node->dfs()->addDirData(actor_id, dir_rows);
+            const auto &[owner_id, dir_rows] = dir_data_result.value();
+            node->dfs()->addDirData(owner_id, dir_rows);
         }
         break;
     }

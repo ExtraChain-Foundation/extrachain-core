@@ -40,11 +40,14 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createProfile(const std::string &hash, ActorType type = ActorType::User);
+    Actor<KeyPrivate> createProfile(const std::string               &hash,
+                                    ActorType                        type            = ActorType::User,
+                                    std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
     Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
                                    const std::string &walletName   = std::string());
     // createDAppMaster
-    Actor<KeyPrivate> createService(const ActorId &profileActor = ActorId());
+    Actor<KeyPrivate> createService(const ActorId                     &profileActor     = ActorId(),
+                                    std::shared_ptr<Actor<KeyPrivate>> predefined_actor = nullptr);
 
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 

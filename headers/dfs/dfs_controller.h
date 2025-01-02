@@ -70,7 +70,7 @@ private:
     std::vector<std::string>                          m_compliteFiles;
     std::vector<ActorId>                              m_unsynchonizedDirs;
     std::uint64_t                                     m_totalDfsSize = 0;
-    std::vector<Dfs::DirRow>                          m_dirRows;
+    std::vector<std::pair<ActorId, Dfs::DirRow>>      m_dirRows;
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -144,7 +144,8 @@ public:
     std::expected<std::vector<DbRow>, CollectionError> get_collection_rows(
         const ActorId               &owner_id,
         const std::string           &file_id,
-        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData(),
+        const std::string           &where_statement = "");
 
     template <typename T>
     ExpectedDirHistoricalRow add_collection_row(
@@ -191,6 +192,7 @@ public:
 
     // TODO: get rows from collection
 
+    // TODO: need two function: remove LOCAL file and remove file from STORE
     bool removeLocalFile(const ActorId &owner_id, const std::string &file_id);
     // visualMoveFile
 
@@ -228,6 +230,8 @@ private:
                                                       CollectionOperation          type,
                                                       const Dfs::DataSecurityData &security_data);
 
+    bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
+
     bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
     bool          removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file);
     std::uint64_t calculateSizeTaken(const std::string &folder = DfsB::fsActrRoot) const;
@@ -239,7 +243,7 @@ private:
     std::string   extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
     void          eraseFirstUnsynchronizedDir();
     void          removeRowFromDB(const DfsP::RemoveFileMessage &msg);
-    void          requestFileSegment(const Dfs::DirRow &dir_row);
+    bool          requestFileSegment(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     void          updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
 public:
@@ -252,12 +256,13 @@ public:
     void        requestSync();
     void        requestDirFileAllActors();
     void        sendSync(std::uint64_t last_modified, const std::string &messageId);
-    void        requestDirData(const ActorId &actorId);
-    void        sendDirData(const ActorId &actorId, std::uint64_t last_modified, const std::string &messageId);
+    void        requestDirData(const ActorId &owner_id);
+    void        sendDirData(const ActorId &owner_id, std::uint64_t last_modified, const std::string &messageId);
     void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
     void        requestFile(const ActorId &actorId, const std::string &fileName);
     void        sendFile(const ActorId &owner_id, const std::string &file_id, const std::string &message_id = "");
     void        beginFetchNextFile();
+    void        process_next_file();
     void        requestNextFragment(const DfsP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
     std::string sendFragment(const DfsP::RequestFileSegmentMessage &msg, const std::string &messageId);
@@ -288,6 +293,7 @@ signals:
     void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
 
+    void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
 
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);

@@ -240,7 +240,7 @@ public:
     void sendMessage(const std::string&    serialized_message,
                      Config::Net::TypeSend typeSend,
                      const std::string&    receiver_identifier,
-                     MessageType           type_info   = MessageType::Unknown,
+                     MessageType           message_type   = MessageType::Unknown,
                      MessageStatus         status_info = MessageStatus::NoStatus);
 
     void saveCustomMessage(const std::string& messageId, const std::string& identifier);
@@ -267,10 +267,14 @@ public:
                              std::string           to_message_id = "",
                              Config::Net::TypeSend typeSend      = Config::Net::TypeSend::All) {
         if (status == MessageStatus::Response && to_message_id.empty()) {
-            eFatal("[Network] Send message error: empty message id for response message");
+            eCritical("[Network] Send message error: empty message id for response message");
+            return "";
         }
         if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
-            eLog("[Network] Send message warning: incorrect type send for response message, set to focused");
+            eWarning(
+                "[Network] Send message warning: incorrect type send for response message, set to focused, type: "
+                "{}",
+                type);
             typeSend = Config::Net::TypeSend::Focused;
         }
 

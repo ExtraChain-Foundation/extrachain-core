@@ -520,7 +520,7 @@ namespace Dfs {
                                                                const std::shared_ptr<Actor<KeyPrivate>>& signer);
             bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
-            std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     actor_id,
+            std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,
                                                                             const std::string& file_id);
             bool                             update_file_metadata(const ActorId& actor_id, DirRow& dir_row);
         } // namespace ActorDirFile

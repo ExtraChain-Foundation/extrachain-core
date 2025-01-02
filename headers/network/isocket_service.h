@@ -24,6 +24,8 @@
 #include "encryption/key_public.h"
 #include "utils/exc_utils.h"
 
+#include <QQueue>
+
 class ExtraChainNode;
 
 class EXTRACHAIN_EXPORT SocketService : public QObject {
@@ -36,6 +38,12 @@ public:
         // OnlySubNetwork
     };
     Q_ENUM(SendType)
+
+    enum class Priority {
+        Low,
+        Normal,
+        High
+    };
 
     explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
     const QString            &identifier() const;
@@ -55,8 +63,9 @@ public:
     void                      setVPN(bool isVPN);
 
 public:
-    virtual void sendMessage(const QByteArray &data) = 0;
-    virtual void final()                             = 0;
+    virtual void sendMessage(const QByteArray &data)                                            = 0;
+    virtual void final()                                                                        = 0;
+    virtual void sendMessageQuality(const QByteArray &data, Priority priority = Priority::High) = 0;
 
 protected slots:
     virtual void closeSocket();
@@ -89,6 +98,14 @@ protected:
     std::atomic_bool m_isConstant      = false;
     std::atomic_bool m_isVPN           = false;
     // ActorId subNetwork;
+
+    QMutex             m_queueMutex;
+    QQueue<QByteArray> m_highQueue;
+    QQueue<QByteArray> m_normalQueue;
+    QQueue<QByteArray> m_lowQueue;
+
+    static constexpr qint64 MAX_BUFFER_SIZE         = 10 * 1024 * 1024; // 10MB
+    bool                    m_waitingForBufferSpace = false;
 
     KeyPrivate priv;
     KeyPublic  pub;
