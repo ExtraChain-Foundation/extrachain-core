@@ -131,8 +131,7 @@ struct MessageIdDataReceived {
     qint64      time;
 };
 
-static const std::string NetworkCacheFile      = "tmp/network.cache";
-static const std::string MessagePauseCacheFile = "tmp/network_pause.cache";
+static const std::string NetworkCacheFile = "tmp/network.cache";
 
 /**
  * @brief The NetworkManager class
@@ -145,7 +144,6 @@ private:
     bool                            reservedActorListUse = false;
     bool                            active               = false;
     bool                            shouldRequest        = false;
-    bool                            message_pause_       = false;
     std::unique_ptr<UPNPConnection> upnpDis;
     std::unique_ptr<UPNPConnection> upnpNet;
     QMap<std::string, int>          msgHashList = {};
@@ -256,10 +254,6 @@ public:
                      Config::Net::TypeSend typeSend,
                      const std::string&    receiver_identifier);
     void sendFromCache();
-
-    void saveToPauseCache(const std::string& message, const std::string& ip, const std::string& identifier);
-    void readFromPauseCache();
-
     bool isActiveConnectionExists();
 
     void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
@@ -326,9 +320,6 @@ public:
 
     void subscribeCustom(const ActorId& actorId);
     void unsubscribeCustom(const ActorId& actorId);
-
-    bool message_pause() const;
-    void set_message_pause(bool newMessage_pause);
 
 signals:
     void newSocketActivated();
