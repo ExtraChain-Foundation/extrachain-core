@@ -272,8 +272,10 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
 }
 
 void WebSocketService::final() {
-    if (!m_ws || !m_ws->isValid()
-        || m_ws->state() != QAbstractSocket::ConnectedState && this->m_activated && m_ws->bytesToWrite() > 0) {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return;
+    }
+    if (this->m_activated && m_ws->bytesToWrite() > 0) {
         m_ws->flush();
     }
 }
