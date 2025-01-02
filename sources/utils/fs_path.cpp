@@ -121,7 +121,7 @@ std::expected<bool, FsError> FsPath::exists() const {
         auto res = std::filesystem::exists(m_path);
         return res;
     } catch (const std::exception& e) {
-        eCritical("Failed to check path existence: {}", e.what());
+        // eCritical("Failed to check path existence: {}", e.what());
         return std::unexpected(FsError::IoError);
     }
 }
@@ -228,7 +228,7 @@ std::expected<std::uintmax_t, FsError> FsPath::file_size() const {
     try {
         return std::filesystem::file_size(m_path);
     } catch (const std::exception& e) {
-        eCritical("Failed to get file size: {}", e.what());
+        // eCritical("Failed to get file size: {}", e.what());
         return std::unexpected(FsError::IoError);
     }
 }
@@ -342,4 +342,13 @@ std::expected<DirectoryIterator, FsError> FsPath::begin() const {
 
 std::expected<DirectoryIterator, FsError> FsPath::end() const {
     return DirectoryIterator();
+}
+
+bool FsPath::exists_and_size_not_zero() const {
+    auto exists    = this->exists();
+    auto file_size = this->file_size();
+    if (!exists.has_value() || !file_size.has_value()) {
+        return false;
+    }
+    return exists.value() && file_size.value() > 0;
 }

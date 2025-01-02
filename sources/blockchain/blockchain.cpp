@@ -427,7 +427,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         }
 
         if (nextBlock.has_value()) {
-            eLog("[Blockchain] Already chained");
+            // eLog("[Blockchain] Already chained");
             return std::unexpected(BlockError::AlreadyChained);
         }
 

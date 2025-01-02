@@ -145,7 +145,10 @@ const std::string &Block::getDataForSignature() const {
 void Block::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
     calculate_hash();
     auto sign = actor->key().sign(getDataForSignature());
-    this->addSignature(actor->id(), sign, true);
+    if (!sign.has_value()) {
+        return;
+    }
+    this->addSignature(actor->id(), sign.value(), true);
 }
 
 BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
@@ -159,7 +162,10 @@ BlockSignError Block::verify(const Actor<KeyPublic> &actor) const {
         return BlockSignError::NoActorSignature;
     }
 
-    bool res = actor.key().verify(getDataForSignature(), it->second);
+    auto res = actor.key().verify(getDataForSignature(), it->second);
+    if (!res.has_value()) {
+        return BlockSignError::InvalidSignature;
+    }
     if (!res) {
         return BlockSignError::InvalidSignature;
     }

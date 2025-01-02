@@ -74,7 +74,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
     });
 
     QObject::connect(node->dfs(),
-                     &DfsController::collectionChange,
+                     &DfsController::collectionChanged,
                      [this](ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow row) {
                          if (dir_row.name == chats_template().name()) {
                              // update chat to ui
@@ -82,7 +82,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
                      });
 }
 
-EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
+std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
     KeyBytes key        = Cryptography::keygen();
     auto     main_actor = node->accountController()->mainActor();
     chat_actor_         = node->accountController()->mainActor()->id();
@@ -100,10 +100,11 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
 
     auto chat = Chat::Chat { .myself = chat_actor_, .chat_key = key };
 
-    auto store_chat_res = node->dfs()->store_collection(chat_actor_,
-                                                        chat_actor_,
-                                                        fmt::format("chat-{}", chat.another),
-                                                        chat_template());
+    auto store_chat_res =
+        node->dfs()->store_collection(chat_actor_,
+                                      chat_actor_,
+                                      fmt::format("chat-{}", node->dfs()->create_file_id_from("chat")),
+                                      chat_template());
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -115,6 +116,17 @@ EXTRACHAIN_EXPORT std::expected<Chat::Chat, ChatError> ChatManager::create_chat(
         insert_chat_to_mychats(chat);
     }
 
+    return chat;
+}
+
+std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
+    auto chat = create_chat(false);
+
+    if (!chat.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    insert_chat_to_mychats(chat.value());
     return chat;
 }
 
@@ -141,15 +153,14 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     }
 
     auto json = Json::serialize(chat);
-
-    auto res = node->dfs()->store_data_as_file(chat.another.value(),
+    auto res  = node->dfs()->store_data_as_file(chat.another.value(),
                                                chat.myself,
                                                ByteArray(json).toBytes(),
                                                CHAT_DAPP_INVITE_FOLDER,
                                                fmt::format("From_{}", main_actor->id()),
                                                Dfs::DataSecurity::Actor,
                                                Dfs::DataSecurityActor { .sender_id   = chat.myself,
-                                                                        .receiver_id = chat.another.value() });
+                                                                         .receiver_id = chat.another.value() });
 
     if (!res.has_value()) {
         eCritical("[ChatManager] Invite error: {}", res.error());

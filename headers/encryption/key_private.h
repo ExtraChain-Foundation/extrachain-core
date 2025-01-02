@@ -25,7 +25,6 @@
 
 #include <boost/core/demangle.hpp>
 #include <msgpack.hpp>
-#include <filesystem>
 
 #include "encryption/encryption_tools.h"
 
@@ -51,21 +50,15 @@ public:
 public:
     void generate();
 
-    Cryptography::CryptoResult encrypt(const Bytes     &data,
-                                       const PublicKey &receiver_public_key,
-                                       const Nonce     &nonce = Nonce()) const;
-    Cryptography::CryptoResult decrypt(const Bytes     &data,
-                                       const PublicKey &sender_public_key,
-                                       const Nonce     &nonce = Nonce()) const;
+    Cryptography::CryptoResult encrypt(const Bytes &data, const PublicKey &receiver_public_key) const;
+    Cryptography::CryptoResult decrypt(const Bytes &data, const PublicKey &sender_public_key) const;
 
     std::expected<bool, FsError> encrypt_file(const FsPath    &file,
                                               const FsPath    &result_file,
-                                              const PublicKey &receiver_public_key,
-                                              const Nonce     &nonce = Nonce()) const;
+                                              const PublicKey &receiver_public_key) const;
     std::expected<bool, FsError> decrypt_file(const FsPath    &file,
                                               const FsPath    &result_file,
-                                              const PublicKey &sender_public_key,
-                                              const Nonce     &nonce = Nonce()) const;
+                                              const PublicKey &sender_public_key) const;
 
     Cryptography::CryptoResult encrypt_self(const Bytes &data) const;
     Cryptography::CryptoResult decrypt_self(const Bytes &data) const;
@@ -73,12 +66,14 @@ public:
     std::expected<bool, FsError> encrypt_self_file(const FsPath &file, const FsPath &result_file) const;
     std::expected<bool, FsError> decrypt_self_file(const FsPath &file, const FsPath &result_file) const;
 
-    Signature sign(const Bytes &data) const;
-    bool      verify(const Bytes &data, const Signature &signature) const;
+    std::expected<Signature, Cryptography::CryptoError> sign(const Bytes &data) const;
+    std::expected<bool, Cryptography::CryptoError> verify(const Bytes &data, const Signature &signature) const;
 
-    // deprecated, TODO: remove
-    Signature sign(const std::string &data) const;
-    bool      verify(const std::string &data, const Signature &signature) const;
+    [[deprecated("Use sign version with Bytes")]]
+    std::expected<Signature, Cryptography::CryptoError> sign(const std::string &data) const;
+    [[deprecated("Use verify version with Bytes")]]
+    std::expected<bool, Cryptography::CryptoError> verify(const std::string &data,
+                                                          const Signature   &signature) const;
 
     const PrivateKey &secret_key() const;
     const PublicKey  &public_key() const;

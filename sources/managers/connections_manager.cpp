@@ -162,11 +162,17 @@ std::string ConnectionsManager::hashConnection(const Dfs::Packets::Connection &c
 
 DbRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &connection) {
     std::string hash = hashConnection(connection);
-    auto        key  = Cryptography::key_from_password(hash);
+    auto        key  = Cryptography::key_from_password(hash).value();
 
-    std::string ecryptedAddress = Cryptography::symmetric_encrypt(connection.address, key);
-    std::string encryptedPort   = Cryptography::symmetric_encrypt(connection.port, key);
-    std::string encryptedActive = Cryptography::symmetric_encrypt(std::to_string(connection.active), key);
+    std::string ecryptedAddress =
+        ByteArray(Cryptography::symmetric_encrypt(ByteArray(connection.address).toBytes(), key).value())
+            .toString();
+    std::string encryptedPort =
+        ByteArray(Cryptography::symmetric_encrypt(ByteArray(connection.port).toBytes(), key).value()).toString();
+    std::string encryptedActive =
+        ByteArray(
+            Cryptography::symmetric_encrypt(ByteArray(std::to_string(connection.active)).toBytes(), key).value())
+            .toString();
 
     DbRow row { { hash_connection, hash },
                 { port_connection, encryptedPort },
@@ -177,11 +183,20 @@ DbRow ConnectionsManager::ecryptConnection(const Dfs::Packets::Connection &conne
 }
 
 DbRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity &activity) {
-    auto key = Cryptography::key_from_password(hash);
+    auto key = Cryptography::key_from_password(hash).value();
 
-    std::string timeactivity = Cryptography::symmetric_encrypt(std::to_string(activity.timeactivity), key);
-    std::string active       = Cryptography::symmetric_encrypt(std::to_string(activity.active), key);
-    std::string score        = Cryptography::symmetric_encrypt(std::to_string(activity.score), key);
+    std::string timeactivity =
+        ByteArray(Cryptography::symmetric_encrypt(ByteArray(std::to_string(activity.timeactivity)).toBytes(), key)
+                      .value())
+            .toString();
+    std::string active =
+        ByteArray(
+            Cryptography::symmetric_encrypt(ByteArray(std::to_string(activity.active)).toBytes(), key).value())
+            .toString();
+    std::string score =
+        ByteArray(
+            Cryptography::symmetric_encrypt(ByteArray(std::to_string(activity.score)).toBytes(), key).value())
+            .toString();
 
     DbRow row { { hash_connection, hash },
                 { active_connection, active },
@@ -193,21 +208,33 @@ DbRow ConnectionsManager::ecryptActivity(const std::string hash, const Activity 
 
 Connection ConnectionsManager::decryptConnection(const DbRow &row) {
     Connection connection;
-    auto       key = Cryptography::key_from_password(row.at(hash_connection));
+    auto       key = Cryptography::key_from_password(row.at(hash_connection)).value();
 
-    connection.port    = Cryptography::symmetric_decrypt(row.at(port_connection), key);
-    connection.address = Cryptography::symmetric_decrypt(row.at(address_connection), key);
-    connection.active  = std::stoi(Cryptography::symmetric_decrypt(row.at(active_connection), key));
+    connection.port =
+        ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(port_connection)).toBytes(), key).value())
+            .toString();
+    connection.address =
+        ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(address_connection)).toBytes(), key).value())
+            .toString();
+    connection.active = std::stoi(
+        ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(active_connection)).toBytes(), key).value())
+            .toString());
     return connection;
 }
 
 std::pair<std::string, Activity> ConnectionsManager::decryptActivity(const DbRow &row) {
     Activity activity;
-    auto     key = Cryptography::key_from_password(row.at(hash_connection));
+    auto     key = Cryptography::key_from_password(row.at(hash_connection)).value();
 
-    activity.timeactivity = std::stoull(Cryptography::symmetric_decrypt(row.at(time_act), key));
-    activity.active       = Cryptography::symmetric_decrypt(row.at(active_connection), key) == "1" ? true : false;
-    activity.score        = std::stoi(Cryptography::symmetric_decrypt(row.at(score_act), key));
+    activity.timeactivity = std::stoull(
+        ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(time_act)).toBytes(), key).value()).toString());
+    activity.active =
+        ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(active_connection)).toBytes(), key).value())
+            .toString()
+        == "1";
+    activity.score =
+        std::stoi(ByteArray(Cryptography::symmetric_decrypt(ByteArray(row.at(score_act)).toBytes(), key).value())
+                      .toString());
     return std::make_pair(ByteArray(key).toString(), activity);
 }
 
