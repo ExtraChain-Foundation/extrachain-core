@@ -84,7 +84,11 @@ void WebSocketService::closeSocket() {
         m_highQueue.clear();
         m_normalQueue.clear();
         m_lowQueue.clear();
+        m_messageCache.clear();
     }
+
+    m_waitingForBufferSpace = false;
+    m_activated             = false;
 
     eLog("[WS] Close socket");
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
@@ -146,7 +150,13 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             return;
         }
 
-        m_ws->sendTextMessage(result);
+        qint64 written = m_ws->sendTextMessage(result);
+        if (written < 0) {
+            eCritical("[WS] Handshake send failed");
+            closeSocket();
+            return;
+        }
+
         if (m_ws->bytesToWrite() > 0) {
             m_ws->flush();
         }
@@ -233,8 +243,15 @@ void WebSocketService::sendMessage(const QByteArray &data, Priority priority) {
 }
 
 bool WebSocketService::canSendMore() const {
-    return m_ws && m_ws->isValid() && m_ws->state() == QAbstractSocket::ConnectedState
-           && m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return false;
+    }
+
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        return false;
+    }
+
+    return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
 }
 
 void WebSocketService::tryDequeueMessage() {
@@ -279,16 +296,22 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
-    m_ws->sendBinaryMessage(prepared);
+    qint64 written = m_ws->sendBinaryMessage(prepared);
+    if (written < 0) {
+        eCritical("[WS] Failed to send message");
+        closeSocket();
+    }
 }
 
 void WebSocketService::final() {
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
-    if (this->m_activated && m_ws->bytesToWrite() > 0) {
-        m_ws->flush();
+    if (!this->m_activated || m_ws->bytesToWrite() == 0) {
+        return;
     }
+
+    m_ws->flush();
 }
 
 void WebSocketService::onConnected() {
@@ -301,8 +324,9 @@ void WebSocketService::onConnected() {
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
     eLog("[WS] Socket error: {}", Utils::enum_value_name(error));
 
-    if (m_ws->state() != QAbstractSocket::ConnectedState)
+    if (m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
+    }
 }
 
 void WebSocketService::connections() {
@@ -338,7 +362,13 @@ void WebSocketService::handshake() {
         return;
     }
 
-    m_ws->sendTextMessage(result);
+    qint64 written = m_ws->sendTextMessage(result);
+    if (written < 0 || m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        eCritical("[WS] Handshake send failed");
+        closeSocket();
+        return;
+    }
+
     if (m_ws->bytesToWrite() > 0) {
         m_ws->flush();
     }
