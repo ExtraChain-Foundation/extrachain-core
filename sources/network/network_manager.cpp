@@ -329,7 +329,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
                 priority = SocketService::Priority::High;
             }
 
-            service->sendMessageQuality(QByteArray::fromStdString(serialized_message), priority);
+            service->sendMessage(QByteArray::fromStdString(serialized_message), priority);
         }
     }
 }
