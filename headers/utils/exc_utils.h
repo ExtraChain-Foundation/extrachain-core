@@ -557,7 +557,6 @@ namespace Utils {
     };
 
     enum class HashAlgorithm {
-        Sha3_512,
         Blake3
     };
 
@@ -607,7 +606,7 @@ namespace Utils {
     EXTRACHAIN_EXPORT void                          hashingElements(std::vector<std::string> &vector);
     EXTRACHAIN_EXPORT std::string merkleFormula(const std::string &hash1, const std::string &hash2);
     EXTRACHAIN_EXPORT std::string calculate_hash(const std::string &data,
-                                                 HashAlgorithm      hash_algorithm = HashAlgorithm::Sha3_512);
+                                                 HashAlgorithm      hash_algorithm = HashAlgorithm::Blake3);
 
     namespace detail {
         template <typename T>
@@ -669,8 +668,6 @@ namespace Utils {
     template <typename T>
     std::string calculate_hash(const T &value, HashAlgorithm hash_algorithm = HashAlgorithm::Blake3) {
         switch (hash_algorithm) {
-        case HashAlgorithm::Sha3_512:
-            eUnimplemented;
         case HashAlgorithm::Blake3:
             return calculate_hash_blake3(value);
         default:

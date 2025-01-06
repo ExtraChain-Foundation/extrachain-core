@@ -137,4 +137,7 @@ public:
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const std::string &messageId);
+
+signals:
+    void newActorSaved(ActorId actor_id);
 };

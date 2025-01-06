@@ -180,7 +180,7 @@ QVariantMap VariantModel::loadJson(const QString &fileName) {
     return map;
 }
 
-QList<QVariantMap> &VariantModel::list() {
+const QList<QVariantMap> &VariantModel::list() const {
     return m_datas;
 }
 
