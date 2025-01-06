@@ -329,7 +329,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
                 priority = SocketService::Priority::High;
             }
 
-            service->sendMessageQuality(QByteArray::fromStdString(serialized_message), priority);
+            service->sendMessage(QByteArray::fromStdString(serialized_message), priority);
         }
     }
 }
@@ -544,7 +544,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 MessageBody outgoing_message =
                     make_message(serialized, MessageType::Custom, status, main_actor->id(), messageId);
                 auto serialized_message = outgoing_message.serialize();
-                auto signature          = ByteArray(main_actor->key().sign(serialized_message).value()).toString();
+                auto signature          = ByteArray(main_actor->key().sign(serialized_message)).toString();
                 sendMessage(serialized_message + signature, Config::Net::TypeSend::Focused, msg_identifier);
             }
             // return;
@@ -842,9 +842,8 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for collection request", type);
             break;
         }
-        const auto &[actor_id, file_id] = db_request_result.value();
-        node->dfs()->network_request_collection(actor_id, file_id, messageId);
-
+        const auto &[requester_id, requested_file_id] = db_request_result.value();
+        node->dfs()->network_request_collection(requester_id, requested_file_id, messageId);
         break;
     }
 
@@ -881,7 +880,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
-        node->dfs()->network_change_collection(actor_id, file_id, historical_row, messageId);
+        node->dfs()->network_change_collection(actor_id, file_id, historical_row);
         break;
     }
 
@@ -960,7 +959,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainTransaction: {
-        // eLog("BlockchainTransaction");
+        eLog("BlockchainTransaction");
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);

@@ -63,9 +63,8 @@ public:
     void                      setVPN(bool isVPN);
 
 public:
-    virtual void sendMessage(const QByteArray &data)                                            = 0;
-    virtual void final()                                                                        = 0;
-    virtual void sendMessageQuality(const QByteArray &data, Priority priority = Priority::High) = 0;
+    virtual void final()                                                                 = 0;
+    virtual void sendMessage(const QByteArray &data, Priority priority = Priority::High) = 0;
 
 protected slots:
     virtual void closeSocket();
