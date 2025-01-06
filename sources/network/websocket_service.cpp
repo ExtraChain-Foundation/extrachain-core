@@ -79,6 +79,9 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 }
 
 void WebSocketService::closeSocket() {
+    m_waitingForBufferSpace = false;
+    m_activated             = false;
+
     {
         QMutexLocker locker(&m_queueMutex);
         m_highQueue.clear();
@@ -86,9 +89,6 @@ void WebSocketService::closeSocket() {
         m_lowQueue.clear();
         m_messageCache.clear();
     }
-
-    m_waitingForBufferSpace = false;
-    m_activated             = false;
 
     eLog("[WS] Close socket");
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
@@ -292,7 +292,7 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !m_activated) {
         return;
     }
 
