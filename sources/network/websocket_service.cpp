@@ -40,11 +40,16 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         connections();
     }
 
-    // connect(this,
-    //         &WebSocketService::sendMessageInternal,
-    //         this,
-    //         &WebSocketService::sendMessageInternalSlot,
-    //         Qt::QueuedConnection);
+    connect(this,
+            &WebSocketService::sendMessageInternal,
+            this,
+            &WebSocketService::sendMessageInternalSlot,
+            Qt::DirectConnection);
+    connect(this,
+            &WebSocketService::needToTryDequeue,
+            this,
+            &WebSocketService::tryDequeueMessage,
+            Qt::QueuedConnection);
 }
 
 WebSocketService::~WebSocketService() {
@@ -74,6 +79,17 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 }
 
 void WebSocketService::closeSocket() {
+    m_waitingForBufferSpace = false;
+    m_activated             = false;
+
+    {
+        QMutexLocker locker(&m_queueMutex);
+        m_highQueue.clear();
+        m_normalQueue.clear();
+        m_lowQueue.clear();
+        m_messageCache.clear();
+    }
+
     eLog("[WS] Close socket");
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
         m_ws->close();
@@ -134,7 +150,13 @@ void WebSocketService::onTextMessage(const QString &message) // for first messag
             return;
         }
 
-        m_ws->sendTextMessage(result);
+        qint64 written = m_ws->sendTextMessage(result);
+        if (written < 0) {
+            eCritical("[WS] Handshake send failed");
+            closeSocket();
+            return;
+        }
+
         if (m_ws->bytesToWrite() > 0) {
             m_ws->flush();
         }
@@ -190,19 +212,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
     }
 }
 
-void WebSocketService::sendMessage(const QByteArray &data) {
-    if (!isActive()) {
-        eLog("[WS] Try to send without activation {}", data.left(35));
-        return;
-    }
-    if (data.isEmpty())
-        eFatal("[WS] Error send size");
-
-    eFatal("!!!");
-    emit sendMessageInternal(data);
-}
-
-void WebSocketService::sendMessageQuality(const QByteArray &data, Priority priority) {
+void WebSocketService::sendMessage(const QByteArray &data, Priority priority) {
     if (!isActive()) {
         eLog("[WS] Try to send without activation {}", data.left(35));
         return;
@@ -228,18 +238,26 @@ void WebSocketService::sendMessageQuality(const QByteArray &data, Priority prior
     }
 
     if (!m_waitingForBufferSpace) {
-        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        emit needToTryDequeue();
     }
 }
 
 bool WebSocketService::canSendMore() const {
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        return false;
+    }
+
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        return false;
+    }
+
     return m_ws->bytesToWrite() < MAX_BUFFER_SIZE;
 }
 
 void WebSocketService::tryDequeueMessage() {
     if (!canSendMore()) {
         m_waitingForBufferSpace = true;
-        QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+        emit needToTryDequeue();
         return;
     }
 
@@ -256,19 +274,15 @@ void WebSocketService::tryDequeueMessage() {
     }
 
     if (!data.isEmpty()) {
-        sendMessageInternalSlot(data);
+        emit sendMessageInternal(data);
 
         if (!m_highQueue.isEmpty() || !m_normalQueue.isEmpty() || !m_lowQueue.isEmpty()) {
-            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+            emit needToTryDequeue();
         }
     }
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-        return;
-    }
-
     if (data.isEmpty()) {
         return;
     }
@@ -277,15 +291,27 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     if (prepared.isEmpty()) {
         return;
     }
-    m_ws->sendBinaryMessage(prepareSendMessage(data));
+
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !m_activated) {
+        return;
+    }
+
+    qint64 written = m_ws->sendBinaryMessage(prepared);
+    if (written < 0) {
+        eCritical("[WS] Failed to send message");
+        closeSocket();
+    }
 }
 
 void WebSocketService::final() {
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
-    if (this->m_activated && m_ws->isValid() && m_ws->bytesToWrite() > 0)
-        m_ws->flush();
+    if (!this->m_activated || m_ws->bytesToWrite() == 0) {
+        return;
+    }
+
+    m_ws->flush();
 }
 
 void WebSocketService::onConnected() {
@@ -298,8 +324,9 @@ void WebSocketService::onConnected() {
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
     eLog("[WS] Socket error: {}", Utils::enum_value_name(error));
 
-    if (m_ws->state() != QAbstractSocket::ConnectedState)
+    if (m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
+    }
 }
 
 void WebSocketService::connections() {
@@ -316,7 +343,7 @@ void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
         if (m_waitingForBufferSpace) {
-            QMetaObject::invokeMethod(this, &WebSocketService::tryDequeueMessage, Qt::QueuedConnection);
+            emit needToTryDequeue();
         }
     });
 }
@@ -335,7 +362,16 @@ void WebSocketService::handshake() {
         return;
     }
 
-    m_ws->sendTextMessage(result);
+    qint64 written = m_ws->sendTextMessage(result);
+    if (written < 0 || m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        eCritical("[WS] Handshake send failed");
+        closeSocket();
+        return;
+    }
+
+    if (m_ws->bytesToWrite() > 0) {
+        m_ws->flush();
+    }
 }
 
 quint16 WebSocketService::port() const {
@@ -351,6 +387,7 @@ quint16 WebSocketService::serverPort() const {
 
 void WebSocketService::processCachedMessages() {
     while (!m_messageCache.isEmpty()) {
+        eLog("-------------------------------- processCachedMessages");
         auto message = m_messageCache.dequeue();
         processMessage(message);
     }

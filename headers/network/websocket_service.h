@@ -55,12 +55,12 @@ public:
     quint16 serverPort() const override;
 
 public:
-    virtual void sendMessage(const QByteArray &data) override;
-    void         sendMessageQuality(const QByteArray &data, Priority priority = Priority::High) override;
+    void         sendMessage(const QByteArray &data, Priority priority = Priority::High) override;
     virtual void final() override;
 
 signals:
     void sendMessageInternal(const QByteArray &data);
+    void needToTryDequeue();
 
 private slots:
     void onTextMessage(const QString &message);
