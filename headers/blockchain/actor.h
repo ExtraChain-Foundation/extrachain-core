@@ -69,7 +69,7 @@ public:
         this->type_ = type;
         this->key_.generate();
         auto public_key = this->key_.public_key();
-        auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Sha3_512);
+        auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 
         if (hash.size() >= BlockchainConst::ACTOR_SIZE)
             id_ = hash.substr(0, BlockchainConst::ACTOR_SIZE);

@@ -20,7 +20,7 @@
 #include "blockchain/block.h"
 #include "blockchain/block_variant.h"
 
-#include "sha3.h"
+#include "blake3.h"
 
 Block::Block() {
     this->m_type     = BlockType::Data;
@@ -76,20 +76,24 @@ Block Block::operator=(const Block &block) {
 }
 
 void Block::calculate_hash() {
-    SHA3        sha3(SHA3::Bits::Bits512);
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
     std::string index = m_index.to_string(NumeralBase::Hex);
-    sha3.add(index.c_str(), index.size());
+    blake3_hasher_update(&hasher, index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
-        sha3.add(data.c_str(), data.size());
+        blake3_hasher_update(&hasher, data.c_str(), data.size());
     }
 
     for (const auto &tx : std::as_const(m_transactions)) {
         auto txHash = tx.hash();
-        sha3.add(txHash.c_str(), txHash.size());
+        blake3_hasher_update(&hasher, txHash.c_str(), txHash.size());
     }
 
-    this->m_hash = sha3.getHash();
+    uint8_t hash[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+    this->m_hash = fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
 }
 
 void Block::setType(BlockType value) {

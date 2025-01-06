@@ -121,7 +121,7 @@ public:
 protected:
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
-     * Uses sha3.
+     * Uses blake3.
      */
     virtual void               calculate_hash();
     virtual const std::string &getDataForSignature() const;

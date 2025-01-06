@@ -417,7 +417,7 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     uint32_t                     id,
     const Dfs::DataSecurityData &security_data) {
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     auto row        = chain->get_collection_rows("WHERE id=" + std::to_string(id));
     return row.value()[0];
 }
@@ -428,7 +428,7 @@ std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection
     const Dfs::DataSecurityData &security_data,
     const std::string           &where_statement) {
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
         return std::unexpected(CollectionError::CollectionNotFound);
@@ -452,7 +452,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
 
     // TODO: choose sign actor from args
     auto main_actor = node->accountController()->currentProfile().main();
-    auto chain      = HistoricalCollection::load(node, main_actor, main_actor->id(), file_id);
+    auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }

@@ -58,7 +58,7 @@ public:
     void        insertFromJson(int index, const QString &fileName);
     QVariantMap loadJson(const QString &fileName);
 
-    QList<QVariantMap> &list();
+    const QList<QVariantMap> &list() const;
 
 signals:
     void countChanged(int count);

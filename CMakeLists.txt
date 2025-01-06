@@ -202,8 +202,7 @@ target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
-    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3
-    magic_enum::magic_enum unofficial::hash-library
+    unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
     Boost::boost Boost::system Boost::thread Boost::chrono Boost::filesystem Boost::mp11 Boost::describe Boost::json)
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets

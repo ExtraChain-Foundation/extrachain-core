@@ -1188,7 +1188,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
                                   + node->accountController()->mainActor()->id().to_string() + salt,
-                              Utils::HashAlgorithm::Sha3_512)
+                              Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }
 

@@ -21,7 +21,7 @@
 
 #include "blockchain/block_variant.h"
 
-#include "sha3.h"
+#include "blake3.h"
 
 GenesisBlock::GenesisBlock()
     : Block() {
@@ -71,23 +71,27 @@ const std::string &GenesisBlock::getDataForSignature() const {
 }
 
 void GenesisBlock::calculate_hash() {
-    SHA3 sha3(SHA3::Bits::Bits512);
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
     auto index = m_index.to_string(NumeralBase::Hex);
-    sha3.add(index.c_str(), index.size());
+    blake3_hasher_update(&hasher, index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
-        sha3.add(data.c_str(), data.size());
+        blake3_hasher_update(&hasher, data.c_str(), data.size());
     }
 
     for (const auto &[key, row] : std::as_const(m_dataRows)) {
         auto &[actorId, tokenId] = key;
-        sha3.add(actorId.to_string().c_str(), actorId.to_string().size());
-        sha3.add(row.state.to_string().c_str(), row.state.to_string().size());
-        sha3.add(tokenId.to_string().c_str(), tokenId.to_string().size());
-        sha3.add(reinterpret_cast<const char *>(&row.type), sizeof(row.type));
+        blake3_hasher_update(&hasher, actorId.to_string().c_str(), actorId.to_string().size());
+        blake3_hasher_update(&hasher, row.state.to_string().c_str(), row.state.to_string().size());
+        blake3_hasher_update(&hasher, tokenId.to_string().c_str(), tokenId.to_string().size());
+        blake3_hasher_update(&hasher, reinterpret_cast<const char *>(&row.type), sizeof(row.type));
     }
 
-    this->m_hash = sha3.getHash();
+    uint8_t hash[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
+    this->m_hash = fmt::format("{:02x}", fmt::join(std::span(hash, BLAKE3_OUT_LEN), ""));
 }
 
 const GenesisDataRows &GenesisBlock::dataRows() const {

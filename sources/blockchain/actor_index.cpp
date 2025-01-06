@@ -151,6 +151,7 @@ int ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
     switch (addActor(actor)) {
     case 0: {
         eLog("[ActorIndex] New actor {} is successfully saved", actor);
+        emit newActorSaved(actor.id());
         return Errors::FILE_NOT_EXISTS;
     }
     case Errors::FILE_ALREADY_EXISTS: {
@@ -290,6 +291,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
 
         eLog("[ActorIndex] Actor {} was added", actor.id());
         node->network()->send_message(actor, MessageType::NewActor);
+        emit newActorSaved(actor.id());
     }
 
     return result;

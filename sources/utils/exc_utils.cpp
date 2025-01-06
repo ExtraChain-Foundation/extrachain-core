@@ -42,7 +42,6 @@
 #include "cpp-base64/base64.cpp"
 #include "encryption/encryption_tools.h"
 // #include "managers/data_mining_manager.h"
-#include <sha3.h>
 #include "dfs/dfs_utils.h"
 
 #ifndef EXTRACHAIN_CMAKE
@@ -51,10 +50,6 @@
 
 std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
     switch (hash_algorithm) {
-    case HashAlgorithm::Sha3_512: {
-        SHA3 sha3(SHA3::Bits::Bits512);
-        return sha3(data);
-    }
     case HashAlgorithm::Blake3: {
         blake3_hasher hasher;
         blake3_hasher_init(&hasher);
