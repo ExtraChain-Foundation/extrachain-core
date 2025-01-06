@@ -595,7 +595,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
         return;
     }
     auto rows = chain->get_collection_rows();
-    if (!rows.has_value()) {
+    if (!rows.has_value() && rows.error() != CollectionError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return;
     }
@@ -607,7 +607,9 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
                                   message_id,
                                   Config::Net::TypeSend::Focused);
 
-    node->network()->send_message(std::make_tuple(owner_id, file_id, rows.value()),
+    node->network()->send_message(std::make_tuple(owner_id,
+                                                  file_id,
+                                                  rows.has_value() ? rows.value() : std::vector<DbRow> {}),
                                   MessageType::DfsCollectionContent,
                                   MessageStatus::Response,
                                   message_id,
@@ -730,6 +732,7 @@ void DfsController::network_response_content_collection(const ActorId           
     // check if history and file ok
     emit downloaded(owner_id, dir_row.value());
     emit collectionDownloaded();
+    sendFile(owner_id, dir_row->file_id);
 }
 
 void DfsController::network_change_collection(const ActorId                 &owner_id,

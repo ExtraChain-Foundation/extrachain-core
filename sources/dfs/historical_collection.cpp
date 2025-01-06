@@ -351,7 +351,7 @@ std::expected<std::vector<DbRow>, CollectionError> HistoricalCollection::get_col
     db.close();
 
     if (db_rows.empty()) {
-        return std::unexpected(CollectionError::Unknown);
+        return std::unexpected(CollectionError::CollectionEmpty);
     }
 
     return db_rows;

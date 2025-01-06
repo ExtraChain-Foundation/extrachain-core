@@ -34,6 +34,7 @@ enum class CollectionOperation {
 enum class CollectionError {
     Unknown,
     CollectionNotFound,
+    CollectionEmpty,
     HistoryNotFound,
     StructuralCreation,
     Adding,
