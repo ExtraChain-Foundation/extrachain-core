@@ -202,13 +202,13 @@ void NetworkManager::removeConnection(const QString &identifier) {
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
-    auto connectionsLocked = *m_connections;
-    for (const auto &connection : *connectionsLocked) {
-        connection->final();
-        emit connection->close();
-        // emit connection->finished();
-    }
-    connectionsLocked->clear();
+    // auto connectionsLocked = *m_connections;
+    // for (const auto &connection : *connectionsLocked) {
+    //     connection->final();
+    //     emit connection->close();
+    //     // emit connection->finished();
+    // }
+    m_connections->clear();
 }
 
 void NetworkManager::checkConnectionsStatus() {
@@ -367,13 +367,9 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
-                eInfo("[VPN] not contains socket identifier: {}", socket_identifier);
-
-                for (auto &it : package.nodes_identifiers_to_ignore) {
-                    eInfo("{}", it);
-                }
+                eInfo("[VPN] brocast further to socket: {}", socket_identifier);
             }
-            return !package.nodes_identifiers_to_ignore.contains(socket_identifier);
+            return res;
         }
         default:
             return false;
@@ -593,10 +589,7 @@ void NetworkManager::messageReceived(const std::string &message,
     std::string   messId       = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
-    eWarning("F1");
-
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
-        eWarning("F1 1");
         if (m_messages->contains(messageId)
             || message_body.init_sender_id == node->accountController()->mainActor()->id()) {
             eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
@@ -614,7 +607,6 @@ void NetworkManager::messageReceived(const std::string &message,
             eInfo("MessageID emplaced: {}", messageId);
         }
     } else if (status == MessageStatus::Response) {
-        eWarning("F1 2");
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
@@ -631,8 +623,6 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
     }
-
-    eWarning("F2");
 
     const NetworkPackageStorage package_data(message_body, identifier, sign.data());
 
