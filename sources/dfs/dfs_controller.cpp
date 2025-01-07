@@ -1758,7 +1758,9 @@ void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) 
     std::string        prevHash;
     for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
         if (it->at("file_id") == msg.file_id) {
-            prevHash = it->at("prev_file_id");
+            auto prevFileIdIt = it->find("prev_file_id");
+            prevHash          = (prevFileIdIt != it->end()) ? prevFileIdIt->second : "";
+
             if (!prevHash.empty()) {
                 actrDirFile.update(fmt::format("UPDATE {} SET prev_file_id = '{}' WHERE prev_file_id = '{}'",
                                                DfsT::ActorDirFile::TableName,
