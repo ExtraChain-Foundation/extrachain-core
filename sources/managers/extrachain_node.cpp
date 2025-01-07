@@ -429,7 +429,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(
     transaction.sign(signer);
 
     eLog("[Blockchain] Send {}", transaction);
-    network()->send_message(transaction, MessageType::BlockchainTransaction);
+    network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::AllParents);
 
     return transaction;
 }
@@ -613,7 +613,10 @@ void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
     DfsP::RequestDfsSize msg { .actorId = actorId };
 
-    m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+    m_networkManager->send_message(msg,
+                                   MessageType::RequestBlockCount,
+                                   Config::Net::TypeSend::AllParents,
+                                   MessageStatus::Request);
 }
 
 AccountController* ExtraChainNode::accountController() const {

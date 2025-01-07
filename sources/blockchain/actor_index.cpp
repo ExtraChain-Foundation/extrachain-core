@@ -111,9 +111,9 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
     if (!actor.empty()) {
         node->network()->send_message(actor,
                                       MessageType::Actor,
+                                      Config::Net::TypeSend::Focused,
                                       MessageStatus::Response,
-                                      messageId,
-                                      Config::Net::TypeSend::Focused);
+                                      messageId);
     } else {
         sendGetActorMessage(actorId);
     }
@@ -128,9 +128,9 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     if (!result.empty()) {
         node->network()->send_message(result,
                                       MessageType::ActorAll,
+                                      Config::Net::TypeSend::Focused,
                                       MessageStatus::Response,
-                                      messageId,
-                                      Config::Net::TypeSend::Focused);
+                                      messageId);
     } else {
         // send empty response
     }
@@ -141,7 +141,10 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
     if (!node->accountController()->empty()) {
-        node->network()->send_message(id, MessageType::ActorAll, MessageStatus::Request);
+        node->network()->send_message(id,
+                                      MessageType::ActorAll,
+                                      Config::Net::TypeSend::AllParents,
+                                      MessageStatus::Request);
 
         eLog("[ActorIndex] Get all actors request");
     }
@@ -180,6 +183,7 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string 
 
     node->network()->send_message(std::to_string(this->getRecords()),
                                   MessageType::ActorCount,
+                                  Config::Net::TypeSend::Focused,
                                   MessageStatus::Response);
 }
 
@@ -258,7 +262,10 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
         eFatal("Can't get actor by zero id");
     }
 
-    node->network()->send_message(actorId.to_string(), MessageType::Actor, MessageStatus::Request);
+    node->network()->send_message(actorId.to_string(),
+                                  MessageType::Actor,
+                                  Config::Net::TypeSend::AllParents,
+                                  MessageStatus::Request);
 }
 
 QByteArray ActorIndex::getById(const ActorId &id) const {
@@ -290,7 +297,7 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         node->dfs()->initializeActor(actor.id());
 
         eLog("[ActorIndex] Actor {} was added", actor.id());
-        node->network()->send_message(actor, MessageType::NewActor);
+        node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::AllParents);
         emit newActorSaved(actor.id());
     }
 
