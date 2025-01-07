@@ -19,7 +19,6 @@
 
 #include "network/isocket_service.h"
 #include "blockchain/actor_index.h"
-#include <QJsonObject>
 
 #include "encryption/encryption_tools.h"
 #include "network/network_manager.h"
@@ -82,75 +81,94 @@ void SocketService::setVPN(bool isVPN) {
     m_isVPN = isVPN;
 }
 
-bool SocketService::checkFirstMessage(const QString &message, const bool canUseConnection) {
-    auto json = QJsonDocument::fromJson(message.toLatin1());
+bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
+    eLog("[Socket] First message: {} | Current first: {}", handshake, node->actorIndex()->firstId());
 
-    if (json.isEmpty()) {
-        eLog("[Socket] First message: '{}'", message);
-        closeSocket();
-        eFatal("[Socket] Can't check first message");
-        return false;
-    }
-
-    auto version                  = json["version"].toString();
-    m_identifier                  = json["identifier"].toString();
-    m_sendType                    = SendType(json["sendType"].toInt());
-    ActorId    jsonFirstId        = ActorId(json["firstId"].toString().toStdString());
-    ActorId    currentFirstId     = node->actorIndex()->firstId();
-    bool       isFirstIdsContains = currentFirstId == jsonFirstId;
-    bool       somethingEmpty     = jsonFirstId.is_zero() || currentFirstId.is_zero();
-    QJsonArray connectionsArr     = json["connections"].toArray();
-
-    eLog("[Socket] First message: {} | Current first: {}", json.toJson(QJsonDocument::Compact), currentFirstId);
-
-    if (currentFirstId.is_zero() && !jsonFirstId.is_zero()) { // TODO: remove hack
-        node->actorIndex()->setFirstId(jsonFirstId);
-    }
-
-    if (version != EXTRACHAIN_VERSION) {
+    // 1. Checking the version
+    if (handshake.version != EXTRACHAIN_VERSION) {
         eLog("[Socket] Close, because version incompatible {}", EXTRACHAIN_VERSION);
-        emit error(Network::SocketServiceError::IncompatibleVersion, version);
-        closeSocket();
-    }
-
-    if (!(somethingEmpty || isFirstIdsContains)) {
-        eLog("[Socket] Close, because network incompatible");
-        emit error(Network::SocketServiceError::IncompatibleNetwork, jsonFirstId.toQString());
+        emit error(Network::SocketServiceError::IncompatibleVersion, QString::fromStdString(handshake.version));
         closeSocket();
         return false;
     }
 
-    if (m_identifier == Network::currentIdentifier()) {
+    // 2. First id/network checks
+    ActorId json_first_id         = ActorId(handshake.first_id);
+    ActorId current_first_id      = node->actorIndex()->firstId();
+    bool    is_first_ids_contains = current_first_id == json_first_id;
+    bool    something_empty       = json_first_id.is_zero() || current_first_id.is_zero();
+
+    if (current_first_id.is_zero() && !json_first_id.is_zero()) {
+        node->actorIndex()->setFirstId(json_first_id);
+    }
+
+    if (!(something_empty || is_first_ids_contains)) {
+        eLog("[Socket] Close, because network incompatible");
+        emit error(Network::SocketServiceError::IncompatibleNetwork, QString::fromStdString(handshake.first_id));
+        closeSocket();
+        return false;
+    }
+
+    // 3. Identifier check
+    m_identifier = QString::fromStdString(handshake.identifier);
+    if (handshake.identifier == Network::currentIdentifier()) {
         emit error(Network::SocketServiceError::IncompatibleIdentifier, "");
         closeSocket();
         return false;
     }
 
-    bool flag              = false;
-    auto connectionsLocked = *node->network()->connections();
-    std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&flag, this](SocketService *el) {
-        flag = flag || (this != el && el->identifier() == m_identifier);
-    });
+    // 4. Checking for duplicate connections
+    bool duplicate = false;
+    {
+        auto connections_locked = *node->network()->connections();
+        std::for_each(connections_locked->begin(),
+                      connections_locked->end(),
+                      [&duplicate, this](SocketService *el) {
+                          duplicate = duplicate || (this != el && el->identifier() == m_identifier);
+                      });
+    }
 
-    if (flag) {
+    if (duplicate) {
         emit error(Network::SocketServiceError::DuplicateIdentifier, "");
         eLog("[Socket] Duplicate identifier");
         closeSocket();
         return false;
     }
 
-    if (canUseConnection) {
-        eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
-        m_activated = true;
-        emit activated();
-        emit shareConnections(connectionsArr);
-        return true;
-    } else {
-        eLog("[Socket] Ignored as external node don't have enough slots. {} {}", fmt::ptr(this), protocol());
-        m_activated    = false;
-        m_needToDelete = true;
+    // 5. Check constant
+    if (!isConstant() && handshake.is_constant) {
+        m_isConstant = true;
+    }
+
+    // 6.
+    {
+        auto connections_locked = *node->network()->connections();
+        if (connections_locked->size() >= Network::maxConnections) {
+            emit error(Network::SocketServiceError::MaxConnections, "");
+            eLog("[Socket] Max connections");
+            closeSocket();
+            return false;
+        }
+    }
+
+    // 7. Set SendType
+    m_sendType = handshake.send_type;
+
+    // 8. Checking slots availability
+    if (!handshake.is_available) {
+        eLog("[Socket] Peer not available");
+        closeSocket();
+        emit shareConnections(handshake.connections);
         return false;
     }
+
+    // 9. If all checks are passed - activate the connection
+    eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
+    m_activated = true;
+    emit activated();
+    emit shareConnections(handshake.connections);
+
+    return true;
 }
 
 void SocketService::closeSocket() {
@@ -158,22 +176,24 @@ void SocketService::closeSocket() {
 }
 
 QByteArray SocketService::generateFirstMessage() {
-    QJsonObject json;
-    json["firstId"]    = node->actorIndex()->firstId().toQString();
-    json["version"]    = EXTRACHAIN_VERSION;
-    json["identifier"] = QString(Network::currentIdentifier());
-    json["sendType"]   = QString::number(int(m_sendType));
+    HandshakeMessage msg { .first_id     = node->actorIndex()->firstId().to_string(),
+                           .version      = EXTRACHAIN_VERSION,
+                           .identifier   = Network::currentIdentifier().toStdString(),
+                           .send_type    = m_sendType,
+                           .connections  = {},
+                           .is_available = true,
+                           .is_constant  = m_isConstant.load() };
 
-    QJsonArray connectionsArr;
     {
-        auto connectionsLocked = *node->network()->connections();
-        for (auto &it : *connectionsLocked)
-            connectionsArr.append(it->ip());
+        auto connections_locked = *node->network()->connections();
+        for (auto &it : *connections_locked) {
+            msg.connections.push_back(it->ip().toStdString());
+        }
+        msg.is_available = connections_locked->size() < Network::maxConnections;
     }
-    json["connections"] = connectionsArr;
 
-    QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
-    return result;
+    auto handshake = Json::serialize(msg);
+    return QByteArray::fromStdString(handshake);
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
