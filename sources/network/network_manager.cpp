@@ -85,21 +85,30 @@ void NetworkManager::reconnection() {
     eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
     auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
-         ++it)
+         ++it) {
+        if (failed_ips.contains(it->first.ip.toStdString())) {
+            return;
+        }
+
         connectToWebSocket(it->first.ip, it->first.port);
+    }
 }
 
 void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
-    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
     auto connectionsLocked = *m_connections;
     for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
         if ((*it)->identifier() == identifier) {
             emit(*it)->close();
-            emit(*it)->finished();
+            // emit(*it)->finished();
         }
         break;
     }
 
+    if (failed_ips.contains(connectInfo.ip.toStdString())) {
+        return;
+    }
+
+    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
     connectToWebSocket(connectInfo.ip, connectInfo.port);
 }
 
@@ -137,30 +146,32 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (!connectionsLocked->contains(service))
             connectionsLocked->insert(service);
     }
-    connect(service, &WebSocketService::shareConnections, this, [&](const QJsonArray connectionsArr) {
-        eLog("shareConnections {}", QJsonDocument(connectionsArr).toJson(QJsonDocument::Compact));
-        auto initIP = node->getInitPublicIPAndCountry().first;
+    connect(service, &WebSocketService::shareConnections, this, [&](const std::vector<std::string> &connections) {
+        eLog("shareConnections: {}", connections);
+
+        auto init_ip = node->getInitPublicIPAndCountry().first;
 
         if (m_connections->size() >= Network::maxConnections) {
             eLog("shareConnections ignored by max connections limit");
             return;
         }
 
-        for (const QJsonValue &value : connectionsArr) {
-            bool canConnect = true;
-            auto ip         = value.toString();
+        for (const auto &ip : connections) {
+            bool can_connect = true;
+
             {
-                auto connectionsLocked = *m_connections;
-                for (const auto &connItem : *connectionsLocked) {
-                    if (ip == connItem->ip() || ip == initIP) {
-                        canConnect = false;
+                auto connections_locked = *m_connections;
+                for (const auto &conn_item : *connections_locked) {
+                    if (ip == conn_item->ip().toStdString() || ip == init_ip) {
+                        can_connect = false;
                         break;
                     }
                 }
             }
 
-            if (canConnect)
-                connectToNode(ip, Network::Protocol::WebSocket);
+            if (can_connect) {
+                connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+            }
         }
     });
 }
@@ -1103,7 +1114,9 @@ void NetworkManager::removeWsConnection() {
     //    m_reconnections.remove(NetworkReconnect {
     //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket
     //        });
-    connection->deleteLater();
+    if (connection != nullptr) {
+        connection->deleteLater();
+    }
     checkConnectionsStatus();
 }
 
@@ -1133,7 +1146,8 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::IncompatibleVersion) {
-        emit connectionError(error, service->identifier(), errorData);
+        failed_ips.insert(service->ip().toStdString());
+        emit connectionError(error, service->ip(), service->identifier(), errorData);
     }
 }
 

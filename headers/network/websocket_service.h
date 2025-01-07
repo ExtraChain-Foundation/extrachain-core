@@ -73,6 +73,7 @@ private slots:
 
 private:
     void connections();
+    void send_public_key();
     void handshake();
 
     QWebSocket *m_ws = nullptr;
