@@ -161,9 +161,8 @@ inline MessageBody make_init_message(const std::string    &data,
                             .message_id     = !to_message_id.empty() ? to_message_id : randomId,
                             .sender_id      = sender,
                             .init_sender_id = sender,
-                            .nodes_identifiers_visited =
-                                std::unordered_set<std::string> { Network::currentIdentifier().toStdString() },
-                            .data = data };
+                            .data           = data };
+    message.nodes_identifiers_visited.emplace(Network::currentIdentifier().toStdString());
 
     return message;
 }

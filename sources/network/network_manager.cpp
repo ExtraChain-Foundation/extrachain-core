@@ -335,8 +335,18 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
                 return socket_identifier == receiver_identifier;
             case Config::Net::TypeSend::AllParents:
                 return true;
-            case Config::Net::TypeSend::Broadcast:
+            case Config::Net::TypeSend::Broadcast: {
+                bool res = !nodes_identifiers_visited.contains(socket_identifier);
+
+                if (res) {
+                    eInfo("[VPN] not contains socket identifier: {}", socket_identifier);
+
+                    for (auto &it : nodes_identifiers_visited) {
+                        eInfo("{}", it);
+                    }
+                }
                 return !nodes_identifiers_visited.contains(socket_identifier);
+            }
             default:
                 return false;
             }
@@ -365,13 +375,13 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
 
 void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data) {
     if (package_data.msg_body.send_type != Config::Net::TypeSend::Broadcast) {
-        eWarning("Send Brodcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
+        eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
     }
 
     auto network_forwarded_messages_locked = *m_network_forwarded_messages;
     if (network_forwarded_messages_locked->contains(package_data.msg_body.message_id)) {
-        eWarning("Send Brodcast Message error - message with the same message ID has already been sent: {}",
+        eWarning("Send Broadcast Message error - message with the same message ID has already been sent: {}",
                  package_data.msg_body.message_id);
         return;
     }
