@@ -551,7 +551,7 @@ void NetworkManager::messageReceived(const std::string &message,
     std::string   messId       = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
-    if (status == MessageStatus::Request) {
+    if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)) {
             qWarning("Network Message ignored: already achieved such Request with messageId: {}",
                      messageId.c_str());
