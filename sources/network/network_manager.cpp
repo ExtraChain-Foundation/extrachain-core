@@ -385,6 +385,8 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
     auto serialized = message_edited.serialize();
     sendMessage(serialized + package_data.sign, message_edited, Config::Net::TypeSend::Broadcast, "");
 
+    eInfo("Message forwarded with messageId: {}", package_data.msg_body.message_id);
+
     network_forwarded_messages_locked->emplace(message_edited.message_id,
                                                std::make_pair(package_data.prev_identifier,
                                                               QDateTime::currentDateTime()));
@@ -574,7 +576,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
     }
 
-    const NetworkPackageStorage packageData(message_body, identifier, sign.data());
+    const NetworkPackageStorage package_data(message_body, identifier, sign.data());
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
@@ -604,7 +606,12 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for custom message", type);
             return;
         }
-        emit customMessageReceived(packageData, custom_deserialize_result.value());
+        emit customMessageReceived(package_data, custom_deserialize_result.value());
+
+        if (node->isRaccoon)
+            emit customMessageReceived(package_data, custom_deserialize_result.value());
+        else
+            sendBrodcastMessageFurther(package_data);
 
         break;
     }

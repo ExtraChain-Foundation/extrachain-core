@@ -90,21 +90,6 @@ enum class MessageStatus {
 MSGPACK_ADD_ENUM(MessageStatus)
 // FORMAT_ENUM(MessageStatus)
 
-// struct MessageBodyCore {
-//     Config::Net::TypeSend send_type;
-//     MessageType           message_type;
-//     MessageStatus         status;
-//     std::string           message_id;
-//     ActorId               init_sender_id;
-//     std::string           data;
-
-//     std::string serialize() const {
-//         return MessagePack::serialize(*this);
-//     }
-
-//     MSGPACK_DEFINE(send_type, message_type, status, message_id, init_sender_id, data)
-// };
-
 struct MessageBody {
     Config::Net::TypeSend           send_type;
     MessageType                     message_type;
