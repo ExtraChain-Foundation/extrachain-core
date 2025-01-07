@@ -97,7 +97,8 @@ struct MessageBody {
     std::string   message_id;
     ActorId       sender_id;
     ActorId                         init_sender_id;
-    std::unordered_set<std::string> nodes_identifiers_visited;
+    std::unordered_set<std::string> nodes_identifiers_to_ignore;
+    std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string   data;
 
     std::string serializeForSign() const {
@@ -115,7 +116,8 @@ struct MessageBody {
                    message_id,
                    sender_id,
                    init_sender_id,
-                   nodes_identifiers_visited,
+                   nodes_identifiers_to_ignore,
+                   nodes_identifiers_to_ignore_later,
                    data)
 };
 
@@ -162,7 +164,6 @@ inline MessageBody make_init_message(const std::string    &data,
                             .sender_id      = sender,
                             .init_sender_id = sender,
                             .data           = data };
-    message.nodes_identifiers_visited.emplace(Network::currentIdentifier().toStdString());
 
     return message;
 }

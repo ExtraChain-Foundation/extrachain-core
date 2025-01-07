@@ -191,6 +191,8 @@ private:
 
     void clearNetworkCaches();
 
+    void addAllServicesIdentifiersToMessage(MessageBody& msg);
+
 public:
     SafePtr<std::set<SocketService*>> connections() const;
     bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
@@ -289,7 +291,12 @@ public:
                                                 status,
                                                 mainActor->id(),
                                                 to_message_id);
-        auto serialized  = message.serialize();
+
+        if (typeSend == Config::Net::TypeSend::Broadcast) {
+            addAllServicesIdentifiersToMessage(message);
+        }
+
+        auto        serialized          = message.serialize();
         auto        serialized_for_sign = message.serializeForSign();
         auto        sign_result         = mainActor->key().sign(serialized_for_sign);
         if (!sign_result.has_value()) {

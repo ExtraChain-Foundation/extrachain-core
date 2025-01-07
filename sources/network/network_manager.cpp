@@ -65,6 +65,37 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     m_reconnectTimer = new QTimer(this);
     m_clear_network_caches_timer = new QTimer(this);
     calculateTraffic = CalculateTraffic::GetInstance();
+
+    connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
+    m_clear_network_caches_timer->start(20000);
+
+    QTimer::singleShot(20000, [this]() {
+        std::string a = Network::currentIdentifier().toStdString();
+        eInfo("[WS] Current Identifier print: {}", a);
+
+        auto connectionsLocked = *m_connections;
+        for (const auto &service : *connectionsLocked) {
+            std::string b = service->identifier().toStdString();
+            eInfo("[WS] Service ident: {}", b);
+        }
+    });
+}
+
+void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
+    for (const auto &it : msg.nodes_identifiers_to_ignore_later) {
+        msg.nodes_identifiers_to_ignore.emplace(it);
+    }
+    msg.nodes_identifiers_to_ignore_later.clear();
+
+    msg.nodes_identifiers_to_ignore_later.emplace(Network::currentIdentifier().toStdString());
+
+    auto connectionsLocked = *m_connections;
+    for (const auto &service : *connectionsLocked) {
+        std::string ident = service->identifier().toStdString();
+
+        if (!ident.empty())
+            msg.nodes_identifiers_to_ignore_later.emplace(ident);
+    }
 }
 
 void NetworkManager::process() {
@@ -72,9 +103,6 @@ void NetworkManager::process() {
         return;
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
     m_reconnectTimer->start(Utils::RECONNECT_INTERVAL);
-
-    connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
-    m_clear_network_caches_timer->start(20000);
 }
 
 void NetworkManager::reconnection() {
@@ -304,6 +332,7 @@ void NetworkManager::clearNetworkCaches() {
         for (auto it = messages_locked->begin(); it != messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
             if (it->second.second.secsTo(currentTime) >= 120) {
+                eInfo("MessageID erased: {}", it->first);
                 it = messages_locked->erase(it);
             } else
                 ++it;
@@ -323,39 +352,41 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
         return;
     }
 
-    static auto isSendCheck =
-        [nodes_identifiers_visited =
-             non_serialized_message.nodes_identifiers_visited](const Config::Net::TypeSend &type_send,
-                                                               const std::string           &receiver_identifier,
-                                                               const std::string           &socket_identifier) {
-            switch (type_send) {
-            case Config::Net::TypeSend::Except:
-                return socket_identifier != receiver_identifier;
-            case Config::Net::TypeSend::Focused:
-                return socket_identifier == receiver_identifier;
-            case Config::Net::TypeSend::AllParents:
-                return true;
-            case Config::Net::TypeSend::Broadcast: {
-                bool res = !nodes_identifiers_visited.contains(socket_identifier);
+    static auto isSendCheck = [](const Config::Net::TypeSend &type_send,
+                                 const std::string           &receiver_identifier,
+                                 const std::string           &socket_identifier,
+                                 const MessageBody           &package) {
+        switch (type_send) {
+        case Config::Net::TypeSend::Except:
+            return socket_identifier != receiver_identifier;
+        case Config::Net::TypeSend::Focused:
+            return socket_identifier == receiver_identifier;
+        case Config::Net::TypeSend::AllParents:
+            return true;
+        case Config::Net::TypeSend::Broadcast: {
+            bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
-                if (res) {
-                    eInfo("[VPN] not contains socket identifier: {}", socket_identifier);
+            if (res) {
+                eInfo("[VPN] not contains socket identifier: {}", socket_identifier);
 
-                    for (auto &it : nodes_identifiers_visited) {
-                        eInfo("{}", it);
-                    }
+                for (auto &it : package.nodes_identifiers_to_ignore) {
+                    eInfo("{}", it);
                 }
-                return !nodes_identifiers_visited.contains(socket_identifier);
             }
-            default:
-                return false;
-            }
-        };
+            return !package.nodes_identifiers_to_ignore.contains(socket_identifier);
+        }
+        default:
+            return false;
+        }
+    };
 
     auto connectionsLocked = *m_connections;
     for (const auto &service : *connectionsLocked) {
         if (service->isActive()
-            && isSendCheck(type_send, receiver_identifier, service->identifier().toStdString())) {
+            && isSendCheck(type_send,
+                           receiver_identifier,
+                           service->identifier().toStdString(),
+                           non_serialized_message)) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
 
             SocketService::Priority priority = message_type == MessageType::DfsAddSegment
@@ -390,7 +421,8 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
 
     MessageBody message_edited = package_data.msg_body;
     message_edited.sender_id   = node->accountController()->mainActor()->id();
-    message_edited.nodes_identifiers_visited.emplace(Network::currentIdentifier());
+    message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
+    addAllServicesIdentifiersToMessage(message_edited);
 
     auto serialized = message_edited.serialize();
     sendMessage(serialized + package_data.sign, message_edited, Config::Net::TypeSend::Broadcast, "");
@@ -561,20 +593,34 @@ void NetworkManager::messageReceived(const std::string &message,
     std::string   messId       = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
+    eWarning("F1");
+
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
-        if (m_messages->contains(messageId)) {
-            qWarning("Network Message ignored: already achieved such Request with messageId: {}",
-                     messageId.c_str());
+        eWarning("F1 1");
+        if (m_messages->contains(messageId)
+            || message_body.init_sender_id == node->accountController()->mainActor()->id()) {
+            eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
+                     messageId,
+                     identifier);
             return;
         }
-        m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
+        auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
+        if (!res.second) {
+            eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
+                     messageId,
+                     identifier);
+            return;
+        } else {
+            eInfo("MessageID emplaced: {}", messageId);
+        }
     } else if (status == MessageStatus::Response) {
+        eWarning("F1 2");
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
             message_edited.sender_id   = node->accountController()->mainActor()->id();
-            message_edited.nodes_identifiers_visited.emplace(Network::currentIdentifier());
+            message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
             sendMessage(serialized + std::string(sign.data()),
@@ -585,6 +631,8 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
     }
+
+    eWarning("F2");
 
     const NetworkPackageStorage package_data(message_body, identifier, sign.data());
 
@@ -605,10 +653,11 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {}",
+        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
                  messageId,
                  message_body.sender_id,
-                 magic_enum::enum_name(status));
+                 magic_enum::enum_name(status),
+                 identifier);
 
         const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
 
@@ -616,7 +665,6 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for custom message", type);
             return;
         }
-        emit customMessageReceived(package_data, custom_deserialize_result.value());
 
         if (node->isRaccoon)
             emit customMessageReceived(package_data, custom_deserialize_result.value());

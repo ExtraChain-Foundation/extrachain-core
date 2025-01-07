@@ -353,7 +353,8 @@ void WebSocketService::handshake() {
     json["isRequest"]  = true;
     json["isConstant"] = m_isConstant.load();
     json["pub"]        = ByteArray(priv.public_key()).toBase64QString();
-    json["identifier"] = QString(Network::currentIdentifier());
+    auto ident         = QString(Network::currentIdentifier());
+    json["identifier"] = ident;
 
     QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
 

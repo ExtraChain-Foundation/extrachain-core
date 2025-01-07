@@ -94,6 +94,7 @@ bool SocketService::checkFirstMessage(const QString &message, const bool canUseC
 
     auto version                  = json["version"].toString();
     m_identifier                  = json["identifier"].toString();
+    eLog("[WS] m_identifier checkFirstMessage: {}", m_identifier);
     m_sendType                    = SendType(json["sendType"].toInt());
     ActorId    jsonFirstId        = ActorId(json["firstId"].toString().toStdString());
     ActorId    currentFirstId     = node->actorIndex()->firstId();
