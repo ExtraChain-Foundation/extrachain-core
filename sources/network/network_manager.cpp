@@ -1229,6 +1229,13 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
     auto service = qobject_cast<SocketService *>(QObject::sender());
     eLog("[NetworkManager] Error socket: {} {}", error, service->identifier());
 
+    if (error == Network::SocketServiceError::IncompatibleNetwork
+        || error == Network::SocketServiceError::IncompatibleVersion) {
+        failed_ips.insert(service->ip().toStdString());
+        emit connectionError(error, service->ip(), service->identifier(), errorData);
+        return;
+    }
+
     if (error != Network::SocketServiceError::DuplicateIdentifier
         && error != Network::SocketServiceError::IncompatibleIdentifier) {
         auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
@@ -1243,12 +1250,6 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
                 break;
             }
         }
-    }
-
-    if (error == Network::SocketServiceError::IncompatibleNetwork
-        || error == Network::SocketServiceError::IncompatibleVersion) {
-        failed_ips.insert(service->ip().toStdString());
-        emit connectionError(error, service->ip(), service->identifier(), errorData);
     }
 }
 

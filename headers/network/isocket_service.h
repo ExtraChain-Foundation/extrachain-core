@@ -97,8 +97,9 @@ protected:
     ExtraChainNode  *node;
     QString          m_identifier;
     QString          m_ip;
-    quint16          m_port      = 0;
-    bool             m_activated = false;
+    quint16          m_port          = 0;
+    bool             m_activated     = false;
+    bool             is_disconnected = false;
     bool             m_needToDelete;
     int              m_bytesIncoming   = 0;
     int              m_bytesOutgoing   = 0;

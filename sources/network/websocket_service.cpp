@@ -54,7 +54,6 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
 
 WebSocketService::~WebSocketService() {
     eLog("[WS] I'm socket, i'm death");
-    m_ws->deleteLater();
 }
 
 QWebSocket *WebSocketService::socket() const {
@@ -90,13 +89,23 @@ void WebSocketService::closeSocket() {
         m_messageCache.clear();
     }
 
-    eLog("[WS] Close socket");
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
+        eLog("[WS] Close socket");
         m_ws->close();
     }
 
-    m_activated = false;
-    emit disconnected();
+    if (m_ws != nullptr) {
+        eLog("[WS] Delete socket");
+        m_ws->deleteLater();
+        m_ws = nullptr;
+    }
+
+    if (!is_disconnected) {
+        eLog("[WS] Disconnect socket");
+        is_disconnected = true;
+        emit disconnected();
+        m_ws->disconnect();
+    }
 }
 
 bool WebSocketService::operator==(const WebSocketService &service) const {
@@ -239,6 +248,9 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    if (m_ws == nullptr) {
+        return;
+    }
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState || !m_activated) {
         return;
     }
@@ -299,6 +311,9 @@ void WebSocketService::connections() {
 void WebSocketService::send_public_key() {
     auto pub_key_str = ByteArray(priv.public_key()).toBase64QString();
 
+    if (m_ws == nullptr) {
+        return;
+    }
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
         return;
@@ -326,6 +341,9 @@ void WebSocketService::handshake() {
     }
     auto encoded_json = ByteArray(encrypted).toBase64QString();
 
+    if (m_ws == nullptr) {
+        return;
+    }
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
         return;
