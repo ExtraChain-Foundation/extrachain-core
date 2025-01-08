@@ -19,8 +19,6 @@
 
 #include "network/websocket_service.h"
 
-#include <QJsonObject>
-
 WebSocketService::WebSocketService(QWebSocket     *ws,
                                    ExtraChainNode *node,
                                    QObject        *parent,
@@ -33,11 +31,13 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
         m_ws = new QWebSocket("ExtraChain");
         eLog("[WS] Create new ws");
     } else {
+        // from server
         m_ws         = ws;
         this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->m_port = m_ws->peerPort();
         eLog("[WS] New service: {}", m_ip);
         connections();
+        send_public_key();
     }
 
     connect(this,
@@ -79,8 +79,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
 }
 
 void WebSocketService::closeSocket() {
-    m_waitingForBufferSpace = false;
     m_activated             = false;
+    m_waitingForBufferSpace = false;
 
     {
         QMutexLocker locker(&m_queueMutex);
@@ -103,92 +103,39 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
     return m_ws == service.m_ws;
 }
 
-void WebSocketService::onTextMessage(const QString &message) // for first message
-{
+// for first message
+void WebSocketService::onTextMessage(const QString &message) {
     if (message.isEmpty())
         return;
 
-    auto json = QJsonDocument::fromJson(message.toLatin1());
+    if (!is_pub) {
+        pub    = KeyPublic(ByteArray::fromBase64(message).toArray<crypto_sign_PUBLICKEYBYTES>());
+        is_pub = true;
 
-    if (json["isRequest"].toBool()) {
-        auto json    = QJsonDocument::fromJson(message.toLatin1());
-        m_isConstant = json["isConstant"].toBool();
-        m_identifier = json["identifier"].toString();
-        auto tempPub = json["pub"].toString();
-
-        eInfo("[WS] First message key achieved: {}, isConstant: {}",
-              json.toJson(QJsonDocument::Compact),
-              m_isConstant);
-
-        pub = KeyPublic(ByteArray::fromBase64(tempPub).toArray<crypto_sign_PUBLICKEYBYTES>());
-        if (pub.empty()) { // or incorrect
-            eFatal("Incorrect public key in socket");
-        }
-
-        QJsonObject jsonAnswer;
-        jsonAnswer["isRequest"]        = false;
-        jsonAnswer["canUseConnection"] = !m_needToDelete;
-        jsonAnswer["pub"]              = ByteArray(priv.public_key()).toBase64QString();
-
-        auto firstMessage  = generateFirstMessage();
-        auto prepared      = prepareSendMessage(firstMessage);
-        jsonAnswer["data"] = ByteArray(prepared).toBase64QString();
-
-        QByteArray result = QJsonDocument(jsonAnswer).toJson(QJsonDocument::JsonFormat::Compact);
-
-        m_activated = true;
-        processCachedMessages();
-        m_timer.setSingleShot(true);
-        connect(&m_timer, &QTimer::timeout, this, [this] {
-            eLog("[Socket] Emit activation after timeout: {} {} {}", fmt::ptr(this), ip(), protocol());
-            emit activated();
-        });
-        m_timer.start(1000);
-
-        if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
-            closeSocket();
-            return;
-        }
-
-        qint64 written = m_ws->sendTextMessage(result);
-        if (written < 0) {
-            eCritical("[WS] Handshake send failed");
-            closeSocket();
-            return;
-        }
-
-        if (m_ws->bytesToWrite() > 0) {
-            m_ws->flush();
-        }
-
-        if (m_needToDelete)
-            closeSocket();
+        handshake();
         return;
     }
 
-    if (m_activated)
-        return;
-
-    bool canUseConnection = json["canUseConnection"].toBool();
-
-    auto tempPub = json["pub"].toString();
-    pub          = KeyPublic(ByteArray::fromBase64(tempPub).toArray<crypto_sign_PUBLICKEYBYTES>());
-
-    if (pub.empty()) {
-        eLog("Incorrect public key in socket");
+    auto decoded = prepareReceiveMessage(ByteArray::fromBase64(message).toQByteArray());
+    if (decoded.isEmpty()) {
+        eLog("[WS] Failed to decode message");
         emit error(Network::SocketServiceError::IncorrectPublicKey, "");
         closeSocket();
         return;
     }
 
-    auto data = json["data"].toString();
-    eLog("[WS] First message: {}", data);
-    auto coded   = ByteArray::fromBase64(data).toQByteArray();
-    auto decoded = prepareReceiveMessage(coded);
-    checkFirstMessage(decoded, canUseConnection);
-
-    if (m_needToDelete)
+    auto handshake_result = Json::deserialize<HandshakeMessage>(decoded.toStdString());
+    if (!handshake_result.has_value()) {
+        eLog("[WS] Failed to parse handshake message: {}", handshake_result.error());
+        emit error(Network::SocketServiceError::IncorrectFirstMessage, "");
         closeSocket();
+        return;
+    }
+
+    bool checked = checkFirstMessage(handshake_result.value());
+    if (checked) {
+        processCachedMessages();
+    }
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
@@ -315,9 +262,10 @@ void WebSocketService::final() {
 }
 
 void WebSocketService::onConnected() {
+    // from local connect
     this->m_ip   = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->m_port = m_ws->peerPort();
-    handshake();
+    send_public_key();
     eLog("[WS] New service: {} {}", m_ip, port());
 }
 
@@ -348,30 +296,46 @@ void WebSocketService::connections() {
     });
 }
 
-void WebSocketService::handshake() {
-    QJsonObject json;
-    json["isRequest"]  = true;
-    json["isConstant"] = m_isConstant.load();
-    json["pub"]        = ByteArray(priv.public_key()).toBase64QString();
-    auto ident         = QString(Network::currentIdentifier());
-    json["identifier"] = ident;
-
-    QByteArray result = QJsonDocument(json).toJson(QJsonDocument::JsonFormat::Compact);
+void WebSocketService::send_public_key() {
+    auto pub_key_str = ByteArray(priv.public_key()).toBase64QString();
 
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
         return;
     }
 
-    qint64 written = m_ws->sendTextMessage(result);
-    if (written < 0 || m_ws->error() != QAbstractSocket::UnknownSocketError) {
-        eCritical("[WS] Handshake send failed");
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
         return;
     }
 
-    if (m_ws->bytesToWrite() > 0) {
-        m_ws->flush();
+    auto written = m_ws->sendTextMessage(pub_key_str);
+    if (written < 0) {
+        eCritical("[WS] Handshake send failed");
+        closeSocket();
+        return;
+    }
+}
+
+void WebSocketService::handshake() {
+    auto first_message = generateFirstMessage();
+    auto encrypted     = prepareSendMessage(first_message);
+    if (encrypted.isEmpty()) {
+        closeSocket();
+        return;
+    }
+    auto encoded_json = ByteArray(encrypted).toBase64QString();
+
+    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        closeSocket();
+        return;
+    }
+
+    auto written = m_ws->sendTextMessage(encoded_json);
+    if (written < 0) {
+        eCritical("[WS] Handshake send failed");
+        closeSocket();
+        return;
     }
 }
 

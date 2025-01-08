@@ -39,6 +39,16 @@ public:
     };
     Q_ENUM(SendType)
 
+    struct HandshakeMessage {
+        std::string              first_id;
+        std::string              version;
+        std::string              identifier;
+        SendType                 send_type = SendType::All;
+        std::vector<std::string> connections;
+        bool                     is_available = false;
+        bool                     is_constant  = false;
+    };
+
     enum class Priority {
         Low,
         Normal,
@@ -76,10 +86,10 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
-    void shareConnections(const QJsonArray connectionsArr);
+    void shareConnections(const std::vector<std::string> &);
 
 protected:
-    bool       checkFirstMessage(const QString &message, const bool canUseConnection);
+    bool       checkFirstMessage(const HandshakeMessage &msg);
     QByteArray generateFirstMessage();
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
@@ -106,8 +116,13 @@ protected:
     static constexpr qint64 MAX_BUFFER_SIZE         = 10 * 1024 * 1024; // 10MB
     bool                    m_waitingForBufferSpace = false;
 
-    KeyPrivate priv;
-    KeyPublic  pub;
+    KeyPrivate priv   = KeyPrivate();
+    KeyPublic  pub    = KeyPublic();
+    bool       is_pub = false;
 };
 
-#endif // WEBSOCKETSERVICE_H
+BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
+                      (),
+                      (first_id, version, identifier, send_type, connections, is_available))
+
+#endif // ISOCKETSERVICE_H

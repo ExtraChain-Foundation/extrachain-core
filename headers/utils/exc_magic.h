@@ -363,7 +363,11 @@ namespace json_convert {
 
         template <std::size_t N>
         std::array<uint8_t, N> array_uint8_from_json(const boost::json::value& json) {
-            std::string            decoded = Utils::from_base64<std::string>(json.as_string().c_str());
+            auto decoded_result = Utils::from_base64<std::string>(json.as_string().c_str());
+            if (!decoded_result.has_value()) {
+                throw "base 64 decode error";
+            }
+            std::string            decoded = decoded_result.value();
             std::array<uint8_t, N> result {};
             std::size_t            copy_size = std::min<std::size_t>(N, decoded.size());
             std::memcpy(result.data(), decoded.data(), copy_size);

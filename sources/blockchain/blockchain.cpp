@@ -30,6 +30,12 @@ Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)
     , */
     node(node) {
+
+    // get first id on start
+    auto genesis = blockIndex.getGenesisBlockById(BigNumber(0));
+    if (genesis.has_value()) {
+        updateFirstId(genesis.value());
+    }
 }
 
 Blockchain::~Blockchain() {

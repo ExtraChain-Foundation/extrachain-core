@@ -326,7 +326,11 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
         eLog("deserialize error: empty list after split");
     }
     for (int i = 0; i < templist.size(); i++) {
-        reslist.push_back(Utils::from_base64(templist.at(i)));
+        auto decoded = Utils::from_base64(templist.at(i));
+        if (!decoded.has_value()) {
+            eFatal("Incorrect Serialization::deserialize");
+        }
+        reslist.push_back(decoded.value());
     }
     return reslist;
 }

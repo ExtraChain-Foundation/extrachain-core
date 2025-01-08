@@ -144,6 +144,7 @@ private:
     bool                            reservedActorListUse = false;
     bool                            active               = false;
     bool                            shouldRequest        = false;
+    std::set<std::string>           failed_ips;
     std::unique_ptr<UPNPConnection> upnpDis;
     std::unique_ptr<UPNPConnection> upnpNet;
     QMap<std::string, int>          msgHashList = {};
@@ -337,7 +338,7 @@ signals:
     void newSocketActivatedWithParams(const std::string ip, const std::string identifier);
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
-    void connectionError(Network::SocketServiceError error, QString identifier, QString erroData);
+    void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
 

@@ -166,7 +166,12 @@ public:
     }
 
     static ByteArray fromBase64(const std::string &encoded) {
-        return ByteArray(Utils::from_base64(encoded));
+        auto decoded = Utils::from_base64(encoded);
+        if (!decoded.has_value()) {
+            eFatal("Incorrect base64");
+            return ByteArray("");
+        }
+        return ByteArray(decoded.value());
     }
 
     static ByteArray fromBase64(const QString &encoded) {
@@ -205,12 +210,14 @@ namespace Network {
     Q_ENUM_NS(Protocol)
 
     enum class SocketServiceError {
-        Unknown                = 0,
-        IncompatibleVersion    = 1,
-        IncompatibleNetwork    = 2,
-        IncompatibleIdentifier = 3,
-        DuplicateIdentifier    = 4,
-        IncorrectPublicKey     = 5,
+        Unknown,
+        IncompatibleVersion,
+        IncompatibleNetwork,
+        IncompatibleIdentifier,
+        DuplicateIdentifier,
+        IncorrectPublicKey,
+        IncorrectFirstMessage,
+        MaxConnections
     };
     Q_ENUM_NS(SocketServiceError)
 
