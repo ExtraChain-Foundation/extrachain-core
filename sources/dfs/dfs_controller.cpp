@@ -86,7 +86,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
-    std::string newTargetVirtualFilePath = visual_folder + "/" + visual_name;
+    std::string newTargetVirtualFilePath = (!visual_folder.empty() ? visual_folder + "/" : "") + visual_name;
 
 #ifdef ANDROID
     auto tempPath =
@@ -203,7 +203,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = file_hash,
-                            .folder        = visual_folder,
                             .name          = visual_name,
                             .size          = file_size_dfs.value(),
                             .created       = 0,
@@ -211,6 +210,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .type          = Dfs::FileType::File,
                             .encryption    = data_security,
                             .state         = Dfs::FileState::Ready };
+    if (!visual_folder.empty()) {
+        dir_row.folder = visual_folder;
+    }
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
