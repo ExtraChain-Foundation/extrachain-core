@@ -241,7 +241,7 @@ int ActorIndex::add(const ActorId &id, const QByteArray &data) {
     eLog("[ActorIndex] Saving the file: {}", path);
 
     if (file.exists()) {
-        eLog("[ActorIndex] Can't save the file {} (file already exits)", path);
+        eLog("[ActorIndex] Can't save the file {} (file already exist)", path);
         return Errors::FILE_ALREADY_EXISTS;
     }
 

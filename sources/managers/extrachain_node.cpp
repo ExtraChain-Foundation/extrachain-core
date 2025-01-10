@@ -104,7 +104,8 @@ void ExtraChainNode::process() {
 
     if (sodium_init() != 0) {
         eLog("Encryption init error");
-        QCoreApplication::exit(-1);
+        eFatal("Encryption init error");
+        QCoreApplication::exit(-1000);
     }
 
     prepareFolders();
@@ -654,7 +655,7 @@ bool ExtraChainNode::login(const std::string& hash) {
 void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
-    std::exit(0);
+    QCoreApplication::exit(0);
 }
 
 void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {

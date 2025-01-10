@@ -29,7 +29,7 @@ static const std::string HASH     = "hash";
 HistoricalChain::HistoricalChain(std::string chainFilePath, std::string objectFilePath)
     : chainFile(chainFilePath) {
     if (!chainFile.open()) {
-        exit(-1);
+        eFatal("HistoricalChain: file not opened");
     }
     objectPath = objectFilePath;
     chainFile.query(Dfs::Historical::CreateTableHistoricalChain);

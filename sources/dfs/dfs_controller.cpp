@@ -836,7 +836,8 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
     DbConnector actrDirFile(actrDirFilePath);
 
     if (!actrDirFile.open()) {
-        exit(EXIT_FAILURE);
+        eLog("No dir file 1");
+        return "";
     }
 
     auto        result       = actrDirFile.select(DfsT::filesTableLast);
@@ -902,7 +903,6 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
     DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
         eFatal("Can't open {}", actrDirFilePath);
-        exit(EXIT_FAILURE);
     }
 
     std::vector<DbRow>    actrDirData  = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, file_name);
@@ -1000,7 +1000,8 @@ std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
     std::filesystem::path realFilePath    = fmt::format("{}{}", actorPath, msg.file_id);
     DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
-        exit(EXIT_FAILURE);
+        eLog("No dir file 2");
+        return "";
     }
     std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
 
@@ -1753,7 +1754,8 @@ void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) 
     std::string actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
     DbConnector actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
-        exit(EXIT_FAILURE);
+        eLog("No dir file 3");
+        return;
     }
 
     std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
@@ -1788,7 +1790,6 @@ std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
     DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(msg.actorId);
     if (!actrDirFile.is_open()) {
         eFatal("Error addFragment 1");
-        exit(EXIT_FAILURE);
     }
     std::vector<DbRow> actrDirData = actrDirFile.select(
         fmt::format("SELECT * FROM {} WHERE file_id = '{}';", DfsT::ActorDirFile::TableName, msg.file_id));
@@ -1875,7 +1876,8 @@ std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg)
     std::filesystem::path realFilePath    = fmt::format("{}{}", pathActor, msg.hash);
     DbConnector           actrDirFile(actrDirFilePath);
     if (!actrDirFile.open()) {
-        exit(EXIT_FAILURE);
+        eLog("No dir file 4");
+        return "";
     }
     std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
 
