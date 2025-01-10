@@ -170,7 +170,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (!connectionsLocked->contains(service))
             connectionsLocked->insert(service);
     }
-    connect(service, &WebSocketService::shareConnections, this, [&](const std::vector<std::string> &connections) {
+    connect(service, &WebSocketService::shareConnections, this, [&](const std::set<std::string> &connections) {
         eLog("shareConnections: {}", connections);
 
         auto init_ip = node->getInitPublicIPAndCountry().first;
@@ -318,6 +318,10 @@ void NetworkManager::connectToWebSocket(const QString &ip,
                                         quint16        port,
                                         bool           requestListNodes,
                                         const bool     isConstant) {
+    if (ip.isEmpty()) {
+        return;
+    }
+
     auto service = new WebSocketService(nullptr, node, this, isConstant);
     service->open(ip, port);
     connectWsService(service, requestListNodes);

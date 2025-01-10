@@ -189,7 +189,12 @@ QByteArray SocketService::generateFirstMessage() {
     {
         auto connections_locked = *node->network()->connections();
         for (auto &it : *connections_locked) {
-            msg.connections.push_back(it->ip().toStdString());
+            auto ip = it->ip().toStdString();
+            if (ip.empty()) {
+                continue;
+            }
+
+            msg.connections.insert(ip);
         }
         msg.is_available = connections_locked->size() < Network::maxConnections;
     }
