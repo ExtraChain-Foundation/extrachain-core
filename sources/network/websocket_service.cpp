@@ -355,6 +355,9 @@ void WebSocketService::handshake() {
 }
 
 quint16 WebSocketService::port() const {
+    if (m_ws == nullptr) {
+        return 0;
+    }
     if (m_ws->peerPort() != node->network()->wsPort)
         return m_ws->peerPort();
     else
