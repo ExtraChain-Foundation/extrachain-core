@@ -283,10 +283,7 @@ void WebSocketService::onConnected() {
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
     eLog("[WS] Socket error: {}", Utils::enum_value_name(error));
-
-    if (m_ws->state() != QAbstractSocket::ConnectedState) {
-        closeSocket();
-    }
+    closeSocket();
 }
 
 void WebSocketService::connections() {
