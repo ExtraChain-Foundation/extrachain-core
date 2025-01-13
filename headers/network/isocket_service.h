@@ -40,13 +40,13 @@ public:
     Q_ENUM(SendType)
 
     struct HandshakeMessage {
-        std::string              first_id;
-        std::string              version;
-        std::string              identifier;
-        SendType                 send_type = SendType::All;
-        std::vector<std::string> connections;
-        bool                     is_available = false;
-        bool                     is_constant  = false;
+        std::string           first_id;
+        std::string           version;
+        std::string           identifier;
+        SendType              send_type = SendType::All;
+        std::set<std::string> connections;
+        bool                  is_available = false;
+        bool                  is_constant  = false;
     };
 
     enum class Priority {
@@ -86,7 +86,7 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
-    void shareConnections(const std::vector<std::string> &);
+    void shareConnections(const std::set<std::string> &);
 
 protected:
     bool       checkFirstMessage(const HandshakeMessage &msg);
@@ -97,8 +97,9 @@ protected:
     ExtraChainNode  *node;
     QString          m_identifier;
     QString          m_ip;
-    quint16          m_port      = 0;
-    bool             m_activated = false;
+    quint16          m_port          = 0;
+    bool             m_activated     = false;
+    bool             is_disconnected = false;
     bool             m_needToDelete;
     int              m_bytesIncoming   = 0;
     int              m_bytesOutgoing   = 0;

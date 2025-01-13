@@ -216,10 +216,13 @@ namespace Dfs {
         Signature sign = Signature();
 
         std::string visual_path() const {
-            if (folder.has_value())
-                return folder.value() + "/" + name;
-            else
+            if (folder.has_value()) {
+                bool        is_folder     = !folder.value().empty();
+                std::string visual_folder = is_folder ? folder.value() + "/" : "";
+                return visual_folder + name;
+            } else {
                 return name;
+            }
         }
 
         bool loaded() const {

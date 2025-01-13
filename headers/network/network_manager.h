@@ -156,13 +156,13 @@ private:
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
 
-    std::map<std::string, std::string>                           m_messages;
+    SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
     std::map<std::string, MessageIdDataWaiting>                  m_messages_waiting;
     std::map<std::string, MessageIdDataReceived>                 m_messages_received;
     QTimer*                                                      m_reconnectTimer;
+    QTimer*                                                                     m_clear_network_caches_timer;
     CalculateTraffic*                                            calculateTraffic;
-    SafePtr<std::map<std::string, std::pair<std::string, bool>>> m_receivedMessageId;
-    std::set<ActorId>                                            m_customPool;
+    SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> m_network_forwarded_messages;
 
     std::string m_networkHashForVPN;
 
@@ -182,6 +182,17 @@ public:
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+
+    void sendMessage(const std::string&    serialized_message,
+                     const MessageBody&    non_serialized_message,
+                     Config::Net::TypeSend typeSend,
+                     const std::string&    receiver_identifier,
+                     MessageType           message_type = MessageType::Unknown,
+                     MessageStatus         status_info  = MessageStatus::NoStatus);
+
+    void clearNetworkCaches();
+
+    void addAllServicesIdentifiersToMessage(MessageBody& msg);
 
 public:
     SafePtr<std::set<SocketService*>> connections() const;
@@ -238,18 +249,7 @@ private slots:
 public:
     QString localIp(); // TODO: remove
 
-    void sendMessage(const std::string&    serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier,
-                     MessageType           message_type = MessageType::Unknown,
-                     MessageStatus         status_info  = MessageStatus::NoStatus);
-
-    void saveCustomMessage(const std::string& messageId, const std::string& identifier);
-
-    void sendCustomMessageFurther(const CustomMessage& customMessage,
-                                  const MessageStatus& status,
-                                  const std::string&   messageId,
-                                  const std::string&   identifier);
+    void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
 
     void saveToCache(const std::string&    serialized_message,
                      Config::Net::TypeSend typeSend,
@@ -264,14 +264,15 @@ public:
     template <class T>
     std::string send_message(T                     data,
                              MessageType           type,
-                             MessageStatus         status        = MessageStatus::NoStatus,
-                             std::string           to_message_id = "",
-                             Config::Net::TypeSend typeSend      = Config::Net::TypeSend::All) {
+                             Config::Net::TypeSend typeSend,
+                             MessageStatus         status              = MessageStatus::NoStatus,
+                             std::string           to_message_id       = "",
+                             std::string           receiver_identifier = "") {
         if (status == MessageStatus::Response && to_message_id.empty()) {
             eCritical("[Network] Send message error: empty message id for response message");
             return "";
         }
-        if (status == MessageStatus::Response && typeSend == Config::Net::TypeSend::All) {
+        if (status == MessageStatus::Response && typeSend != Config::Net::TypeSend::Focused) {
             eWarning(
                 "[Network] Send message warning: incorrect type send for response message, set to focused, type: "
                 "{}",
@@ -280,22 +281,31 @@ public:
         }
 
         if (node->accountController()->empty()) {
-            // eFatal("Can't send");
+            eCritical("[Network] Send message error: accountController is empty!");
             return "";
         }
 
         auto&       mainActor = node->accountController()->mainActor();
-        MessageBody message =
-            make_message(MessagePack::serialize(data), type, status, mainActor->id(), to_message_id);
-        auto serialized  = message.serialize();
-        auto sign_result = mainActor->key().sign(serialized);
+        MessageBody message             = make_init_message(MessagePack::serialize(data),
+                                                typeSend,
+                                                type,
+                                                status,
+                                                mainActor->id(),
+                                                to_message_id);
+
+        if (typeSend == Config::Net::TypeSend::Broadcast) {
+            addAllServicesIdentifiersToMessage(message);
+        }
+
+        auto        serialized          = message.serialize();
+        auto        serialized_for_sign = message.serializeForSign();
+        auto        sign_result         = mainActor->key().sign(serialized_for_sign);
         if (!sign_result.has_value()) {
             return "";
         }
         auto        sign = ByteArray(sign_result.value()).toString();
-        std::string receiver_identifier;
         if (!to_message_id.empty()) {
-            receiver_identifier = m_messages[to_message_id];
+            receiver_identifier = m_messages->at(to_message_id).first;
             //            if (receiver_identifier.empty())
             //                eFatal("Network send message error: receiver_identifier is empty");
             // m_messages.erase(to_message_id);
@@ -314,7 +324,7 @@ public:
         }
 #endif
 
-        this->sendMessage(serialized + sign, typeSend, receiver_identifier, type, status);
+        this->sendMessage(serialized + sign, message, typeSend, receiver_identifier, type, status);
 
         return message.message_id;
     }
@@ -323,9 +333,6 @@ public:
 
     CalculateTraffic* getCalculateTraffic() const;
 
-    void subscribeCustom(const ActorId& actorId);
-    void unsubscribeCustom(const ActorId& actorId);
-
 signals:
     void newSocketActivated();
     void newSocketActivatedWithParams(const std::string ip, const std::string identifier);
@@ -333,11 +340,7 @@ signals:
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
-    void customMessageReceived(const CustomMessage customPackage,
-                               const MessageStatus status,
-                               const std::string   messageId,
-                               const ActorId       senderId,
-                               const std::string   identifier);
+    void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
 
     friend class DfsNetworkManager;
 };

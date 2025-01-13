@@ -332,7 +332,8 @@ namespace Config {
         static const int NECESSARY_RESPONSE_COUNT = 1; // 3
 
         enum class TypeSend {
-            All,
+            AllParents,
+            Broadcast,
             Except,
             Focused
         };

@@ -77,8 +77,7 @@ private:
     void handshake();
 
     QWebSocket *m_ws = nullptr;
-
-    QTimer m_timer;
+    QTimer      m_timer;
 
     void tryDequeueMessage();
     bool canSendMore() const;

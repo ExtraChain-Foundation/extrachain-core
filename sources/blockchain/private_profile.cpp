@@ -62,7 +62,6 @@ const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &PrivateProfile::actors() 
 bool PrivateProfile::changeCurrent(const ActorId &actorId) {
     if (getActor(actorId)->empty()) {
         eFatal("Can't find actor");
-        std::exit(-123);
     }
     m_current = actorId;
     return true;
@@ -95,7 +94,6 @@ const std::shared_ptr<Actor<KeyPrivate>> PrivateProfile::getActor(const ActorId 
     }
 
     eWarning("Can't find actor");
-    // std::exit(-123);
     return nullptr;
 }
 

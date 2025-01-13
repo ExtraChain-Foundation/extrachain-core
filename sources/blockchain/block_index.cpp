@@ -708,7 +708,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     std::string path = buildFilePath(id);
 
     if (!std::filesystem::exists(path)) {
-        // eLog("[BlockIndex] Can't get the file {} (file is not exits)", path);
+        // eLog("[BlockIndex] Can't get the file {} (file is not exist)", path);
         return std::unexpected(BlockError::NotExists);
     }
 

@@ -104,7 +104,8 @@ void ExtraChainNode::process() {
 
     if (sodium_init() != 0) {
         eLog("Encryption init error");
-        QCoreApplication::exit(-1);
+        eFatal("Encryption init error");
+        QCoreApplication::exit(-1000);
     }
 
     prepareFolders();
@@ -429,7 +430,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(
     transaction.sign(signer);
 
     eLog("[Blockchain] Send {}", transaction);
-    network()->send_message(transaction, MessageType::BlockchainTransaction);
+    network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::AllParents);
 
     return transaction;
 }
@@ -613,7 +614,10 @@ void ExtraChainNode::calculateBlockCount() {
     ActorId              actorId = m_accountController->mainActor()->id();
     DfsP::RequestDfsSize msg { .actorId = actorId };
 
-    m_networkManager->send_message(msg, MessageType::RequestBlockCount, MessageStatus::Request);
+    m_networkManager->send_message(msg,
+                                   MessageType::RequestBlockCount,
+                                   Config::Net::TypeSend::AllParents,
+                                   MessageStatus::Request);
 }
 
 AccountController* ExtraChainNode::accountController() const {
@@ -651,7 +655,7 @@ bool ExtraChainNode::login(const std::string& hash) {
 void ExtraChainNode::logout() {
     m_accountController->clear();
     // auto hash remove
-    std::exit(0);
+    QCoreApplication::exit(0);
 }
 
 void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {

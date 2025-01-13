@@ -127,7 +127,10 @@ void DataMiningManager::requestCoinReward() {
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored = node->blockchain()->getBlocksStored() };
 
-    node->network()->send_message(requestReward, MessageType::BlockchainCoinReward, MessageStatus::Request);
+    node->network()->send_message(requestReward,
+                                  MessageType::BlockchainCoinReward,
+                                  Config::Net::TypeSend::AllParents,
+                                  MessageStatus::Request);
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {

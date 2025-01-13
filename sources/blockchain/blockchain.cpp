@@ -94,7 +94,10 @@ void Blockchain::sync(const BigNumber &from) {
     if (fromBlock < 0)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
-    node->network()->send_message(fromBlock, MessageType::BlockchainSync, MessageStatus::Request);
+    node->network()->send_message(fromBlock,
+                                  MessageType::BlockchainSync,
+                                  Config::Net::TypeSend::AllParents,
+                                  MessageStatus::Request);
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
@@ -130,15 +133,15 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
         if (block->isGenesisBlock()) {
             node->network()->send_message(block->getGenesisBlockConst(),
                                           MessageType::BlockchainGenesisBlock,
+                                          Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId,
-                                          Config::Net::TypeSend::Focused);
+                                          messageId);
         } else {
             node->network()->send_message(block->getBlockConst(),
                                           MessageType::BlockchainNewBlock,
+                                          Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId,
-                                          Config::Net::TypeSend::Focused);
+                                          messageId);
         }
     }
 
@@ -193,10 +196,14 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
 
     if (block.isGenesisBlock()) {
         auto genesisBlock = block.getGenesisBlockConst();
-        node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock);
+        node->network()->send_message(*genesisBlock,
+                                      MessageType::BlockchainGenesisBlock,
+                                      Config::Net::TypeSend::AllParents);
     } else {
         auto dataBlock = block.getBlockConst();
-        node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock);
+        node->network()->send_message(*dataBlock,
+                                      MessageType::BlockchainNewBlock,
+                                      Config::Net::TypeSend::AllParents);
     }
 
     // eLog("Send {}", block);

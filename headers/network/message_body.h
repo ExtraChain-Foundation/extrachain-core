@@ -91,17 +91,44 @@ MSGPACK_ADD_ENUM(MessageStatus)
 // FORMAT_ENUM(MessageStatus)
 
 struct MessageBody {
-    MessageType   message_type;
+    Config::Net::TypeSend           send_type;
+    MessageType                     message_type;
     MessageStatus status;
     std::string   message_id;
     ActorId       sender_id;
+    ActorId                         init_sender_id;
+    std::unordered_set<std::string> nodes_identifiers_to_ignore;
+    std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string   data;
+
+    std::string serializeForSign() const {
+        return std::to_string(std::to_underlying(send_type)) + std::to_string(std::to_underlying(message_type))
+               + std::to_string(std::to_underlying(status)) + message_id + init_sender_id.to_string() + data;
+    }
 
     std::string serialize() const {
         return MessagePack::serialize(*this);
     }
 
-    MSGPACK_DEFINE(message_type, status, message_id, sender_id, data)
+    MSGPACK_DEFINE(send_type,
+                   message_type,
+                   status,
+                   message_id,
+                   sender_id,
+                   init_sender_id,
+                   nodes_identifiers_to_ignore,
+                   nodes_identifiers_to_ignore_later,
+                   data)
+};
+
+struct NetworkPackageStorage {
+    NetworkPackageStorage(const MessageBody& msg_body,
+                          const std::string& prev_identifier,
+                          const std::string& sign);
+
+    const MessageBody msg_body;
+    const std::string prev_identifier;
+    const std::string sign;
 };
 
 struct SocketIdentifier {
@@ -116,11 +143,12 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_message(const std::string &data,
-                                MessageType        type,
-                                MessageStatus      status,
-                                const ActorId     &sender,
-                                std::string        to_message_id) {
+inline MessageBody make_init_message(const std::string    &data,
+                                     Config::Net::TypeSend send_type,
+                                     MessageType           type,
+                                     MessageStatus         status,
+                                     const ActorId        &sender,
+                                     std::string           to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
     }
@@ -129,11 +157,13 @@ inline MessageBody make_message(const std::string &data,
                                                  + std::to_string(QRandomGenerator::global()->bounded(100000)))
                                .substr(0, 15); // temp
 
-    MessageBody message = { .message_type = type,
-                            .status       = status,
-                            .message_id   = !to_message_id.empty() ? to_message_id : randomId,
-                            .sender_id    = sender,
-                            .data         = data };
+    MessageBody message = { .send_type      = send_type,
+                            .message_type   = type,
+                            .status         = status,
+                            .message_id     = !to_message_id.empty() ? to_message_id : randomId,
+                            .sender_id      = sender,
+                            .init_sender_id = sender,
+                            .data           = data };
 
     return message;
 }

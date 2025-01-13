@@ -83,6 +83,8 @@ void SocketService::setVPN(bool isVPN) {
 
 bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     eLog("[Socket] First message: {} | Current first: {}", handshake, node->actorIndex()->firstId());
+    m_identifier = QString::fromStdString(handshake.identifier);
+    m_sendType   = handshake.send_type;
 
     // 1. Checking the version
     if (handshake.version != EXTRACHAIN_VERSION) {
@@ -110,7 +112,6 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     }
 
     // 3. Identifier check
-    m_identifier = QString::fromStdString(handshake.identifier);
     if (handshake.identifier == Network::currentIdentifier()) {
         emit error(Network::SocketServiceError::IncompatibleIdentifier, "");
         closeSocket();
@@ -135,6 +136,10 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
         return false;
     }
 
+    if (is_disconnected) {
+        return false;
+    }
+
     // 5. Check constant
     if (!isConstant() && handshake.is_constant) {
         m_isConstant = true;
@@ -151,10 +156,7 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
         }
     }
 
-    // 7. Set SendType
-    m_sendType = handshake.send_type;
-
-    // 8. Checking slots availability
+    // 7. Checking slots availability
     if (!handshake.is_available) {
         eLog("[Socket] Peer not available");
         closeSocket();
@@ -162,7 +164,7 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
         return false;
     }
 
-    // 9. If all checks are passed - activate the connection
+    // 8. If all checks are passed - activate the connection
     eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
     m_activated = true;
     emit activated();
@@ -187,7 +189,12 @@ QByteArray SocketService::generateFirstMessage() {
     {
         auto connections_locked = *node->network()->connections();
         for (auto &it : *connections_locked) {
-            msg.connections.push_back(it->ip().toStdString());
+            auto ip = it->ip().toStdString();
+            if (ip.empty()) {
+                continue;
+            }
+
+            msg.connections.insert(ip);
         }
         msg.is_available = connections_locked->size() < Network::maxConnections;
     }

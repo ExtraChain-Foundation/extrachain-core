@@ -113,7 +113,6 @@ bool AccountController::load(const std::string &hash) {
 const std::shared_ptr<Actor<KeyPrivate>> AccountController::mainActor() {
     if (m_profiles.empty()) {
         eFatal("[AccountController] No main actor");
-        std::exit(-1);
     }
     return currentProfile().main();
 }
@@ -125,8 +124,7 @@ PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
         }
     }
 
-    eFatal("Can't find actor");
-    std::exit(-123);
+    eFatal("getProfile: Can't find actor");
     return m_profiles.front();
 }
 
@@ -141,7 +139,7 @@ const PrivateProfile &AccountController::currentProfile() const {
     }
 
     eFatal("Can't find actor");
-    std::exit(-123);
+    QCoreApplication::exit(-123);
     return m_profiles.front();
 }
 
