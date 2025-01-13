@@ -40,11 +40,11 @@ public:
     void                                  add_wallet(const Actor<KeyPrivate> &actor);
     bool                                  rename_wallet(const ActorId &actorId, const std::string &walletName);
 
-    // TODO: use std::reference_wrapper
-    const std::expected<Actor<KeyPrivate>, PrivateProfileError> get_actor(const ActorId &actorId) const;
-    bool                                                        loaded();
-    const std::string                                          &hash() const;
-    QJsonObject                                                 toJson() const;
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> get_actor(
+        const ActorId &actorId) const;
+    bool               loaded();
+    const std::string &hash() const;
+    QJsonObject        toJson() const;
 
     std::map<ActorId, std::string> wallet_names() const;
 

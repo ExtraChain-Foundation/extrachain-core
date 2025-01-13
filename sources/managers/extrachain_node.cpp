@@ -386,11 +386,11 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     }
 
     if (receiver.is_zero() && amount > 0) {
-        if (!actor->empty()) {
-            Transaction tx(actor->id(), receiver, amount);
+        if (!actor->get().empty()) {
+            Transaction tx(actor->get().id(), receiver, amount);
             tx.setToken(token);
 
-            eLog("Attempting to create: {} from user {}", tx, actor->id());
+            eLog("Attempting to create: {} from user {}", tx, actor->get().id());
 
             tx.sign(actor.value());
             eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
@@ -401,9 +401,9 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         return std::unexpected(TransactionError::Unknown);
     }
 
-    if (!actor->empty()) {
-        eLog("{}", actor->id());
-        Transaction tx(actor->id(), receiver, amount);
+    if (!actor->get().empty()) {
+        eLog("{}", actor->get().id());
+        Transaction tx(actor->get().id(), receiver, amount);
         // add sent tx balances
 
         tx.setToken(token);

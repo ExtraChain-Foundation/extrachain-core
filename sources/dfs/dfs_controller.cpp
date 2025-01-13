@@ -164,7 +164,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
-            auto res = actor->key().encrypt_self_file(new_file_path, dfs_path);
+            auto res = actor->get().key().encrypt_self_file(new_file_path, dfs_path);
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -178,7 +178,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
             auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
             // TODO: checks
-            auto res = sender->key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
+            auto res = sender->get().key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -351,7 +351,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto chain = HistoricalCollection::create(node, actor.value(), actor->id(), file_id, collection_template);
+    auto chain =
+        HistoricalCollection::create(node, actor.value(), actor->get().id(), file_id, collection_template);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -919,7 +920,7 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
     if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("file_id");
         if ((virtualFilePath.end()--)->string() == "secured") {
-            if (!localOwner->empty()) {
+            if (!localOwner->get().empty()) {
                 std::filesystem::create_directories(tempFilePath);
                 tempFilePath /= virtualFilePath.filename();
                 // localOwner->key().decrypt_self_file(realFilePath, tempFilePath);

@@ -50,7 +50,7 @@ const Actor<KeyPrivate> &PrivateProfile::system() const {
     if (!system_actor.has_value()) {
         eFatal("ExtraUser system error");
     }
-    return system_actor.value();
+    return system_actor->get();
 }
 
 const Actor<KeyPrivate> &PrivateProfile::current() const {
@@ -61,7 +61,7 @@ const Actor<KeyPrivate> &PrivateProfile::current() const {
     if (!current_actor.has_value()) {
         eFatal("ExtraUser system error");
     }
-    return current_actor.value();
+    return current_actor->get();
 }
 
 const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
@@ -93,18 +93,16 @@ bool PrivateProfile::rename_wallet(const ActorId &actorId, const std::string &wa
     return true;
 }
 
-const std::expected<Actor<KeyPrivate>, PrivateProfileError> PrivateProfile::get_actor(
+std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> PrivateProfile::get_actor(
     const ActorId &actorId) const {
     if (actorId.is_zero()) {
         return std::unexpected(PrivateProfileError::ZeroActor);
     }
-
     for (const auto &actor : std::as_const(actors_)) {
         if (actorId == actor.id()) {
-            return actor;
+            return std::ref(actor);
         }
     }
-
     return std::unexpected(PrivateProfileError::NoActor);
 }
 
