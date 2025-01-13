@@ -102,9 +102,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
     return dirRow.value();
 }
 
-bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId                            &actor_id,
-                                            DirRow                                   &dir_row,
-                                            const std::shared_ptr<Actor<KeyPrivate>> &signer) {
+bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &actor_id,
+                                            DirRow                  &dir_row,
+                                            const Actor<KeyPrivate> &signer) {
     auto dir_file = get_actor_dir_file(actor_id);
 
     if (!dir_file.is_open()) {
@@ -118,7 +118,7 @@ bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId                       
     dir_row.last_modified = current_ms;
     dir_row.prev_file_id  = prev_file_id;
 
-    auto sign = signer->key().sign(Utils::calculate_hash(dir_row));
+    auto sign = signer.key().sign(Utils::calculate_hash(dir_row));
     if (!sign.has_value()) {
         return false;
     }

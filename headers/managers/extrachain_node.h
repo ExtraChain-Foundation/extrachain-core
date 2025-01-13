@@ -149,8 +149,8 @@ public:
                                                                        BigNumberFloat amount,
                                                                        ActorId        token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction,
-                                                                 const std::shared_ptr<Actor<KeyPrivate>> signer);
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction              transaction,
+                                                                 const Actor<KeyPrivate>& signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
     std::string exportUser();

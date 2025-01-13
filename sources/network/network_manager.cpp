@@ -62,9 +62,9 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
     localInizialization();
-    m_reconnectTimer = new QTimer(this);
+    m_reconnectTimer             = new QTimer(this);
     m_clear_network_caches_timer = new QTimer(this);
-    calculateTraffic = CalculateTraffic::GetInstance();
+    calculateTraffic             = CalculateTraffic::GetInstance();
 
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
@@ -431,7 +431,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
     auto &mainActor = node->accountController()->mainActor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->mainActor()->id();
+    message_edited.sender_id   = node->accountController()->mainActor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     addAllServicesIdentifiersToMessage(message_edited);
 
@@ -520,10 +520,10 @@ void NetworkManager::sendFromCache() {
             eWarning("Size deserialized data in not correct");
             continue;
         }
-        const std::string           deserialized_message = deserializedList[0];
-        MessageBody message_body = MessagePack::deserialize<MessageBody>(deserialized_message).value();
-        const Config::Net::TypeSend typeSend             = typeSendFromString(deserializedList[1]);
-        const std::string           receiver_identifier  = deserializedList[2];
+        const std::string deserialized_message = deserializedList[0];
+        MessageBody       message_body       = MessagePack::deserialize<MessageBody>(deserialized_message).value();
+        const Config::Net::TypeSend typeSend = typeSendFromString(deserializedList[1]);
+        const std::string           receiver_identifier = deserializedList[2];
         sendMessage(deserialized_message,
                     message_body,
                     typeSend,
@@ -584,7 +584,7 @@ void NetworkManager::messageReceived(const std::string &message,
         return;
     }
 
-    MessageBody   message_body = message_body_expected.value();
+    MessageBody message_body = message_body_expected.value();
 
     auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
     if (sign_actor) {
@@ -598,15 +598,15 @@ void NetworkManager::messageReceived(const std::string &message,
         //  return;
     }
 
-    MessageType   type         = message_body.message_type;
-    MessageStatus status       = message_body.status;
-    std::string   serialized   = message_body.data;
-    std::string   messId       = message_body.message_id;
+    MessageType   type       = message_body.message_type;
+    MessageStatus status     = message_body.status;
+    std::string   serialized = message_body.data;
+    std::string   messId     = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
-            || message_body.init_sender_id == node->accountController()->mainActor()->id()) {
+            || message_body.init_sender_id == node->accountController()->mainActor().id()) {
             eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
                      messageId,
                      identifier);
@@ -626,7 +626,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->mainActor()->id();
+            message_edited.sender_id   = node->accountController()->mainActor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
@@ -1307,7 +1307,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->mainActor()->id().to_string() + salt,
+                                  + node->accountController()->mainActor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }

@@ -160,8 +160,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto actor = node->accountController()->currentProfile().getActor(security_self->my_actor);
-            auto res   = actor->key().encrypt_self_file(new_file_path, dfs_path);
+            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::Unknown);
+            }
+            auto res = actor->key().encrypt_self_file(new_file_path, dfs_path);
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -172,7 +175,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->accountController()->currentProfile().getActor(security_actor->sender_id);
+            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
             auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
             // TODO: checks
             auto res = sender->key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
@@ -343,9 +346,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const Dfs::DataSecurityData   &security_data) {
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = DfsPath::file_path(owner_id, file_id).value();
-    auto        actor    = node->accountController()->currentProfile().getActor(owner_id);
+    auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
+    if (!actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
 
-    auto chain = HistoricalCollection::create(node, actor, actor->id(), file_id, collection_template);
+    auto chain = HistoricalCollection::create(node, actor.value(), actor->id(), file_id, collection_template);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -453,7 +459,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     // TODO: check fields
 
     // TODO: choose sign actor from args
-    auto main_actor = node->accountController()->currentProfile().main();
+    auto main_actor = node->accountController()->currentProfile().system();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -484,7 +490,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     dir_row.hash          = hash;
     dir_row.size          = size;
 
-    auto sign = main_actor->key().sign(Utils::calculate_hash(dir_row));
+    auto sign = main_actor.key().sign(Utils::calculate_hash(dir_row));
     if (!sign.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -895,7 +901,10 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
 
 // TODO: remove?
 std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std::string &file_name) {
-    auto                  localOwner      = node->accountController()->currentProfile().getActor(owner_id);
+    auto localOwner = node->accountController()->currentProfile().get_actor(owner_id);
+    if (!localOwner.has_value()) {
+        eFatal("Can't get actor: {}", owner_id);
+    }
     std::string           pathDelim       = Utils::platformDelimeter();
     const std::string     ownerPath       = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
     std::filesystem::path realFilePath    = fmt::format("{}{}", ownerPath, file_name);
@@ -931,7 +940,7 @@ bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
         fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}",
                     msg.file_id,
                     msg.actorId,
-                    node->accountController()->mainActor()->id().to_string());
+                    node->accountController()->mainActor().id().to_string());
     eLog("{}", message);
 
     auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.file_id);

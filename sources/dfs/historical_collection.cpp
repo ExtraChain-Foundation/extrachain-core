@@ -26,10 +26,10 @@
 #include "managers/account_controller.h"
 #include "utils/db_connector.h"
 
-HistoricalCollection::HistoricalCollection(ExtraChainNode                           *node,
-                                           const std::shared_ptr<Actor<KeyPrivate>> &actor,
-                                           const ActorId                            &file_actor_id,
-                                           const std::string                        &file_id,
+HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
+                                           const Actor<KeyPrivate>     &actor,
+                                           const ActorId               &file_actor_id,
+                                           const std::string           &file_id,
                                            Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->node               = node;
@@ -44,14 +44,14 @@ HistoricalCollection::HistoricalCollection(ExtraChainNode                       
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
-    ExtraChainNode                           *node,
-    const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
-    const ActorId                            &file_actor_id,
-    const std::string                        &file_id,
-    const ActorId                            &template_actor_id,
-    const std::string                        &template_file_id,
-    Dfs::DataSecurity                         data_security,
-    const Dfs::DataSecurityData              &security_data) {
+    ExtraChainNode              *node,
+    const Actor<KeyPrivate>     &main_actor,
+    const ActorId               &file_actor_id,
+    const std::string           &file_id,
+    const ActorId               &template_actor_id,
+    const std::string           &template_file_id,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
@@ -83,13 +83,13 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
-    ExtraChainNode                           *node,
-    const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
-    const ActorId                            &file_actor_id,
-    const std::string                        &file_id,
-    const Dfs::CollectionTemplate            &collection_template,
-    Dfs::DataSecurity                         data_security,
-    const Dfs::DataSecurityData              &security_data) {
+    ExtraChainNode                *node,
+    const Actor<KeyPrivate>       &main_actor,
+    const ActorId                 &file_actor_id,
+    const std::string             &file_id,
+    const Dfs::CollectionTemplate &collection_template,
+    Dfs::DataSecurity              data_security,
+    const Dfs::DataSecurityData   &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     DbConnector db(chain.historical_path_);
@@ -121,12 +121,12 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::creat
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
-    ExtraChainNode                           *node,
-    const std::shared_ptr<Actor<KeyPrivate>> &main_actor,
-    const ActorId                            &file_actor_id,
-    const std::string                        &file_id,
-    Dfs::DataSecurity                         data_security,
-    const Dfs::DataSecurityData              &security_data) {
+    ExtraChainNode              *node,
+    const Actor<KeyPrivate>     &main_actor,
+    const ActorId               &file_actor_id,
+    const std::string           &file_id,
+    Dfs::DataSecurity            data_security,
+    const Dfs::DataSecurityData &security_data) {
     HistoricalCollection chain(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
     if (!chain.historical_path_.exists_and_size_not_zero()) {
@@ -188,7 +188,7 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Structural,
                                                     .data      = Json::serialize(collection_creation),
                                                     .timestamp = Utils::current_date_ms(),
-                                                    .actor_id  = this->actor_->id(),
+                                                    .actor_id  = this->actor_.id(),
                                                     .sign      = Signature() };
     insert_historical_row(historical_row);
 
@@ -216,7 +216,7 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::StructuralTemplated,
                                                     .data      = Json::serialize(collection_template),
                                                     .timestamp = Utils::current_date_ms(),
-                                                    .actor_id  = this->actor_->id(),
+                                                    .actor_id  = this->actor_.id(),
                                                     .sign      = Signature() };
     insert_historical_row(historical_row);
 
@@ -251,7 +251,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ad
 
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Add,
                                                     .data      = Json::serialize(db_row),
-                                                    .actor_id  = this->actor_->id(),
+                                                    .actor_id  = this->actor_.id(),
                                                     .sign      = Signature() };
 
     insert_historical_row(historical_row);
@@ -297,7 +297,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
 
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Update,
                                                     .data      = Json::serialize(std::make_pair(id, db_row)),
-                                                    .actor_id  = this->actor_->id(),
+                                                    .actor_id  = this->actor_.id(),
                                                     .sign      = Signature() };
 
     insert_historical_row(historical_row);
@@ -320,7 +320,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::up
 std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::remove_row(const std::uint32_t id) {
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Remove,
                                                     .data      = std::to_string(id),
-                                                    .actor_id  = this->actor_->id(),
+                                                    .actor_id  = this->actor_.id(),
                                                     .sign      = Signature() };
     // TODO: check if id exists
     static auto db_row_id = DbRow { { "id", std::to_string(id) } };
@@ -455,7 +455,7 @@ void HistoricalCollection::insert_historical_row(HistoricalCollectionRow &histor
 
 void HistoricalCollection::historical_collection_row_sign(HistoricalCollectionRow &row) {
     auto hash = Utils::calculate_hash(row);
-    auto sign = this->actor_->key().sign(hash);
+    auto sign = this->actor_.key().sign(hash);
     if (!sign.has_value()) {
         return;
     }
@@ -536,7 +536,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
                 return DbRow {};
             }
             encryptor = [myself = myself.value()](const ByteArray &data) {
-                return myself->key().encrypt_self(data.toBytes());
+                return myself.key().encrypt_self(data.toBytes());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Actor) {
@@ -547,7 +547,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
                 return DbRow {};
             }
             encryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s->key().encrypt(data.toBytes(), r.key().public_key());
+                return s.key().encrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
@@ -591,7 +591,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
                 return DbRow {};
             }
             decryptor = [myself = myself.value()](const ByteArray &data) {
-                return myself->key().decrypt_self(data.toBytes());
+                return myself.key().decrypt_self(data.toBytes());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Actor) {
@@ -602,7 +602,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
                 return DbRow {};
             }
             decryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s->key().decrypt(data.toBytes(), r.key().public_key());
+                return s.key().decrypt(data.toBytes(), r.key().public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {

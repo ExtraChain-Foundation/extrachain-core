@@ -27,24 +27,28 @@ enum class PrivateProfileError {
     ZeroActor
 };
 
+using PrivateActors = std::vector<Actor<KeyPrivate>>;
+
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    static PrivateProfile                    create(const Actor<KeyPrivate> &actor, const std::string &hash);
-    static PrivateProfile                    load(const ActorId &actorId, const std::string &hash);
-    const std::shared_ptr<Actor<KeyPrivate>> main() const;
-    const std::shared_ptr<Actor<KeyPrivate>> current() const;
-    const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &actors() const;
-    bool                                                   changeCurrent(const ActorId &actorId);
-    void                                                   addWallet(const Actor<KeyPrivate> &actor);
-    bool                                     renameWallet(const ActorId &actorId, const std::string &walletName);
-    const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
-    const std::expected<std::shared_ptr<Actor<KeyPrivate>>, PrivateProfileError> get_actor(
-        const ActorId &actorId) const;
-    bool               loaded();
-    const std::string &hash() const;
-    QJsonObject        toJson() const;
+    static PrivateProfile                 create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile                 load(const ActorId &actorId, const std::string &hash);
+    const Actor<KeyPrivate>              &system() const;
+    const Actor<KeyPrivate>              &current() const;
+    const std::vector<Actor<KeyPrivate>> &actors() const;
+    bool                                  change_current(const ActorId &actorId);
+    void                                  add_wallet(const Actor<KeyPrivate> &actor);
+    bool                                  rename_wallet(const ActorId &actorId, const std::string &walletName);
 
-    std::map<ActorId, std::string> getWalletNames() const;
+    // TODO: use std::reference_wrapper
+    const std::expected<Actor<KeyPrivate>, PrivateProfileError> get_actor(const ActorId &actorId) const;
+    bool                                                        loaded();
+    const std::string                                          &hash() const;
+    QJsonObject                                                 toJson() const;
+
+    std::map<ActorId, std::string> wallet_names() const;
+
+    void add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
     PrivateProfile() = default;
@@ -53,9 +57,10 @@ private:
     void                  load();
     std::filesystem::path path();
 
-    ActorId                                         m_main;
-    ActorId                                         m_current;
-    std::string                                     m_hash;
-    std::vector<std::shared_ptr<Actor<KeyPrivate>>> m_actors;
-    std::map<ActorId, std::string>                  walletNames;
+    ActorId                        system_;
+    ActorId                        current_;
+    std::string                    hash_;
+    PrivateActors                  actors_;
+    PrivateActors                  imports_;
+    std::map<ActorId, std::string> wallet_names_;
 };
