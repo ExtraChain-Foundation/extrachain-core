@@ -268,8 +268,9 @@ public:
                              MessageStatus         status              = MessageStatus::NoStatus,
                              std::string           to_message_id       = "",
                              std::string           receiver_identifier = "") {
-        if (status == MessageStatus::Response && to_message_id.empty()) {
-            eCritical("[Network] Send message error: empty message id for response message");
+        if (status == MessageStatus::Response && to_message_id.empty() && receiver_identifier.empty()) {
+            eCritical(
+                "[Network] Send message error: empty message id or receiver identifier for response message");
             return "";
         }
         if (status == MessageStatus::Response && typeSend != Config::Net::TypeSend::Focused) {
