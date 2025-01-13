@@ -168,7 +168,7 @@ public:
     static ByteArray fromBase64(const std::string &encoded) {
         auto decoded = Utils::from_base64(encoded);
         if (!decoded.has_value()) {
-            eFatal("Incorrect base64");
+            eFatal("Incorrect base64 in: {}", encoded);
             return ByteArray("");
         }
         return ByteArray(decoded.value());
