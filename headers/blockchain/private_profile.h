@@ -36,6 +36,7 @@ public:
     const Actor<KeyPrivate>              &system() const;
     const Actor<KeyPrivate>              &current() const;
     const std::vector<Actor<KeyPrivate>> &actors() const;
+    const std::vector<Actor<KeyPrivate>> &imports() const;
     bool                                  change_current(const ActorId &actorId);
     void                                  add_wallet(const Actor<KeyPrivate> &actor);
     bool                                  rename_wallet(const ActorId &actorId, const std::string &walletName);

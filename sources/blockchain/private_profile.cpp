@@ -68,6 +68,10 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
     return actors_;
 }
 
+const std::vector<Actor<KeyPrivate>> &PrivateProfile::imports() const {
+    return imports_;
+}
+
 bool PrivateProfile::change_current(const ActorId &actorId) {
     auto changed_actor = get_actor(actorId);
     if (!changed_actor.has_value()) {
@@ -124,6 +128,12 @@ QJsonObject PrivateProfile::toJson() const {
     }
     json["actors"] = actors;
 
+    QJsonArray imports;
+    for (const auto &actor : imports_) {
+        actors.append(actor.toJsonArray());
+    }
+    json["imports"] = imports;
+
     QJsonObject walletNames;
     for (const auto &[actor, name] : this->wallet_names_) {
         walletNames[actor.toQString()] = QString::fromStdString(name);
@@ -163,12 +173,19 @@ void PrivateProfile::load() {
     auto json              = QJsonDocument::fromJson(json_bytes_qt).object();
     system_                = json["main"].toString().toStdString();
     const auto actors      = json["actors"].toArray();
+    const auto imports     = json["actors"].toArray();
     const auto walletNames = json["walletNames"].toObject();
 
     for (const auto &actor : actors) {
         auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
         auto a    = Actor<KeyPrivate>::fromJson(json);
         actors_.push_back(a);
+    }
+
+    for (const auto &actor : imports) {
+        auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
+        auto a    = Actor<KeyPrivate>::fromJson(json);
+        imports_.push_back(a);
     }
 
     for (auto it = walletNames.begin(); it != walletNames.end(); ++it) {
@@ -184,4 +201,8 @@ std::filesystem::path PrivateProfile::path() {
 
 std::map<ActorId, std::string> PrivateProfile::wallet_names() const {
     return wallet_names_;
+}
+
+void PrivateProfile::add_imported_actor(const Actor<KeyPrivate> &imported_actor) {
+    imports_.push_back(imported_actor);
 }
