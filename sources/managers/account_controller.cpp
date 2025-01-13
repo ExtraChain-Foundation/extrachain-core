@@ -79,6 +79,21 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
     return actor;
 }
 
+void AccountController::import_profile(const ImportedUser &imported_profile, const std::string &hash) {
+    auto              profile = PrivateProfile::import(imported_profile, hash);
+    Actor<KeyPrivate> actor   = profile.system();
+
+    for (const auto &actor : profile.actors()) {
+        node->actorIndex()->addActor(actor.to_public());
+    }
+    for (const auto &actor : profile.imports()) {
+        node->actorIndex()->addActor(actor.to_public());
+    }
+
+    addToProfileList(actor.id());
+    eLog("[Accounts] Imported profile: {}", imported_profile);
+}
+
 void AccountController::renameWallet(const ActorId     &profileActor,
                                      const ActorId     &actorId,
                                      const std::string &walletName) {

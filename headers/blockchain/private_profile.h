@@ -27,11 +27,31 @@ enum class PrivateProfileError {
     ZeroActor
 };
 
+enum class ImportError {
+    NoNetworkId,
+    EmptyProfile,
+    CryptoError,
+    NoActor
+};
+
+struct ImportedUser {
+    ActorId                        network;
+    std::string                    version;
+    uint64_t                       date;
+    ActorId                        system;
+    std::vector<Actor<KeyPrivate>> actors;
+    std::vector<Actor<KeyPrivate>> imports;
+    std::map<ActorId, std::string> wallet_names;
+};
+BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
+
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
     PrivateProfile() = default; // only for json
-    static PrivateProfile                 create(const Actor<KeyPrivate> &actor, const std::string &hash);
-    static PrivateProfile                 load(const ActorId &actorId, const std::string &hash);
+    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile load(const ActorId &actor_id, const std::string &hash);
+    static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash);
+
     const Actor<KeyPrivate>              &system() const;
     const Actor<KeyPrivate>              &current() const;
     const std::vector<Actor<KeyPrivate>> &actors() const;
@@ -47,7 +67,8 @@ public:
 
     std::map<ActorId, std::string> wallet_names() const;
 
-    void add_imported_actor(const Actor<KeyPrivate> &imported_actor);
+    std::expected<std::string, ImportError> export_actor(const ActorId &actor_id);
+    void                                    add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
     void                  save();

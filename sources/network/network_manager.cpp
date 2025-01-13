@@ -347,7 +347,7 @@ void NetworkManager::clearNetworkCaches() {
         for (auto it = messages_locked->begin(); it != messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
             if (it->second.second.secsTo(currentTime) >= 120) {
-                eInfo("MessageID erased: {}", it->first);
+                // eTemp("MessageID erased: {}", it->first);
                 it = messages_locked->erase(it);
             } else
                 ++it;

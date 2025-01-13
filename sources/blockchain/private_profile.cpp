@@ -31,12 +31,26 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std:
     return user;
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actorId, const std::string &hash) {
+PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash) {
     PrivateProfile user;
-    user.system_ = actorId;
+    user.system_ = actor_id;
     user.hash_   = hash;
     user.load();
     return user;
+}
+
+PrivateProfile PrivateProfile::import(const ImportedUser &imported_user, const std::string &hash) {
+    PrivateProfile private_profile;
+    private_profile.hash_         = hash;
+    private_profile.actors_       = imported_user.actors;
+    private_profile.imports_      = imported_user.imports;
+    private_profile.wallet_names_ = imported_user.wallet_names;
+
+    private_profile.system_  = imported_user.system;
+    private_profile.current_ = imported_user.system;
+
+    private_profile.save();
+    return private_profile;
 }
 
 const Actor<KeyPrivate> &PrivateProfile::system() const {
@@ -163,6 +177,15 @@ std::filesystem::path PrivateProfile::path() {
 
 std::map<ActorId, std::string> PrivateProfile::wallet_names() const {
     return wallet_names_;
+}
+
+std::expected<std::string, ImportError> PrivateProfile::export_actor(const ActorId &actor_id) {
+    auto actor = get_actor(actor_id);
+    if (!actor.has_value()) {
+        return std::unexpected(ImportError::NoActor);
+    }
+
+    return Json::serialize(actor);
 }
 
 void PrivateProfile::add_imported_actor(const Actor<KeyPrivate> &imported_actor) {

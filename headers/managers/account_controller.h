@@ -49,6 +49,8 @@ public:
     Actor<KeyPrivate> createService(const ActorId                   &profileActor     = ActorId(),
                                     std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
 
+    void import_profile(const ImportedUser &imported_profile, const std::string &hash);
+
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     bool load(const std::string &hash);
