@@ -141,7 +141,7 @@ public:
 
     // TODO: sign/verify - as expected
     // digital signature
-    void           sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    void           sign(const Actor<KeyPrivate> &actor);
     BlockSignError verify(const Actor<KeyPublic> &actor) const;
 
     bool equals(const Block &block) const;

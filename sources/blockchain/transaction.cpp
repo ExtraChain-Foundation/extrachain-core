@@ -158,11 +158,11 @@ void Transaction::setType(TransactionType newType) {
     m_type = newType;
 }
 
-void Transaction::sign(const std::shared_ptr<Actor<KeyPrivate>> actor) {
-    this->m_approver = actor->id();
+void Transaction::sign(const Actor<KeyPrivate> &actor) {
+    this->m_approver = actor.id();
     calculate_hash();
 
-    auto sign = actor->key().sign(m_hash);
+    auto sign = actor.key().sign(m_hash);
     if (!sign.has_value()) {
         return;
     }

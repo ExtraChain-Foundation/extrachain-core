@@ -29,6 +29,7 @@
 #include <QTimer>
 
 #include "blockchain/transaction.h"
+#include "blockchain/private_profile.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 
@@ -149,12 +150,13 @@ public:
                                                                        BigNumberFloat amount,
                                                                        ActorId        token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(Transaction transaction,
-                                                                 const std::shared_ptr<Actor<KeyPrivate>> signer);
+    std::expected<Transaction, TransactionError> sendTransaction(Transaction              transaction,
+                                                                 const Actor<KeyPrivate>& signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
-    std::string exportUser();
-    bool        importUser(const std::string& data, const std::string& login, const std::string& password);
+
+    std::expected<std::string, ImportError> exportUser();
+    bool importUser(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file
 
     void createNetworkIdentifier();

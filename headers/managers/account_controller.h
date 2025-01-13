@@ -46,14 +46,16 @@ public:
     Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
                                    const std::string &walletName   = std::string());
     // createDAppMaster
-    Actor<KeyPrivate> createService(const ActorId                     &profileActor     = ActorId(),
-                                    std::shared_ptr<Actor<KeyPrivate>> predefined_actor = nullptr);
+    Actor<KeyPrivate> createService(const ActorId                   &profileActor     = ActorId(),
+                                    std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
+
+    void import_profile(const ImportedUser &imported_profile, const std::string &hash);
 
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     bool load(const std::string &hash);
 
-    const std::shared_ptr<Actor<KeyPrivate>> mainActor();
+    const Actor<KeyPrivate> &mainActor();
 
     PrivateProfile &getProfile(const ActorId &actorId);
     /**
@@ -67,10 +69,10 @@ public:
     void changeCurrentProfile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
-    const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &accounts() const; // temp
-    const std::vector<ActorId>                             accountsIds() const;
-    const std::shared_ptr<Actor<KeyPrivate>>               currentWallet() const; // temp
-    void                                                   clear();
+    const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
+    const std::vector<ActorId>            accountsIds() const;
+    const Actor<KeyPrivate>              &currentWallet() const; // temp
+    void                                  clear();
 
     static std::vector<ActorId> profilesList();
     void                        addToProfileList(const ActorId &actorId);

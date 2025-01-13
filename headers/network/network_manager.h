@@ -157,11 +157,11 @@ private:
     NetworkStatus                                m_networkStatus;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
-    std::map<std::string, MessageIdDataWaiting>                  m_messages_waiting;
-    std::map<std::string, MessageIdDataReceived>                 m_messages_received;
-    QTimer*                                                      m_reconnectTimer;
+    std::map<std::string, MessageIdDataWaiting>                                 m_messages_waiting;
+    std::map<std::string, MessageIdDataReceived>                                m_messages_received;
+    QTimer*                                                                     m_reconnectTimer;
     QTimer*                                                                     m_clear_network_caches_timer;
-    CalculateTraffic*                                            calculateTraffic;
+    CalculateTraffic*                                                           calculateTraffic;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> m_network_forwarded_messages;
 
     std::string m_networkHashForVPN;
@@ -287,24 +287,20 @@ public:
         }
 
         auto&       mainActor = node->accountController()->mainActor();
-        MessageBody message             = make_init_message(MessagePack::serialize(data),
-                                                typeSend,
-                                                type,
-                                                status,
-                                                mainActor->id(),
-                                                to_message_id);
+        MessageBody message =
+            make_init_message(MessagePack::serialize(data), typeSend, type, status, mainActor.id(), to_message_id);
 
         if (typeSend == Config::Net::TypeSend::Broadcast) {
             addAllServicesIdentifiersToMessage(message);
         }
 
-        auto        serialized          = message.serialize();
-        auto        serialized_for_sign = message.serializeForSign();
-        auto        sign_result         = mainActor->key().sign(serialized_for_sign);
+        auto serialized          = message.serialize();
+        auto serialized_for_sign = message.serializeForSign();
+        auto sign_result         = mainActor.key().sign(serialized_for_sign);
         if (!sign_result.has_value()) {
             return "";
         }
-        auto        sign = ByteArray(sign_result.value()).toString();
+        auto sign = ByteArray(sign_result.value()).toString();
         if (!to_message_id.empty()) {
             receiver_identifier = m_messages->at(to_message_id).first;
             //            if (receiver_identifier.empty())

@@ -236,8 +236,7 @@ bool Blockchain::isGenesisId(const BigNumber &id) {
     return id == 0 || id % Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS == 0;
 }
 
-std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(
-    const std::shared_ptr<Actor<KeyPrivate>> actor) {
+std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Actor<KeyPrivate> &actor) {
     eLog("Creating genesis block");
 
     if (blockIndex.getLastSavedId() == -1 || blockIndex.getRecords() == 0) {
@@ -287,8 +286,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(
     return BlockVariant(genesis);
 }
 
-std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(
-    const std::shared_ptr<Actor<KeyPrivate>> actor) {
+std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(const Actor<KeyPrivate> &actor) {
     if (blockIndex.getRecords() != 0 || blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
         return std::unexpected(BlockError::Invalid);
     }
@@ -300,7 +298,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(
     gdi.state = BigNumberFloat(0);
     gdi.type  = BlockchainConst::DataRowType::Universal;
     genesis.addRow(ActorId(), ActorId(), gdi);
-    genesis.addData(actor->id().to_string());
+    genesis.addData(actor.id().to_string());
     genesis.sign(actor);
     return BlockVariant(genesis);
 }
@@ -838,7 +836,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
 
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->accountController()->mainActor()->id();
+    const ActorId &mainActorId    = node->accountController()->mainActor().id();
     const ActorId &firstId        = node->actorIndex()->firstId();
 
     const auto accounts = node->accountController()->accountsIds();

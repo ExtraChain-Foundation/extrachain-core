@@ -204,8 +204,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::
     if (predefine_token_id.empty())
         actor = node->accountController()->createService();
     else {
-        auto temp_actor = std::make_shared<Actor<KeyPrivate>>();
-        *temp_actor     = actor.fromJson(QByteArray::fromStdString(predefine_token_id));
+        auto temp_actor = actor.fromJson(QByteArray::fromStdString(predefine_token_id));
         actor           = node->accountController()->createService({}, temp_actor);
     }
     QString actorId      = QString(actor.id().toQString());

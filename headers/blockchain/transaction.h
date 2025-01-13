@@ -35,6 +35,7 @@ MSGPACK_ADD_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
+    NoSender,
     EmptyTransaction,
     NoLastBlock, // EmptyBlockchain?
     InsufficientFunds,
@@ -101,7 +102,7 @@ public:
     Transaction(Transaction &&other) noexcept;
 
     // digital signature
-    void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    void sign(const Actor<KeyPrivate> &actor);
     bool verify(const Actor<KeyPublic> &actor) const;
 
     // void setSenderBalance(BigNumber balance);

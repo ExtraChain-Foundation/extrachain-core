@@ -27,35 +27,60 @@ enum class PrivateProfileError {
     ZeroActor
 };
 
+enum class ImportError {
+    NoNetworkId,
+    EmptyProfile,
+    CryptoError,
+    NoActor
+};
+
+struct ImportedUser {
+    ActorId                        network;
+    std::string                    version;
+    uint64_t                       date;
+    ActorId                        system;
+    std::vector<Actor<KeyPrivate>> actors;
+    std::vector<Actor<KeyPrivate>> imports;
+    std::map<ActorId, std::string> wallet_names;
+};
+BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
+
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
-    static PrivateProfile                    create(const Actor<KeyPrivate> &actor, const std::string &hash);
-    static PrivateProfile                    load(const ActorId &actorId, const std::string &hash);
-    const std::shared_ptr<Actor<KeyPrivate>> main() const;
-    const std::shared_ptr<Actor<KeyPrivate>> current() const;
-    const std::vector<std::shared_ptr<Actor<KeyPrivate>>> &actors() const;
-    bool                                                   changeCurrent(const ActorId &actorId);
-    void                                                   addWallet(const Actor<KeyPrivate> &actor);
-    bool                                     renameWallet(const ActorId &actorId, const std::string &walletName);
-    const std::shared_ptr<Actor<KeyPrivate>> getActor(const ActorId &actorId) const;
-    const std::expected<std::shared_ptr<Actor<KeyPrivate>>, PrivateProfileError> get_actor(
+    PrivateProfile() = default; // only for json
+    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile load(const ActorId &actor_id, const std::string &hash);
+    static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash);
+
+    const Actor<KeyPrivate>              &system() const;
+    const Actor<KeyPrivate>              &current() const;
+    const std::vector<Actor<KeyPrivate>> &actors() const;
+    const std::vector<Actor<KeyPrivate>> &imports() const;
+    bool                                  change_current(const ActorId &actorId);
+    void                                  add_wallet(const Actor<KeyPrivate> &actor);
+    bool                                  rename_wallet(const ActorId &actorId, const std::string &walletName);
+
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> get_actor(
         const ActorId &actorId) const;
     bool               loaded();
     const std::string &hash() const;
-    QJsonObject        toJson() const;
 
-    std::map<ActorId, std::string> getWalletNames() const;
+    std::map<ActorId, std::string> wallet_names() const;
+
+    std::expected<std::string, ImportError> export_actor(const ActorId &actor_id);
+    void                                    add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
-    PrivateProfile() = default;
-
     void                  save();
     void                  load();
     std::filesystem::path path();
 
-    ActorId                                         m_main;
-    ActorId                                         m_current;
-    std::string                                     m_hash;
-    std::vector<std::shared_ptr<Actor<KeyPrivate>>> m_actors;
-    std::map<ActorId, std::string>                  walletNames;
+    ActorId                        system_;
+    ActorId                        current_;
+    std::string                    hash_;
+    std::vector<Actor<KeyPrivate>> actors_;
+    std::vector<Actor<KeyPrivate>> imports_;
+    std::map<ActorId, std::string> wallet_names_;
+
+    BOOST_DESCRIBE_CLASS(PrivateProfile, (), (), (), (system_, actors_, imports_, wallet_names_))
 };

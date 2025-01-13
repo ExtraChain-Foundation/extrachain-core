@@ -58,7 +58,6 @@ class TokenManager : public QObject {
     ExtraChainNode *node;
 
     void sendInitialTransaction(const ActorId &owner, const TokenId &token, const BigNumberFloat &amount);
-    // std::shared_ptr<Actor<KeyPrivate>> createPrivateActor();
     void initializeTokenArray();
     bool tokenExist(const std::string &nameToken, const std::string &tickerToken);
 

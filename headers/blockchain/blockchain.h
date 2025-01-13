@@ -92,11 +92,10 @@ public:
     static BigNumber lastGenesisIdFor(const BigNumber &id);
     static bool      isGenesisId(const BigNumber &id);
 
-    std::expected<BlockVariant, BlockError> createGenesisBlock(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    std::expected<BlockVariant, BlockError> createGenesisBlock(const Actor<KeyPrivate> &actor);
 
     std::expected<BlockVariant, BlockError> createFirstBlock(
-        const std::shared_ptr<Actor<KeyPrivate>>
-            actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
+        const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
                                                         BigNumber        from  = BigNumber(-1),

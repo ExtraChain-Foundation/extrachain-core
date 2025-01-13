@@ -518,9 +518,7 @@ namespace Dfs {
                                                                                    const std::string& file_id);
             std::optional<Dfs::CollectionTemplate> get_collection_template_name(const ActorId&     actor_id,
                                                                                 const std::string& template_name);
-            bool                                   add_dir_row(const ActorId&                            actor_id,
-                                                               DirRow&                                   dir_row,
-                                                               const std::shared_ptr<Actor<KeyPrivate>>& signer);
+            bool add_dir_row(const ActorId& actor_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
             bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
             std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,

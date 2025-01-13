@@ -46,7 +46,7 @@ public:
     void setPrevHash(const std::string& prevHash);
 
     void addSignature(const ActorId& id, const Signature& sign, bool isApprove);
-    void sign(const std::shared_ptr<Actor<KeyPrivate>> actor);
+    void sign(const Actor<KeyPrivate>& actor);
     bool verify(const Actor<KeyPublic>& actor) const;
 
     bool isBlock() const;
