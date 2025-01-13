@@ -19,8 +19,6 @@
 
 #include "blockchain/private_profile.h"
 
-#include <QJsonObject>
-
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
@@ -118,81 +116,45 @@ const std::string &PrivateProfile::hash() const {
     return hash_;
 }
 
-QJsonObject PrivateProfile::toJson() const {
-    QJsonObject json;
-    json["main"] = system_.toQString();
-
-    QJsonArray actors;
-    for (const auto &actor : actors_) {
-        actors.append(actor.toJsonArray());
-    }
-    json["actors"] = actors;
-
-    QJsonArray imports;
-    for (const auto &actor : imports_) {
-        actors.append(actor.toJsonArray());
-    }
-    json["imports"] = imports;
-
-    QJsonObject walletNames;
-    for (const auto &[actor, name] : this->wallet_names_) {
-        walletNames[actor.toQString()] = QString::fromStdString(name);
-    }
-    json["walletNames"] = walletNames;
-
-    eLog("[PrivateProfile] JSON: {}", QJsonDocument(json).toJson(QJsonDocument::Compact));
-    return json;
-}
-
 void PrivateProfile::save() {
-    auto json_bytes = QJsonDocument(toJson()).toJson(QJsonDocument::Compact).toStdString();
+    auto json_bytes = Json::serialize(*this);
     auto encrypted  = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()), hash_);
     if (!encrypted.has_value()) {
         eFatal("Incorrect private profile save");
     }
 
-    auto data = QByteArray(reinterpret_cast<const char *>(encrypted->data()), encrypted->size());
-    // eLog("Save data: {}", data);
-    QFile file(path().string().c_str());
-    file.open(QFile::WriteOnly);
-    if (file.write(data) == 0)
+    std::ofstream file(path(), std::ios::binary);
+    if (!file) {
+        eFatal("Can't open file for writing");
+    }
+
+    if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
         eFatal("Can't write");
+    }
     file.close();
 }
 
 void PrivateProfile::load() {
-    QFile file(path().string().c_str());
-    file.open(QFile::ReadOnly);
-    auto data       = file.readAll().toStdString();
+    std::ifstream file(path(), std::ios::binary);
+    if (!file) {
+        eFatal("Can't open file");
+    }
+    std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
     auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), hash_);
     if (!json_bytes.has_value()) {
         eFatal("Incorrect private profile load");
     }
-    auto json_bytes_qt = QByteArray(reinterpret_cast<const char *>(json_bytes->data()), json_bytes->size());
 
-    auto json              = QJsonDocument::fromJson(json_bytes_qt).object();
-    system_                = json["main"].toString().toStdString();
-    const auto actors      = json["actors"].toArray();
-    const auto imports     = json["actors"].toArray();
-    const auto walletNames = json["walletNames"].toObject();
-
-    for (const auto &actor : actors) {
-        auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
-        auto a    = Actor<KeyPrivate>::fromJson(json);
-        actors_.push_back(a);
+    auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
+    if (!profile.has_value()) {
+        eFatal("Incorrect private profile load: incorrect json");
     }
 
-    for (const auto &actor : imports) {
-        auto json = QJsonDocument(actor.toArray()).toJson(QJsonDocument::Compact);
-        auto a    = Actor<KeyPrivate>::fromJson(json);
-        imports_.push_back(a);
-    }
-
-    for (auto it = walletNames.begin(); it != walletNames.end(); ++it) {
-        auto actor_id = it.key().toStdString();
-        auto name     = it.value().toString().toStdString();
-        this->wallet_names_.insert({ ActorId(actor_id), name });
-    }
+    this->system_  = profile->system_;
+    this->current_ = profile->system_;
+    this->actors_  = profile->actors_;
+    this->imports_ = profile->imports_;
 }
 
 std::filesystem::path PrivateProfile::path() {

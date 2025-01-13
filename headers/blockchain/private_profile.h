@@ -27,10 +27,9 @@ enum class PrivateProfileError {
     ZeroActor
 };
 
-using PrivateActors = std::vector<Actor<KeyPrivate>>;
-
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
+    PrivateProfile() = default; // only for json
     static PrivateProfile                 create(const Actor<KeyPrivate> &actor, const std::string &hash);
     static PrivateProfile                 load(const ActorId &actorId, const std::string &hash);
     const Actor<KeyPrivate>              &system() const;
@@ -45,15 +44,12 @@ public:
         const ActorId &actorId) const;
     bool               loaded();
     const std::string &hash() const;
-    QJsonObject        toJson() const;
 
     std::map<ActorId, std::string> wallet_names() const;
 
     void add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
-    PrivateProfile() = default;
-
     void                  save();
     void                  load();
     std::filesystem::path path();
@@ -61,7 +57,9 @@ private:
     ActorId                        system_;
     ActorId                        current_;
     std::string                    hash_;
-    PrivateActors                  actors_;
-    PrivateActors                  imports_;
+    std::vector<Actor<KeyPrivate>> actors_;
+    std::vector<Actor<KeyPrivate>> imports_;
     std::map<ActorId, std::string> wallet_names_;
+
+    BOOST_DESCRIBE_CLASS(PrivateProfile, (), (), (), (system_, actors_, imports_, wallet_names_))
 };
