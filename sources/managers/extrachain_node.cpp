@@ -570,15 +570,23 @@ void ExtraChainNode::connectSignals() {
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(m_tokenManager,
-            &TokenManager::sendTransactionCreateToken,
-            this,
-            [&](const ActorId& actorId, const Transaction& tx) {
+        &TokenManager::sendTransactionCreateToken,
+        this,
+        [this](const ActorId& actorId, const Transaction& tx) {
+            QTimer* timer = new QTimer();
+            timer->setSingleShot(true);
+            
+            connect(timer, &QTimer::timeout, this, [=]() {
                 auto actor = m_accountController->currentProfile().get_actor(actorId);
                 if (!actor.has_value()) {
                     return;
                 }
                 this->sendTransaction(tx, actor.value());
+                timer->deleteLater();
             });
+            
+            timer->start(2000);
+        });
 
     connect(m_tokenManager,
             &TokenManager::sendToken,

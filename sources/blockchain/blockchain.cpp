@@ -833,6 +833,13 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
 TransactionProveError Blockchain::proveTransaction(const Transaction          &tx,
                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
+    // TODO: temp, remove
+    if (tx.type() == TransactionType::InitContract) {
+        return TransactionProveError::NoError;
+    }
+    if (!tx.token().is_zero()) {
+        return TransactionProveError::NoError;
+    }
 
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
