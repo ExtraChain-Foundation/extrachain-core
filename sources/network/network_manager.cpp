@@ -403,7 +403,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             SocketService::Priority priority = message_type == MessageType::DfsAddSegment
                                                    ? SocketService::Priority::Low
                                                    : SocketService::Priority::Normal;
-            if (message_type == MessageType::Custom) {
+            if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
                 priority = SocketService::Priority::High;
             }
 
