@@ -904,7 +904,7 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
 std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std::string &file_name) {
     auto localOwner = node->accountController()->currentProfile().get_actor(owner_id);
     if (!localOwner.has_value()) {
-        eFatal("Can't get actor: {}", owner_id);
+        // eFatal("Can't get actor: {}", owner_id);
     }
     std::string           pathDelim       = Utils::platformDelimeter();
     const std::string     ownerPath       = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
