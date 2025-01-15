@@ -306,7 +306,14 @@ public:
         }
         auto sign = ByteArray(sign_result.value()).toString();
         if (!to_message_id.empty()) {
-            receiver_identifier = m_messages->at(to_message_id).first;
+            auto messages_locked = *m_messages;
+            if (messages_locked->count(to_message_id)) {
+                receiver_identifier = messages_locked->at(to_message_id).first;
+            } else {
+                eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
+                         to_message_id);
+                return "";
+            }
             //            if (receiver_identifier.empty())
             //                eFatal("Network send message error: receiver_identifier is empty");
             // m_messages.erase(to_message_id);
