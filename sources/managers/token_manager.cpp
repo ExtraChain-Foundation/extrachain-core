@@ -95,9 +95,9 @@ QMap<QString, QString> TokenManager::mapTokens() {
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
     for (auto &t : resultSelect) {
+        auto name  = t.at("name").c_str();
         auto tokenId = t.at("actorId").c_str();
-        auto ticker  = t.at("ticker").c_str();
-        map.insert(tokenId, ticker);
+        map.insert(name, tokenId);
     }
 
     return map;
