@@ -180,7 +180,7 @@ struct VPNMessage {
     std::set<std::string>    networkIdentifiersToIgnore;
     std::string              localIP;
     std::string              publicIP;
-    std::string              publicKeyFile;
+    std::string              publicKey;
     std::string              uuid;
     std::vector<std::string> allIPsToSet;
     std::string              senderID;
@@ -196,7 +196,7 @@ struct VPNMessage {
                    networkIdentifiersToIgnore,
                    localIP,
                    publicIP,
-                   publicKeyFile,
+                   publicKey,
                    uuid,
                    allIPsToSet,
                    senderID)
