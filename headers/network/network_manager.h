@@ -281,6 +281,10 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
+        if (!node->accountController()) {
+            eCritical("[Network] Send message error: accountController is bye!");
+            return "";
+        }
         if (node->accountController()->empty()) {
             eCritical("[Network] Send message error: accountController is empty!");
             return "";

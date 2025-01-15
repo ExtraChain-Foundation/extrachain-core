@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.19)
 
-configure_file(
-    "${CMAKE_CURRENT_LIST_DIR}/extrachain_version"
-    "${CMAKE_BINARY_DIR}/extrachain_version"
-    COPYONLY
-)
+# configure_file(
+#     "${CMAKE_CURRENT_LIST_DIR}/extrachain_version"
+#     "${CMAKE_BINARY_DIR}/extrachain_version"
+#     COPYONLY
+# )
 
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
 

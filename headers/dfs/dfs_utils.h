@@ -474,7 +474,7 @@ namespace Dfs {
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
     + "("
       "file_id       TEXT PRIMARY KEY  NOT NULL,"
-      "prev_file_id  TEXT              UNIQUE,"
+      "prev_file_id  TEXT              ," // UNIQUE,"
       "actor_id      TEXT              NOT NULL,"
       "hash          TEXT              NOT NULL,"
       "folder        TEXT                     ,"
