@@ -86,7 +86,7 @@ bool TokenManager::isValidTicker(const std::string &ticker) {
 }
 
 QMap<QString, QString> TokenManager::mapTokens() {
-    QMap<QString, QString> map = { { ActorId().toQString(), "ExC" } };
+    QMap<QString, QString> map = { { "ExC", ActorId().toQString() } };
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {
@@ -98,6 +98,25 @@ QMap<QString, QString> TokenManager::mapTokens() {
         auto name  = t.at("name").c_str();
         auto tokenId = t.at("actorId").c_str();
         map.insert(name, tokenId);
+    }
+
+    return map;
+}
+
+QMap<QString, QString> TokenManager::mapTokensByTokenId()
+{
+    QMap<QString, QString> map = { { ActorId().toQString(), "ExC" } };
+    DbConnector            db(Token::DB_TOKENS_PATH);
+    bool                   isDbOpen = db.open();
+    if (!isDbOpen) {
+        eWarning("Database {} doesn't opened", db.file());
+        return map;
+    }
+    auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
+    for (auto &t : resultSelect) {
+        auto name  = t.at("name").c_str();
+        auto tokenId = t.at("actorId").c_str();
+        map.insert(tokenId, QString(name).toUpper());
     }
 
     return map;
