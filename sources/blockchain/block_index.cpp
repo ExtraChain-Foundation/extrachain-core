@@ -850,6 +850,7 @@ BigNumber BlockIndex::loadFileFromSection(
         return BigNumber();
     }
 
+    list = list.filter(QRegularExpression("^[0-9A-Fa-f]+$"));
     std::sort(list.begin(), list.end(), asBigNumComparator);
     std::vector<std::string> list_stl;
     list_stl.reserve(list.size());
@@ -866,6 +867,8 @@ BigNumber BlockIndex::loadFileFromSection(
         eLog("[BlockIndex] loadFileFromSection(): folder.entryList->folder.entryList: empty");
         return BigNumber();
     }
+
+    list = list.filter(QRegularExpression("^[0-9A-Fa-f]+$"));
     std::sort(list.begin(), list.end(), asBigNumComparator);
 
     list_stl.clear();

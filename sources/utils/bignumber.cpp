@@ -48,7 +48,7 @@ BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
         }
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
-        assert(false);
+        eFatal("Incorrect BigNumber value: {}", bigNumber);
     }
 
     UPDATE_DEBUG()
