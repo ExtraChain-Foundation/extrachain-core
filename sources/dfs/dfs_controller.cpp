@@ -742,7 +742,7 @@ void DfsController::network_response_content_collection(const ActorId           
     // check if history and file ok
     emit downloaded(owner_id, dir_row.value());
     emit collectionDownloaded();
-    sendFile(owner_id, dir_row->file_id);
+    // sendFile(owner_id, dir_row->file_id);
 }
 
 void DfsController::network_change_collection(const ActorId                 &owner_id,
@@ -824,7 +824,7 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
 
     if (load_bytes) {
         if (std::filesystem::exists(realFilePath)) {
-            eLog("[Dfs] File already exists"); // temp: not correct, add calculate file
+            // eLog("[Dfs] File already exists {} {}", owner_id, dir_row); // temp: not correct, add calculate file
             return dir_row.file_id;
         }
         if (!writeAvailable(dir_row.size)) {
