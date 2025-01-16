@@ -298,6 +298,53 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
     return collection_template;
 }
 
+std::expected<DbConnector, bool> Dfs::DirsFile::database() {
+    DbConnector dirs_file(Dfs::Basic::dirsPath);
+    if (dirs_file.open()) {
+        return std::unexpected(false);
+    }
+
+    return dirs_file;
+}
+
+bool Dfs::DirsFile::create_file() {
+    // create basic dirs file
+    auto db = database();
+    if (!db.has_value()) {
+        return false;
+    }
+    if (db->create_table(Dfs::Tables::DirsFile::CreateTableQuery)) {
+        return false;
+    }
+    db->close();
+
+    return true;
+}
+
+std::vector<Dfs::DirsFile::DirsRow> Dfs::DirsFile::load_all() {
+    auto db = database();
+    if (!db.has_value()) {
+        return {};
+    }
+
+    auto                 all_dbrows = db->select_all(Dfs::Tables::DirsFile::TableName);
+    std::vector<DirsRow> dirs_rows;
+    dirs_rows.reserve(all_dbrows.size());
+
+    for (const auto &dbrow : all_dbrows) {
+        auto dirs_row = Utils::from_dbrow<DirsRow>(dbrow);
+        if (!dirs_row.has_value()) {
+            continue;
+        }
+        dirs_rows.push_back(dirs_row.value());
+    }
+
+    return dirs_rows;
+}
+
+std::vector<Dfs::DirsFile::DirsRow> Dfs::DirsFile::load_from_modified(uint64_t last_modified) {
+}
+
 namespace magic {
     std::string custom_magic<Dfs::FileId>::read(const Dfs::FileId &value) {
         return value.value();

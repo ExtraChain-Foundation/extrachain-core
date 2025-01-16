@@ -530,7 +530,7 @@ namespace Dfs {
             static const std::string TableName = "Dirs";
             static const std::string CreateTableQuery = "CREATE TABLE IF NOT EXISTS " + TableName
                                             + "("
-                                              "actorId      TEXT PRIMARY KEY NOT NULL,"
+                                              "actor_id      TEXT PRIMARY KEY NOT NULL,"
                                               "last_modified INTEGER          NOT NULL "
                                               ");";
         } // namespace DirsFile
@@ -560,6 +560,19 @@ namespace Dfs {
         std::expected<FsPath, FsError> file_path(const ActorId& actor_id, const std::string& file_id);
         std::filesystem::path          actorPath(const ActorId& actorId);
     } // namespace Path
+
+    namespace DirsFile {
+        struct DirsRow {
+            ActorId       actor_id;
+            std::uint64_t last_modified;
+        };
+
+        std::expected<DbConnector, bool> database();
+        bool                             create_file();
+        std::vector<DirsRow>             load_all();
+        std::vector<DirsRow>             load_from_modified(std::uint64_t last_modified);
+    } // namespace DirsFile
+
 } // namespace Dfs
 
 MAKE_CUSTOM_MAGICAL(Dfs::FileId)

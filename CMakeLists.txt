@@ -55,6 +55,8 @@ set(EXTRACHAIN_CORE_INCLUDES
 
 set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dirs_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/download_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/version_controller.h
@@ -84,7 +86,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/transaction_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
@@ -117,6 +118,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/download_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/collection_template.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
@@ -145,7 +148,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/transaction_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp

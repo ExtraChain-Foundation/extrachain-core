@@ -64,6 +64,13 @@ enum class MessageType {
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
+    DfsSyncSearchFile      = 74, // запрашиваем пока что у соседей
+    DfsSyncSearchResult    = 75, // есть или нет
+    DfsSyncDirsRequest     = 76,
+    DfsSyncDirsResponce    = 77,
+    DfsSyncDirRows         = 78,
+    DfsSyncDirRowsResponce = 79,
+
     FragmentDataInfo      = 90,
     FragmentsDataListInfo = 91,
 
@@ -93,13 +100,13 @@ MSGPACK_ADD_ENUM(MessageStatus)
 struct MessageBody {
     Config::Net::TypeSend           send_type;
     MessageType                     message_type;
-    MessageStatus status;
-    std::string   message_id;
-    ActorId       sender_id;
+    MessageStatus                   status;
+    std::string                     message_id;
+    ActorId                         sender_id;
     ActorId                         init_sender_id;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
-    std::string   data;
+    std::string                     data;
 
     std::string serializeForSign() const {
         return std::to_string(std::to_underlying(send_type)) + std::to_string(std::to_underlying(message_type))
@@ -143,11 +150,11 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_init_message(const std::string    &data,
+inline MessageBody make_init_message(const std::string&    data,
                                      Config::Net::TypeSend send_type,
                                      MessageType           type,
                                      MessageStatus         status,
-                                     const ActorId        &sender,
+                                     const ActorId&        sender,
                                      std::string           to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");

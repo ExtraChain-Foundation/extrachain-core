@@ -26,24 +26,21 @@
 #include "dfs/fragment_storage.h"
 #include "dfs/name_validator.h"
 #include "dfs/collection_template.h"
+#include "dfs/dirs_manager.h"
+#include "dfs/download_manager.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
-    , node(node) {
+    , node(node)
+    , dirs_manager_(DirsManager(node))
+    , download_manager_(DownloadManager(node)) {
+    // create dfs folder
     std::filesystem::create_directories(DfsB::fsActrRoot);
-
-    DbConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-    dirsFile.create_table(DfsT::DirsFile::CreateTableQuery);
-    dirsFile.close();
 
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
-
-    if (!node->accountController()->empty())
-        requestDirFileAllActors();
 }
 
 DfsController::~DfsController() {
@@ -55,7 +52,7 @@ void DfsController::initializeActor(const ActorId &actorId) {
     std::filesystem::create_directories(DfsB::fsActrRoot + pathDelim + actorId.to_string());
     DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(actorId);
     actrDirFile.query(DfsT::ActorDirFile::CreateTableQuery);
-    requestDirData(actorId);
+    // requestDirData(actorId);
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
@@ -824,7 +821,7 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
 
     if (load_bytes) {
         if (std::filesystem::exists(realFilePath)) {
-            // eLog("[Dfs] File already exists {} {}", owner_id, dir_row); // temp: not correct, add calculate file
+            eLog("[Dfs] File already exists {} {}", owner_id, dir_row); // temp: not correct, add calculate file
             return dir_row.file_id;
         }
         if (!writeAvailable(dir_row.size)) {
@@ -1397,70 +1394,6 @@ void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &m
                                   messageId);
 }
 
-void DfsController::requestSync() {
-    node->network()->send_message(Utils::current_date_secs(),
-                                  MessageType::DfsLastModified,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
-}
-
-void DfsController::requestDirFileAllActors() {
-    m_unsynchonizedDirs = node->actorIndex()->allActors();
-    eLog("[Dfs] m_unsynchonizedDirs: {}", m_unsynchonizedDirs);
-    if (!m_unsynchonizedDirs.empty()) {
-        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
-    }
-}
-
-void DfsController::sendSync(std::uint64_t last_modified, const std::string &messageId) {
-    DbConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {} WHERE last_modified = {}",
-                                              DfsT::DirsFile::TableName,
-                                              std::to_string(last_modified)));
-    for (auto &row : actors) {
-        sendDirData(ActorId(row["actorId"]), last_modified, messageId);
-    }
-}
-
-void DfsController::requestDirData(const ActorId &owner_id) {
-    node->network()->send_message(owner_id,
-                                  MessageType::DfsDirData,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
-}
-
-void DfsController::sendDirData(const ActorId     &owner_id,
-                                std::uint64_t      last_modified,
-                                const std::string &messageId) {
-    if (!std::filesystem::exists(DfsT::ActorDirFile::actorDbPath(owner_id))) {
-        return;
-    }
-    auto dirRows = DfsT::ActorDirFile::get_dir_rows(owner_id, last_modified);
-    if (!dirRows.has_value())
-        return;
-    if (!dirRows.value().empty()) {
-        node->network()->send_message(std::pair { owner_id, dirRows.value() },
-                                      MessageType::DfsDirData,
-                                      Config::Net::TypeSend::Focused,
-                                      MessageStatus::Response,
-                                      messageId);
-    } else {
-        eraseFirstUnsynchronizedDir();
-    }
-}
-
-void DfsController::addDirData(const ActorId &owner_id, const std::vector<Dfs::DirRow> &dirRows) {
-    eLog("[Dfs] addDirData result: {}", dirRows.size());
-    bool res = DfsT::ActorDirFile::add_dir_rows(owner_id, dirRows);
-
-    for (const auto &row : dirRows) {
-        m_dirRows.push_back({ owner_id, row });
-    }
-
-    process_next_file();
-}
-
 void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
     eLog("[Dfs] Request file: {} / {}", actorId, fileName);
     if (fileName.empty())
@@ -1542,29 +1475,6 @@ bool DfsController::requestFileSegment(const ActorId &owner_id, const Dfs::DirRo
     }
 
     return false;
-}
-
-void DfsController::beginFetchNextFile() {
-    if (m_dirRows.empty())
-        return;
-
-    eLog("begin fetch next file");
-    m_dirRows.erase(m_dirRows.begin());
-    process_next_file();
-}
-
-void DfsController::process_next_file() {
-    while (!m_dirRows.empty()) {
-        auto [owner_id, row] = m_dirRows[0];
-
-        if ((row.type == Dfs::FileType::File || row.type == Dfs::FileType::Collection)
-            && requestFileSegment(owner_id, row)) {
-            eTemp("---------------------- Temp: Dfs: request {} {}", owner_id, row.file_id);
-            break;
-        }
-
-        m_dirRows.erase(m_dirRows.begin());
-    }
 }
 
 void DfsController::requestNextFragment(const Dfs::Packets::RequestFileSegmentMessage &msg) {
@@ -1751,13 +1661,6 @@ float DfsController::percentVerified(std::vector<Dfs::Packets::VerifyFileMessage
     return result;
 }
 
-void DfsController::eraseFirstUnsynchronizedDir() {
-    if (!m_unsynchonizedDirs.empty())
-        m_unsynchonizedDirs.erase(m_unsynchonizedDirs.begin());
-    if (!m_unsynchonizedDirs.empty())
-        requestDirData(ActorId(m_unsynchonizedDirs.at(0)));
-}
-
 void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) {
     std::string pathDelim       = Utils::platformDelimeter();
     std::string actorPath       = fmt::format("{}{}{}{}", DfsB::fsActrRoot, pathDelim, msg.actorId, pathDelim);
@@ -1872,8 +1775,8 @@ void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
     connect(&fw, &FragmentWriter::compliteFile, this, [this](const std::string &fileName) {
         m_compliteFiles.push_back(fileName);
     });
-    connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
-    connect(this, &DfsController::collectionDownloaded, this, &DfsController::beginFetchNextFile);
+    // connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
+    // connect(this, &DfsController::collectionDownloaded, this, &DfsController::beginFetchNextFile);
 
     fw.start();
     fw.wait();

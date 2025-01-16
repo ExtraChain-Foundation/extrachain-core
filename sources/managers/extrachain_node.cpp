@@ -46,7 +46,7 @@
 #include "chat/chat_manager.h"
 
 #ifdef Q_OS_LINUX
-#include <signal.h>
+    #include <signal.h>
 #endif
 
 struct TokensDataRow {
@@ -561,8 +561,8 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         emit readyInitLocalizationFiles();
-        m_dfs->requestDirFileAllActors();
-        m_dfs->requestSync();
+        // m_dfs->requestDirFileAllActors();
+        // m_dfs->requestSync();
     });
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
@@ -578,23 +578,23 @@ void ExtraChainNode::connectSignals() {
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(m_tokenManager,
-        &TokenManager::sendTransactionCreateToken,
-        this,
-        [this](const ActorId& actorId, const Transaction& tx) {
-            QTimer* timer = new QTimer();
-            timer->setSingleShot(true);
-            
-            connect(timer, &QTimer::timeout, this, [=]() {
-                auto actor = m_accountController->currentProfile().get_actor(actorId);
-                if (!actor.has_value()) {
-                    return;
-                }
-                this->sendTransaction(tx, actor.value());
-                timer->deleteLater();
+            &TokenManager::sendTransactionCreateToken,
+            this,
+            [this](const ActorId& actorId, const Transaction& tx) {
+                QTimer* timer = new QTimer();
+                timer->setSingleShot(true);
+
+                connect(timer, &QTimer::timeout, this, [=]() {
+                    auto actor = m_accountController->currentProfile().get_actor(actorId);
+                    if (!actor.has_value()) {
+                        return;
+                    }
+                    this->sendTransaction(tx, actor.value());
+                    timer->deleteLater();
+                });
+
+                timer->start(2000);
             });
-            
-            timer->start(2000);
-        });
 
     connect(m_tokenManager,
             &TokenManager::sendToken,

@@ -38,9 +38,13 @@
 
 #include "blockchain/actor_id.h"
 #include "dfs/dfs_utils.h"
+#include "dfs/dirs_manager.h"
+#include "dfs/download_manager.h"
 #include "dfs/historical_collection.h"
 
 class ExtraChainNode;
+class DirsManager;
+class DownloadManager;
 using FileId                   = std::string;
 using ExpectedDirRow           = std::expected<Dfs::DirRow, Dfs::DfsError>;
 using ExpectedDirHistoricalRow = std::expected<std::pair<Dfs::DirRow, HistoricalCollectionRow>, Dfs::DfsError>;
@@ -68,9 +72,7 @@ private:
 
     std::map<std::pair<ActorId, FileId>, Dfs::DirRow> files;
     std::vector<std::string>                          m_compliteFiles;
-    std::vector<ActorId>                              m_unsynchonizedDirs;
     std::uint64_t                                     m_totalDfsSize = 0;
-    std::vector<std::pair<ActorId, Dfs::DirRow>>      m_dirRows;
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -222,7 +224,17 @@ public:
 
     void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
 
+    const DirsManager &dirs_manager() {
+        return dirs_manager_;
+    };
+    const DownloadManager &download_manager() {
+        return download_manager_;
+    }
+
 private:
+    DirsManager     dirs_manager_;
+    DownloadManager download_manager_;
+
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
                                                       DbRow                        row,
@@ -241,7 +253,6 @@ private:
                                   std::uint64_t                      offset,
                                   std::uint64_t                      fragmentSize);
     std::string   extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
-    void          eraseFirstUnsynchronizedDir();
     void          removeRowFromDB(const DfsP::RemoveFileMessage &msg);
     bool          requestFileSegment(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     void          updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
@@ -253,16 +264,8 @@ public:
     void        sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
                                     const std::string                     &messageId,
                                     BigNumber                              dfsCount) const;
-    void        requestSync();
-    void        requestDirFileAllActors();
-    void        sendSync(std::uint64_t last_modified, const std::string &messageId);
-    void        requestDirData(const ActorId &owner_id);
-    void        sendDirData(const ActorId &owner_id, std::uint64_t last_modified, const std::string &messageId);
-    void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
     void        requestFile(const ActorId &actorId, const std::string &fileName);
     void        sendFile(const ActorId &owner_id, const std::string &file_id, const std::string &message_id = "");
-    void        beginFetchNextFile();
-    void        process_next_file();
     void        requestNextFragment(const DfsP::RequestFileSegmentMessage &msg);
     std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
     std::string sendFragment(const DfsP::RequestFileSegmentMessage &msg, const std::string &messageId);

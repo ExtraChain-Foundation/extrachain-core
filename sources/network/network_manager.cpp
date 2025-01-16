@@ -835,38 +835,38 @@ void NetworkManager::messageReceived(const std::string &message,
     case MessageType::ActorCount:
         break;
 
-    case MessageType::DfsDirData: {
-        if (status == MessageStatus::Request) {
-            auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
-            if (!dir_actor_id_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
-                break;
-            }
-            node->dfs()->sendDirData(dir_actor_id_result.value(), 0, messageId);
-        } else if (status == MessageStatus::Response) {
-            auto dir_data_result =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
-            if (!dir_data_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for directory data in {} state",
-                         type,
-                         status);
-                break;
-            }
-            const auto &[owner_id, dir_rows] = dir_data_result.value();
-            node->dfs()->addDirData(owner_id, dir_rows);
-        }
-        break;
-    }
+        // case MessageType::DfsDirData: {
+        //     if (status == MessageStatus::Request) {
+        //         auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
+        //         if (!dir_actor_id_result.has_value()) {
+        //             eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type,
+        //             status); break;
+        //         }
+        //         node->dfs()->sendDirData(dir_actor_id_result.value(), 0, messageId);
+        //     } else if (status == MessageStatus::Response) {
+        //         auto dir_data_result =
+        //             MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+        //         if (!dir_data_result.has_value()) {
+        //             eWarning("[NetworkManager] {} deserialization failed for directory data in {} state",
+        //                      type,
+        //                      status);
+        //             break;
+        //         }
+        //         const auto &[owner_id, dir_rows] = dir_data_result.value();
+        //         node->dfs()->addDirData(owner_id, dir_rows);
+        //     }
+        //     break;
+        // }
 
-    case MessageType::DfsLastModified: {
-        auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
-        if (!last_modified_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for last modified", type);
-            break;
-        }
-        node->dfs()->sendSync(last_modified_result.value(), messageId);
-        break;
-    }
+        // case MessageType::DfsLastModified: {
+        //     auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
+        //     if (!last_modified_result.has_value()) {
+        //         eWarning("[NetworkManager] {} deserialization failed for last modified", type);
+        //         break;
+        //     }
+        //     node->dfs()->sendSync(last_modified_result.value(), messageId);
+        //     break;
+        // }
 
     case MessageType::DfsAddFile: {
         auto dfs_add_result = MessagePack::deserialize<std::pair<ActorId, Dfs::DirRow>>(serialized);
