@@ -45,6 +45,10 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 
+#ifdef Q_OS_LINUX
+#include <signal.h>
+#endif
+
 struct TokensDataRow {
     TokenId        token_id;
     std::string    name;
@@ -93,6 +97,10 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     Logger::instance().set_debug(true);
+
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_DFL);
+#endif
 }
 
 void ExtraChainNode::process() {
