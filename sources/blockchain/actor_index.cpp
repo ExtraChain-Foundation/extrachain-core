@@ -18,8 +18,6 @@
  */
 
 #include "blockchain/actor_index.h"
-
-#include "dfs/dfs_controller.h"
 #include "network/network_manager.h"
 
 ActorId ActorIndex::firstId() {
@@ -150,29 +148,6 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     }
 }
 
-int ActorIndex::handleNewActor(Actor<KeyPublic> actor) {
-    switch (addActor(actor)) {
-    case 0: {
-        eLog("[ActorIndex] New actor {} is successfully saved", actor);
-        emit newActorSaved(actor.id());
-        return Errors::FILE_NOT_EXISTS;
-    }
-    case Errors::FILE_ALREADY_EXISTS: {
-        eLog("[ActorIndex] New actor {} can't be added: it is already in storage", actor);
-        return Errors::FILE_ALREADY_EXISTS;
-    }
-    case Errors::FILE_IS_NOT_OPENED: {
-        eWarning("[ActorIndex] Error: new actor {} is not saved", actor);
-        return Errors::FILE_IS_NOT_OPENED;
-    }
-    default: {
-        eWarning("[ActorIndex] Error: unexpected return type");
-        return Errors::UNDEFINED;
-    }
-    }
-    return Errors::UNDEFINED;
-}
-
 void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
     for (const auto &actor : actors)
         getActor(actor);
@@ -196,7 +171,7 @@ std::string ActorIndex::getFolderPath() const {
 }
 
 QString ActorIndex::buildFilePath(const ActorId &id) const {
-    QByteArray Id = id.toQByteArray();
+    QByteArray Id = id.toQByteArray(); // id.to_string - std::string
 
     QByteArray section      = Id.right(SECTION_NAME_SIZE);
     QString    pathToFolder = QString::fromStdString(folderPath) + section;
@@ -232,29 +207,25 @@ std::size_t ActorIndex::getRecords() const {
     return records;
 }
 
-int ActorIndex::add(const ActorId &id, const QByteArray &data) {
-    // if (id <= 1000)
-    //     eFatal("Try to add actor with id {}", id);
-
+std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QByteArray &data) {
     QString path = buildFilePath(id);
     QFile   file(path);
-    eLog("[ActorIndex] Saving the file: {}", path);
 
     if (file.exists()) {
-        eLog("[ActorIndex] Can't save the file {} (file already exist)", path);
-        return Errors::FILE_ALREADY_EXISTS;
+        eLog("[ActorIndex] Can't save file {}: already exist", path);
+        return std::unexpected(ActorSaveError::AlreadyExists);
     }
 
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(data);
-        file.flush();
-        file.close();
-
-        return 0;
+    if (!file.open(QIODevice::WriteOnly)) {
+        eLog("[ActorIndex] Can't save file {}: not opened", path);
+        return std::unexpected(ActorSaveError::NotOpened);
     }
 
-    eLog("[ActorIndex] Can't save the file {} (file is not opened)", path);
-    return Errors::FILE_IS_NOT_OPENED;
+    eLog("[ActorIndex] Saving the file: {}", path);
+    file.write(data);
+    file.flush();
+    file.close();
+    return {};
 }
 
 void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
@@ -281,27 +252,42 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
     return data;
 }
 
-int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
-    int  result  = this->add(actor.id(), actor.toJson());
-    auto actorId = actor.id().to_string();
+std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyPublic> &actor) {
+    auto result = this->save_actor(actor);
+    node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::Broadcast);
+    return result;
+}
 
-    if (result != Errors::FILE_ALREADY_EXISTS && result != Errors::FILE_IS_NOT_OPENED) {
-        this->records++;
-        DbConnector db(folderPath + "actors");
-        db.open();
-        bool dbInsert = db.insert(Config::DataStorage::actorsTable,
-                                  { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
-        if (!dbInsert)
-            eFatal("db actor insert error");
+std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {
+    auto result = this->add(actor.id(), actor.toJson());
 
-        node->dfs()->initializeActor(actor.id());
-
-        eLog("[ActorIndex] Actor {} was added", actor.id());
-        node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::AllParents);
-        emit newActorSaved(actor.id());
+    if (!result.has_value()) {
+        return std::unexpected(result.error());
     }
 
-    return result;
+    bool res = save_actor_index(actor);
+    if (!res) {
+        return std::unexpected(ActorSaveError::Undefined);
+    }
+
+    emit newActorSaved(actor.id());
+    return {};
+}
+
+bool ActorIndex::save_actor_index(const Actor<KeyPublic> &actor) {
+    this->records++;
+
+    DbConnector db(folderPath + "actors");
+    if (!db.open()) {
+        return false;
+    }
+
+    bool dbInsert = db.insert(Config::DataStorage::actorsTable,
+                              { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
+    if (!dbInsert)
+        eFatal("db actor insert error");
+
+    return true;
 }
 
 std::vector<ActorId> ActorIndex::allActors() {

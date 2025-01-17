@@ -785,9 +785,9 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for new actor", type);
             return;
         }
-        auto actor_handling_result = node->actorIndex()->handleNewActor(new_actor_result.value());
-        if (actor_handling_result == Errors::FILE_NOT_EXISTS) {
-            emit accrual(new_actor_result.value().id());
+        auto actor_handling_result = node->actorIndex()->save_actor(new_actor_result.value());
+        if (actor_handling_result.has_value()) {
+            sendBrodcastMessageFurther(package_data);
         }
         break;
     }
@@ -806,7 +806,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 eWarning("[NetworkManager] {} deserialization failed for Actor in {} state", type, status);
                 break;
             }
-            node->actorIndex()->handleNewActor(actor_result.value());
+            node->actorIndex()->save_actor(actor_result.value());
         }
         break;
     }

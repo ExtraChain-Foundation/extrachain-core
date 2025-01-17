@@ -304,7 +304,7 @@ public:
 
         auto serialized          = message.serialize();
         auto serialized_for_sign = message.serializeForSign();
-        auto sign_result         = mainActor.key().sign(serialized_for_sign);
+        auto sign_result         = mainActor.key().sign(ByteArray(serialized_for_sign).toBytes());
         if (!sign_result.has_value()) {
             return "";
         }

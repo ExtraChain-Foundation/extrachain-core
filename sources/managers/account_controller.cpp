@@ -42,7 +42,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     auto profile = PrivateProfile::create(actor, hash);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
-    node->actorIndex()->addActor(actor.to_public());
+    node->actorIndex()->store_new_actor(actor.to_public());
     addToProfileList(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
@@ -62,7 +62,7 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, c
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     profile.add_wallet(actor);
     profile.rename_wallet(actor.id(), walletName);
-    node->actorIndex()->addActor(actor.to_public());
+    node->actorIndex()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -75,7 +75,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
         actor.create(ActorType::Service);
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     profile.add_wallet(actor);
-    node->actorIndex()->addActor(actor.to_public());
+    node->actorIndex()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -84,10 +84,10 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
-        node->actorIndex()->addActor(actor.to_public());
+        node->actorIndex()->store_new_actor(actor.to_public());
     }
     for (const auto &actor : profile.imports()) {
-        node->actorIndex()->addActor(actor.to_public());
+        node->actorIndex()->store_new_actor(actor.to_public());
     }
 
     addToProfileList(actor.id());
@@ -101,7 +101,7 @@ void AccountController::renameWallet(const ActorId     &profileActor,
     profile.rename_wallet(actorId, walletName);
 }
 
-bool AccountController::load(const std::string &hash) {
+bool AccountController::load(const std::string &hash) { // if (hash.empty()) { eFatal("Incorrect profile loading");
     auto profiles = profilesList();
 
     for (auto &actorId : profiles) {
@@ -110,7 +110,7 @@ bool AccountController::load(const std::string &hash) {
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
                 if (node->actorIndex()->getById(actor.id()).isEmpty()) {
-                    node->actorIndex()->addActor(actor.to_public());
+                    node->actorIndex()->store_new_actor(actor.to_public());
                 }
             }
 

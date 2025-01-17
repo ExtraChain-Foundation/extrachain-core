@@ -29,12 +29,35 @@
 
 DirsManager::DirsManager(ExtraChainNode* node)
     : node(node) {
+    // create dfs folder
+    std::filesystem::create_directories(DfsB::fsActrRoot);
 
     // basic creation of dirs file
     bool dirs_result = Dfs::DirsFile::create_file();
     if (!dirs_result) {
         eFatal("[DirsManager] Can't create basic .dirs file");
     }
+}
+
+void DirsManager::initialize_actor_folder(const ActorId& actorId) {
+    std::string path_delim = Utils::platformDelimeter();
+    std::filesystem::create_directories(DfsB::fsActrRoot + path_delim + actorId.to_string());
+    DbConnector dir_file = DfsT::ActorDirFile::get_actor_dir_file(actorId);
+    dir_file.query(DfsT::ActorDirFile::CreateTableQuery);
+    // requestDirData(actorId);
+}
+
+void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
+    auto max_last_modified = Dfs::DirsFile::max_last_modified();
+    if (!max_last_modified.has_value()) {
+        return;
+    }
+    if (last_modified <= max_last_modified.value()) {
+        return;
+    }
+
+    auto dirs_row = Dfs::DirsFile::DirsRow { .actor_id = actor_id, .last_modified = last_modified };
+    Dfs::DirsFile::insert(dirs_row);
 }
 
 std::expected<void, DirsError> DirsManager::load_initial_state() {

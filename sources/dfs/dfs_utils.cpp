@@ -298,10 +298,11 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
     return collection_template;
 }
 
-std::expected<DbConnector, bool> Dfs::DirsFile::database() {
+std::expected<DbConnector, Dfs::DirsFile::DirsError> Dfs::DirsFile::database() {
     DbConnector dirs_file(Dfs::Basic::dirsPath);
-    if (dirs_file.open()) {
-        return std::unexpected(false);
+    if (!dirs_file.open()) {
+        eCritical("[DirsFile] Can't open dirs file");
+        return std::unexpected(DirsError::DirsNotOpen);
     }
 
     return dirs_file;
@@ -313,7 +314,7 @@ bool Dfs::DirsFile::create_file() {
     if (!db.has_value()) {
         return false;
     }
-    if (db->create_table(Dfs::Tables::DirsFile::CreateTableQuery)) {
+    if (!db->create_table(Dfs::Tables::DirsFile::CreateTableQuery)) {
         return false;
     }
     db->close();
@@ -321,13 +322,20 @@ bool Dfs::DirsFile::create_file() {
     return true;
 }
 
-std::vector<Dfs::DirsFile::DirsRow> Dfs::DirsFile::load_all() {
+std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs::DirsFile::load_all() {
+    return load_from_modified(0);
+}
+
+std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs::DirsFile::load_from_modified(
+    uint64_t last_modified) {
     auto db = database();
     if (!db.has_value()) {
         return {};
     }
 
-    auto                 all_dbrows = db->select_all(Dfs::Tables::DirsFile::TableName);
+    auto query =
+        fmt::format("SELECT FROM {} WHERE last_modified > {}", Dfs::Tables::DirsFile::TableName, last_modified);
+    auto                 all_dbrows = db->select(query);
     std::vector<DirsRow> dirs_rows;
     dirs_rows.reserve(all_dbrows.size());
 
@@ -342,7 +350,57 @@ std::vector<Dfs::DirsFile::DirsRow> Dfs::DirsFile::load_all() {
     return dirs_rows;
 }
 
-std::vector<Dfs::DirsFile::DirsRow> Dfs::DirsFile::load_from_modified(uint64_t last_modified) {
+bool Dfs::DirsFile::insert(const DirsRow &dirs_row) {
+    auto db = database();
+    if (!db.has_value()) {
+        return false;
+    }
+
+    auto dbrow = Utils::to_dbrow(dirs_row);
+    bool res   = db->replace(Dfs::Tables::DirsFile::TableName, dbrow);
+
+    if (!res) {
+        eWarning("[DirsManager] Can't update dirs file");
+    }
+
+    return res;
+}
+
+void Dfs::DirsFile::insert_vector(const std::vector<DirsRow> &dirs_rows) {
+    auto db = database();
+    if (!db.has_value()) {
+        return;
+    }
+
+    // begin transaction
+    for (const auto &dirs_row : dirs_rows) {
+        auto dbrow = Utils::to_dbrow(dirs_row);
+        bool res   = db->insert(Dfs::Tables::DirsFile::TableName, dbrow);
+    }
+    // end transaction
+}
+
+std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_modified() {
+    auto db = database();
+    if (!db.has_value()) {
+        return std::unexpected(Dfs::DirsFile::DirsError::DirsNotOpen);
+    }
+
+    auto query      = fmt::format("SELECT MAX(last_modified) FROM {}", Dfs::Tables::DirsFile::TableName);
+    auto all_dbrows = db->select(query);
+    if (all_dbrows.empty()) {
+        return 0;
+    }
+    if (all_dbrows.front().empty()) {
+        return 0;
+    }
+
+    try {
+        std::uint64_t max_last = std::stoull(all_dbrows.front().at("MAX(last_modified)"));
+        return max_last;
+    } catch (const std::exception &) {
+        return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
+    }
 }
 
 namespace magic {

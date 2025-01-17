@@ -39,6 +39,9 @@ class DirsManager {
 public:
     DirsManager(ExtraChainNode* node);
 
+    void initialize_actor_folder(const ActorId& actorId);
+    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
+
     // Load initial state from .dirs and .dir files
     std::expected<void, DirsError> load_initial_state();
 

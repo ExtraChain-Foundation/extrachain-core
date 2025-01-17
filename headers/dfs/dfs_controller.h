@@ -78,8 +78,6 @@ public:
     explicit DfsController(ExtraChainNode *node);
     ~DfsController();
 
-    void initializeActor(const ActorId &actorId);
-
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,
@@ -221,8 +219,6 @@ public:
                                  std::string         &actor,
                                  std::string         &nameFile,
                                  DfsP::ReferenceData &referenceData);
-
-    void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
 
     const DirsManager &dirs_manager() {
         return dirs_manager_;

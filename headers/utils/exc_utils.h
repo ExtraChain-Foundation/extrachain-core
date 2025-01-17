@@ -343,22 +343,6 @@ namespace Config {
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 // FORMAT_ENUM(Config::Net::TypeSend)
 
-namespace Errors {
-    // IO
-    static const int FILE_NOT_EXISTS     = 0;
-    static const int FILE_ALREADY_EXISTS = 101;
-    static const int FILE_IS_NOT_OPENED  = 102;
-    static const int UNDEFINED           = 103;
-
-    // Blocks
-    // static const int BLOCK_IS_NOT_VALID = 201;
-    // static const int BLOCKS_CANT_MERGE = 202;
-    // static const int BLOCKS_ARE_EQUAL = 203;
-
-    // Mem and Block index
-    // static const int NO_BLOCKS = 401;
-} // namespace Errors
-
 namespace Serialization {
     EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
     EXTRACHAIN_EXPORT std::vector<std::string> deserialize(const std::string &serialized);

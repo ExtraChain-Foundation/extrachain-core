@@ -34,25 +34,18 @@ DfsController::DfsController(ExtraChainNode *node)
     , node(node)
     , dirs_manager_(DirsManager(node))
     , download_manager_(DownloadManager(node)) {
-    // create dfs folder
-    std::filesystem::create_directories(DfsB::fsActrRoot);
-
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
+
+    connect(node->actorIndex(), &ActorIndex::newActorSaved, [this](ActorId actor_id) {
+        dirs_manager_.initialize_actor_folder(actor_id);
+    });
 }
 
 DfsController::~DfsController() {
     eInfo("DfsController::~DfsController()");
-}
-
-void DfsController::initializeActor(const ActorId &actorId) {
-    std::string pathDelim = Utils::platformDelimeter();
-    std::filesystem::create_directories(DfsB::fsActrRoot + pathDelim + actorId.to_string());
-    DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(actorId);
-    actrDirFile.query(DfsT::ActorDirFile::CreateTableQuery);
-    // requestDirData(actorId);
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
@@ -232,7 +225,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     fs.initLocalFile(file_size);
     fs.initHistoricalChain();
 
-    updateDirsLastModified(owner_id, dir_row.last_modified);
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
     insertToFiles(dir_row);
     emit added(owner_id, dir_row);
@@ -367,23 +360,25 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
 
-    Dfs::DirRow dir_row     = { .actor_id      = author_id,
-                                .file_id       = file_id,
-                                .prev_file_id  = "",
-                                .hash          = collection_hash,
-                                .folder        = Dfs::Basic::TEMPLATE_COLLECTION,
-                                .name          = visual_name,
-                                .size          = collection_size,
-                                .created       = 0,
-                                .last_modified = 0,
-                                .type          = Dfs::FileType::Collection,
-                                .encryption    = data_security,
-                                .state         = Dfs::FileState::Ready };
-    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
+    Dfs::DirRow dir_row = { .actor_id      = author_id,
+                            .file_id       = file_id,
+                            .prev_file_id  = "",
+                            .hash          = collection_hash,
+                            .folder        = Dfs::Basic::TEMPLATE_COLLECTION,
+                            .name          = visual_name,
+                            .size          = collection_size,
+                            .created       = 0,
+                            .last_modified = 0,
+                            .type          = Dfs::FileType::Collection,
+                            .encryption    = data_security,
+                            .state         = Dfs::FileState::Ready };
 
+    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
     if (!add_dir_row_result) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
+
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
     insertToFiles(dir_row);
     emit added(owner_id, dir_row);
@@ -494,6 +489,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     }
     dir_row.sign = sign.value();
     Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row);
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_row.value()),
                                   MessageType::DfsCollectionRowChange,
@@ -861,11 +857,7 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
     }
     actrDirFile.close();
 
-    DbConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-    dirsFile.replace(DfsT::DirsFile::TableName,
-                     { { "actorId", dir_row.actor_id.to_string() },
-                       { "last_modified", std::to_string(dir_row.last_modified) } });
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
     if (load_bytes && dir_row.type == Dfs::FileType::File) {
         if (dir_row.size >= m_bytesLimit - m_sizeTaken) {
@@ -1328,15 +1320,6 @@ void DfsController::dataFromReferenceString(const std::string           &referen
     allowData.erase(0, allowData.find(":") + 2);
     allowData.erase(allowData.size() - 2, allowData.size() - 1);
     referenceData = Dfs::Packets::ReferenceData(keyData, allowData);
-}
-
-// TODO: move to utils
-void DfsController::updateDirsLastModified(const ActorId &actorId, uint64_t last_modified) {
-    DbConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-    dirsFile.replace(DfsT::DirsFile::TableName,
-                     { { "actorId", actorId.to_string() }, { "last_modified", std::to_string(last_modified) } });
-    dirsFile.close();
 }
 
 std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget,
@@ -1861,7 +1844,7 @@ void DfsController::loadVPNLocalizationFiles() {
     DbConnector dirsFile(DfsB::dirsPath);
     dirsFile.open();
 
-    auto actors = dirsFile.select(fmt::format("SELECT actorId FROM {}", DfsT::DirsFile::TableName));
+    auto actors = dirsFile.select(fmt::format("SELECT actor_id FROM {}", DfsT::DirsFile::TableName));
     for (const auto &row : actors) {
         auto        actorId     = ActorId(row.begin()->second);
         DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(actorId);
