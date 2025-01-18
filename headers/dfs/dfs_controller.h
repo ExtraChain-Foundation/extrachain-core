@@ -227,6 +227,10 @@ public:
         return download_manager_;
     }
 
+    void sync(const std::string &identifier) {
+        dirs_manager_.sync(identifier);
+    }
+
 private:
     DirsManager     dirs_manager_;
     DownloadManager download_manager_;

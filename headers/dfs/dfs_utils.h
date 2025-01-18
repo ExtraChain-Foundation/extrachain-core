@@ -577,9 +577,9 @@ namespace Dfs {
         std::expected<DbConnector, DirsError> database();
         bool                                  create_file();
 
-        std::expected<uint64_t, Dfs::DirsFile::DirsError> max_last_modified();
-        std::expected<std::vector<DirsRow>, DirsError>    load_all();
-        std::expected<std::vector<DirsRow>, DirsError>    load_from_modified(std::uint64_t last_modified);
+        std::expected<std::uint64_t, Dfs::DirsFile::DirsError> max_last_modified();
+        std::expected<std::vector<DirsRow>, DirsError>         load_all();
+        std::expected<std::vector<DirsRow>, DirsError>         load_from_modified(std::uint64_t last_modified);
 
         bool insert(const DirsRow& dirs_row);
         void insert_vector(const std::vector<DirsRow>& dirs_rows);

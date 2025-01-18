@@ -42,8 +42,8 @@ enum class MessageType {
     BlockchainLastSaved    = 38,
     BlockchainAnarchy      = 39,
 
-    DfsDirData            = 50,
-    DfsLastModified       = 51,
+    DfsDirData = 50,
+    // DfsLastModified       = 51,
     DfsAddFile            = 52,
     DfsRequestFile        = 53,
     DfsRequestFileSegment = 54,
@@ -64,12 +64,10 @@ enum class MessageType {
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
-    DfsSyncSearchFile      = 74, // запрашиваем пока что у соседей
-    DfsSyncSearchResult    = 75, // есть или нет
-    DfsSyncDirsRequest     = 76,
-    DfsSyncDirsResponce    = 77,
-    DfsSyncDirRows         = 78,
-    DfsSyncDirRowsResponce = 79,
+    DfsSyncSearchFile   = 74, // запрашиваем пока что у соседей
+    DfsSyncSearchResult = 75, // есть или нет
+    DfsSyncDirs         = 76,
+    DfsSyncDirsRows     = 77,
 
     FragmentDataInfo      = 90,
     FragmentsDataListInfo = 91,

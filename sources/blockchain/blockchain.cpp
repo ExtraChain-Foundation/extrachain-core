@@ -88,16 +88,27 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
     return blockIndex.getLastTxByHash(hash, token);
 }
 
-void Blockchain::sync(const BigNumber &from) {
+void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
     if (fromBlock < 0)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
-    node->network()->send_message(fromBlock,
-                                  MessageType::BlockchainSync,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
+
+    if (identifier.empty()) {
+        eWarning("[Blockchain] all parent sync");
+        node->network()->send_message(fromBlock,
+                                      MessageType::BlockchainSync,
+                                      Config::Net::TypeSend::AllParents,
+                                      MessageStatus::Request);
+    } else {
+        node->network()->send_message(fromBlock,
+                                      MessageType::BlockchainSync,
+                                      Config::Net::TypeSend::Focused,
+                                      MessageStatus::Request,
+                                      "",
+                                      identifier);
+    }
 }
 
 void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {

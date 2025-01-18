@@ -603,7 +603,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
         return;
     }
 
-    eLog("[Dfs] Responce for request collection: {} / {}", owner_id, file_id);
+    eLog("[Dfs] Response for request collection: {} / {}", owner_id, file_id);
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_rows.value()),
                                   MessageType::DfsCollectionHistory,
                                   Config::Net::TypeSend::Focused,
@@ -759,7 +759,10 @@ void DfsController::network_change_collection(const ActorId                 &own
         return;
     }
     chain->insert_row_to_database(row);
-    chain->change_collection(row);
+    auto res = chain->change_collection(row);
+    if (res.has_value()) {
+        dirs_manager_.update_dirs(owner_id, row.timestamp);
+    }
 
     node->network()->send_message(std::make_tuple(owner_id, file_id, row),
                                   MessageType::DfsCollectionRowChange,

@@ -28,6 +28,7 @@
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
+#include "dfs/dirs_manager.h"
 
 #include <filesystem>
 #include <fstream>
@@ -448,6 +449,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
 void NetworkManager::saveToCache(const std::string    &serialized_message,
                                  Config::Net::TypeSend typeSend,
                                  const std::string    &receiver_identifier) {
+    if (typeSend != Config::Net::TypeSend::Broadcast) {
+        return;
+    }
+
     std::ofstream file;
     file.open(NetworkCacheFile, std::ios_base::out | std::ios_base::app | std::ios_base::binary);
     if (!file.is_open()) {
@@ -462,6 +467,8 @@ void NetworkManager::saveToCache(const std::string    &serialized_message,
             return "Except";
         case Config::Net::TypeSend::Focused:
             return "Focused";
+        case Config::Net::TypeSend::Broadcast:
+            return "Broadcast";
         }
         return "";
     };
@@ -511,6 +518,8 @@ void NetworkManager::sendFromCache() {
             return Config::Net::TypeSend::Except;
         else if (typeSendStr == "Focused")
             return Config::Net::TypeSend::Focused;
+        else if (typeSendStr == "Broadcast")
+            return Config::Net::TypeSend::Broadcast;
         return Config::Net::TypeSend::AllParents;
     };
 
@@ -858,15 +867,33 @@ void NetworkManager::messageReceived(const std::string &message,
         //     break;
         // }
 
-        // case MessageType::DfsLastModified: {
-        //     auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
-        //     if (!last_modified_result.has_value()) {
-        //         eWarning("[NetworkManager] {} deserialization failed for last modified", type);
-        //         break;
-        //     }
-        //     node->dfs()->sendSync(last_modified_result.value(), messageId);
-        //     break;
-        // }
+    case MessageType::DfsSyncDirs: {
+        if (status == MessageStatus::Request) {
+            node->dfs()->dirs_manager().network_request_sync(messageId);
+        } else if (status == MessageStatus::Response) {
+            auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
+
+            if (!last_modified_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for last modified", type);
+                break;
+            }
+
+            node->dfs()->dirs_manager().network_response_sync(last_modified_result.value(), identifier);
+        }
+
+        break;
+    }
+
+    case MessageType::DfsSyncDirsRows: {
+        auto dirs_rows_result = MessagePack::deserialize<std::vector<Dfs::DirsFile::DirsRow>>(serialized);
+        if (!dirs_rows_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
+            break;
+        }
+        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value());
+
+        break;
+    }
 
     case MessageType::DfsAddFile: {
         auto dfs_add_result = MessagePack::deserialize<std::pair<ActorId, Dfs::DirRow>>(serialized);

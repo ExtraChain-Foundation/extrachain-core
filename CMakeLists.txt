@@ -86,6 +86,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/transaction_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/metatypes.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/extrachain_global.h
@@ -143,6 +144,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/connections_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp

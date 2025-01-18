@@ -334,7 +334,7 @@ std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs
     }
 
     auto query =
-        fmt::format("SELECT FROM {} WHERE last_modified > {}", Dfs::Tables::DirsFile::TableName, last_modified);
+        fmt::format("SELECT * FROM {} WHERE last_modified > {}", Dfs::Tables::DirsFile::TableName, last_modified);
     auto                 all_dbrows = db->select(query);
     std::vector<DirsRow> dirs_rows;
     dirs_rows.reserve(all_dbrows.size());
@@ -380,7 +380,7 @@ void Dfs::DirsFile::insert_vector(const std::vector<DirsRow> &dirs_rows) {
     // end transaction
 }
 
-std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_modified() {
+std::expected<std::uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_modified() {
     auto db = database();
     if (!db.has_value()) {
         return std::unexpected(Dfs::DirsFile::DirsError::DirsNotOpen);

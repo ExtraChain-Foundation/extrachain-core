@@ -565,14 +565,19 @@ void ExtraChainNode::connectSignals() {
         // m_dfs->requestSync();
     });
 
+    connect(m_networkManager,
+            &NetworkManager::newSocketActivatedWithParams,
+            [this](const std::string ip, const std::string identifier) {
+                eLog("[WS] Start sync...");
+                m_blockchain->sync(BigNumber(), identifier);
+                m_dfs->sync(identifier);
+            });
+
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
     });
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendCountRequestMsg(m_accountController->mainActor().id());
-    });
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        m_blockchain->sync();
     });
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
@@ -584,7 +589,7 @@ void ExtraChainNode::connectSignals() {
                 QTimer* timer = new QTimer();
                 timer->setSingleShot(true);
 
-                connect(timer, &QTimer::timeout, this, [=]() {
+                connect(timer, &QTimer::timeout, this, [=, this]() {
                     auto actor = m_accountController->currentProfile().get_actor(actorId);
                     if (!actor.has_value()) {
                         return;

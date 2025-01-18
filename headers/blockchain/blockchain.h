@@ -70,7 +70,7 @@ public:
                                                             const bool       makeRequestBlock = false);
     std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
-    void sync(const BigNumber &from = BigNumber());
+    void sync(const BigNumber &from = BigNumber(), const std::string &identifier = "");
     void lastSavedRequest();
 
 private:
