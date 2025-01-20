@@ -257,7 +257,9 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
-    void addBlockFromNetwork(const BlockVariant &block, const std::string &messageId);
+    void addBlockFromNetwork(const BlockVariant &block,
+                             const std::string  &messageId,
+                             const std::string  &identifier);
     void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
 
     /**
@@ -275,7 +277,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const std::string &messageId);
-    void syncResponse(const BigNumber fromBlock, const std::string &messageId);
+    void addBlockNetwork(const BlockVariant &block, const std::string &messageId, const std::string &identifier);
+    void syncResponse(const BigNumber fromBlock, const std::string &identfier);
     void process();
 };

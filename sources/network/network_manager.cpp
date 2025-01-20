@@ -595,17 +595,17 @@ void NetworkManager::messageReceived(const std::string &message,
 
     MessageBody message_body = message_body_expected.value();
 
-    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
-    if (sign_actor) {
-        if (!sign_actor.value().key().verify(ByteArray(message_body.serializeForSign()).toBytes(),
-                                             ByteArray(sign.data()).toArray<crypto_sign_BYTES>())) {
-            // eWarning("Sign package is invalid!");
-            // return;
-        }
-    } else {
-        // TODO: what if no actor?
-        //  return;
-    }
+    // auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
+    // if (sign_actor) {
+    //     if (!sign_actor.value().key().verify(ByteArray(message_body.serializeForSign()).toBytes(),
+    //                                          ByteArray(sign.data()).toArray<crypto_sign_BYTES>())) {
+    //         // eWarning("Sign package is invalid!");
+    //         // return;
+    //     }
+    // } else {
+    //     // TODO: what if no actor?
+    //     //  return;
+    // }
 
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
@@ -890,7 +890,31 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
         }
-        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value());
+        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), identifier);
+
+        break;
+    }
+
+    case MessageType::DfsSyncDirRows: {
+        if (status == MessageStatus::Request) {
+            auto dirs_row_result = MessagePack::deserialize<Dfs::DirsFile::DirsRow>(serialized);
+            if (!dirs_row_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for dirs row", type);
+                break;
+            }
+
+            node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), messageId);
+        } else if (status == MessageStatus::Response) {
+            auto dirs_row_result =
+                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+            if (!dirs_row_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
+                break;
+            }
+            auto &[owner_id, dir_rows] = dirs_row_result.value();
+
+            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, messageId);
+        }
 
         break;
     }
@@ -901,7 +925,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
             break;
         }
-        node->dfs()->network_add_file(dfs_add_result->first, dfs_add_result->second, true);
+        // node->dfs()->network_add_file(dfs_add_result->first, dfs_add_result->second, true);
         break;
     }
 
@@ -912,7 +936,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[requesting_actor_id, requested_file_name] = file_request_result.value();
-        node->dfs()->sendFile(requesting_actor_id, requested_file_name, messageId);
+        // node->dfs()->sendFile(requesting_actor_id, requested_file_name, messageId);
         break;
     }
 
@@ -922,7 +946,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for file segment request", type);
             break;
         }
-        emit fetchFragment(segment_request_result.value(), messageId);
+        // emit fetchFragment(segment_request_result.value(), messageId);
         break;
     }
 
@@ -932,7 +956,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for segment message", type);
             break;
         }
-        emit addFragSignal(segment_add_result.value());
+        // emit addFragSignal(segment_add_result.value());
         break;
     }
 
@@ -942,7 +966,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for edit segment", type);
             break;
         }
-        node->dfs()->insertFragment(segment_edit_result.value());
+        // node->dfs()->insertFragment(segment_edit_result.value());
         break;
     }
 
@@ -952,7 +976,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for delete segment", type);
             break;
         }
-        node->dfs()->deleteFragment(segment_delete_result.value());
+        // node->dfs()->deleteFragment(segment_delete_result.value());
         break;
     }
 
@@ -962,7 +986,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for remove file", type);
             break;
         }
-        node->dfs()->removeFile(file_remove_result.value());
+        // node->dfs()->removeFile(file_remove_result.value());
         break;
     }
 
@@ -1080,7 +1104,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!genesis_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(genesis_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId, identifier);
         } else {
             eLog("false genesis block");
         }
@@ -1095,7 +1119,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!new_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(new_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId, identifier);
         }
         break;
     }
@@ -1132,7 +1156,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), messageId);
+        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), identifier);
         break;
     }
 

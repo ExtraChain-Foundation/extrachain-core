@@ -403,6 +403,31 @@ std::expected<std::uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_m
     }
 }
 
+std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::last_modified(const ActorId &actor_id) {
+    auto db = database();
+    if (!db.has_value()) {
+        return std::unexpected(Dfs::DirsFile::DirsError::DirsNotOpen);
+    }
+
+    auto query      = fmt::format("SELECT last_modified FROM {} WHERE actor_id = '{}'",
+                             Dfs::Tables::DirsFile::TableName,
+                             actor_id);
+    auto all_dbrows = db->select(query);
+    if (all_dbrows.empty()) {
+        return 0;
+    }
+    if (all_dbrows.front().empty()) {
+        return 0;
+    }
+
+    try {
+        std::uint64_t max_last = std::stoull(all_dbrows.front().at("last_modified"));
+        return max_last;
+    } catch (const std::exception &) {
+        return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
+    }
+}
+
 namespace magic {
     std::string custom_magic<Dfs::FileId>::read(const Dfs::FileId &value) {
         return value.value();

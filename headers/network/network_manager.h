@@ -131,6 +131,17 @@ struct MessageIdDataReceived {
     qint64      time;
 };
 
+class Responder {
+public:
+    // send
+    // broadcast send
+
+private:
+    std::string     identifier;
+    std::string     message_id;
+    NetworkManager* network_manager;
+};
+
 static const std::string NetworkCacheFile = "tmp/network.cache";
 
 /**

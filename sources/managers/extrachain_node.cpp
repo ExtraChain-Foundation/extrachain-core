@@ -181,7 +181,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         if (!firstBlock.has_value())
             return false;
 
-        m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
+        m_blockchain->addBlockFromNetwork(firstBlock.value(), "", "");
     }
 
     auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
@@ -365,6 +365,8 @@ bool ExtraChainNode::importUser(const std::string& data, const std::string& logi
     if (!imported_user.has_value()) {
         return false;
     }
+
+    // TODO: network id check
 
     m_accountController->import_profile(imported_user.value(), hash);
 

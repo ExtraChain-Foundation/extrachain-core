@@ -64,10 +64,17 @@ enum class MessageType {
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
-    DfsSyncSearchFile   = 74, // запрашиваем пока что у соседей
-    DfsSyncSearchResult = 75, // есть или нет
-    DfsSyncDirs         = 76,
-    DfsSyncDirsRows     = 77,
+    // DfsSyncSearchFile   = 74, // parent for now
+    // DfsSyncSearchResult = 75, // true or false
+    DfsSyncDirs     = 76,
+    DfsSyncDirsRows = 77,
+    DfsSyncDirRows  = 78,
+
+    DfsFileState = 80,
+    // DfsFileWant = 81,
+    DfsFileFragment = 82,
+    // DfsFileThanks   = 83,
+    DfsFileRemove = 84,
 
     FragmentDataInfo      = 90,
     FragmentsDataListInfo = 91,

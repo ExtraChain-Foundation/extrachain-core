@@ -761,6 +761,7 @@ void DfsController::network_change_collection(const ActorId                 &own
     chain->insert_row_to_database(row);
     auto res = chain->change_collection(row);
     if (res.has_value()) {
+        // dir time update
         dirs_manager_.update_dirs(owner_id, row.timestamp);
     }
 

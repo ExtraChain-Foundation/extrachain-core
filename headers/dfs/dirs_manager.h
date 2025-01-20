@@ -1,0 +1,60 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#pragma once
+
+#include <map>
+#include <string>
+#include <expected>
+#include <QObject>
+#include "dfs/dfs_utils.h"
+
+class ExtraChainNode;
+class DownloadManager;
+using DirRow = Dfs::DirRow;
+
+enum class DirsError {
+    FileSystemError,
+    ParseError,
+    DownloadManagerError
+};
+
+class DirsManager {
+public:
+    DirsManager(ExtraChainNode* node);
+
+    void initialize_actor_folder(const ActorId& actorId);
+    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
+
+    void sync(const std::string& identifier) const;
+    void network_request_sync(const std::string& message_id) const;
+    void network_response_sync(std::uint64_t max_last_modified, const std::string& message_id) const;
+
+    void send_from_last_modified(std::uint64_t last_modified, const std::string& message_id) const;
+    void network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
+                                             const std::string&                         identifier) const;
+
+    void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id) const;
+    void network_response_dir_rows(const ActorId &owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& message_id) const;
+
+private:
+    ExtraChainNode* node;
+
+    std::map<std::string, DirRow> files;
+};

@@ -578,6 +578,7 @@ namespace Dfs {
         bool                                  create_file();
 
         std::expected<std::uint64_t, Dfs::DirsFile::DirsError> max_last_modified();
+        std::expected<std::uint64_t, Dfs::DirsFile::DirsError> last_modified(const ActorId& actor_id);
         std::expected<std::vector<DirsRow>, DirsError>         load_all();
         std::expected<std::vector<DirsRow>, DirsError>         load_from_modified(std::uint64_t last_modified);
 
