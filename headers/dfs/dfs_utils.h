@@ -255,6 +255,15 @@ namespace Dfs {
                            sign))
 
     namespace Packets {
+        struct FragmentData {
+            ActorId     owner_id;
+            std::string file_id;
+            // hash
+            // std::vector<uint8_t
+            std::string   data;
+            std::uint64_t offset;
+        };
+
         struct ResponseDfsSize {
             ActorId     actorId;
             std::size_t size;
@@ -487,9 +496,12 @@ namespace Dfs {
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
                                                                                 std::uint64_t  last_modified = 0);
 
+            std::expected<std::string, Dfs::DfsError> last_file_id(const ActorId&     owner_id,
+                                                                   const std::string& file_id);
+
             // TODO: search in dir row: by file type, by name, get folder, ...
 
-            std::expected<std::vector<std::uint8_t>, Utils::FileError> get_file_content(
+            std::expected<std::vector<std::uint8_t>, Utils::ContentError> get_file_content(
                 const ActorId&     actor_id,
                 const std::string& file_id);
 
@@ -501,12 +513,12 @@ namespace Dfs {
                                                                                    const std::string& file_id);
             std::optional<Dfs::CollectionTemplate> get_collection_template_name(const ActorId&     actor_id,
                                                                                 const std::string& template_name);
-            bool add_dir_row(const ActorId& actor_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
+            bool add_dir_row(const ActorId& owner_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
             bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
             std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,
                                                                             const std::string& file_id);
-            bool                             update_file_metadata(const ActorId& actor_id, DirRow& dir_row);
+            bool                             update_file_metadata(const ActorId& ownerr_id, DirRow& dir_row);
         } // namespace ActorDirFile
 
         namespace DirsFile {
@@ -527,7 +539,7 @@ namespace Dfs {
                                                    "signature  TEXT NOT NULL"
                                                    ");";
 
-        static const std::string filesTableLast = "WITH end_files AS ("
+        static const std::string last_file_id_query = "WITH end_files AS ("
             "SELECT f1.file_id, f1.prev_file_id, COUNT(*) OVER() as cnt "
             "FROM " + Dfs::Tables::ActorDirFile::TableName + " f1 "
             "LEFT JOIN " + Dfs::Tables::ActorDirFile::TableName + " f2 ON f1.file_id = f2.prev_file_id "
@@ -580,6 +592,8 @@ namespace Dfs {
         DirRow  dir_row;
     };
     BOOST_DESCRIBE_STRUCT(FileData, (), (owner_id, dir_row))
+
+    void initialize_actor_folder(const ActorId& actor_id);
 } // namespace Dfs
 
 MAKE_CUSTOM_MAGICAL(Dfs::FileId)

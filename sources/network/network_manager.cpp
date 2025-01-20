@@ -918,6 +918,25 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsStoreFile: {
+        auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
+        if (!file_link_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
+            break;
+        }
+
+        node->dfs()->network_store_file(file_link_result->owner_id,
+                                        file_link_result->dir_row,
+                                        Dfs::NetworkStoreFile::Broadcast);
+        sendBrodcastMessageFurther(package_data);
+
+        break;
+    }
+
+    case MessageType::DfsStoreFragment: {
+        break;
+    }
+
     case MessageType::DfsCollectionRequest: {
         auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         if (!db_request_result.has_value()) {

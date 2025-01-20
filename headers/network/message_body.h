@@ -41,28 +41,30 @@ enum class MessageType {
     BlockchainSync         = 37,
     BlockchainLastSaved    = 38,
 
-    RequestDfsSize  = 61,
-    ResponseDfsSize = 62,
-    // DfsState = 63,
-    RequestBlockCount  = 64,
-    ResponseBlockCount = 65,
+    DfsStoreFile = 50,
+    // DfsSyncSearchFile   = 51, // parent for now
+    // DfsSyncSearchResult = 52, // true or false
+    DfsSyncDirs     = 53,
+    DfsSyncDirsRows = 54,
+    DfsSyncDirRows  = 55,
+
+    DfsFileState = 56,
+    // DfsFileWant = 57,
+    DfsStoreFragment = 58,
+    DfsFileFragment  = 59,
+    // DfsFileThanks   = 60,
+    DfsFileRemove = 61,
 
     DfsCollectionRequest   = 70,
     DfsCollectionContent   = 71,
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
-    // DfsSyncSearchFile   = 74, // parent for now
-    // DfsSyncSearchResult = 75, // true or false
-    DfsSyncDirs     = 76,
-    DfsSyncDirsRows = 77,
-    DfsSyncDirRows  = 78,
-
-    DfsFileState = 80,
-    // DfsFileWant = 81,
-    DfsFileFragment = 82,
-    // DfsFileThanks   = 83,
-    DfsFileRemove = 84,
+    RequestDfsSize  = 90,
+    ResponseDfsSize = 91,
+    // DfsState = 92,
+    RequestBlockCount  = 93,
+    ResponseBlockCount = 94,
 
     NewListConnections    = 100,
     GetListConnections    = 101,

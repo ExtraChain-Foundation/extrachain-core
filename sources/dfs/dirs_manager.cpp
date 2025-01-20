@@ -40,15 +40,7 @@ DirsManager::DirsManager(ExtraChainNode* node)
     }
 }
 
-void DirsManager::initialize_actor_folder(const ActorId& actorId) {
-    std::string path_delim = Utils::platformDelimeter();
-    std::filesystem::create_directories(DfsB::fsActrRoot + path_delim + actorId.to_string());
-    DbConnector dir_file = DfsT::ActorDirFile::get_actor_dir_file(actorId);
-    dir_file.query(DfsT::ActorDirFile::CreateTableQuery);
-    // requestDirData(actorId);
-}
-
-void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
+void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) const {
     auto max_last_modified = Dfs::DirsFile::max_last_modified();
     if (!max_last_modified.has_value()) {
         return;
@@ -157,6 +149,11 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
     // TODO: add merge for sync dir file
 
+    Dfs::initialize_actor_folder(owner_id);
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
+
     eTemp("~~~~~~~~~~~~~~~~b {}", res);
+
+    auto max_value = std::ranges::max(dir_rows, {}, &DirRow::last_modified).last_modified;
+    this->update_dirs(owner_id, max_value);
 }

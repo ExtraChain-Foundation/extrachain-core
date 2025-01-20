@@ -32,14 +32,14 @@ std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
         eFatal("Database {} not opened", db.file());
     }
 
-    auto        result       = db.select(Dfs::Tables::filesTableLast);
+    auto        result       = db.select(Dfs::Tables::last_file_id_query);
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
     return lastFileName;
 }
 
-DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &actorId) {
-    DbConnector db(actorDbPath(actorId).string());
+DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &owner_id) {
+    DbConnector db(actorDbPath(owner_id).string());
     db.open();
     return db;
 }
@@ -79,6 +79,19 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
     return dirRows;
 }
 
+std::expected<std::string, Dfs::DfsError> Dfs::Tables::ActorDirFile::last_file_id(const ActorId     &owner_id,
+                                                                                  const std::string &file_id) {
+    auto db = get_actor_dir_file(owner_id);
+    if (!db.is_open()) {
+        eFatal("Database {} not opened", db.file());
+    }
+
+    auto        result       = db.select(Dfs::Tables::last_file_id_query);
+    auto        prev_file_id = result.empty() ? std::optional<DbRow> {} : result[0];
+    std::string last_file_id = prev_file_id ? prev_file_id->at("file_id") : "";
+    return last_file_id;
+}
+
 void Dfs::Tables::ActorDirFile::update_file_state(const ActorId    &actor_id,
                                                   const std::string file_id,
                                                   FileState         state) {
@@ -113,10 +126,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
     return dirRow.value();
 }
 
-bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &actor_id,
+bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
                                             DirRow                  &dir_row,
                                             const Actor<KeyPrivate> &signer) {
-    auto dir_file = get_actor_dir_file(actor_id);
+    auto dir_file = get_actor_dir_file(owner_id);
 
     if (!dir_file.is_open()) {
         return false;
@@ -226,8 +239,8 @@ std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actor_id, DirRow &dir_row) {
-    auto db = get_actor_dir_file(actor_id);
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &ownerr_id, DirRow &dir_row) {
+    auto db = get_actor_dir_file(ownerr_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
@@ -244,23 +257,23 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &actor_id, Di
     return db.update(query);
 }
 
-std::expected<std::vector<std::uint8_t>, Utils::FileError> Dfs::Tables::ActorDirFile::get_file_content(
+std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::ActorDirFile::get_file_content(
     const ActorId     &actor_id,
     const std::string &file_id) {
     auto path = Path::file_path(actor_id, file_id);
 
     if (!path.has_value()) {
         eLog("Invalid path");
-        return std::unexpected(Utils::FileError::InvalidFile);
+        return std::unexpected(Utils::ContentError::InvalidFile);
     }
 
     auto content = Utils::read_file_content(path.value());
     if (!content.has_value()) {
-        return std::unexpected(Utils::FileError::InvalidFile);
+        return std::unexpected(Utils::ContentError::InvalidFile);
     }
 
     if (content->empty()) {
-        return std::unexpected(Utils::FileError::InvalidFile);
+        return std::unexpected(Utils::ContentError::InvalidFile);
     }
 
     eLog("[Dfs] Read {} bytes from actor {} and file {}", content->size(), actor_id, file_id);
@@ -440,6 +453,22 @@ std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::last_modified(c
     } catch (const std::exception &) {
         return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
     }
+}
+
+void Dfs::initialize_actor_folder(const ActorId &actor_id) {
+    auto actor_folder = DfsB::fsActrRoot + Utils::platformDelimeter() + actor_id.to_string();
+
+    if (std::filesystem::exists(actor_folder)) {
+        return;
+    }
+
+    std::filesystem::create_directories(actor_folder);
+
+    // create dir file
+    DbConnector dir_file = DfsT::ActorDirFile::get_actor_dir_file(actor_id);
+    dir_file.query(DfsT::ActorDirFile::CreateTableQuery);
+
+    // requestDirData(actorId);
 }
 
 namespace magic {

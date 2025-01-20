@@ -33,6 +33,10 @@
 #include <string>
 #include <string_view>
 #include <random>
+#include <limits>
+
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 
 #include <sodium.h>
 
@@ -623,24 +627,24 @@ boost::json::value Utils::stringToJsonValue(const std::string &value, const std:
     return boost::json::value(std::string(value));
 }
 
-std::expected<std::vector<std::uint8_t>, Utils::FileError> Utils::read_file_content(const FsPath &path) {
+std::expected<std::vector<std::uint8_t>, Utils::ContentError> Utils::read_file_content(const FsPath &path) {
     // Get file size
     const auto size = path.file_size();
     if (!size.has_value()) {
         eLog("Failed to get file size: {}", path.string().value_or("invalid path"));
-        return std::unexpected(FileError::ReadError);
+        return std::unexpected(ContentError::ReadError);
     }
 
     if (*size == 0) {
         eLog("File is empty: {}", path.string().value_or("invalid path"));
-        return std::unexpected(FileError::EmptyFile);
+        return std::unexpected(ContentError::EmptyFile);
     }
 
     // Check if file size is reasonable (e.g., less than 4GB)
     constexpr std::uintmax_t MAX_FILE_SIZE = 4ULL * 1024 * 1024 * 1024;
     if (*size > MAX_FILE_SIZE) {
         eLog("File too large: {} bytes", *size);
-        return std::unexpected(FileError::SizeTooLarge);
+        return std::unexpected(ContentError::SizeTooLarge);
     }
 
     // Read file content
@@ -650,15 +654,242 @@ std::expected<std::vector<std::uint8_t>, Utils::FileError> Utils::read_file_cont
     std::ifstream file(path.native(), std::ios::binary);
     if (!file) {
         eLog("Failed to open file: {}", path.string().value_or("invalid path"));
-        return std::unexpected(FileError::ReadError);
+        return std::unexpected(ContentError::ReadError);
     }
 
     content.insert(content.begin(), std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 
     if (file.fail()) {
         eLog("Failed to read file: {}", path.string().value_or("invalid path"));
-        return std::unexpected(FileError::ReadError);
+        return std::unexpected(ContentError::ReadError);
     }
 
     return content;
+}
+
+std::expected<std::string, Utils::FileError> Utils::read_file_chunk(const FsPath &file_path,
+                                                                    uint64_t      offset,
+                                                                    uint64_t      size) {
+    if (size == 0) {
+        return std::unexpected(FileError::InvalidInput);
+    }
+
+    try {
+        auto exists = file_path.exists();
+        if (!exists.has_value() || !exists.value()) {
+            return std::unexpected(FileError::InvalidInput);
+        }
+
+        auto file_size = file_path.file_size();
+        if (!file_size.has_value()) {
+            return std::unexpected(FileError::InvalidInput);
+        }
+
+        if (offset >= file_size.value()) {
+            return std::unexpected(FileError::InvalidInput);
+        }
+
+        const auto actual_size = std::min(size, file_size.value() - offset);
+
+        std::ifstream file(file_path.native(), std::ios::binary);
+        if (!file) {
+            return std::unexpected(FileError::OpenError);
+        }
+
+        file.seekg(offset);
+        if (file.fail()) {
+            return std::unexpected(FileError::SeekError);
+        }
+
+        std::string result(actual_size, '\0');
+        if (!file.read(result.data(), actual_size)) {
+            return std::unexpected(FileError::ReadError);
+        }
+
+        return result;
+
+    } catch (const std::exception &e) {
+        eCritical("Error reading file {}: {}", file_path.native().string(), e.what());
+        return std::unexpected(FileError::ReadError);
+    }
+}
+std::expected<void, Utils::FileError> extend_file_size(const std::filesystem::path &path,
+                                                       std::uint64_t                current_size,
+                                                       std::uint64_t                required_size) {
+    using FileError = Utils::FileError;
+    if (required_size <= current_size) {
+        return {};
+    }
+
+    try {
+        std::fstream file(path, std::ios::in | std::ios::out | std::ios::binary);
+        if (!file) {
+            eWarning("Failed to open file for extending: {}", path.string());
+            return std::unexpected(FileError::WriteError);
+        }
+
+        // Just set the file size
+        file.seekp(required_size - 1);
+        file.put(0);
+        file.flush();
+
+        return {};
+    } catch (const std::exception &e) {
+        eCritical("Error while extending file: {}", e.what());
+        return std::unexpected(FileError::WriteError);
+    }
+}
+// Create or extend file without modifying existing content
+std::expected<void, Utils::FileError> prepare_file(const FsPath &file_path, std::uint64_t required_size) {
+    using FileError = Utils::FileError;
+
+    try {
+        auto exists = file_path.exists();
+        if (!exists.has_value()) {
+            return std::unexpected(FileError::InvalidInput);
+        }
+
+        if (!exists.value()) {
+            // Create new file of required size
+            std::ofstream file(file_path.native(), std::ios::binary);
+            if (!file) {
+                eCritical("Failed to create file {}", file_path.native().string());
+                return std::unexpected(FileError::WriteError);
+            }
+            file.seekp(required_size - 1);
+            file.put(0);
+            return {};
+        }
+
+        // File exists - check if we need to extend
+        auto current_size = file_path.file_size();
+        if (!current_size.has_value()) {
+            return std::unexpected(FileError::InvalidInput);
+        }
+
+        if (required_size > current_size.value()) {
+            // Extend existing file preserving content
+            std::fstream file(file_path.native(), std::ios::binary | std::ios::in | std::ios::out);
+            if (!file) {
+                eCritical("Failed to open file for extending {}", file_path.native().string());
+                return std::unexpected(FileError::WriteError);
+            }
+            file.seekp(required_size - 1);
+            file.put(0);
+        }
+
+        return {};
+    } catch (const std::exception &e) {
+        eCritical("Error preparing file {}: {}", file_path.native().string(), e.what());
+        return std::unexpected(FileError::WriteError);
+    }
+}
+
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+#endif
+
+std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath          &file_path,
+                                                              const std::string_view data,
+                                                              uint64_t               offset) {
+    using FileError = Utils::FileError;
+
+    // Check if file path is valid
+    const auto path_str = file_path.string();
+    if (!path_str.has_value()) {
+        eLog("Failed to get string representation of file path");
+        return std::unexpected(FileError::InvalidInput);
+    }
+
+    // Check if we have write permissions for the file or its parent directory if file doesn't exist
+    auto exists = file_path.exists();
+    if (!exists.has_value()) {
+        eLog("Failed to check if file exists");
+        return std::unexpected(FileError::OpenError);
+    }
+
+    if (exists.value()) {
+        // File exists - check write permissions
+        auto parent = file_path.parent_path();
+        if (!parent.has_value()) {
+            eLog("Failed to get parent path");
+            return std::unexpected(FileError::OpenError);
+        }
+    }
+
+    // Open file in appropriate mode
+    std::fstream file;
+    file.open(path_str.value(), std::ios::in | std::ios::out | std::ios::binary);
+
+    if (!file.is_open()) {
+        // If file doesn't exist, create it
+        file.clear();
+        file.open(path_str.value(), std::ios::out | std::ios::binary);
+        if (!file.is_open()) {
+            eLog("Failed to create file: {}", path_str.value());
+            return std::unexpected(FileError::OpenError);
+        }
+        file.close();
+        file.open(path_str.value(), std::ios::in | std::ios::out | std::ios::binary);
+    }
+
+    if (!file.is_open()) {
+        eLog("Failed to open file: {}", path_str.value());
+        return std::unexpected(FileError::OpenError);
+    }
+
+    // Get current file size
+    file.seekg(0, std::ios::end);
+    if (file.fail()) {
+        eLog("Failed to seek to end of file");
+        return std::unexpected(FileError::SeekError);
+    }
+
+    const auto file_size = file.tellg();
+    if (file_size == -1) {
+        eLog("Failed to get file size");
+        return std::unexpected(FileError::ReadError);
+    }
+
+    // Handle different offset cases
+    if (offset > static_cast<uint64_t>(file_size)) {
+        // Need to pad with zeros
+        file.seekp(file_size, std::ios::beg);
+        if (file.fail()) {
+            eLog("Failed to seek to file_size position");
+            return std::unexpected(FileError::SeekError);
+        }
+
+        const std::vector<char> padding(offset - file_size, '\0');
+        file.write(padding.data(), padding.size());
+        if (file.fail()) {
+            eLog("Failed to write padding");
+            return std::unexpected(FileError::WriteError);
+        }
+    }
+
+    // Seek to the target position
+    file.seekp(offset, std::ios::beg);
+    if (file.fail()) {
+        eLog("Failed to seek to target position");
+        return std::unexpected(FileError::SeekError);
+    }
+
+    // Write the actual data
+    file.write(data.data(), data.size());
+    if (file.fail()) {
+        eLog("Failed to write data");
+        return std::unexpected(FileError::WriteError);
+    }
+
+    // Ensure all data is written
+    file.flush();
+    if (file.fail()) {
+        eLog("Failed to flush file");
+        return std::unexpected(FileError::WriteError);
+    }
+
+    return {};
 }

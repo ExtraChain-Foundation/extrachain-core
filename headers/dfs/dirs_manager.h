@@ -19,10 +19,10 @@
 
 #pragma once
 
-#include <map>
 #include <string>
 #include <expected>
-#include <QObject>
+
+#include "blockchain/actor_id.h"
 #include "dfs/dfs_utils.h"
 
 class ExtraChainNode;
@@ -39,8 +39,7 @@ class DirsManager {
 public:
     DirsManager(ExtraChainNode* node);
 
-    void initialize_actor_folder(const ActorId& actorId);
-    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
+    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified) const;
 
     void sync(const std::string& identifier) const;
     void network_request_sync(const std::string& message_id) const;
@@ -51,10 +50,10 @@ public:
                                              const std::string&                         identifier) const;
 
     void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id) const;
-    void network_response_dir_rows(const ActorId &owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& message_id) const;
+    void network_response_dir_rows(const ActorId&                  owner_id,
+                                   const std::vector<Dfs::DirRow>& dir_rows,
+                                   const std::string&              message_id) const;
 
 private:
     ExtraChainNode* node;
-
-    std::map<std::string, DirRow> files;
 };

@@ -20,6 +20,7 @@
 #include "dfs/dfs_controller.h"
 
 #include "blockchain/actor_index.h"
+#include "dfs/dfs_utils.h"
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "network/network_manager.h"
@@ -39,7 +40,7 @@ DfsController::DfsController(ExtraChainNode *node)
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
     connect(node->actorIndex(), &ActorIndex::newActorSaved, [this](ActorId actor_id) {
-        dirs_manager_.initialize_actor_folder(actor_id);
+        Dfs::initialize_actor_folder(actor_id);
     });
 }
 
@@ -224,12 +225,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
-    insertToFiles(dir_row);
-    emit added(owner_id, dir_row);
-    // sendFile(owner_id, file_id);
+    // insertToFiles(dir_row);
+    emit stored(owner_id, dir_row);
+
+    auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
+    broadcast_stored(file_data);
 
     return dir_row;
-    // return addFile(msg, false);
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
@@ -377,9 +379,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
-    insertToFiles(dir_row);
-    emit added(owner_id, dir_row);
-    // sendFile(owner_id, file_id);
+    // insertToFiles(dir_row);
+    emit stored(owner_id, dir_row);
+
+    auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
+    broadcast_stored(file_data);
 
     return dir_row;
 }
@@ -771,11 +775,24 @@ void DfsController::network_change_collection(const ActorId                 &own
     emit collectionChanged(owner_id, dir_row.value(), row);
 }
 
-std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes) {
-    std::string pathDelim       = Utils::platformDelimeter();
-    std::string actorFolderPath = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
-    std::string actrDirFilePath = actorFolderPath + DfsB::fsMapName;
-    std::string realFilePath    = actorFolderPath + dir_row.file_id;
+void DfsController::broadcast_stored(const Dfs::FileData &file_data) {
+    node->network()->send_message(file_data, MessageType::DfsStoreFile, Config::Net::TypeSend::Broadcast);
+}
+
+void DfsController::sync_stored(const Dfs::FileData &file_data, const std::string &message_id) {
+    node->network()->send_message(file_data,
+                                  MessageType::DfsStoreFile,
+                                  Config::Net::TypeSend::Focused,
+                                  MessageStatus::Response,
+                                  message_id);
+}
+
+std::string DfsController::network_store_file(const ActorId        &owner_id,
+                                              const Dfs::DirRow    &dir_row,
+                                              Dfs::NetworkStoreFile network_stote) {
+    std::string actorFolderPath =
+        DfsB::fsActrRoot + Utils::platformDelimeter() + owner_id.to_string() + Utils::platformDelimeter();
+    // std::string actrDirFilePath = actorFolderPath + DfsB::fsMapName;
 
     if (is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         eSuccess("[Dfs] Ignoring file download: file already exists 👌😎👍");
@@ -808,76 +825,60 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
         // }
     }
 
-    if (load_bytes) {
-        if (std::filesystem::exists(realFilePath)) {
-            eLog("[Dfs] File already exists {} {}", owner_id, dir_row); // temp: not correct, add calculate file
-            return dir_row.file_id;
-        }
-        if (!writeAvailable(dir_row.size)) {
-            eLog("[Dfs] Storage full");
-            eFatal("[Dfs] Storage full");
-            return dir_row.file_id;
-        }
-    }
+    DbConnector dir_file = Dfs::Tables::ActorDirFile::get_actor_dir_file(owner_id);
 
-    if (load_bytes && !std::filesystem::exists(realFilePath)) {
-        std::fstream fs;
-        fs.open(realFilePath, std::ios::out | std::ios::binary);
-        fs.close();
-    }
-
-    DbConnector actrDirFile(actrDirFilePath);
-
-    if (!actrDirFile.open()) {
+    if (!dir_file.is_open()) {
         eLog("No dir file 1");
         return "";
     }
 
-    auto        result       = actrDirFile.select(DfsT::filesTableLast);
-    auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
-    std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
-
     DbRow dirRowDb  = Utils::to_dbrow(dir_row);
-    bool  insertRes = actrDirFile.replace(DfsT::ActorDirFile::TableName, dirRowDb);
+    bool  insertRes = dir_file.replace(DfsT::ActorDirFile::TableName, dirRowDb);
 
     if (!insertRes) {
         auto errorStr = fmt::format("[Dfs] addFile: insert failed:{} {}",
-                                    actrDirFile.file().c_str(),
+                                    dir_file.file().c_str(),
                                     DfsT::ActorDirFile::TableName.c_str());
         eLog("{}", errorStr);
         eFatal("Error 2: {}", errorStr);
         return "";
     }
-    actrDirFile.close();
+    dir_file.close();
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
-    if (load_bytes && dir_row.type == Dfs::FileType::File) {
-        if (dir_row.size >= m_bytesLimit - m_sizeTaken) {
-            return dir_row.file_id;
-        } else {
-            DfsP::RequestFileSegmentMessage reqMessage = { .actorId = owner_id,
-                                                           .file_id = dir_row.file_id,
-                                                           .hash    = dir_row.hash,
-                                                           .offset  = 0 };
-            // node->network()->send_message(reqMessage,
-            //                               MessageType::DfsRequestFileSegment,
-            //                               Config::Net::TypeSend::AllParents,
-            //                               MessageStatus::Request);
-        }
+    // if (network_stote && dir_row.type == Dfs::FileType::File) {
+    //     if (dir_row.size >= m_bytesLimit - m_sizeTaken) {
+    //         return dir_row.file_id;
+    //     } else {
+    //         DfsP::RequestFileSegmentMessage reqMessage = { .actorId = owner_id,
+    //                                                        .file_id = dir_row.file_id,
+    //                                                        .hash    = dir_row.hash,
+    //                                                        .offset  = 0 };
+    //         // node->network()->send_message(reqMessage,
+    //         //                               MessageType::DfsRequestFileSegment,
+    //         //                               Config::Net::TypeSend::AllParents,
+    //         //                               MessageStatus::Request);
+    //     }
+    // }
+
+    // if (network_stote && dir_row.type == Dfs::FileType::Collection) {
+    //     node->network()->send_message(std::make_pair(owner_id, dir_row.file_id),
+    //                                   MessageType::DfsCollectionRequest,
+    //                                   Config::Net::TypeSend::AllParents,
+    //                                   MessageStatus::Request);
+    // }
+
+    // insertToFiles(dir_row);
+
+    if (network_stote == Dfs::NetworkStoreFile::Broadcast) {
+        emit stored(owner_id, dir_row);
+    } else {
+        emit added(owner_id, dir_row);
     }
 
-    if (load_bytes && dir_row.type == Dfs::FileType::Collection) {
-        node->network()->send_message(std::make_pair(owner_id, dir_row.file_id),
-                                      MessageType::DfsCollectionRequest,
-                                      Config::Net::TypeSend::AllParents,
-                                      MessageStatus::Request);
-    }
-
-    insertToFiles(dir_row);
-    emit added(owner_id, dir_row);
-
-    eLog("[Dfs] File {}/{} was added", owner_id, dir_row.file_id);
+    std::string stored_added = network_stote == Dfs::NetworkStoreFile::Broadcast ? "stored" : "added";
+    eLog("[Dfs] File {}/{} was {}", owner_id, dir_row.file_id, stored_added);
 
     return dir_row.file_id;
 }
@@ -939,10 +940,6 @@ std::uint64_t DfsController::totalDfsSize() const {
 
 void DfsController::increaseSizeTaken(uintmax_t value) {
     m_sizeTaken += value;
-}
-
-void DfsController::insertToFiles(const Dfs::DirRow &dirRow) {
-    files[{ dirRow.actor_id, dirRow.file_id }] = dirRow;
 }
 
 void DfsController::exportFile(const std::string &pathTo,

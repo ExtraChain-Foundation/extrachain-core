@@ -692,7 +692,7 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
 
-    enum class FileError {
+    enum class ContentError {
         ReadError,
         SizeTooLarge,
         EmptyFile,
@@ -704,7 +704,7 @@ namespace Utils {
      * @param path File path to read
      * @return Expected vector with file contents or FileError
      */
-    EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, FileError> read_file_content(const FsPath &path);
+    EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, ContentError> read_file_content(const FsPath &path);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);
@@ -767,6 +767,26 @@ namespace Utils {
     EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
     EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
+
+    enum class FileError {
+        InvalidInput,
+        OpenError,
+        ReadError,
+        WriteError,
+        SeekError,
+        FileTooLarge,
+        MappingError
+    };
+
+    // Read N bytes from file starting from offset
+    EXTRACHAIN_EXPORT std::expected<std::string, FileError> read_file_chunk(const FsPath &file_path,
+                                                                            std::uint64_t offset,
+                                                                            std::uint64_t size);
+
+    // Write data to file at specific offset
+    EXTRACHAIN_EXPORT std::expected<void, FileError> write_file_chunk(const FsPath          &file_path,
+                                                                      const std::string_view data,
+                                                                      std::uint64_t          offset);
 } // namespace Utils
 
 namespace BlockchainConst {

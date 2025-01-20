@@ -29,8 +29,6 @@
 #include <QObject>
 
 #include <boost/generator_iterator.hpp>
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
 #include <boost/random.hpp>
 #include <boost/algorithm/string.hpp>
 #include <filesystem>
@@ -57,6 +55,11 @@ namespace Dfs {
         CollectionTemplate,
         Chat
     };
+
+    enum class NetworkStoreFile {
+        Broadcast,
+        Sync
+    };
 } // namespace Dfs
 
 class ThreadAddFiles;
@@ -70,9 +73,7 @@ private:
     std::uint64_t m_bytesLimit = 10995116277760;
     std::size_t   m_sizeTaken  = 0;
 
-    std::map<std::pair<ActorId, FileId>, Dfs::DirRow> files;
-    std::vector<std::string>                          m_compliteFiles;
-    std::uint64_t                                     m_totalDfsSize = 0;
+    std::uint64_t m_totalDfsSize = 0;
 
 public:
     explicit DfsController(ExtraChainNode *node);
@@ -190,14 +191,23 @@ public:
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
+    //
+    // void remote_stored_file();
+    // void remove_local_file();
+
     // TODO: get rows from collection
 
     // TODO: need two function: remove LOCAL file and remove file from STORE
 
     // visualMoveFile
 
+    void broadcast_stored(const Dfs::FileData &file_data);
+    void sync_stored(const Dfs::FileData &file_data, const std::string &message_id);
+
     // External interfaces
-    std::string network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes);
+    std::string network_store_file(const ActorId        &owner_id,
+                                   const Dfs::DirRow    &dir_row,
+                                   Dfs::NetworkStoreFile network_stote);
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
 
     // Unique file ID: hash+msec+salt
@@ -206,7 +216,6 @@ public:
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
-    void          insertToFiles(const Dfs::DirRow &dirRow);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::fsActrRoot) const;
 
@@ -256,6 +265,7 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
+    void stored(ActorId owner_id, Dfs::DirRow dirRow);
     void added(ActorId owner_id, Dfs::DirRow dirRow);
     void updated(ActorId owner_id, Dfs::DirRow dirRow);
     void removed(ActorId owner_id, Dfs::DirRow dirRow);
