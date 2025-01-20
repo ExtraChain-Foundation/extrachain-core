@@ -57,8 +57,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dirs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/download_manager.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/version_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_collection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
@@ -122,8 +120,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/download_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/collection_template.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/version_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp

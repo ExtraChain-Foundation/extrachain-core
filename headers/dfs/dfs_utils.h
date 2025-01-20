@@ -377,7 +377,7 @@ namespace Dfs {
         };
     } // namespace Packets
 
-    namespace Fragments {
+    namespace FragmentsOld {
         static const std::string Extension          = ".fragments";
         static const std::string TableNameFragments = "Fragments";
         static const std::string CreateTableQueryFragments = "CREATE TABLE IF NOT EXISTS " + TableNameFragments
@@ -387,27 +387,7 @@ namespace Dfs {
                                                        "size       INTEGER             NOT NULL, "
                                                        "fragHash   TEXT                NOT NULL"
                                                        ");";
-
-        static const std::string GetCountFragmants = "SELECT COUNT(size) FROM Fragments";
-        static const std::string GetSizeFragmants  = "SELECT SUM(size) FROM Fragments";
-
-        struct FragmentsInfo {
-            ActorId                        actor;
-            std::string                    fileHash;
-            std::string                    filePath;
-            std::uint64_t                  fileSize;
-            std::list<std::pair<int, int>> fragmentPositionList;
-
-            void print() const {
-                eLog("[Fragment] actor: {}, file hash: {}, path: {}", actor, fileHash, filePath);
-                for (const auto& pair : fragmentPositionList) {
-                    eLog("{} {}", pair.first, pair.second);
-                }
-            }
-
-            MSGPACK_DEFINE(actor, fileHash, filePath, fileSize, fragmentPositionList)
-        };
-    } // namespace Fragments
+    } // namespace FragmentsOld
 
     namespace Historical {
         struct FileChange {
@@ -513,6 +493,9 @@ namespace Dfs {
                 const ActorId&     actor_id,
                 const std::string& file_id);
 
+            // TODO: add expected
+            void update_file_state(const ActorId& actor_id, const std::string file_id, Dfs::FileState state);
+
             // TODO: expected
             std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
                                                                                    const std::string& file_id);
@@ -586,23 +569,27 @@ namespace Dfs {
         void insert_vector(const std::vector<DirsRow>& dirs_rows);
     } // namespace DirsFile
 
+    struct FileLink {
+        ActorId     owner_id;
+        std::string file_id;
+    };
+    BOOST_DESCRIBE_STRUCT(FileLink, (), (owner_id, file_id))
+
+    struct FileData {
+        ActorId owner_id;
+        DirRow  dir_row;
+    };
+    BOOST_DESCRIBE_STRUCT(FileData, (), (owner_id, dir_row))
 } // namespace Dfs
 
 MAKE_CUSTOM_MAGICAL(Dfs::FileId)
 
-namespace DfsP    = Dfs::Packets;
-namespace DfsF    = Dfs::Fragments;
+namespace DfsP = Dfs::Packets;
+// namespace DfsF    = Dfs::Fragments;
 namespace DfsT    = Dfs::Tables;
 namespace DfsHc   = Dfs::Historical;
 namespace DfsB    = Dfs::Basic;
 namespace DfsPath = Dfs::Path;
-
-// FORMAT_ENUM(Dfs::DfsError)
-// FORMAT_ENUM(Dfs::FileType)
-// FORMAT_ENUM(Dfs::FileState)
-// FORMAT_ENUM(Dfs::Encryption)
-// FORMAT_ENUM(Dfs::Packets::SegmentMessageType)
-// FORMAT_ENUM(Dfs::Reward::TypeFunctioning)
 
 MSGPACK_ADD_ENUM(Dfs::FileType)
 MSGPACK_ADD_ENUM(Dfs::FileState)

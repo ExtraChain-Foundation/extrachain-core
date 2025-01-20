@@ -23,7 +23,6 @@
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "network/network_manager.h"
-#include "dfs/fragment_storage.h"
 #include "dfs/name_validator.h"
 #include "dfs/collection_template.h"
 #include "dfs/dirs_manager.h"
@@ -221,15 +220,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     increaseSizeTaken(file_size);
     m_totalDfsSize += file_size; // TODO: is need at this place?
 
-    FragmentStorage fs(owner_id, file_id, file_hash);
-    fs.initLocalFile(file_size);
-    fs.initHistoricalChain();
+    // TODO: Fragments: create
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
 
     insertToFiles(dir_row);
     emit added(owner_id, dir_row);
-    sendFile(owner_id, file_id);
+    // sendFile(owner_id, file_id);
 
     return dir_row;
     // return addFile(msg, false);
@@ -382,7 +379,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
 
     insertToFiles(dir_row);
     emit added(owner_id, dir_row);
-    sendFile(owner_id, file_id);
+    // sendFile(owner_id, file_id);
 
     return dir_row;
 }
@@ -774,14 +771,6 @@ void DfsController::network_change_collection(const ActorId                 &own
     emit collectionChanged(owner_id, dir_row.value(), row);
 }
 
-bool DfsController::removeLocalFile(const ActorId &owner_id, const std::string &fileId) {
-    std::string             path = DfsPath::filePath(owner_id, fileId).string();
-    DfsP::RemoveFileMessage msg  = { .actorId = owner_id, .file_id = fileId };
-    bool                    res  = removeFile(msg);
-    node->network()->send_message(msg, MessageType::DfsRemoveFile, Config::Net::TypeSend::AllParents);
-    return res;
-}
-
 std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes) {
     std::string pathDelim       = Utils::platformDelimeter();
     std::string actorFolderPath = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
@@ -871,10 +860,10 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
                                                            .file_id = dir_row.file_id,
                                                            .hash    = dir_row.hash,
                                                            .offset  = 0 };
-            node->network()->send_message(reqMessage,
-                                          MessageType::DfsRequestFileSegment,
-                                          Config::Net::TypeSend::AllParents,
-                                          MessageStatus::Request);
+            // node->network()->send_message(reqMessage,
+            //                               MessageType::DfsRequestFileSegment,
+            //                               Config::Net::TypeSend::AllParents,
+            //                               MessageStatus::Request);
         }
     }
 
@@ -925,53 +914,6 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
     return realFilePath.string();
 }
 
-bool DfsController::removeFile(const DfsP::RemoveFileMessage &msg) {
-    // if (msg.actor != node.accountController()->mainActor()->id().toStdString()) {
-    //     eLog("[Dfs] Remove file: file has been removed");
-    //     return false;
-    // }
-    std::string message =
-        fmt::format("[Dfs] Remove file {}. Check equal actors. \"msg.Actor\":{}\n\"mainActor:\"{}",
-                    msg.file_id,
-                    msg.actorId,
-                    node->accountController()->mainActor().id().to_string());
-    eLog("{}", message);
-
-    auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.file_id);
-    if (!dirRow.has_value()) {
-        return false;
-    }
-
-    removeRowFromDB(msg);
-    std::string path = DfsPath::filePath(msg.actorId, msg.file_id).string();
-
-    {
-        QFile file(QString::fromStdString(path));
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            eLog("Could not open VPN localization file: {}", file.errorString());
-        } else {
-            QTextStream          in(&file);
-            QString              oneLine = in.readLine();
-            static const QString prefix  = "Country:";
-            if (oneLine.startsWith(prefix))
-                emit getRemovedVPNLocalizationInfo(oneLine, msg.actorId.to_string());
-        }
-    }
-
-    const bool removedFile     = std::filesystem::remove(path);
-    const bool removeStorjFile = std::filesystem::remove(fmt::format("{}{}", path, Dfs::Fragments::Extension));
-    message                    = fmt::format("[Dfs] Remove file {} - {} by path - {}. Storj file has been - {}.",
-                          msg.file_id,
-                          (removedFile ? "removed" : "not removed"),
-                          path,
-                          removeStorjFile ? "removed" : "not removed");
-    eLog("{}", message);
-
-    // TODO: use real owner_id
-    emit removed(dirRow->actor_id, dirRow.value());
-    return removedFile;
-}
-
 std::string DfsController::create_file_id(std::filesystem::path file) {
     return create_file_id_from(file.string());
 }
@@ -985,178 +927,6 @@ std::string DfsController::create_file_id_from(const std::string &data) {
     std::string file_id =
         Utils::calculate_hash(fmt::format("{}{}{}", data, std::to_string(time), salt)).substr(0, 64);
     return file_id;
-}
-
-bool DfsController::renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash) {
-    const std::string     actorId   = actor.to_string();
-    std::string           pathDelim = Utils::platformDelimeter();
-    std::filesystem::path path      = DfsB::fsActrRoot + pathDelim + actorId + pathDelim;
-    std::filesystem::rename(path / std::string(fileHash), path / std::string(newFileHash));
-    return std::filesystem::exists(path / std::string(newFileHash));
-}
-
-std::string DfsController::insertFragment(const DfsP::SegmentMessage &msg) {
-    eLog("[Dfs] Edit file: {}", msg.hash);
-    std::string           pathDelim       = Utils::platformDelimeter();
-    std::string           actorPath       = DfsB::fsActrRoot + pathDelim + msg.actorId.to_string() + pathDelim;
-    std::string           actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
-    std::filesystem::path realFilePath    = fmt::format("{}{}", actorPath, msg.file_id);
-    DbConnector           actrDirFile(actrDirFilePath);
-    if (!actrDirFile.open()) {
-        eLog("No dir file 2");
-        return "";
-    }
-    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
-
-    if (actrDirData.empty()) {
-        eLog("[Dfs] editFile: Skipped because of empty result");
-        eFatal("[Dfs] editFile: Skipped because of empty result: actrDirData || localDirData empty");
-        return "";
-    }
-
-    if (actrDirData.size() > 2) {
-        const auto errorStr =
-            fmt::format("[Dfs] editFile: Query select failed: Query result has unsupported size:{}",
-                        actrDirData.size());
-        eLog("{}", QString::fromStdString(errorStr));
-        eFatal("Error 4: {}", errorStr);
-        return "";
-    }
-    insertDataChunk(msg.data, msg.offset, realFilePath);
-    actrDirFile.close();
-    return Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
-}
-
-// void DfsController::addListFiles(const QStringList &files) {
-//     eLog("Files add in thread id: {} {}", QThread::currentThreadId(), files.size());
-//     const auto     actor = node->accountController()->mainActor();
-//     ThreadAddFiles addFilesThread(this, actor, files);
-//     connect(&addFilesThread, &ThreadAddFiles::added, this,
-//             [&](DFSP::AddFileMessage msg, std::string filePath) {
-//                 insertToFiles(msg);
-//                 emit added(msg.Actor, msg.FileName, msg.Path, msg.Size);
-//                 emit resultAddFile("", QString::fromStdString(filePath));
-//             });
-
-//     connect(&addFilesThread, &ThreadAddFiles::sendMessage, this,
-//             [&](DFSP::AddFileMessage msg, MessageType messageType) {
-//                 eLog("send file: {}", msg.FileName);
-//                 node->network()->send_message(msg, MessageType::DfsAddFile);
-//             });
-//     connect(&addFilesThread, &ThreadAddFiles::error, this, [&](std::string error, std::string fileName) {
-//         eLog("{}");
-//         emit resultAddFile(QString::fromStdString(error), QString::fromStdString(fileName));
-//     });
-//     addFilesThread.start();
-//     addFilesThread.wait();
-// }
-
-bool DfsController::insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file) {
-    std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + file.stem().string();
-    std::filesystem::create_directories(tempFilePath.remove_filename());
-    tempFilePath = tempFilePath.string() + file.stem().string();
-    std::ofstream                     ofs(tempFilePath.string(), std::ios::binary);
-    boost::interprocess::file_mapping fmapSource(file.c_str(), boost::interprocess::read_write);
-    std::uint64_t                     fz = std::filesystem::file_size(file);
-    ofs.write(data.c_str(), data.size()); // add data to new temp file
-    ofs.flush();
-    std::size_t i = 0;
-    for (i = position; i < fz; i = i + DfsB::sectionSize) { // copy old data to new temp file
-        if (i + DfsB::sectionSize < fz) {
-            boost::interprocess::mapped_region rightRegion(fmapSource,
-                                                           boost::interprocess::read_write,
-                                                           i,
-                                                           DfsB::sectionSize);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofs.write(rr_ptr, rightRegion.get_size());
-            ofs.flush();
-        } else {
-            boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofs.write(rr_ptr, rightRegion.get_size());
-            ofs.flush();
-        }
-    }
-    ofs.close();
-
-    std::filesystem::resize_file(file, position); // cut right side from old file
-    std::ofstream                     ofsres(file.c_str(), std::ios::out | std::ios::app | std::ios::binary);
-    boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
-    std::uint64_t                     fzres = std::filesystem::file_size(tempFilePath);
-
-    for (i = 0; i < fzres; i = i + DfsB::sectionSize) { // copy new data to old file
-        if (i + DfsB::sectionSize < fzres) {
-            boost::interprocess::mapped_region rightRegion(fmapTarget,
-                                                           boost::interprocess::read_write,
-                                                           i,
-                                                           DfsB::sectionSize);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofsres.write(rr_ptr, rightRegion.get_size());
-        } else {
-            boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofsres.write(rr_ptr, rightRegion.get_size());
-        }
-    }
-    ofsres.close();
-
-    std::filesystem::remove(tempFilePath);
-
-    return true;
-}
-
-bool DfsController::removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file) {
-    std::string           pathDelim    = Utils::platformDelimeter();
-    std::filesystem::path tempFilePath = BlockchainConst::TMP_FOLDER + pathDelim + file.stem().string();
-    std::filesystem::create_directories(tempFilePath.remove_filename());
-    tempFilePath = tempFilePath.string() + file.stem().string();
-    std::ofstream                     ofs(tempFilePath.string());
-    boost::interprocess::file_mapping fmapSource(file.c_str(), boost::interprocess::read_write);
-    std::uint64_t                     fz = std::filesystem::file_size(file);
-    std::size_t                       i  = 0;
-    for (i = position + length; i < fz; i = i + DfsB::sectionSize) { // copy old data to new temp file
-        if (i + DfsB::sectionSize < fz) {
-            boost::interprocess::mapped_region rightRegion(fmapSource,
-                                                           boost::interprocess::read_write,
-                                                           i,
-                                                           DfsB::sectionSize);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofs.write(rr_ptr, rightRegion.get_size());
-            ofs.flush();
-        } else {
-            boost::interprocess::mapped_region rightRegion(fmapSource, boost::interprocess::read_write, i);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofs.write(rr_ptr, rightRegion.get_size());
-            ofs.flush();
-        }
-    }
-    ofs.close();
-
-    std::filesystem::resize_file(file, position); // cut right side from old file
-    std::ofstream                     ofsres(file.c_str(), std::ios::out | std::ios::app | std::ios::binary);
-    boost::interprocess::file_mapping fmapTarget(tempFilePath.c_str(), boost::interprocess::read_write);
-    std::uint64_t                     fzres = std::filesystem::file_size(tempFilePath);
-
-    for (i = 0; i < fzres; i = i + DfsB::sectionSize) { // copy new data to old file
-        if (i + DfsB::sectionSize < fzres) {
-            boost::interprocess::mapped_region rightRegion(fmapTarget,
-                                                           boost::interprocess::read_write,
-                                                           i,
-                                                           DfsB::sectionSize);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofsres.write(rr_ptr, rightRegion.get_size());
-        } else {
-            boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_write, i);
-            char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-            ofsres.write(rr_ptr, rightRegion.get_size());
-        }
-    }
-    ofsres.close();
-
-    std::filesystem::remove(tempFilePath);
-
-    return true;
 }
 
 std::uint64_t DfsController::sizeTaken() const {
@@ -1280,69 +1050,27 @@ std::uint64_t DfsController::calculateFilesSize(const std::string &folder) const
 std::uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const {
     std::size_t size = 0;
 
-    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
-        if (entry.is_regular_file() && entry.path().extension() == DfsF::Extension) {
-            const auto actorId = ActorId(entry.path().parent_path().filename().string());
-            size += DfsT::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename().string());
-        } else if (entry.is_directory()) {
-            size += calculateDataAmountStored(entry.path().string());
-        }
-    }
+    // TODO: Fragments: Use new style
+    // for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
+    //     if (entry.is_regular_file() && entry.path().extension() == DfsF::Extension) {
+    //         const auto actorId = ActorId(entry.path().parent_path().filename().string());
+    //         size += DfsT::ActorDirFile::dataAmountStoredSize(actorId, entry.path().filename().string());
+    //     } else if (entry.is_directory()) {
+    //         size += calculateDataAmountStored(entry.path().string());
+    //     }
+    // }
     return size;
 }
 
-std::string DfsController::makeReferenceFile(const ActorId                     &actor,
-                                             const std::string                 &nameFile,
-                                             const Dfs::Packets::ReferenceData &referenceData) {
-    std::string result;
-    result.append(DfsPath::filePath(actor, nameFile).string());
-    result.append("|");
-    result.append(referenceData.toString());
-    return result;
+const DirsManager &DfsController::dirs_manager() {
+    return dirs_manager_;
 }
 
-void DfsController::dataFromReferenceString(const std::string           &referenceStr,
-                                            std::string                 &actor,
-                                            std::string                 &nameFile,
-                                            Dfs::Packets::ReferenceData &referenceData) {
-    std::string delimiter    = "|";
-    int         posDelimiter = referenceStr.find(delimiter);
-    std::string filePath     = referenceStr.substr(0, posDelimiter);
-    filePath.erase(0, 4);
-    std::string pathdelimiter    = "/";
-    int         posPathDelimiter = filePath.find(pathdelimiter);
-    actor                        = filePath.substr(0, posPathDelimiter);
-    nameFile                     = filePath.substr(posPathDelimiter + 1, filePath.length() - 1);
-
-    std::string referenceDataStr = referenceStr.substr(posDelimiter + 2, referenceStr.size() - 2);
-    std::string comadelimiter    = ",";
-    std::string keyData          = referenceDataStr.substr(0, referenceDataStr.find(comadelimiter) - 1);
-    keyData.erase(0, keyData.find(":") + 2);
-
-    std::string allowData =
-        referenceDataStr.substr(referenceDataStr.find(comadelimiter) + 2, referenceDataStr.length() - 2);
-    allowData.erase(0, allowData.find(":") + 2);
-    allowData.erase(allowData.size() - 2, allowData.size() - 1);
-    referenceData = Dfs::Packets::ReferenceData(keyData, allowData);
+const DownloadManager &DfsController::download_manager() {
+    return download_manager_;
 }
 
-std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget,
-                                           std::uint64_t                      offset,
-                                           std::uint64_t                      fragmentSize) {
-    boost::interprocess::mapped_region rightRegion(fmapTarget,
-                                                   boost::interprocess::read_only,
-                                                   offset,
-                                                   fragmentSize);
-    char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-    return std::string(rr_ptr, fragmentSize);
-}
-
-std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset) {
-    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset);
-    char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-    return std::string(rr_ptr, rightRegion.get_size());
-}
-
+// TODO: use dfs size
 void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg,
@@ -1376,261 +1104,6 @@ void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &m
     DfsP::ResponseBlockCount response { .actorId = msg.actorId, .blockCount = dfsCount };
     node->network()->send_message(response,
                                   MessageType::ResponseBlockCount,
-                                  Config::Net::TypeSend::Focused,
-                                  MessageStatus::Response,
-                                  messageId);
-}
-
-void DfsController::requestFile(const ActorId &actorId, const std::string &fileName) {
-    eLog("[Dfs] Request file: {} / {}", actorId, fileName);
-    if (fileName.empty())
-        return;
-
-    std::filesystem::remove(DfsPath::filePath(actorId, fileName));
-    node->network()->send_message(std::pair { actorId, fileName },
-                                  MessageType::DfsRequestFile,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
-}
-
-void DfsController::sendFile(const ActorId &owner_id, const std::string &file_id, const std::string &message_id) {
-    if (file_id.empty()) {
-        eFatal("[Dfs] Empty file name");
-    }
-
-    auto dirRow = DfsT::ActorDirFile::get_dir_row(owner_id, file_id);
-
-    if (!dirRow.has_value()) {
-        return;
-    }
-
-    auto msg = std::make_pair(owner_id, dirRow.value());
-    if (message_id.empty()) {
-        node->network()->send_message(msg, MessageType::DfsAddFile, Config::Net::TypeSend::AllParents);
-    } else {
-        node->network()->send_message(msg,
-                                      MessageType::DfsAddFile,
-                                      Config::Net::TypeSend::Focused,
-                                      MessageStatus::Response,
-                                      message_id);
-    }
-}
-
-bool DfsController::requestFileSegment(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
-    const auto path = DfsPath::filePath(dir_row.actor_id, dir_row.file_id);
-
-    const bool fileExist = std::filesystem::exists(path);
-    if (!fileExist) {
-        if (dir_row.type == Dfs::FileType::Collection) {
-            // node->network()->send_message(std::make_pair(dir_row.actor_id, dir_row.file_id),
-            //                               MessageType::DfsCollectionRequest,
-            //                               MessageStatus::Request);
-            // return;
-        }
-
-        requestFile(dir_row.actor_id, dir_row.file_id);
-        return true;
-    }
-
-    bool file_downloaded = is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash);
-    if (file_downloaded) {
-        return false;
-    }
-
-    auto dir_row_local = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
-
-    if (!dir_row_local.has_value()) {
-        requestFile(dir_row.actor_id, dir_row.file_id);
-    } else {
-        if (dir_row.type == Dfs::FileType::File) {
-            DfsP::RequestFileSegmentMessage reqMessage = { .actorId = owner_id,
-                                                           .file_id = dir_row.file_id,
-                                                           .hash    = dir_row.hash,
-                                                           .offset  = 0 };
-            node->network()->send_message(reqMessage,
-                                          MessageType::DfsRequestFileSegment,
-                                          Config::Net::TypeSend::AllParents,
-                                          MessageStatus::Request);
-            return true;
-        } else if (dir_row.type == Dfs::FileType::Collection) {
-            node->network()->send_message(std::make_pair(owner_id, dir_row.file_id),
-                                          MessageType::DfsCollectionRequest,
-                                          Config::Net::TypeSend::AllParents,
-                                          MessageStatus::Request);
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void DfsController::requestNextFragment(const Dfs::Packets::RequestFileSegmentMessage &msg) {
-    // eLog("request next fragment");
-    node->network()->send_message(msg,
-                                  MessageType::DfsRequestFileSegment,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
-}
-
-std::string DfsController::sendFragment(const DfsP::RequestFileSegmentMessage &msg, const std::string &messageId) {
-    std::filesystem::path realFilePath = DfsPath::filePath(msg.actorId, msg.file_id);
-    if (!std::filesystem::exists(realFilePath)) {
-        return "";
-        eFatal("[Dfs] No file");
-    }
-
-    boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
-    std::string                       data;
-    auto                              fileSize = std::filesystem::file_size(realFilePath);
-    if (fileSize - msg.offset > DfsB::sectionSize) {
-        data = extractFragment(fmapTarget, msg.offset, DfsB::sectionSize);
-    } else {
-        data = extractFragment(fmapTarget, msg.offset);
-    }
-
-    DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
-                                      .file_id = msg.file_id,
-                                      .hash    = msg.hash,
-                                      .data    = std::move(data),
-                                      .offset  = msg.offset };
-
-    node->network()->send_message(fragment,
-                                  MessageType::DfsAddSegment,
-                                  Config::Net::TypeSend::Focused,
-                                  MessageStatus::Response,
-                                  messageId);
-    if (msg.offset + DfsB::sectionSize >= fileSize) {
-        if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.file_id);
-            dirRow.has_value()) {
-            emit uploaded(msg.actorId, dirRow.value());
-        }
-        return "";
-    }
-    emit uploadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
-    return "";
-}
-
-void DfsController::fetchFragments(Dfs::Packets::RequestFileSegmentMessage &msg, std::string &messageId) {
-    std::filesystem::path realFilePath = DfsPath::filePath(msg.actorId, msg.file_id);
-    if (!std::filesystem::exists(realFilePath)) {
-        return;
-    }
-
-    auto fileSize = std::filesystem::file_size(realFilePath);
-    if (fileSize == 0) {
-        return;
-    }
-    boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
-    std::string                       data;
-    std::uint64_t                     totalOffset  = 0;
-    bool                              lastFragment = false;
-    do {
-        std::uint64_t limitSectionSize = 0;
-        while (limitSectionSize <= DfsB::maxSectionSize && !lastFragment) {
-            if (fileSize - totalOffset > DfsB::sectionSize) {
-                data += extractFragment(fmapTarget, totalOffset, DfsB::sectionSize);
-                totalOffset += DfsB::sectionSize;
-                limitSectionSize += DfsB::sectionSize;
-                eLog("progress: {}%", (double(totalOffset) / double(fileSize) * 100));
-                emit uploadProgress(msg.actorId, msg.file_id, double(totalOffset) / double(fileSize) * 100);
-            } else {
-                lastFragment = true;
-                data += extractFragment(fmapTarget, totalOffset);
-            }
-        }
-
-        DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
-                                          .file_id = msg.file_id,
-                                          .hash    = msg.hash,
-                                          .data    = std::move(data),
-                                          .offset  = totalOffset };
-
-        messageId = node->network()->send_message(fragment,
-                                                  MessageType::DfsAddSegment,
-                                                  Config::Net::TypeSend::Focused,
-                                                  MessageStatus::Response,
-                                                  messageId);
-
-        if (lastFragment) {
-            if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.file_id);
-                dirRow.has_value()) {
-                emit uploaded(msg.actorId, dirRow.value());
-            }
-        } else {
-            emit uploadProgress(msg.actorId, msg.file_id, double(totalOffset) / double(fileSize) * 100);
-        }
-    } while (!lastFragment);
-}
-
-void DfsController::fetchFragment(Dfs::Packets::RequestFileSegmentMessage &msg, std::string &messageId) {
-    std::filesystem::path realFilePath = DfsPath::filePath(msg.actorId, msg.file_id);
-    if (!std::filesystem::exists(realFilePath)) {
-        return;
-    }
-    auto fileSize = std::filesystem::file_size(realFilePath);
-    if (fileSize == 0) {
-        return;
-    }
-    boost::interprocess::file_mapping fmapTarget(realFilePath.c_str(), boost::interprocess::read_only);
-    std::string                       data;
-    bool                              lastFragment = false;
-    uint64_t                          newOffset    = msg.offset;
-
-    if (fileSize - msg.offset > DfsB::sectionSize) {
-        data         = extractFragment(fmapTarget, msg.offset, DfsB::sectionSize);
-        newOffset    = msg.offset + DfsB::sectionSize;
-        lastFragment = false;
-    } else {
-        data         = extractFragment(fmapTarget, msg.offset);
-        newOffset    = fileSize;
-        lastFragment = true;
-    }
-
-    // eLog("[Dfs] Progress for {} / {}: {}%",
-    //      msg.actorId,
-    //      msg.file_id,
-    //      (double(msg.offset) / double(fileSize) * 100));
-
-    // emit uploadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
-
-    DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
-                                      .file_id = msg.file_id,
-                                      .hash    = msg.hash,
-                                      .data    = std::move(data),
-                                      .offset  = newOffset };
-
-    node->network()->send_message(fragment,
-                                  MessageType::DfsAddSegment,
-                                  Config::Net::TypeSend::Focused,
-                                  MessageStatus::Response,
-                                  messageId);
-
-    if (lastFragment) {
-        if (const auto dirRow = Dfs::Tables::ActorDirFile::get_dir_row(msg.actorId, msg.file_id);
-            dirRow.has_value()) {
-            emit uploaded(msg.actorId, dirRow.value());
-        }
-    } else {
-        emit uploadProgress(msg.actorId, msg.file_id, double(newOffset) / double(fileSize) * 100);
-    }
-}
-
-void DfsController::verifyFiles(std::vector<Dfs::Packets::VerifyFileMessage> &fileList, std::string &messageId) {
-    for (auto &file : fileList) {
-        // check file exist
-        std::filesystem::path realFilePath = DfsPath::filePath(file.actorId, file.file_id);
-        if (!std::filesystem::exists(realFilePath)) {
-            eLog("File by path {} doesn't exist", realFilePath);
-            continue;
-        }
-        std::string fileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
-        if (fileHash == file.hash) {
-            file.verified = true;
-        }
-    }
-    std::vector<std::string> serializedData = MessagePack::serialize_container(fileList);
-    node->network()->send_message(serializedData,
-                                  MessageType::DfsVerifyList,
                                   Config::Net::TypeSend::Focused,
                                   MessageStatus::Response,
                                   messageId);
@@ -1680,146 +1153,6 @@ void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) 
     actrDirFile.close();
 }
 
-std::string DfsController::addFragment(const DfsP::SegmentMessage &msg) {
-    auto fileName = DfsPath::filePath(msg.actorId, msg.file_id);
-    if (!std::filesystem::exists(fileName)
-        || std::find(m_compliteFiles.begin(), m_compliteFiles.end(), msg.file_id) != m_compliteFiles.end()) {
-        return "";
-    }
-
-    DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(msg.actorId);
-    if (!actrDirFile.is_open()) {
-        eFatal("Error addFragment 1");
-    }
-    std::vector<DbRow> actrDirData = actrDirFile.select(
-        fmt::format("SELECT * FROM {} WHERE file_id = '{}';", DfsT::ActorDirFile::TableName, msg.file_id));
-    actrDirFile.close();
-
-    DbRow dirRowDb  = actrDirData[0];
-    auto  dirRowExp = Utils::from_dbrow<Dfs::DirRow>(dirRowDb);
-    if (!dirRowExp.has_value()) {
-        return "expected !has_value()";
-    }
-    auto dirRow = dirRowExp.value();
-
-    std::string   virtualPath     = dirRow.visual_path();
-    std::uint64_t fileSize        = dirRow.size;
-    auto          currentFileSize = std::filesystem::file_size(fileName);
-    if (fileSize == currentFileSize) {
-        m_compliteFiles.push_back(msg.file_id);
-        eLog("[Dfs] File is complite");
-        return "";
-    }
-
-    FragmentStorage fs(msg);
-    fs.insertFragment(msg);
-    currentFileSize = std::filesystem::file_size(fileName);
-    emit downloadProgress(msg.actorId, msg.file_id, double(msg.offset) / double(fileSize) * 100);
-    if (fileSize == currentFileSize) {
-        const auto file_hash = Utils::calculate_hash_file(FsPath::create(fileName).value()).value();
-        if (msg.hash == file_hash) {
-            eLog("[Dfs] File {} done", fileName);
-            auto dirRow = files.at({ msg.actorId, msg.file_id });
-            files.erase({ msg.actorId, msg.file_id });
-            emit downloaded(msg.actorId, dirRow);
-            // sendFile(msg.actorId, msg.file_id); // temp
-            fs.initHistoricalChain();
-            return "hash";
-        } else {
-            requestFile(msg.actorId, msg.file_id);
-            eFatal("[Dfs] Incorrect file check");
-            return "";
-        }
-    }
-    return "";
-}
-
-void DfsController::threadAddFragment(const Dfs::Packets::SegmentMessage &msg) {
-    // eLog("add segment. Thread: {}", QThread::currentThreadId());
-    FragmentWriter fw(msg, m_compliteFiles);
-
-    connect(&fw, &FragmentWriter::requestNextFragment, this, &DfsController::requestNextFragment);
-    connect(&fw,
-            &FragmentWriter::downloadProgress,
-            this,
-            [=, this](const ActorId &actor, const std::string &fileName, const double progress) {
-                emit this->downloadProgress(ActorId(actor), fileName, progress);
-                this->updateFileState(msg.actorId, msg.file_id, Dfs::FileState::Partial);
-            });
-    connect(&fw, &FragmentWriter::eraseFromFiles, this, [=, this](DfsP::SegmentMessage msg) {
-        files.erase({ msg.actorId, msg.file_id });
-    });
-    connect(&fw, &FragmentWriter::requestFile, this, &DfsController::requestFile);
-    connect(&fw, &FragmentWriter::sendFile, this, &DfsController::sendFile);
-    connect(&fw, &FragmentWriter::downloadedFile, this, &DfsController::downloaded);
-    connect(&fw,
-            &FragmentWriter::downloadedFile,
-            this,
-            [this](const ActorId &owner_id, const Dfs::DirRow &dirRow) {
-                this->updateFileState(owner_id, dirRow.file_id, Dfs::FileState::Ready);
-            });
-
-    connect(&fw, &FragmentWriter::compliteFile, this, [this](const std::string &fileName) {
-        m_compliteFiles.push_back(fileName);
-    });
-    // connect(&fw, &FragmentWriter::finished, this, &DfsController::beginFetchNextFile);
-    // connect(this, &DfsController::collectionDownloaded, this, &DfsController::beginFetchNextFile);
-
-    fw.start();
-    fw.wait();
-}
-
-std::string DfsController::deleteFragment(const DfsP::DeleteSegmentMessage &msg) {
-    std::string           pathDelim       = Utils::platformDelimeter();
-    std::string           pathActor       = DfsB::fsActrRoot + pathDelim + msg.actorId.to_string() + pathDelim;
-    std::string           actrDirFilePath = fmt::format("{}{}", pathActor, DfsB::fsMapName);
-    std::filesystem::path realFilePath    = fmt::format("{}{}", pathActor, msg.hash);
-    DbConnector           actrDirFile(actrDirFilePath);
-    if (!actrDirFile.open()) {
-        eLog("No dir file 4");
-        return "";
-    }
-    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
-
-    if (actrDirData.empty()) {
-        eLog("[Dfs] editFile: Skipped because of empty result");
-        eFatal("Error: actrDirData.empty() || localDirData.empty() in delete");
-        return "";
-    }
-
-    if (actrDirData.size() > 2) {
-        eLog("[Dfs] editFile: Query select failed: Query result has unsupported size: {}", actrDirData.size());
-        eFatal("Error 1");
-        return "";
-    }
-    removeDataChunk(msg.offset, msg.size, realFilePath);
-    std::string newFileHash = Utils::calculate_hash_file(FsPath::create(realFilePath).value()).value();
-    // std::uint64_t newFileSize = std::filesystem::file_size(realFilePath);
-
-    for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
-        if (it->at("hash") == msg.hash) {
-            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET fileHash = " +
-            // "'"
-            //                    + newFileHash + "' " + "WHERE " + "hash = " + "'" +
-            //                    it->at("fileHash")
-            //                    + "'");
-        }
-        if (it->at("prev_file_id") == msg.hash) {
-            // actrDirFile.update("UPDATE " + DFST::ActorDirFile::TableName + " SET prev_file_id =
-            // " +
-            // "'"
-            //                    + newFileHash + "' " + "WHERE " + "hash = " + "'" +
-            //                    it->at("hash")
-            //                    + "'");
-        }
-    }
-
-    FragmentStorage fragmentStorage(msg.actorId, msg.file_id, msg.hash);
-    fragmentStorage.removeFragment(msg);
-
-    return newFileHash;
-}
-
 std::uint64_t DfsController::bytesLimit() const {
     return m_bytesLimit;
 }
@@ -1833,15 +1166,6 @@ std::uint64_t DfsController::bytesAvailable() {
 
 bool DfsController::writeAvailable(std::size_t size) {
     return bytesAvailable() > size + 10000;
-}
-
-void DfsController::updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state) {
-    auto actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(actorId);
-    actrDirFile.update(fmt::format("UPDATE {} SET state = '{}' WHERE file_id = '{}'",
-                                   DfsT::ActorDirFile::TableName,
-                                   std::to_underlying(state),
-                                   fileName));
-    actrDirFile.close();
 }
 
 void DfsController::loadVPNLocalizationFiles() {

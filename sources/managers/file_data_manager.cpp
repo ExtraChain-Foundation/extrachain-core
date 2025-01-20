@@ -67,10 +67,12 @@ std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
 
     for (const auto &entry : std::filesystem::directory_iterator(pathToActorFolder)) {
         const auto nameFile = entry.path().filename();
-        if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
+        /* if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
             continue;
+        */
 
         FileStatus status = FileStatus::None;
+        /*
         const auto pathToStorjFile =
             pathToActorFolder.string() + Utils::platformDelimeter() + nameFile.string() + DfsF::Extension;
 
@@ -95,6 +97,7 @@ std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
                 db.close();
             }
         }
+        */
 
         FileData fileStruct = FileData { .nameFile = entry.path().filename().string(),
                                          .pathFile = entry.path().string(),

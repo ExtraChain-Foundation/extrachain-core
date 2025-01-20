@@ -214,9 +214,6 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
-    void addFragSignal(const DfsP::SegmentMessage& msg);
-    void fetchFragment(DfsP::RequestFileSegmentMessage& msg, std::string& messageId);
-    void accrual(const ActorId& actorId);
 
 protected:
     void connectToWebSocket(const QString& ip,

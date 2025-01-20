@@ -79,6 +79,17 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
     return dirRows;
 }
 
+void Dfs::Tables::ActorDirFile::update_file_state(const ActorId    &actor_id,
+                                                  const std::string file_id,
+                                                  FileState         state) {
+    auto actrDirFile = get_actor_dir_file(actor_id);
+    actrDirFile.update(fmt::format("UPDATE {} SET state = '{}' WHERE file_id = '{}'",
+                                   TableName,
+                                   std::to_underlying(state),
+                                   file_id));
+    actrDirFile.close();
+}
+
 std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &actor_id,
                                                                                  const std::string &search_value,
                                                                                  const std::string &field) {
@@ -190,6 +201,7 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
         return 0;
     }
 
+    /*
     auto count = db.select(fmt::format("SELECT COUNT(size) from {}", DfsF::TableNameFragments))[0];
     if (std::stoi(count["COUNT(size)"]) == 0) {
         return 0;
@@ -199,6 +211,8 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     auto &row  = rows[0];
 
     return std::stoull(row["SUM(size)"]);
+    */
+    return 0;
 }
 
 std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
