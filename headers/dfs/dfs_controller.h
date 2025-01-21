@@ -42,7 +42,7 @@
 
 class ExtraChainNode;
 class DirsManager;
-class DownloadManager;
+class LoadManager;
 using FileId                   = std::string;
 using ExpectedDirRow           = std::expected<Dfs::DirRow, Dfs::DfsError>;
 using ExpectedDirHistoricalRow = std::expected<std::pair<Dfs::DirRow, HistoricalCollectionRow>, Dfs::DfsError>;
@@ -200,9 +200,11 @@ public:
     // TODO: need two function: remove LOCAL file and remove file from STORE
 
     // visualMoveFile
-
-    void broadcast_stored(const Dfs::FileData &file_data);
+    void broadcast_stored(const ActorId &owner_id, const DirRow &dir_row);
+    void broadcast_stored_file(const ActorId &owner_id, const DirRow &dir_row);
     void sync_stored(const Dfs::FileData &file_data, const std::string &message_id);
+
+    void network_stored_fragment(const Dfs::Packets::FragmentData &fragment_data);
 
     // External interfaces
     std::string network_store_file(const ActorId        &owner_id,
@@ -220,7 +222,7 @@ public:
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::fsActrRoot) const;
 
     const DirsManager     &dirs_manager();
-    const DownloadManager &download_manager();
+    const LoadManager &download_manager();
 
     void sync(const std::string &identifier) {
         dirs_manager_.sync(identifier);
@@ -228,7 +230,7 @@ public:
 
 private:
     DirsManager     dirs_manager_;
-    DownloadManager download_manager_;
+    LoadManager download_manager_;
 
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
@@ -271,13 +273,12 @@ signals:
     void removed(ActorId owner_id, Dfs::DirRow dirRow);
 
     void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void uploadProgress(ActorId owner_id, std::string file_id, int progress);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void downloadProgress(ActorId owner_id, std::string file_id, int progress);
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
-
-    void downloadProgress(ActorId owner_id, std::string file_id, int progress);
-    void uploadProgress(ActorId owner_id, std::string file_id, int progress);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

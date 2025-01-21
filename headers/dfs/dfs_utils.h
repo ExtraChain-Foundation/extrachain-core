@@ -81,7 +81,7 @@ namespace Dfs {
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";
         static const std::string   COLLECTION_FILE            = ".collection";
-        static const std::uint64_t sectionSize                = /*2097152*/ 524228;
+        static const std::uint64_t FRAGMENT_SIZE              = /*2097152*/ 524228;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
         static const std::uint64_t historicalChainSectionSize = 209715200;
@@ -164,9 +164,9 @@ namespace Dfs {
 
     enum class FileState {
         Removed = 0,
-        Ready   = 1,
-        Known   = 2,
-        Partial = 3
+        Known   = 1,
+        Ready   = 2,
+        // Partial = 3
     };
 
     enum class DataSecurity {
@@ -263,6 +263,7 @@ namespace Dfs {
             std::string   data;
             std::uint64_t offset;
         };
+        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset))
 
         struct ResponseDfsSize {
             ActorId     actorId;
@@ -480,7 +481,7 @@ namespace Dfs {
 
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
             std::string        getLastFileId(DbConnector& db);
-            int                totalFileSize(const ActorId& actorId);
+            std::size_t totalFileSize(const ActorId& actorId);
             std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
             // TODO: expected
@@ -552,7 +553,7 @@ namespace Dfs {
 
     namespace Path {
         std::filesystem::path          filePath(const ActorId& actor_id, const std::string& file_id);
-        std::expected<FsPath, FsError> file_path(const ActorId& actor_id, const std::string& file_id);
+        std::expected<FsPath, FsError> file_path(const ActorId& owner_id, const std::string& file_id);
         std::filesystem::path          actorPath(const ActorId& actorId);
     } // namespace Path
 

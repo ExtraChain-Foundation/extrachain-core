@@ -383,7 +383,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
-                eInfo("[VPN] brocast further to socket: {}", socket_identifier);
+                // eInfo("[VPN] brocast further to socket: {}", socket_identifier);
             }
             return res;
         }
@@ -402,7 +402,10 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
 
             SocketService::Priority priority = SocketService::Priority::Normal;
-            // Dfs: Low
+
+            if (message_type == MessageType::DfsStoreFragment) {
+                priority = SocketService::Priority::Low;
+            }
             if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
                 priority = SocketService::Priority::High;
             }
@@ -934,6 +937,14 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DfsStoreFragment: {
+        auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+        if (!fragment_data_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for FragmentData", type);
+            break;
+        }
+
+        node->dfs()->network_stored_fragment(fragment_data_result.value());
+        sendBrodcastMessageFurther(package_data);
         break;
     }
 

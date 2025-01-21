@@ -26,7 +26,7 @@
 #include "dfs/dfs_utils.h"
 
 class ExtraChainNode;
-class DownloadManager;
+class LoadManager;
 using DirRow = Dfs::DirRow;
 
 enum class DirsError {

@@ -25,11 +25,11 @@
 // Implementation file will contain network-related includes that you'll add later
 // #include "network/dfs_sync_messages.h"
 
-DownloadManager::DownloadManager(ExtraChainNode* node)
+LoadManager::LoadManager(ExtraChainNode* node)
     : node(node) {
 }
 
-void DownloadManager::add_to_queue(ActorId actor_id, std::string file_id, Dfs::FileState state) {
+void LoadManager::add_to_queue(ActorId actor_id, std::string file_id, Dfs::FileState state) {
     eLog("Adding file to download queue: {} (state: {})", file_id, static_cast<int>(state));
 
     // Don't add if already in queue or active downloads
@@ -57,7 +57,7 @@ void DownloadManager::add_to_queue(ActorId actor_id, std::string file_id, Dfs::F
     // }
 }
 
-void DownloadManager::process_next() {
+void LoadManager::process_next() {
     // Check if we can add more downloads
     while (active_downloads.size() < MAX_CONCURRENT_DOWNLOADS) {
         auto next = get_next_download();
@@ -74,7 +74,7 @@ void DownloadManager::process_next() {
     }
 }
 
-std::optional<DownloadInfo> DownloadManager::get_next_download() {
+std::optional<LoadInfo> LoadManager::get_next_download() {
     while (!download_queue.empty()) {
         auto info = download_queue.front();
         download_queue.pop();
@@ -96,7 +96,7 @@ std::optional<DownloadInfo> DownloadManager::get_next_download() {
     return std::nullopt;
 }
 
-void DownloadManager::check_stalled_downloads() {
+void LoadManager::check_stalled_downloads() {
     std::vector<std::string> stalled_files;
 
     // Find stalled downloads
@@ -112,7 +112,7 @@ void DownloadManager::check_stalled_downloads() {
     }
 }
 
-void DownloadManager::move_to_queue_end(const std::string& file_id) {
+void LoadManager::move_to_queue_end(const std::string& file_id) {
     auto it = active_downloads.find(file_id);
     if (it == active_downloads.end()) {
         return;

@@ -33,7 +33,7 @@ DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
     , dirs_manager_(DirsManager(node))
-    , download_manager_(DownloadManager(node)) {
+    , download_manager_(LoadManager(node)) {
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
     // loadBytesLimit();
@@ -228,8 +228,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     // insertToFiles(dir_row);
     emit stored(owner_id, dir_row);
 
-    auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
-    broadcast_stored(file_data);
+    broadcast_stored(owner_id, dir_row);
+
+    broadcast_stored_file(owner_id, dir_row);
 
     return dir_row;
 }
@@ -381,9 +382,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
 
     // insertToFiles(dir_row);
     emit stored(owner_id, dir_row);
-
-    auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
-    broadcast_stored(file_data);
+    broadcast_stored(owner_id, dir_row);
 
     return dir_row;
 }
@@ -775,8 +774,78 @@ void DfsController::network_change_collection(const ActorId                 &own
     emit collectionChanged(owner_id, dir_row.value(), row);
 }
 
-void DfsController::broadcast_stored(const Dfs::FileData &file_data) {
+void DfsController::broadcast_stored(const ActorId &owner_id, const DirRow &dir_row) {
+    auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
     node->network()->send_message(file_data, MessageType::DfsStoreFile, Config::Net::TypeSend::Broadcast);
+}
+
+void DfsController::broadcast_stored_file(const ActorId &owner_id, const DirRow &dir_row) {
+    auto path = Dfs::Path::file_path(owner_id, dir_row.file_id);
+    if (!path.has_value()) {
+        return;
+    }
+    auto size = path->file_size();
+    if (!size.has_value()) {
+        return;
+    }
+
+    const uint64_t total_size = size.value();
+    uint64_t       offset     = 0;
+
+    // while (offset < total_size) {
+    //     // Calculate the size of the current fragment
+    //     uint64_t current_fragment_size = std::min(Dfs::Basic::FRAGMENT_SIZE, total_size - offset);
+
+    //     // Read the chunk from file
+    //     auto chunk = Utils::read_file_chunk(*path, offset, current_fragment_size);
+    //     if (!chunk.has_value()) {
+    //         // Handle error if reading fails
+    //         return;
+    //     }
+
+    //     // Prepare fragment data
+    //     Dfs::Packets::FragmentData file_fragment;
+    //     file_fragment.owner_id = owner_id;
+    //     file_fragment.file_id  = dir_row.file_id;
+    //     file_fragment.data     = std::move(chunk.value());
+    //     file_fragment.offset   = offset;
+
+    //     // Send the fragment
+    //     node->network()->send_message(file_fragment,
+    //                                   MessageType::DfsStoreFragment,
+    //                                   Config::Net::TypeSend::Broadcast);
+
+    //     // Move to next chunk
+    //     offset += current_fragment_size;
+    // }
+
+    std::thread sender([this, owner_id, dir_row, path = *path, total_size = *size]() {
+        uint64_t offset = 0;
+
+        while (offset < total_size) {
+            auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
+            if (!chunk.has_value()) {
+                return;
+            }
+
+            Dfs::Packets::FragmentData file_fragment;
+            file_fragment.owner_id = owner_id;
+            file_fragment.file_id  = dir_row.file_id;
+            file_fragment.data     = std::move(*chunk);
+            file_fragment.offset   = offset;
+
+            node->network()->send_message(file_fragment,
+                                          MessageType::DfsStoreFragment,
+                                          Config::Net::TypeSend::Broadcast);
+
+            offset += Dfs::Basic::FRAGMENT_SIZE;
+
+            // Задержка между отправками
+            std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        }
+    });
+
+    sender.detach();
 }
 
 void DfsController::sync_stored(const Dfs::FileData &file_data, const std::string &message_id) {
@@ -785,6 +854,25 @@ void DfsController::sync_stored(const Dfs::FileData &file_data, const std::strin
                                   Config::Net::TypeSend::Focused,
                                   MessageStatus::Response,
                                   message_id);
+}
+
+void DfsController::network_stored_fragment(const Dfs::Packets::FragmentData &fragment_data) {
+    // TODO: Fragments: verify fragment
+    if (fragment_data.data.size() > Dfs::Basic::FRAGMENT_SIZE) {
+        eCritical("[Dfs] Incorrect fragment size: {}", fragment_data.data.size());
+        return;
+    }
+
+    auto path = Dfs::Path::file_path(fragment_data.owner_id, fragment_data.file_id);
+    if (!path.has_value()) {
+        return;
+    }
+
+    auto result = Utils::write_file_chunk(path.value(), fragment_data.data, fragment_data.offset);
+
+    if (!result.has_value()) {
+        return;
+    }
 }
 
 std::string DfsController::network_store_file(const ActorId        &owner_id,
@@ -873,9 +961,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
 
     if (network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
-    } else {
-        emit added(owner_id, dir_row);
     }
+
+    emit added(owner_id, dir_row);
 
     std::string stored_added = network_stote == Dfs::NetworkStoreFile::Broadcast ? "stored" : "added";
     eLog("[Dfs] File {}/{} was {}", owner_id, dir_row.file_id, stored_added);
@@ -1063,7 +1151,7 @@ const DirsManager &DfsController::dirs_manager() {
     return dirs_manager_;
 }
 
-const DownloadManager &DfsController::download_manager() {
+const LoadManager &DfsController::download_manager() {
     return download_manager_;
 }
 

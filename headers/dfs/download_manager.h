@@ -36,7 +36,7 @@ enum class DownloadError {
     FileNotFound
 };
 
-struct DownloadInfo {
+struct LoadInfo {
     ActorId                               actor_id;
     std::string                           file_id;
     int                                   attempt_count { 0 };
@@ -59,9 +59,9 @@ struct DownloadInfo {
     }
 };
 
-class DownloadManager {
+class LoadManager {
 public:
-    DownloadManager(ExtraChainNode* node);
+    LoadManager(ExtraChainNode* node);
 
     void add_to_queue(ActorId actor_id, std::string file_id, Dfs::FileState state);
     void process_next();
@@ -79,10 +79,11 @@ private:
     static constexpr int  MAX_CONCURRENT_DOWNLOADS = 2;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
-    std::queue<DownloadInfo>                      download_queue;
-    std::unordered_map<std::string, DownloadInfo> active_downloads; // file_id -> DownloadInfo
+    // current_upload
+    std::queue<LoadInfo>                      download_queue;
+    std::unordered_map<std::string, LoadInfo> active_downloads; // file_id -> LoadInfo
 
-    [[nodiscard]] std::optional<DownloadInfo> get_next_download();
+    [[nodiscard]] std::optional<LoadInfo> get_next_download();
     void move_to_queue_end(const std::string& file_id); // Перемещение "зависшей" загрузки в конец очереди
 
     // Тебе нужно будет добавить:

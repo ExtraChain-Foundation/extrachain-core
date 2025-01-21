@@ -180,8 +180,8 @@ std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::st
            + file_id;
 }
 
-std::expected<FsPath, FsError> Dfs::Path::file_path(const ActorId &actor_id, const std::string &file_id) {
-    auto path = fmt::format("{}/{}/{}", DfsB::fsActrRoot, actor_id, file_id);
+std::expected<FsPath, FsError> Dfs::Path::file_path(const ActorId &owner_id, const std::string &file_id) {
+    auto path = fmt::format("{}/{}/{}", DfsB::fsActrRoot, owner_id, file_id);
     // TODO: validate file id
     return FsPath::create(path);
 }
@@ -190,7 +190,7 @@ std::filesystem::path Dfs::Path::actorPath(const ActorId &actorId) {
     return DfsB::fsActrRoot + Utils::platformDelimeter() + actorId.to_string();
 }
 
-int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
+std::size_t Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
     auto db = get_actor_dir_file(actorId);
     if (!db.is_open()) {
         eFatal("Database {} error", db.file());
@@ -202,7 +202,7 @@ int Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
         return 0;
 
     auto row = db.select(fmt::format("SELECT SUM(size) from {}", TableName)).at(0);
-    return std::stoi(row["SUM(size)"]);
+    return std::stoll(row["SUM(size)"]);
 }
 
 std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     &actorId,
