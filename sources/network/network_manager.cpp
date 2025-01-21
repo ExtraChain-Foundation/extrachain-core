@@ -383,7 +383,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
-                // eInfo("[VPN] brocast further to socket: {}", socket_identifier);
+                // eTemp("[VPN] brocast further to socket: {}", socket_identifier);
             }
             return res;
         }
@@ -441,7 +441,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
     auto serialized = message_edited.serialize();
     sendMessage(serialized + package_data.sign, message_edited, Config::Net::TypeSend::Broadcast, "");
 
-    eInfo("Message forwarded with messageId: {}", package_data.msg_body.message_id);
+    // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
     network_forwarded_messages_locked->emplace(message_edited.message_id,
                                                std::make_pair(package_data.prev_identifier,
@@ -650,7 +650,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
     }
 
-    const NetworkPackageStorage package_data(message_body, identifier, sign.data());
+    const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
