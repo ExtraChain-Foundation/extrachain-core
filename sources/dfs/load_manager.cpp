@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "dfs/download_manager.h"
+#include "dfs/load_manager.h"
 
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"

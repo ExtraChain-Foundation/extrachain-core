@@ -22,7 +22,7 @@
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 #include "dfs/dfs_controller.h"
-#include "dfs/download_manager.h"
+#include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
 
 // тебе нужно будет добавить:

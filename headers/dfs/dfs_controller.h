@@ -37,7 +37,7 @@
 #include "blockchain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dirs_manager.h"
-#include "dfs/download_manager.h"
+#include "dfs/load_manager.h"
 #include "dfs/historical_collection.h"
 
 class ExtraChainNode;

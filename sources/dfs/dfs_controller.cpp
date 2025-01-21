@@ -27,7 +27,7 @@
 #include "dfs/name_validator.h"
 #include "dfs/collection_template.h"
 #include "dfs/dirs_manager.h"
-#include "dfs/download_manager.h"
+#include "dfs/load_manager.h"
 
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
