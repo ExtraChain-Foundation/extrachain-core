@@ -27,7 +27,6 @@
 
 class ExtraChainNode;
 class LoadManager;
-using DirRow = Dfs::DirRow;
 
 enum class DirsError {
     FileSystemError,
@@ -39,20 +38,20 @@ class DirsManager {
 public:
     DirsManager(ExtraChainNode* node);
 
-    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified) const;
+    void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
 
-    void sync(const std::string& identifier) const;
-    void network_request_sync(const std::string& message_id) const;
-    void network_response_sync(std::uint64_t max_last_modified, const std::string& message_id) const;
+    void sync(const std::string& identifier);
+    void network_request_sync(const std::string& message_id);
+    void network_response_sync(std::uint64_t max_last_modified, const std::string& message_id);
 
-    void send_from_last_modified(std::uint64_t last_modified, const std::string& message_id) const;
+    void send_from_last_modified(std::uint64_t last_modified, const std::string& message_id);
     void network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
-                                             const std::string&                         identifier) const;
+                                             const std::string&                         identifier);
 
-    void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id) const;
+    void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id);
     void network_response_dir_rows(const ActorId&                  owner_id,
                                    const std::vector<Dfs::DirRow>& dir_rows,
-                                   const std::string&              message_id) const;
+                                   const std::string&              identifier);
 
 private:
     ExtraChainNode* node;

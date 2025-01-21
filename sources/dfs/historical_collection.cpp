@@ -33,7 +33,7 @@ HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
                                            Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->node               = node;
-    this->file_path_         = DfsPath::file_path(file_actor_id, file_id).value();
+    this->file_path_         = Dfs::Path::file_path(file_actor_id, file_id).value();
     auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), ".collection");
     this->historical_path_   = FsPath::create(historical_path_str).value();
     this->actor_             = actor;

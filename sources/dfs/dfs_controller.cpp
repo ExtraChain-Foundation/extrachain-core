@@ -33,7 +33,7 @@ DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
     , dirs_manager_(DirsManager(node))
-    , download_manager_(LoadManager(node)) {
+    , load_manager_(LoadManager(node)) {
     m_sizeTaken    = calculateSizeTaken();
     m_totalDfsSize = calculateFilesSize();
     // loadBytesLimit();
@@ -113,7 +113,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     std::string           file_id = create_file_id(file_path);
     std::filesystem::path place_in_dfs =
         DfsB::fsActrRootW + DfsB::separator + owner_id.toQString().toStdWString() + DfsB::separator;
-    auto dfs_path = DfsPath::file_path(owner_id, file_id).value();
+    auto dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
 
     if (dfs_path.exists()) {
         // TODO: maybe just regen id?
@@ -230,7 +230,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     broadcast_stored(owner_id, dir_row);
 
-    broadcast_stored_file(owner_id, dir_row);
+    load_manager_.broadcast_stored_file(owner_id, dir_row.file_id);
 
     return dir_row;
 }
@@ -335,7 +335,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
     std::string file_id  = create_file_id_from("db");
-    auto        dfs_path = DfsPath::file_path(owner_id, file_id).value();
+    auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -501,7 +501,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
 bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
                                                const std::string &file_id,
                                                const std::string &hash) {
-    const auto path = DfsPath::file_path(owner_id, file_id);
+    const auto path = Dfs::Path::file_path(owner_id, file_id);
     if (!path.has_value()) {
         eWarning("[Dfs] Add file from network: incorrect dir row for owner {} and hash '{}'", owner_id, hash);
     }
@@ -663,7 +663,7 @@ void DfsController::network_response_historical_collection(
         return;
     }
 
-    auto dfs_path = DfsPath::file_path(owner_id, file_id);
+    auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
     if (!dfs_path->exists()) {
         return;
     }
@@ -774,78 +774,9 @@ void DfsController::network_change_collection(const ActorId                 &own
     emit collectionChanged(owner_id, dir_row.value(), row);
 }
 
-void DfsController::broadcast_stored(const ActorId &owner_id, const DirRow &dir_row) {
+void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
     auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
     node->network()->send_message(file_data, MessageType::DfsStoreFile, Config::Net::TypeSend::Broadcast);
-}
-
-void DfsController::broadcast_stored_file(const ActorId &owner_id, const DirRow &dir_row) {
-    auto path = Dfs::Path::file_path(owner_id, dir_row.file_id);
-    if (!path.has_value()) {
-        return;
-    }
-    auto size = path->file_size();
-    if (!size.has_value()) {
-        return;
-    }
-
-    const uint64_t total_size = size.value();
-    uint64_t       offset     = 0;
-
-    // while (offset < total_size) {
-    //     // Calculate the size of the current fragment
-    //     uint64_t current_fragment_size = std::min(Dfs::Basic::FRAGMENT_SIZE, total_size - offset);
-
-    //     // Read the chunk from file
-    //     auto chunk = Utils::read_file_chunk(*path, offset, current_fragment_size);
-    //     if (!chunk.has_value()) {
-    //         // Handle error if reading fails
-    //         return;
-    //     }
-
-    //     // Prepare fragment data
-    //     Dfs::Packets::FragmentData file_fragment;
-    //     file_fragment.owner_id = owner_id;
-    //     file_fragment.file_id  = dir_row.file_id;
-    //     file_fragment.data     = std::move(chunk.value());
-    //     file_fragment.offset   = offset;
-
-    //     // Send the fragment
-    //     node->network()->send_message(file_fragment,
-    //                                   MessageType::DfsStoreFragment,
-    //                                   Config::Net::TypeSend::Broadcast);
-
-    //     // Move to next chunk
-    //     offset += current_fragment_size;
-    // }
-
-    std::thread sender([this, owner_id, dir_row, path = *path, total_size = *size]() {
-        uint64_t offset = 0;
-
-        while (offset < total_size) {
-            auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
-            if (!chunk.has_value()) {
-                return;
-            }
-
-            Dfs::Packets::FragmentData file_fragment;
-            file_fragment.owner_id = owner_id;
-            file_fragment.file_id  = dir_row.file_id;
-            file_fragment.data     = std::move(*chunk);
-            file_fragment.offset   = offset;
-
-            node->network()->send_message(file_fragment,
-                                          MessageType::DfsStoreFragment,
-                                          Config::Net::TypeSend::Broadcast);
-
-            offset += Dfs::Basic::FRAGMENT_SIZE;
-
-            // Задержка между отправками
-            std::this_thread::sleep_for(std::chrono::milliseconds(15));
-        }
-    });
-
-    sender.detach();
 }
 
 void DfsController::sync_stored(const Dfs::FileData &file_data, const std::string &message_id) {
@@ -854,25 +785,6 @@ void DfsController::sync_stored(const Dfs::FileData &file_data, const std::strin
                                   Config::Net::TypeSend::Focused,
                                   MessageStatus::Response,
                                   message_id);
-}
-
-void DfsController::network_stored_fragment(const Dfs::Packets::FragmentData &fragment_data) {
-    // TODO: Fragments: verify fragment
-    if (fragment_data.data.size() > Dfs::Basic::FRAGMENT_SIZE) {
-        eCritical("[Dfs] Incorrect fragment size: {}", fragment_data.data.size());
-        return;
-    }
-
-    auto path = Dfs::Path::file_path(fragment_data.owner_id, fragment_data.file_id);
-    if (!path.has_value()) {
-        return;
-    }
-
-    auto result = Utils::write_file_chunk(path.value(), fragment_data.data, fragment_data.offset);
-
-    if (!result.has_value()) {
-        return;
-    }
 }
 
 std::string DfsController::network_store_file(const ActorId        &owner_id,
@@ -1147,12 +1059,12 @@ std::uint64_t DfsController::calculateDataAmountStored(const std::string &folder
     return size;
 }
 
-const DirsManager &DfsController::dirs_manager() {
+DirsManager &DfsController::dirs_manager() {
     return dirs_manager_;
 }
 
-const LoadManager &DfsController::download_manager() {
-    return download_manager_;
+LoadManager &DfsController::download_manager() {
+    return load_manager_;
 }
 
 // TODO: use dfs size
@@ -1204,38 +1116,6 @@ float DfsController::percentVerified(std::vector<Dfs::Packets::VerifyFileMessage
     }
     result = ((float)countFilesVerified / (float)fileList.size()) * 100;
     return result;
-}
-
-void DfsController::removeRowFromDB(const Dfs::Packets::RemoveFileMessage &msg) {
-    std::string pathDelim       = Utils::platformDelimeter();
-    std::string actorPath       = fmt::format("{}{}{}{}", DfsB::fsActrRoot, pathDelim, msg.actorId, pathDelim);
-    std::string actrDirFilePath = fmt::format("{}{}", actorPath, DfsB::fsMapName);
-    DbConnector actrDirFile(actrDirFilePath);
-    if (!actrDirFile.open()) {
-        eLog("No dir file 3");
-        return;
-    }
-
-    std::vector<DbRow> actrDirData = DfsT::ActorDirFile::getFileDataByName(&actrDirFile, msg.file_id);
-    std::string        prevHash;
-    for (auto it = actrDirData.begin(); it < actrDirData.end(); it++) {
-        if (it->at("file_id") == msg.file_id) {
-            auto prevFileIdIt = it->find("prev_file_id");
-            prevHash          = (prevFileIdIt != it->end()) ? prevFileIdIt->second : "";
-
-            if (!prevHash.empty()) {
-                actrDirFile.update(fmt::format("UPDATE {} SET prev_file_id = '{}' WHERE prev_file_id = '{}'",
-                                               DfsT::ActorDirFile::TableName,
-                                               prevHash,
-                                               it->at("file_id")));
-            }
-            actrDirFile.query(fmt::format("DELETE FROM {} WHERE file_id = '{}'",
-                                          DfsT::ActorDirFile::TableName,
-                                          it->at("file_id")));
-        }
-    }
-
-    actrDirFile.close();
 }
 
 std::uint64_t DfsController::bytesLimit() const {

@@ -135,6 +135,19 @@ namespace Dfs {
         std::string hex_string_;
     };
 
+    struct FileLink {
+        ActorId     owner_id;
+        std::string file_id;
+
+        bool operator==(const FileLink&) const  = default;
+        auto operator<=>(const FileLink&) const = default;
+
+        size_t hash() const {
+            return std::hash<std::string>()(owner_id.to_string() + file_id);
+        }
+    };
+    BOOST_DESCRIBE_STRUCT(FileLink, (), (owner_id, file_id))
+
     enum class DfsError {
         Unknown,
         NotExists,
@@ -165,8 +178,8 @@ namespace Dfs {
     enum class FileState {
         Removed = 0,
         Known   = 1,
-        Ready   = 2,
-        // Partial = 3
+        Partial = 2,
+        Ready   = 3,
     };
 
     enum class DataSecurity {
@@ -254,6 +267,12 @@ namespace Dfs {
                            state,
                            sign))
 
+    struct FileData {
+        ActorId owner_id;
+        DirRow  dir_row;
+    };
+    BOOST_DESCRIBE_STRUCT(FileData, (), (owner_id, dir_row))
+
     namespace Packets {
         struct FragmentData {
             ActorId     owner_id;
@@ -289,56 +308,6 @@ namespace Dfs {
             ActorId actorId;
 
             MSGPACK_DEFINE(actorId)
-        };
-
-        struct RequestFileSegmentMessage {
-            ActorId       actorId;
-            std::string   file_id;
-            std::string   hash;
-            std::uint64_t offset;
-            MSGPACK_DEFINE(actorId, file_id, hash, offset)
-        };
-
-        struct RemoveFileMessage {
-            ActorId     actorId;
-            std::string file_id;
-            MSGPACK_DEFINE(actorId, file_id)
-        };
-
-        struct SegmentMessage {
-            ActorId       actorId;
-            std::string   file_id;
-            std::string   hash;
-            std::string   data;
-            std::uint64_t offset;
-            MSGPACK_DEFINE(actorId, file_id, hash, data, offset)
-        };
-
-        enum SegmentMessageType {
-            Add     = 0,
-            Insert  = 1,
-            Replace = 2,
-            Remove  = 3
-        };
-
-        struct EditSegmentMessage {
-            ActorId            actorId;
-            std::string        file_id;
-            std::string        hash;
-            std::string        newHash;
-            std::string        data;
-            std::uint64_t      offset;
-            SegmentMessageType actionType;
-            MSGPACK_DEFINE(actorId, file_id, hash, data, offset, actionType)
-        };
-
-        struct DeleteSegmentMessage {
-            ActorId       actorId;
-            std::string   file_id;
-            std::string   hash;
-            std::uint64_t offset;
-            std::uint64_t size;
-            MSGPACK_DEFINE(actorId, file_id, hash, offset, size)
         };
 
         struct VerifyFileMessage {
@@ -400,6 +369,10 @@ namespace Dfs {
     } // namespace FragmentsOld
 
     namespace Historical {
+        static const std::string HISTORICAL_TABLE = "historical_chain";
+    }
+
+    namespace HistoricalOld {
         struct FileChange {
             std::uint64_t pos;
             std::string   data;
@@ -414,8 +387,6 @@ namespace Dfs {
             }
         };
 
-        static const std::string HISTORICAL_TABLE = "historical_chain";
-
         static const std::string TableNameHC = "HistoricalChain";
         static const std::string CreateTableHistoricalChain = "CREATE TABLE IF NOT EXISTS " + TableNameHC
                                                       + "("
@@ -425,7 +396,7 @@ namespace Dfs {
                                                         "data       BLOB                NOT NULL,"
                                                         "hash       TEXT                NOT NULL "
                                                         ");";
-    } // namespace Historical
+    } // namespace HistoricalOld
 
     namespace Reward {
         static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
@@ -481,7 +452,7 @@ namespace Dfs {
 
             std::vector<DbRow> getFileDataByName(DbConnector* db, std::string name);
             std::string        getLastFileId(DbConnector& db);
-            std::size_t totalFileSize(const ActorId& actorId);
+            std::size_t        totalFileSize(const ActorId& actorId);
             std::uint64_t      dataAmountStoredSize(const ActorId& actorId, const std::string& storjName);
 
             // TODO: expected
@@ -582,32 +553,27 @@ namespace Dfs {
         void insert_vector(const std::vector<DirsRow>& dirs_rows);
     } // namespace DirsFile
 
-    struct FileLink {
-        ActorId     owner_id;
-        std::string file_id;
-    };
-    BOOST_DESCRIBE_STRUCT(FileLink, (), (owner_id, file_id))
-
-    struct FileData {
-        ActorId owner_id;
-        DirRow  dir_row;
-    };
-    BOOST_DESCRIBE_STRUCT(FileData, (), (owner_id, dir_row))
-
     void initialize_actor_folder(const ActorId& actor_id);
 } // namespace Dfs
 
 MAKE_CUSTOM_MAGICAL(Dfs::FileId)
 
 namespace DfsP = Dfs::Packets;
-// namespace DfsF    = Dfs::Fragments;
-namespace DfsT    = Dfs::Tables;
-namespace DfsHc   = Dfs::Historical;
-namespace DfsB    = Dfs::Basic;
-namespace DfsPath = Dfs::Path;
+// namespace DfsF    = Dfs::FragmentsOld;
+namespace DfsT = Dfs::Tables;
+// namespace DfsHc   = Dfs::HistoricalOld;
+namespace DfsB = Dfs::Basic;
 
-MSGPACK_ADD_ENUM(Dfs::FileType)
-MSGPACK_ADD_ENUM(Dfs::FileState)
-MSGPACK_ADD_ENUM(Dfs::DataSecurity)
-MSGPACK_ADD_ENUM(Dfs::Packets::SegmentMessageType)
+// MSGPACK_ADD_ENUM(Dfs::FileType)
+// MSGPACK_ADD_ENUM(Dfs::FileState)
+// MSGPACK_ADD_ENUM(Dfs::DataSecurity)
 MSGPACK_ADD_ENUM(Dfs::Reward::TypeFunctioning)
+
+namespace std {
+    template <>
+    struct hash<Dfs::FileLink> {
+        std::size_t operator()(const Dfs::FileLink& c) const {
+            return c.hash();
+        }
+    };
+} // namespace std

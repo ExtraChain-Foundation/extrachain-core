@@ -915,7 +915,7 @@ void NetworkManager::messageReceived(const std::string &message,
             }
             auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, messageId);
+            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, identifier);
         }
 
         break;
@@ -936,15 +936,32 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::DfsStoreFragment: {
+    case MessageType::DfsStoreFragment:
+    case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
         if (!fragment_data_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for FragmentData", type);
             break;
         }
 
-        node->dfs()->network_stored_fragment(fragment_data_result.value());
-        sendBrodcastMessageFurther(package_data);
+        node->dfs()->download_manager().network_fragment(fragment_data_result.value());
+
+        if (type == MessageType::DfsStoreFragment) {
+            sendBrodcastMessageFurther(package_data);
+        }
+        break;
+    }
+
+    case MessageType::DfsFileRequest: {
+        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        if (!link_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file request", type);
+            break;
+        }
+
+        node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
+                                                              link_result->file_id,
+                                                              identifier);
         break;
     }
 

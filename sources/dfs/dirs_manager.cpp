@@ -21,6 +21,7 @@
 
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
+#include "dfs/dfs_controller.h"
 #include "dfs/download_manager.h"
 #include "utils/exc_logs.h"
 
@@ -40,7 +41,7 @@ DirsManager::DirsManager(ExtraChainNode* node)
     }
 }
 
-void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) const {
+void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
     auto max_last_modified = Dfs::DirsFile::max_last_modified();
     if (!max_last_modified.has_value()) {
         return;
@@ -53,7 +54,7 @@ void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) c
     Dfs::DirsFile::insert(dirs_row);
 }
 
-void DirsManager::sync(const std::string& identifier) const {
+void DirsManager::sync(const std::string& identifier) {
     if (identifier.empty()) {
         return;
     }
@@ -66,7 +67,7 @@ void DirsManager::sync(const std::string& identifier) const {
                                   identifier);
 }
 
-void DirsManager::network_request_sync(const std::string& message_id) const {
+void DirsManager::network_request_sync(const std::string& message_id) {
     auto max_last_modified = Dfs::DirsFile::max_last_modified();
     if (!max_last_modified.has_value()) {
         eFatal("[Dfs] Sync error");
@@ -79,12 +80,12 @@ void DirsManager::network_request_sync(const std::string& message_id) const {
                                   message_id);
 }
 
-void DirsManager::network_response_sync(uint64_t max_last_modified, const std::string& message_id) const {
+void DirsManager::network_response_sync(uint64_t max_last_modified, const std::string& message_id) {
     eLog("--------------- {} ", max_last_modified);
     send_from_last_modified(max_last_modified, message_id);
 }
 
-void DirsManager::send_from_last_modified(uint64_t last_modified, const std::string& message_id) const {
+void DirsManager::send_from_last_modified(uint64_t last_modified, const std::string& message_id) {
     auto allall = Dfs::DirsFile::load_from_modified(last_modified);
     if (!allall.has_value()) {
         return;
@@ -107,7 +108,7 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const std::str
 }
 
 void DirsManager::network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
-                                                      const std::string& identifier) const {
+                                                      const std::string&                         identifier) {
     eTemp("!_!_!_! {}", dirs_rows);
     std::vector<ActorId> actors;
     actors.reserve(dirs_rows.size());
@@ -129,8 +130,7 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
     }
 }
 
-void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row,
-                                           const std::string&            message_id) const {
+void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id) {
     auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dirs_row.actor_id, dirs_row.last_modified);
 
     if (!dir_rows.has_value()) {
@@ -145,7 +145,7 @@ void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_ro
 
 void DirsManager::network_response_dir_rows(const ActorId&                  owner_id,
                                             const std::vector<Dfs::DirRow>& dir_rows,
-                                            const std::string&              message_id) const {
+                                            const std::string&              identifier) {
     eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
     // TODO: add merge for sync dir file
 
@@ -154,6 +154,8 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
-    auto max_value = std::ranges::max(dir_rows, {}, &DirRow::last_modified).last_modified;
+    auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
     this->update_dirs(owner_id, max_value);
+
+    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, identifier);
 }

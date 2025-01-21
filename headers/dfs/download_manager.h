@@ -24,8 +24,8 @@
 #include <chrono>
 #include <expected>
 #include <unordered_set>
-
-#include "dfs_utils.h"
+#include <unordered_map>
+#include "dfs/dfs_utils.h"
 #include "blockchain/actor_id.h"
 
 class ExtraChainNode;
@@ -37,13 +37,12 @@ enum class DownloadError {
 };
 
 struct LoadInfo {
-    ActorId                               actor_id;
-    std::string                           file_id;
+    Dfs::DirRow                           dir_row;
     int                                   attempt_count { 0 };
     std::chrono::system_clock::time_point last_attempt {};
-    std::chrono::system_clock::time_point last_segment_time {}; // Время последнего полученного сегмента
-    Dfs::FileState                        state { Dfs::FileState::Known };
-    std::unordered_set<std::string>       tried_neighbors;
+    std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
+    // Dfs::FileState                        state { Dfs::FileState::Known };
+    std::unordered_set<std::string> tried_neighbors;
 
     [[nodiscard]] std::chrono::milliseconds next_delay() const {
         return std::chrono::minutes(1) * (1 << attempt_count);
@@ -54,23 +53,31 @@ struct LoadInfo {
     }
 
     [[nodiscard]] bool is_stalled() const {
-        // Если последний сегмент был получен более 30 секунд назад
+        // If last segment was received more than 30 seconds ago
         return std::chrono::system_clock::now() - last_segment_time > std::chrono::seconds(30);
     }
 };
 
 class LoadManager {
 public:
-    LoadManager(ExtraChainNode* node);
+    explicit LoadManager(ExtraChainNode* node);
 
-    void add_to_queue(ActorId actor_id, std::string file_id, Dfs::FileState state);
-    void process_next();
-    void check_stalled_downloads(); // Проверка "зависших" загрузок
+    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
+    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
 
-    // Тебе нужно будет добавить:
+    // void process_next();
+    void check_stalled_downloads(); // Check "stalled" downloads
+
+    // You'll need to add:
     // void on_search_result(const DfsSyncSearchResult& result);
-    // void on_segment_received(const std::string& file_id); // Обновление времени последнего сегмента
-    // void on_download_error(/* параметры ошибки */);
+    // void on_segment_received(const std::string& file_id); // Update time of last segment
+    // void on_download_error(/* error parameters */);
+
+    void broadcast_stored_file(const ActorId&     owner_id,
+                               const std::string& file_id,
+                               const std::string& identifier = "");
+
+    void network_fragment(const Dfs::Packets::FragmentData& fragment_data);
 
 private:
     ExtraChainNode* node;
@@ -79,14 +86,14 @@ private:
     static constexpr int  MAX_CONCURRENT_DOWNLOADS = 2;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
-    // current_upload
-    std::queue<LoadInfo>                      download_queue;
-    std::unordered_map<std::string, LoadInfo> active_downloads; // file_id -> LoadInfo
+    std::queue<LoadInfo>                        download_queue;
+    std::unordered_map<Dfs::FileLink, LoadInfo> active_downloads;
+    std::set<Dfs::FileLink>                     temp_active;
 
-    [[nodiscard]] std::optional<LoadInfo> get_next_download();
-    void move_to_queue_end(const std::string& file_id); // Перемещение "зависшей" загрузки в конец очереди
+    // [[nodiscard]] std::optional<LoadInfo> get_next_download();
+    void move_to_queue_end(const Dfs::FileLink& file_link); // Move stalled download to end of queue
 
-    // Тебе нужно будет добавить:
-    // void send_search_request(const DownloadInfo& info);
+    // You'll need to add:
+    // void send_search_request(const LoadInfo& info);
     // std::string select_random_neighbor(const std::unordered_set<std::string>& excluded);
 };
