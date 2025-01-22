@@ -133,6 +133,7 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     std::expected<void, ActorSaveError> store_new_actor(const Actor<KeyPublic> &actor);
+    std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
     std::vector<ActorId>                allActors();
     void                                handleNewAllActors(const std::vector<ActorId> &actors);
