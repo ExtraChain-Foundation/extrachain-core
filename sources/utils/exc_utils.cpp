@@ -259,9 +259,6 @@ std::expected<std::string, Utils::FileHashError> Utils::calculate_hash_file(cons
     if (!exists_result) {
         return std::unexpected(FileHashError::FileNotFound);
     }
-    if (!*exists_result) {
-        return std::unexpected(FileHashError::FileNotFound);
-    }
 
     auto has_read = path.has_read_permission();
     if (!has_read) {
@@ -676,7 +673,7 @@ std::expected<std::string, Utils::FileError> Utils::read_file_chunk(const FsPath
 
     try {
         auto exists = file_path.exists();
-        if (!exists.has_value() || !exists.value()) {
+        if (!exists) {
             return std::unexpected(FileError::InvalidInput);
         }
 
@@ -745,11 +742,8 @@ std::expected<void, Utils::FileError> prepare_file(const FsPath &file_path, std:
 
     try {
         auto exists = file_path.exists();
-        if (!exists.has_value()) {
-            return std::unexpected(FileError::InvalidInput);
-        }
 
-        if (!exists.value()) {
+        if (!exists) {
             // Create new file of required size
             std::ofstream file(file_path.native(), std::ios::binary);
             if (!file) {
@@ -805,18 +799,13 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
 
     // Check if we have write permissions for the file or its parent directory if file doesn't exist
     auto exists = file_path.exists();
-    if (!exists.has_value()) {
-        eLog("Failed to check if file exists");
-        return std::unexpected(FileError::OpenError);
-    }
-
-    if (exists.value()) {
+    if (exists) {
         // File exists - check write permissions
-        auto parent = file_path.parent_path();
-        if (!parent.has_value()) {
-            eLog("Failed to get parent path");
-            return std::unexpected(FileError::OpenError);
-        }
+        // auto parent = file_path.parent_path();
+        // if (!parent.has_value()) {
+        //     eLog("Failed to get parent path");
+        //     return std::unexpected(FileError::OpenError);
+        // }
     }
 
     // Open file in appropriate mode

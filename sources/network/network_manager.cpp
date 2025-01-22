@@ -796,7 +796,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for new actor", type);
             return;
         }
-        auto actor_handling_result = node->actorIndex()->save_actor(new_actor_result.value());
+        auto actor_handling_result = node->actorIndex()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
             sendBrodcastMessageFurther(package_data);
         }

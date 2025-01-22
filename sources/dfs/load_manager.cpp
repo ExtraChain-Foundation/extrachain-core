@@ -112,8 +112,7 @@ void LoadManager::check_all_files(std::string identifier) {
                     continue;
                 }
 
-                auto exists = file_path->exists();
-                if (exists.has_value() && exists.value()) {
+                if (file_path->exists()) {
                     auto size = file_path->file_size();
                     if (size.has_value() && size == row.size) {
                         continue;

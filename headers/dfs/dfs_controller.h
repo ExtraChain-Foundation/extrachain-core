@@ -197,9 +197,12 @@ public:
                                      Dfs::FileState     state,
                                      std::string        identifier);
 
-    //
-    // void remote_stored_file();
-    // void remove_local_file();
+    // full file remove
+    std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
+    void                      network_remove_stored_file(const ActorId &owner_id, const std::string &file_id);
+
+    // remove only local copy
+    std::expected<void, bool> remove_local_file(const ActorId &owner_id, const std::string &file_id);
 
     // TODO: get rows from collection
 

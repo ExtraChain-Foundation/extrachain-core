@@ -86,13 +86,7 @@ class Logger {
             return;
         }
 
-        auto exists = path->exists();
-        if (!exists.has_value()) {
-            fmt::println("Failed to check directory existence: {}", static_cast<int>(exists.error()));
-            return;
-        }
-
-        if (exists.value()) {
+        if (path->exists()) {
             return;
         }
 

@@ -144,4 +144,5 @@ public:
 
 signals:
     void newActorSaved(ActorId actor_id);
+    void actorSaved(ActorId actor_id);
 };

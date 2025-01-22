@@ -254,7 +254,23 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
 
 std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyPublic> &actor) {
     auto result = this->save_actor(actor);
+    if (!result.has_value()) {
+        return std::unexpected(result.error());
+    }
+
+    emit newActorSaved(actor.id());
     node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::Broadcast);
+    return result;
+}
+
+std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Actor<KeyPublic> &actor)
+{
+    auto result = this->save_actor(actor);
+    if (!result.has_value()) {
+        return std::unexpected(result.error());
+    }
+
+    emit newActorSaved(actor.id());
     return result;
 }
 
@@ -270,7 +286,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
         return std::unexpected(ActorSaveError::Undefined);
     }
 
-    emit newActorSaved(actor.id());
+    emit actorSaved(actor.id());
     return {};
 }
 

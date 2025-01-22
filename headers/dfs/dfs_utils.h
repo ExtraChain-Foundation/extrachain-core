@@ -176,11 +176,12 @@ namespace Dfs {
     };
 
     enum class FileState {
-        Removed = 0,
-        Known   = 1,
-        Partial = 2,
-        Ready   = 3,
-        Unknown = 100
+        Removed    = 0,
+        Known      = 1,
+        Partial    = 2,
+        Processing = 3,
+        Ready      = 4,
+        Unknown    = 100
     };
 
     enum class DataSecurity {
@@ -453,7 +454,7 @@ namespace Dfs {
       "last_modified INTEGER           NOT NULL,"
       "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
       "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 3),"
-      "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 3),"
+      "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 4),"
       "sign          TEXT              NOT NULL,"
       "UNIQUE(folder, name)"
       ");";

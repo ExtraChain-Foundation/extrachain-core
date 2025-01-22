@@ -39,7 +39,7 @@ DfsController::DfsController(ExtraChainNode *node)
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
-    connect(node->actorIndex(), &ActorIndex::newActorSaved, [this](ActorId actor_id) {
+    connect(node->actorIndex(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
         Dfs::initialize_actor_folder(actor_id);
     });
 }
@@ -513,22 +513,21 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
         // return true; // TODO: that's all
     }
 
-    if (auto exists = path->exists(); exists.has_value()) {
-        if (exists.value()) {
-            // TODO: use cached hash and state from dir row?
-            if (dir_row->type == Dfs::FileType::File) {
-                auto existing_hash = Utils::calculate_hash_file(path.value());
-                if (existing_hash.has_value() && existing_hash.value() == hash) {
-                    return true;
-                }
+    bool exists = path->exists();
+    if (exists) {
+        // TODO: use cached hash and state from dir row?
+        if (dir_row->type == Dfs::FileType::File) {
+            auto existing_hash = Utils::calculate_hash_file(path.value());
+            if (existing_hash.has_value() && existing_hash.value() == hash) {
+                return true;
             }
+        }
 
-            if (dir_row->type == Dfs::FileType::Collection) {
-                auto [collection_hash, collection_size] =
-                    Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
-                if (collection_hash == hash) {
-                    return true;
-                }
+        if (dir_row->type == Dfs::FileType::Collection) {
+            auto [collection_hash, collection_size] =
+                Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
+            if (collection_hash == hash) {
+                return true;
             }
         }
     }
@@ -814,6 +813,28 @@ void DfsController::network_response_file_state(const ActorId     &owner_id,
         dir_row->state = state;
         load_manager_.add_to_queue(owner_id, dir_row.value(), identifier);
     }
+}
+
+std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {
+    // Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
+    // emit removed(owner_id, );
+    return std::unexpected(false);
+}
+
+std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_id, const std::string &file_id) {
+    Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Known);
+    auto file_path = Dfs::Path::file_path(owner_id, file_id);
+    if (!file_path.has_value()) {
+        // return error getting path
+    }
+
+    auto exists = file_path->exists();
+    if (!file_path->exists()) {
+        // return no local file
+    }
+
+    std::filesystem::remove(file_path->native());
+    return {};
 }
 
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
