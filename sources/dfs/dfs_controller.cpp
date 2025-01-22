@@ -104,7 +104,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     }
     my_file.close();
 
-    auto file_size = new_file_path.file_size().value();
+    auto file_size_result = new_file_path.file_size();
+    if (!file_size_result.has_value()) {
+        eWarning("[Dfs] Can't size file");
+        return std::unexpected(Dfs::DfsError::NotReadable);
+    }
+    auto file_size = file_size_result.value();
     // if size == 0 -> return
     if (!writeAvailable(file_size)) {
         return std::unexpected(Dfs::DfsError::StorageFull);
