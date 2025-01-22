@@ -184,6 +184,17 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         m_blockchain->addBlockFromNetwork(firstBlock.value(), "", "");
     }
 
+    create_network_need_dfs_creation = true;
+
+    eSuccess("[Node] New network created");
+    return true;
+}
+
+void ExtraChainNode::create_new_network_dfs() {
+    // temp while no cached local new store file
+    create_network_need_dfs_creation = false;
+
+    auto first_id        = m_actorIndex->firstId();
     auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
         { Dfs::Field::ActorId("token_id").not_null().unique(),
           Dfs::Field::String("name").not_null().unique().length(3, 20),
@@ -193,31 +204,30 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
           Dfs::Field::String("color").not_null(),
           Dfs::Field::String("smart") });
 
-    auto template_res = m_dfs->store_template(first.id(), tokens_template);
+    auto template_res = m_dfs->store_template(first_id, tokens_template);
     if (!template_res.has_value()) {
         eCritical("Can't create token cache database, because {}", template_res.error());
-        return false;
+        return;
     }
 
     auto store_res =
-        m_dfs->store_collection(first.id(), first.id(), "Tokens", template_res->actor_id, template_res->file_id);
+        m_dfs->store_collection(first_id, first_id, "Tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         Utils::wipeDataFiles();
-        return false;
+        return;
     }
 
     auto tokens_row = TokensDataRow { .token_id = ActorId(),
                                       .name     = "ExtraChain",
                                       .ticker   = "EXC",
                                       .count    = BigNumberFloat(0),
-                                      .owner    = first.id(),
+                                      .owner    = first_id,
                                       .color    = "#111111",
                                       .smart    = "" };
     m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
 
-    eSuccess("[Node] New network created");
-    return true;
+    eSuccess("[Node] New network dfs created");
 }
 
 void ExtraChainNode::start() {
@@ -571,6 +581,11 @@ void ExtraChainNode::connectSignals() {
             &NetworkManager::newSocketActivatedWithParams,
             [this](const std::string ip, const std::string identifier) {
                 eLog("[WS] Start sync...");
+
+                if (create_network_need_dfs_creation) {
+                    create_new_network_dfs();
+                }
+
                 m_blockchain->sync(BigNumber(), identifier);
                 m_dfs->sync(identifier);
             });
