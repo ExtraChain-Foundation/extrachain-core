@@ -106,7 +106,22 @@ void LoadManager::check_all_files(std::string identifier) {
         }
 
         for (const auto& row : dir_rows.value()) {
-            if (row.state == Dfs::FileState::Ready || row.state == Dfs::FileState::Removed) {
+            if (row.state == Dfs::FileState::Ready) {
+                auto file_path = Dfs::Path::file_path(dir.actor_id, row.file_id);
+                if (!file_path.has_value()) {
+                    continue;
+                }
+
+                auto exists = file_path->exists();
+                if (exists.has_value() && exists.value()) {
+                    auto size = file_path->file_size();
+                    if (size.has_value() && size == row.size) {
+                        continue;
+                    }
+                }
+            }
+
+            if (row.state == Dfs::FileState::Removed) {
                 continue;
             }
 
@@ -245,6 +260,13 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
             offset += Dfs::Basic::FRAGMENT_SIZE;
             std::this_thread::sleep_for(std::chrono::milliseconds(15));
         }
+
+        auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+        if (!dir_row.has_value()) {
+            return;
+        }
+        // use list for first uploaded
+        node->dfs()->uploaded(owner_id, dir_row.value());
     });
 
     sender.detach();

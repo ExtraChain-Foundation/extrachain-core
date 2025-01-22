@@ -118,14 +118,34 @@ void WebSocketService::onTextMessage(const QString &message) {
         return;
 
     if (!is_pub) {
-        pub    = KeyPublic(ByteArray::fromBase64(message).toArray<crypto_sign_PUBLICKEYBYTES>());
+        auto pub_result = Utils::from_base64(message.toStdString());
+        if (!pub_result.has_value()) {
+            emit error(Network::SocketServiceError::IncorrectPublicKey,
+                       "",
+                       m_ip.toStdString(),
+                       m_identifier.toStdString());
+            closeSocket();
+            return;
+        }
+
+        pub    = KeyPublic(ByteArray(pub_result.value()).toArray<crypto_sign_PUBLICKEYBYTES>());
         is_pub = true;
 
         handshake();
         return;
     }
 
-    auto decoded = prepareReceiveMessage(ByteArray::fromBase64(message).toQByteArray());
+    auto encoded_result = Utils::from_base64(message.toStdString());
+    if (!encoded_result.has_value()) {
+        emit error(Network::SocketServiceError::IncorrectFirstMessage,
+                   "",
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
+        closeSocket();
+        return;
+    }
+
+    auto decoded = prepareReceiveMessage(QByteArray::fromStdString(encoded_result.value()));
     if (decoded.isEmpty()) {
         eLog("[WS] Failed to decode message");
         emit error(Network::SocketServiceError::IncorrectPublicKey,
@@ -312,7 +332,7 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::send_public_key() {
-    auto pub_key_str = ByteArray(priv.public_key()).toBase64QString();
+    auto pub_key_str = Utils::to_base64(ByteArray(priv.public_key()).toString());
 
     if (m_ws == nullptr) {
         return;
@@ -327,7 +347,7 @@ void WebSocketService::send_public_key() {
         return;
     }
 
-    auto written = m_ws->sendTextMessage(pub_key_str);
+    auto written = m_ws->sendTextMessage(QString::fromStdString(pub_key_str));
     if (written < 0) {
         eCritical("[WS] Handshake send failed");
         closeSocket();
@@ -342,7 +362,7 @@ void WebSocketService::handshake() {
         closeSocket();
         return;
     }
-    auto encoded_json = ByteArray(encrypted).toBase64QString();
+    auto encoded_json = Utils::to_base64(encrypted.toStdString());
 
     if (m_ws == nullptr) {
         return;
@@ -352,7 +372,7 @@ void WebSocketService::handshake() {
         return;
     }
 
-    auto written = m_ws->sendTextMessage(encoded_json);
+    auto written = m_ws->sendTextMessage(QString::fromStdString(encoded_json));
     if (written < 0) {
         eCritical("[WS] Handshake send failed");
         closeSocket();
