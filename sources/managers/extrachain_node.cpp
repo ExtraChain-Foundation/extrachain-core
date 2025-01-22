@@ -355,32 +355,33 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     return ByteArray(encrypted.value()).toString();
 }
 
-bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
+std::string ExtraChainNode::importUser(const std::string& data, const std::string& login,
+                                const std::string& password) {
     if (data.empty()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto login_password = login + password;
     if (login_password.empty()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto hash = Utils::calculate_hash(login_password);
     auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash);
     if (!json.has_value()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto imported_user = Json::deserialize<ImportedUser>(json.value());
     if (!imported_user.has_value()) {
-        return false;
+        return std::string();
     }
 
     // TODO: network id check
 
     m_accountController->import_profile(imported_user.value(), hash);
 
-    return true;
+    return hash;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
