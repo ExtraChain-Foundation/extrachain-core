@@ -93,6 +93,7 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
     }
 }
 
+// TODO: move to dirs manager
 void LoadManager::check_all_files(std::string identifier) {
     auto dirs = Dfs::DirsFile::load_all();
     if (!dirs.has_value()) {
@@ -102,6 +103,7 @@ void LoadManager::check_all_files(std::string identifier) {
     for (const auto& dir : dirs.value()) {
         const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
         if (!dir_rows.has_value()) {
+            //
             continue;
         }
 
@@ -305,9 +307,9 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
     }
 
-    eTemp("[Fragment] {}: size: {}, offset: {}, {}",
-          file_link,
-          active_download.dir_row.size,
-          fragment_data.offset,
-          is_last_fragment);
+    // eTemp("[Fragment] {}: size: {}, offset: {}, {}",
+    //       file_link,
+    //       active_download.dir_row.size,
+    //       fragment_data.offset,
+    //       is_last_fragment);
 }

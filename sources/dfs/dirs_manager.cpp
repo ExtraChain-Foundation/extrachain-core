@@ -86,6 +86,8 @@ void DirsManager::network_response_sync(uint64_t max_last_modified, const std::s
 }
 
 void DirsManager::send_from_last_modified(uint64_t last_modified, const std::string& message_id) {
+    if (last_modified > 300'000)
+        last_modified -=  300'000;
     auto allall = Dfs::DirsFile::load_from_modified(last_modified);
     if (!allall.has_value()) {
         return;
@@ -119,6 +121,9 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
         if (!last_modified.has_value()) {
             return;
         }
+        if (dirs_row.last_modified == last_modified) {
+            continue;
+        }
 
         node->network()->send_message(Dfs::DirsFile::DirsRow { .actor_id      = dirs_row.actor_id,
                                                                .last_modified = last_modified.value() },
@@ -150,10 +155,14 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     // TODO: add merge for sync dir file
 
     Dfs::initialize_actor_folder(owner_id);
+
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
     eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
+    if(dir_rows.empty()) {
+        return;
+    }
     auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
     this->update_dirs(owner_id, max_value);
 
