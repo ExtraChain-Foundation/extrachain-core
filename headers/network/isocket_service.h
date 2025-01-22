@@ -82,7 +82,7 @@ protected slots:
 signals:
     void send(const QByteArray &data);
     void disconnected();
-    void error(Network::SocketServiceError code, const QString &errorData);
+    void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier);
     void close();
     void activated();
     void finished(); // if threads

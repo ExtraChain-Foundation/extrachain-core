@@ -765,6 +765,7 @@ void DfsController::network_change_collection(const ActorId                 &own
         dirs_manager_.update_dirs(owner_id, row.timestamp);
     }
 
+    // TODO: broadcast
     node->network()->send_message(std::make_tuple(owner_id, file_id, row),
                                   MessageType::DfsCollectionRowChange,
                                   Config::Net::TypeSend::Except,
@@ -772,6 +773,47 @@ void DfsController::network_change_collection(const ActorId                 &own
                                   message_id);
 
     emit collectionChanged(owner_id, dir_row.value(), row);
+}
+
+void DfsController::network_request_file_state(const ActorId     &owner_id,
+                                               const std::string &file_id,
+                                               std::string        message_id) {
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+
+    if (!dir_row.has_value()) {
+        auto file_state =
+            Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = Dfs::FileState::Unknown };
+        node->network()->send_message(file_state,
+                                      MessageType::DfsFileState,
+                                      Config::Net::TypeSend::Focused,
+                                      MessageStatus::Response,
+                                      message_id);
+        return;
+    }
+
+    auto file_state =
+        Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = dir_row->state };
+    node->network()->send_message(file_state,
+                                  MessageType::DfsFileState,
+                                  Config::Net::TypeSend::Focused,
+                                  MessageStatus::Response,
+                                  message_id);
+}
+
+void DfsController::network_response_file_state(const ActorId     &owner_id,
+                                                const std::string &file_id,
+                                                Dfs::FileState     state,
+                                                std::string        identifier) {
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+
+    if (!dir_row.has_value()) {
+        return;
+    }
+
+    if (state == Dfs::FileState::Ready) {
+        dir_row->state = state;
+        load_manager_.add_to_queue(owner_id, dir_row.value(), identifier);
+    }
 }
 
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
@@ -832,7 +874,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         return "";
     }
 
-    DbRow dirRowDb  = Utils::to_dbrow(dir_row);
+    auto dir_row2   = dir_row;
+    dir_row2.state  = Dfs::FileState::Known;
+    DbRow dirRowDb  = Utils::to_dbrow(dir_row2);
     bool  insertRes = dir_file.replace(DfsT::ActorDirFile::TableName, dirRowDb);
 
     if (!insertRes) {
@@ -873,6 +917,12 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
 
     if (network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
+
+        auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
+        // check real status
+        load_info.dir_row.state = Dfs::FileState::Known;
+        load_manager_.active_downloads.insert({ file_link, load_info });
     }
 
     emit added(owner_id, dir_row);

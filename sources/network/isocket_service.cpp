@@ -89,7 +89,10 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     // 1. Checking the version
     if (handshake.version != EXTRACHAIN_VERSION) {
         eLog("[Socket] Close, because version incompatible {}", EXTRACHAIN_VERSION);
-        emit error(Network::SocketServiceError::IncompatibleVersion, QString::fromStdString(handshake.version));
+        emit error(Network::SocketServiceError::IncompatibleVersion,
+                   QString::fromStdString(handshake.version),
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         closeSocket();
         return false;
     }
@@ -106,14 +109,20 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
 
     if (!(something_empty || is_first_ids_contains)) {
         eLog("[Socket] Close, because network incompatible");
-        emit error(Network::SocketServiceError::IncompatibleNetwork, QString::fromStdString(handshake.first_id));
+        emit error(Network::SocketServiceError::IncompatibleNetwork,
+                   QString::fromStdString(handshake.first_id),
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         closeSocket();
         return false;
     }
 
     // 3. Identifier check
     if (handshake.identifier == Network::currentIdentifier()) {
-        emit error(Network::SocketServiceError::IncompatibleIdentifier, "");
+        emit error(Network::SocketServiceError::IncompatibleIdentifier,
+                   "",
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         closeSocket();
         return false;
     }
@@ -130,7 +139,10 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     }
 
     if (duplicate) {
-        emit error(Network::SocketServiceError::DuplicateIdentifier, "");
+        emit error(Network::SocketServiceError::DuplicateIdentifier,
+                   "",
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         eLog("[Socket] Duplicate identifier");
         closeSocket();
         return false;
@@ -149,7 +161,10 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     {
         auto connections_locked = *node->network()->connections();
         if (connections_locked->size() >= Network::maxConnections) {
-            emit error(Network::SocketServiceError::MaxConnections, "");
+            emit error(Network::SocketServiceError::MaxConnections,
+                       "",
+                       m_ip.toStdString(),
+                       m_identifier.toStdString());
             eLog("[Socket] Max connections");
             closeSocket();
             return false;

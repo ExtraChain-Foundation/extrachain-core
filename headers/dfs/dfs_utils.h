@@ -180,6 +180,7 @@ namespace Dfs {
         Known   = 1,
         Partial = 2,
         Ready   = 3,
+        Unknown = 100
     };
 
     enum class DataSecurity {
@@ -280,9 +281,16 @@ namespace Dfs {
             // hash
             // std::vector<uint8_t
             std::string   data;
-            std::uint64_t offset;
+            std::uint64_t offset; // fragment num
         };
         BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset))
+
+        struct FileState {
+            ActorId        owner_id;
+            std::string    file_id;
+            Dfs::FileState state = Dfs::FileState::Known;
+        };
+        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state))
 
         struct ResponseDfsSize {
             ActorId     actorId;
@@ -462,10 +470,10 @@ namespace Dfs {
             std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
 
             // TODO: field: string to enum class
-            std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const ActorId&     actor_id,
+            std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const ActorId&     owner_id,
                                                                                const std::string& search_value,
                                                                                const std::string& field = "file_id");
-            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& actorId,
+            std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& owner_id,
                                                                                 std::uint64_t  last_modified = 0);
 
             std::expected<std::string, Dfs::DfsError> last_file_id(const ActorId&     owner_id,

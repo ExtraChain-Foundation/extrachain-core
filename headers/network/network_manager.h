@@ -252,7 +252,7 @@ public slots:
 
 private slots:
     void removeWsConnection();
-    void socketError(Network::SocketServiceError error, QString errorData);
+    void socketError(Network::SocketServiceError error, QString errorData, std::string ip, std::string identifier);
 
 public:
     QString localIp(); // TODO: remove

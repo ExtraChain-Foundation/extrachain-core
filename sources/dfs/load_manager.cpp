@@ -38,10 +38,9 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
-    if (temp_active.contains(file_link)) {
+    if (active_downloads.contains(file_link)) {
         return;
     }
-    temp_active.insert(file_link);
 
     if (dir_row.state != Dfs::FileState::Ready) {
         return;
@@ -56,14 +55,6 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    // temp: request file
-    this->node->network()->send_message(file_link,
-                                        MessageType::DfsFileRequest,
-                                        Config::Net::TypeSend::Focused,
-                                        MessageStatus::NoStatus,
-                                        "",
-                                        identifier);
-
     // // Check in queue
     // bool file_in_queue =
     //     std::any_of(download_queue.cbegin(), download_queue.cend(), [&file_link](const auto& info) {
@@ -77,7 +68,16 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
     // check real status
     load_info.dir_row.state = Dfs::FileState::Known;
-    download_queue.push(load_info);
+    active_downloads.insert({ file_link, load_info });
+    // download_queue.push(load_info);
+
+    // temp: request file
+    this->node->network()->send_message(file_link,
+                                        MessageType::DfsFileRequest,
+                                        Config::Net::TypeSend::Focused,
+                                        MessageStatus::NoStatus,
+                                        "",
+                                        identifier);
 
     // Try to process queue if we have space for new downloads
     if (active_downloads.size() < MAX_CONCURRENT_DOWNLOADS) {
@@ -91,6 +91,45 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
     for (const auto& dir_row : dir_rows) {
         add_to_queue(owner_id, dir_row, identifier);
     }
+}
+
+void LoadManager::check_all_files(std::string identifier) {
+    auto dirs = Dfs::DirsFile::load_all();
+    if (!dirs.has_value()) {
+        return;
+    }
+
+    for (const auto& dir : dirs.value()) {
+        const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
+        if (!dir_rows.has_value()) {
+            continue;
+        }
+
+        for (const auto& row : dir_rows.value()) {
+            if (row.state == Dfs::FileState::Ready || row.state == Dfs::FileState::Removed) {
+                continue;
+            }
+
+            auto file_link = Dfs::FileLink { .owner_id = dir.actor_id, .file_id = row.file_id };
+
+            // TODO: insert to queue
+
+            // TODO: process from queue
+            // search file
+            this->node->network()->send_message(file_link,
+                                                MessageType::DfsFileState,
+                                                Config::Net::TypeSend::Focused,
+                                                MessageStatus::Request,
+                                                "",
+                                                identifier);
+        }
+    }
+
+    // bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+    //                                                              file_link.file_id,
+    //                                                              active_download.dir_row.hash);
+    // if (!is_downloaded) {5
+    // }
 }
 
 // void LoadManager::process_next() {
@@ -212,7 +251,9 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
 }
 
 void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_data) {
-    // TODO: Fragments: verify fragment
+    auto file_link = Dfs::FileLink { .owner_id = fragment_data.owner_id, .file_id = fragment_data.file_id };
+
+    // TODO: Fragments: verify fragment, use Dir Row and fragment list
     if (fragment_data.data.size() > Dfs::Basic::FRAGMENT_SIZE) {
         eCritical("[Dfs] Incorrect fragment size: {}", fragment_data.data.size());
         return;
@@ -224,26 +265,28 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
     }
 
     auto result = Utils::write_file_chunk(path.value(), fragment_data.data, fragment_data.offset);
-
     if (!result.has_value()) {
         return;
     }
-}
 
-/*
-Тебе нужно будет добавить:
+    auto active_download  = active_downloads.at(file_link);
+    bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
+    if (is_last_fragment) {
+        bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+                                                                     file_link.file_id,
+                                                                     active_download.dir_row.hash);
+        if (!is_downloaded) {
+            eCritical("[Fragment] Ooops, something wrong. Need to implement Fragments checks");
+            return;
+        }
+        active_downloads.erase(file_link);
+        Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
+        node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
+    }
 
-void DownloadManager::on_search_result(const DfsSyncSearchResult& result) {
- // Обработка результата поиска
- // Если файл найден - начать загрузку
- // Если нет - пробовать у другого соседа или пометить как ненайденный
+    eTemp("[Fragment] {}: size: {}, offset: {}, {}",
+          file_link,
+          active_download.dir_row.size,
+          fragment_data.offset,
+          is_last_fragment);
 }
-
-void DownloadManager::on_segment_received(const std::string& file_id) {
- // Обновление времени последнего сегмента
- auto it = active_downloads.find(file_id);
- if (it != active_downloads.end()) {
-     it->second.last_segment_time = std::chrono::system_clock::now();
- }
-}
-*/

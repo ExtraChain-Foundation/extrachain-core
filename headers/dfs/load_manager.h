@@ -58,12 +58,19 @@ struct LoadInfo {
     }
 };
 
+enum class PullMode {
+    All,
+    Selective
+};
+
 class LoadManager {
 public:
     explicit LoadManager(ExtraChainNode* node);
 
     void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
     void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
+
+    void check_all_files(std::string identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
@@ -86,10 +93,14 @@ private:
     static constexpr int  MAX_CONCURRENT_DOWNLOADS = 2;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
-    std::queue<LoadInfo>                        download_queue;
-    std::unordered_map<Dfs::FileLink, LoadInfo> active_downloads;
-    std::set<Dfs::FileLink>                     temp_active;
+    PullMode pull_mode = PullMode::All;
 
+    std::queue<LoadInfo> download_queue;
+
+public:
+    std::unordered_map<Dfs::FileLink, LoadInfo> active_downloads;
+
+private:
     // [[nodiscard]] std::optional<LoadInfo> get_next_download();
     void move_to_queue_end(const Dfs::FileLink& file_link); // Move stalled download to end of queue
 

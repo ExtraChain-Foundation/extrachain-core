@@ -191,6 +191,12 @@ public:
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
+    void network_request_file_state(const ActorId &owner_id, const std::string &file_id, std::string message_id);
+    void network_response_file_state(const ActorId     &owner_id,
+                                     const std::string &file_id,
+                                     Dfs::FileState     state,
+                                     std::string        identifier);
+
     //
     // void remote_stored_file();
     // void remove_local_file();
@@ -222,6 +228,7 @@ public:
     LoadManager &download_manager();
 
     void sync(const std::string &identifier) {
+        load_manager_.check_all_files(identifier);
         dirs_manager_.sync(identifier);
     }
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);

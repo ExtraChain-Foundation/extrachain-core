@@ -128,7 +128,10 @@ void WebSocketService::onTextMessage(const QString &message) {
     auto decoded = prepareReceiveMessage(ByteArray::fromBase64(message).toQByteArray());
     if (decoded.isEmpty()) {
         eLog("[WS] Failed to decode message");
-        emit error(Network::SocketServiceError::IncorrectPublicKey, "");
+        emit error(Network::SocketServiceError::IncorrectPublicKey,
+                   "",
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         closeSocket();
         return;
     }
@@ -136,7 +139,10 @@ void WebSocketService::onTextMessage(const QString &message) {
     auto handshake_result = Json::deserialize<HandshakeMessage>(decoded.toStdString());
     if (!handshake_result.has_value()) {
         eLog("[WS] Failed to parse handshake message: {}", handshake_result.error());
-        emit error(Network::SocketServiceError::IncorrectFirstMessage, "");
+        emit error(Network::SocketServiceError::IncorrectFirstMessage,
+                   "",
+                   m_ip.toStdString(),
+                   m_identifier.toStdString());
         closeSocket();
         return;
     }

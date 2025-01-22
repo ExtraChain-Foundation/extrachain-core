@@ -49,7 +49,7 @@ enum class MessageType {
     DfsSyncDirRows  = 55,
 
     DfsFileState = 56,
-    // DfsFileWant = 57,
+    // DfsFileWant      = 57,
     DfsStoreFragment = 58,
     DfsFileRequest   = 59,
     DfsFileFragment  = 60,

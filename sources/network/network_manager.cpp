@@ -928,6 +928,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
+        file_link_result->dir_row.state = Dfs::FileState::Known;
         node->dfs()->network_store_file(file_link_result->owner_id,
                                         file_link_result->dir_row,
                                         Dfs::NetworkStoreFile::Broadcast);
@@ -949,6 +950,31 @@ void NetworkManager::messageReceived(const std::string &message,
         if (type == MessageType::DfsStoreFragment) {
             sendBrodcastMessageFurther(package_data);
         }
+        break;
+    }
+
+    case MessageType::DfsFileState: {
+        if (status == MessageStatus::Request) {
+            auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+            if (!link_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for request file state", type);
+                break;
+            }
+
+            node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, messageId);
+        } else if (status == MessageStatus::Response) {
+            auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+            if (!file_state_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for response file state", type);
+                break;
+            }
+
+            node->dfs()->network_response_file_state(file_state_result->owner_id,
+                                                     file_state_result->file_id,
+                                                     file_state_result->state,
+                                                     identifier);
+        }
+
         break;
     }
 
@@ -1207,18 +1233,21 @@ void NetworkManager::removeWsConnection() {
     checkConnectionsStatus();
 }
 
-void NetworkManager::socketError(Network::SocketServiceError error, QString errorData) {
-    if (QObject::sender() == nullptr) {
-        return;
-    }
+void NetworkManager::socketError(Network::SocketServiceError error,
+                                 QString                     errorData,
+                                 std::string                 ip,
+                                 std::string                 identifier) {
+    // if (QObject::sender() == nullptr) {
+    //     return;
+    // }
 
-    auto service = qobject_cast<SocketService *>(QObject::sender());
-    eLog("[NetworkManager] Error socket: {} {}", error, service->identifier());
+    // auto service = qobject_cast<SocketService *>(QObject::sender());
+    eLog("[NetworkManager] Error socket: {} {} {}", error, ip, identifier);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::IncompatibleVersion) {
-        failed_ips.insert(service->ip().toStdString());
-        emit connectionError(error, service->ip(), service->identifier(), errorData);
+        failed_ips.insert(ip);
+        emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;
     }
 
@@ -1227,7 +1256,7 @@ void NetworkManager::socketError(Network::SocketServiceError error, QString erro
         auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
         for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
              ++it) {
-            if (it->first.ip == service->ip() && it->first.protocol == service->protocol()) {
+            if (it->first.ip == ip && it->first.protocol == Network::Protocol::WebSocket) {
                 auto r = it->first;
                 auto i = it->second;
                 QTimer::singleShot(1000, [this, r, i] {

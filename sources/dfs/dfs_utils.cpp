@@ -58,9 +58,9 @@ std::filesystem::path Dfs::Tables::ActorDirFile::storjDbPath(const ActorId     &
 }
 
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_rows(
-    const ActorId &actorId,
+    const ActorId &owner_id,
     std::uint64_t  last_modified) {
-    auto db = get_actor_dir_file(actorId);
+    auto db = get_actor_dir_file(owner_id);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -103,10 +103,10 @@ void Dfs::Tables::ActorDirFile::update_file_state(const ActorId    &actor_id,
     actrDirFile.close();
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &actor_id,
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &owner_id,
                                                                                  const std::string &search_value,
                                                                                  const std::string &field) {
-    auto db = get_actor_dir_file(actor_id);
+    auto db = get_actor_dir_file(owner_id);
     if (!db.is_open()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -181,7 +181,7 @@ std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::st
 }
 
 std::expected<FsPath, FsError> Dfs::Path::file_path(const ActorId &owner_id, const std::string &file_id) {
-    if (!Utils::is_hex_string_lower(file_id)) {
+    if (file_id.size() != 64 && !Utils::is_hex_string_lower(file_id)) {
         return std::unexpected(FsError::InvalidPath);
     }
 
