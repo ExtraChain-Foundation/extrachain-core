@@ -998,7 +998,10 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        node->dfs()->network_remove_stored_file(file_remove->owner_id, file_remove->file_id, file_remove->sign);
+        node->dfs()->network_remove_stored_file(file_remove->owner_id,
+                                                file_remove->file_id,
+                                                file_remove->sign,
+                                                file_remove->last_modified);
         // if sign not verify only -> not broadrcast
         sendBrodcastMessageFurther(package_data);
         break;

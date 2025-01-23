@@ -257,7 +257,12 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &ownerr_id, D
                dir_row.last_modified,
                dir_row.file_id,
                dir_row.sign);
-    return db.update(query);
+    auto upd = db.update(query);
+    if (!upd) {
+        return false;
+    }
+
+    return true;
 }
 
 std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::ActorDirFile::get_file_content(
@@ -456,6 +461,11 @@ std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::last_modified(c
     } catch (const std::exception &) {
         return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
     }
+}
+
+void Dfs::DirsFile::update_row(const ActorId &actor_id, std::uint64_t last_modified) {
+    auto dirs_row = Dfs::DirsFile::DirsRow { .actor_id = actor_id, .last_modified = last_modified };
+    Dfs::DirsFile::insert(dirs_row);
 }
 
 void Dfs::initialize_actor_folder(const ActorId &actor_id) {

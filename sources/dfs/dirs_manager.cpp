@@ -50,8 +50,7 @@ void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
         return;
     }
 
-    auto dirs_row = Dfs::DirsFile::DirsRow { .actor_id = actor_id, .last_modified = last_modified };
-    Dfs::DirsFile::insert(dirs_row);
+    Dfs::DirsFile::update_row(actor_id, last_modified);
 }
 
 void DirsManager::sync(const std::string& identifier) {
@@ -87,7 +86,7 @@ void DirsManager::network_response_sync(uint64_t max_last_modified, const std::s
 
 void DirsManager::send_from_last_modified(uint64_t last_modified, const std::string& message_id) {
     if (last_modified > 300'000)
-        last_modified -=  300'000;
+        last_modified -= 300'000;
     auto allall = Dfs::DirsFile::load_from_modified(last_modified);
     if (!allall.has_value()) {
         return;
@@ -156,11 +155,12 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     Dfs::initialize_actor_folder(owner_id);
 
+    // Need to change adding'
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
     eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
-    if(dir_rows.empty()) {
+    if (dir_rows.empty()) {
         return;
     }
     auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;

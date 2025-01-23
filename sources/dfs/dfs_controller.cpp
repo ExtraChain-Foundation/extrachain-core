@@ -840,7 +840,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     auto remove_file = Dfs::Packets::RemoveFile { .owner_id      = owner_id,
                                                   .file_id       = file_id,
                                                   .sign          = sign.value(),
-                                                  .last_modified = 1 };
+                                                  .last_modified = Utils::current_date_ms() };
 
     remove_local_file(owner_id, file_id);
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
@@ -853,11 +853,13 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
 
 void DfsController::network_remove_stored_file(const ActorId     &owner_id,
                                                const std::string &file_id,
-                                               const Signature   &sign) {
+                                               const Signature   &sign,
+                                               std::uint64_t      last_modified) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
     if (!dir_row.has_value()) {
         return;
     }
+    auto dir_row_new = dir_row.value();
 
     auto actor = node->actorIndex()->get_actor(owner_id);
     if (!actor.has_value()) {
@@ -865,7 +867,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
         return;
     }
 
-    auto hash   = dir_row->calculate_hash(true);
+    auto hash   = dir_row_new.calculate_hash(true);
     auto verify = actor.value().key().verify(hash, sign);
     if (!verify) {
         return;
@@ -873,8 +875,12 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
 
     remove_local_file(owner_id, file_id);
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
-    // update last time
+    dir_row_new.last_modified = last_modified;
+    dir_row_new.sign          = sign;
+    Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row_new);
     // update dirs
+
+    // sizeTaken--, totalDfsSize--
     emit removed(owner_id, file_id);
 }
 

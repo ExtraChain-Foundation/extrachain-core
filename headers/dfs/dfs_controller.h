@@ -199,7 +199,10 @@ public:
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
-    void                      network_remove_stored_file(const ActorId &owner_id, const std::string &file_id, const Signature &sign);
+    void                      network_remove_stored_file(const ActorId     &owner_id,
+                                                         const std::string &file_id,
+                                                         const Signature   &sign,
+                                                         uint64_t           last_modified);
 
     // remove only local copy
     std::expected<void, bool> remove_local_file(const ActorId &owner_id, const std::string &file_id);
