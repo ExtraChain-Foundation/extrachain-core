@@ -1145,21 +1145,8 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         const auto &reward_request = reward_request_result.value();
         switch (status) {
-        case MessageStatus::NoStatus:
-            break;
         case MessageStatus::Request: {
-            node->dataMiningManager()->sendCoinsReward(reward_request);
-            break;
-        }
-        case MessageStatus::Response: {
-            switch (reward_request.TypeFunctioningObj) {
-            case Dfs::Reward::TypeFunctioning::Test: {
-                eLog("[TEST] You could receive {}", reward_request.RewardAmount);
-                break;
-            }
-            case Dfs::Reward::Base:
-                break;
-            }
+            node->dataMiningManager()->network_request_coin_reward(reward_request);
             break;
         }
         default:

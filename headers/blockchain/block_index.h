@@ -98,7 +98,6 @@ public:
     std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiverAndToken(const ActorId &id,
                                                                           const TokenId &token) const;
-    std::pair<Transaction, BigNumber> getLastTxByApprover(const ActorId &id, const TokenId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,

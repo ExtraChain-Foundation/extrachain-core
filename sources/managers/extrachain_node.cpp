@@ -132,7 +132,7 @@ void ExtraChainNode::process() {
 
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    timer->start(30000);
+    timer->start(10000);
 
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
@@ -426,9 +426,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Tra
         return std::unexpected(TransactionError::NoLastBlock);
     }
 
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
+    BigNumber lastBlockId = lastRealBlock->getIndex();
     transaction.setPrevBlock(lastBlockId);
     transaction.sign(signer);
+    // !sign -> the конец
 
     eLog("[Blockchain] Send {}", transaction);
     network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::AllParents);
@@ -573,23 +574,23 @@ void ExtraChainNode::connectSignals() {
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(m_tokenManager,
-        &TokenManager::sendTransactionCreateToken,
-        this,
-        [this](const ActorId& actorId, const Transaction& tx) {
-            QTimer* timer = new QTimer();
-            timer->setSingleShot(true);
-            
-            connect(timer, &QTimer::timeout, this, [=]() {
-                auto actor = m_accountController->currentProfile().get_actor(actorId);
-                if (!actor.has_value()) {
-                    return;
-                }
-                this->sendTransaction(tx, actor.value());
-                timer->deleteLater();
+            &TokenManager::sendTransactionCreateToken,
+            this,
+            [this](const ActorId& actorId, const Transaction& tx) {
+                QTimer* timer = new QTimer();
+                timer->setSingleShot(true);
+
+                connect(timer, &QTimer::timeout, this, [=]() {
+                    auto actor = m_accountController->currentProfile().get_actor(actorId);
+                    if (!actor.has_value()) {
+                        return;
+                    }
+                    this->sendTransaction(tx, actor.value());
+                    timer->deleteLater();
+                });
+
+                timer->start(2000);
             });
-            
-            timer->start(2000);
-        });
 
     connect(m_tokenManager,
             &TokenManager::sendToken,

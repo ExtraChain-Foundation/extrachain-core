@@ -255,14 +255,11 @@ namespace Config {
                                                 "sender       TEXT  NOT NULL, "
                                                 "receiver     TEXT  NOT NULL, "
                                                 "amount       TEXT  NOT NULL, "
-                                                "date         TEXT  NOT NULL, "
                                                 "data         TEXT          , "
                                                 "token        TEXT  NOT NULL, "
-                                                "prevBlock    TEXT  NOT NULL, "
+                                                "prev_block    TEXT  NOT NULL, "
                                                 "hash         TEXT  NOT NULL, "
-                                                "approver     TEXT  NOT NULL, "
-                                                "signature    TEXT  NOT NULL, "
-                                                "producer     TEXT  NOT NULL "
+                                                "signature    TEXT  NOT NULL "
                                                 ");";
         static const std::string SignTable = "Signatures";
         static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
@@ -827,10 +824,9 @@ namespace SearchEnum {
     enum class TxParam {
         UserSender = 0,
         UserReceiver,
-        UserApprover,
         UserSenderOrReceiver,
         UserSenderOrReceiverOrToken,
-        User, // sender or receiver or approver
+        User, // sender or receiver
         Hash,
         Data,
         Null
