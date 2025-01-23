@@ -856,6 +856,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
+    if (!tx.token().is_zero()) {
+        return TransactionProveError::NoError;
+    }
+
     if (tx.amount() == 0) {
         return TransactionProveError::AmountZero;
     }
