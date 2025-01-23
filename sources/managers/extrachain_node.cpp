@@ -46,7 +46,7 @@
 #include "chat/chat_manager.h"
 
 #ifdef Q_OS_LINUX
-#include <signal.h>
+    #include <signal.h>
 #endif
 
 struct TokensDataRow {
@@ -466,8 +466,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
 
-        // TODO: temp
-        // dataMiningManager()->requestCoinReward();
+        dataMiningManager()->requestCoinReward();
     }
 }
 

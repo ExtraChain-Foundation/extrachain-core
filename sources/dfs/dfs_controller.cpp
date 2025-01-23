@@ -894,6 +894,8 @@ std::string DfsController::network_add_file(const ActorId &owner_id, const Dfs::
 
     insertToFiles(dir_row);
     emit added(owner_id, dir_row);
+    increaseSizeTaken(dir_row.size);
+    m_totalDfsSize += dir_row.size;
 
     eLog("[Dfs] File {}/{} was added", owner_id, dir_row.file_id);
 
