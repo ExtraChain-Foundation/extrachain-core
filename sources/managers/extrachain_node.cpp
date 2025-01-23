@@ -45,6 +45,10 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 
+#ifdef Q_OS_LINUX
+    #include <signal.h>
+#endif
+
 struct TokensDataRow {
     TokenId        token_id;
     std::string    name;
@@ -458,8 +462,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
 
-        // TODO: temp
-        // dataMiningManager()->requestCoinReward();
+        dataMiningManager()->requestCoinReward();
     }
 }
 

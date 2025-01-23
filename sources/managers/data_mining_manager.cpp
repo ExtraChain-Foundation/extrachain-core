@@ -118,11 +118,25 @@ void DataMiningManager::coinRewardRequest(const BigNumber &blockIndex) {
 void DataMiningManager::requestCoinReward() {
     const auto actor      = node->accountController()->mainActor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+    auto       amount     = calculateRewardAmount();
+
+    // eLog("[Reward] Request: Actor: {}, Dfs size: {}, Reward: {}, Traffic sent/received: {}/{}, Blocks: {}",
+    //      actor.id(),
+    //      node->dfs()->sizeTaken(),
+    //      amount,
+    //      totalBytes.first,
+    //      totalBytes.second,
+    //      node->blockchain()->getBlocksStored());
+
+    if (amount == 0) {
+        // eLog("[Reward] Can't send amount, because amount = 0");
+        return;
+    }
 
     auto requestReward = Dfs::Reward::RequestReward { .Actor              = actor.id(),
                                                       .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = Dfs::Reward::Base,
-                                                      .RewardAmount       = calculateRewardAmount(),
+                                                      .RewardAmount       = amount,
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored = node->blockchain()->getBlocksStored() };
@@ -138,8 +152,9 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
-        // eLog("{} {} {}", "[Blockchain] Cannot calculate  due to division by zero. TotalBytes, total dfs:"
-        //, totalBytes.first, node->dfs()->totalDfsSize());
+        // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
+        //      totalBytes.first,
+        //      node->dfs()->totalDfsSize());
         return BigNumberFloat(0);
     }
 
@@ -149,17 +164,26 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     if (lastBlock->isEmpty())
         return BigNumberFloat(0);
     auto lastIndex = lastBlock->getIndex();
-    if (lastIndex == BigNumber(0))
-        return BigNumberFloat(0);
+    if (lastIndex == BigNumber(0)) {
+        lastIndex = BigNumber(1);
+        // return BigNumberFloat(0);
+    }
 
     auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
     auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
+    auto res              = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+               + (blocksStored / BigNumberFloat(lastIndex) * 100);
 
-    return sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-           + (blocksStored / BigNumberFloat(lastIndex) * 100);
+    // eLog(
+    //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Blocks ratio: {}/{}, Multiplier:
+    //     , " "Result: {}" "100", sizeTaken, totalDfsSize, totalBytesSecond, totalBytesFirst, blocksStored,
+    //     lastIndex,
+    //     res);
+
+    return res;
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
@@ -176,7 +200,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     if (lastBlock->isEmpty())
         return BigNumberFloat(0);
     auto lastIndex = lastBlock->getIndex();
-    if (lastIndex == 0)
+    if (lastIndex == 0) // a u jk
         return BigNumberFloat(0);
 
     return (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
@@ -195,7 +219,7 @@ void DataMiningManager::sendCoinsReward(const Dfs::Reward::RequestReward &reques
 
         // TODO: temp
         if (transaction.amount() <= 0) {
-            transaction.setAmount(BigNumberFloat(1));
+            transaction.setAmount(BigNumberFloat(0));
             // return;
         }
 
