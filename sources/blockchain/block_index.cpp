@@ -216,10 +216,6 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySenderOrReceiverAndToke
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-std::pair<Transaction, BigNumber> BlockIndex::getLastTxByApprover(const ActorId &id, const TokenId &token) const {
-    return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserApprover, token);
-}
-
 std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id,
                                                                 BigNumber        from,
                                                                 int              count,
@@ -274,11 +270,6 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string
             }
             case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if (tx.sender().to_string() == data || tx.receiver().to_string() == data)
-                    return { tx, lastBlockId };
-                break;
-            }
-            case SearchEnum::TxParam::UserApprover: {
-                if (tx.approver().to_string() == data)
                     return { tx, lastBlockId };
                 break;
             }
@@ -356,13 +347,6 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
             case SearchEnum::TxParam::UserSenderOrReceiver: {
                 if ((BigNumber(tx.sender().to_string()) == id || BigNumber(tx.receiver().to_string()) == id)
                     && tx.token() == token) {
-                    currentTxs.insert(tx);
-                    ++currentCount;
-                }
-                break;
-            }
-            case SearchEnum::TxParam::UserApprover: {
-                if (BigNumber(tx.approver().to_string()) == id && tx.token() == token) {
                     currentTxs.insert(tx);
                     ++currentCount;
                 }
@@ -532,14 +516,11 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             rowRow.insert({ "sender", tmp.sender().to_string() });
             rowRow.insert({ "receiver", tmp.receiver().to_string() });
             rowRow.insert({ "amount", tmp.amount().to_string() });
-            rowRow.insert({ "date", std::to_string(tmp.date()) });
             rowRow.insert({ "token", tmp.token().to_string() });
             rowRow.insert({ "data", tmp.data() });
-            rowRow.insert({ "prevBlock", tmp.prevBlock().to_string() });
+            rowRow.insert({ "prev_block", tmp.prevBlock().to_string() });
             rowRow.insert({ "hash", tmp.hash() });
-            rowRow.insert({ "approver", tmp.approver().to_string() });
             rowRow.insert({ "signature", ByteArray(tmp.signature()).toBase64() });
-            rowRow.insert({ "producer", tmp.producer().to_string() });
 
             bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
             if (txInserted)
@@ -779,14 +760,11 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
             tx.setSender(ActorId(tmp.at("sender")));
             tx.setReceiver(ActorId(tmp.at("receiver")));
             tx.setAmount(BigNumberFloat(tmp.at("amount")));
-            tx.setDate(std::stoll(tmp.at("date")));
             tx.setData(tmp.at("data"));
             tx.setToken(ActorId(tmp.at("token")));
-            tx.setPrevBlock(BigNumber(tmp.at("prevBlock")));
+            tx.setPrevBlock(BigNumber(tmp.at("prev_block")));
             tx.setHash(tmp.at("hash").c_str());
-            tx.setApprover(ActorId(tmp.at("approver")));
             tx.setSignature(ByteArray::fromBase64(tmp.at("signature")).toArray<crypto_sign_BYTES>());
-            tx.setProducer(ActorId(tmp.at("producer")));
 
             if (!tx.isEmpty() || tx.isBurn()) // TODO: ?
                 transactions.insert(tx);

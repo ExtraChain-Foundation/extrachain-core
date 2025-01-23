@@ -93,15 +93,6 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
     return true;
 }
 
-bool ActorIndex::validateTx(const Transaction &tx) {
-    Actor<KeyPublic> actor = this->getActor(tx.approver());
-    if (actor.empty()) {
-        eWarning("Can not validate tx {}. There no actor {} in local storage", tx.hash(), tx.approver());
-        return false;
-    }
-    return tx.verify(actor);
-}
-
 void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messageId) {
     // receive id
     // create response message

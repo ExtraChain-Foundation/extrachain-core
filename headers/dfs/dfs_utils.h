@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "blockchain/actor.h"
+#include "blockchain/transaction.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
@@ -438,6 +439,7 @@ namespace Dfs {
     } // namespace Historical
 
     namespace Reward {
+        static const int       TOLERANCE                   = 100;
         static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
         struct CoinReward {
             ActorId        Actor;
@@ -451,20 +453,14 @@ namespace Dfs {
         };
 
         struct RequestReward {
-            ActorId         Actor;
             std::uint64_t   DataStoredSize;
             TypeFunctioning TypeFunctioningObj;
-            BigNumberFloat  RewardAmount;
             std::uint64_t   BytesSent;
             std::uint64_t   BytesReceived;
             BigNumber       BlocksStored;
-            MSGPACK_DEFINE(Actor,
-                           DataStoredSize,
-                           TypeFunctioningObj,
-                           RewardAmount,
-                           BytesSent,
-                           BytesReceived,
-                           BlocksStored)
+            Transaction     transaction;
+
+            MSGPACK_DEFINE(DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction)
         };
     } // namespace Reward
 
