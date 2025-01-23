@@ -308,7 +308,7 @@ void WebSocketService::onConnected() {
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
-    eLog("[WS] Socket error: {}", Utils::enum_value_name(error));
+    eLog("[WS] Socket error: {}, {}", Utils::enum_value_name(error), m_ip);
     closeSocket();
 }
 

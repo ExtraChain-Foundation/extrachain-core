@@ -161,6 +161,10 @@ public:
 
         Actor<T> actor;
         auto     array = QJsonDocument::fromJson(serialized).array();
+        if (array.size() < 3) {
+            eFatal("?1");
+            return actor;
+        }
         actor.set_id(ActorId(array[0].toString().toStdString()));
         actor.set_type(ActorType(array[1].toInt()));
         auto pub = ByteArray::fromBase64(array[2].toString()).toArray<crypto_sign_PUBLICKEYBYTES>();
@@ -169,6 +173,10 @@ public:
             actor.set_public_key(pub);
         }
         if constexpr (std::is_same_v<T, KeyPrivate>) {
+            if (array.size() != 4) {
+                eFatal("?2");
+                return actor;
+            }
             auto sec = ByteArray::fromBase64(array[3].toString()).toArray<crypto_sign_SECRETKEYBYTES>();
             actor.set_secret_key(sec, pub);
         }

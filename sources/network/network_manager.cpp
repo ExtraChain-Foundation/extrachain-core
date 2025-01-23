@@ -991,6 +991,19 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsFileRemove: {
+        auto file_remove = MessagePack::deserialize<Dfs::Packets::RemoveFile>(serialized);
+        if (!file_remove.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file remove", type);
+            break;
+        }
+
+        node->dfs()->network_remove_stored_file(file_remove->owner_id, file_remove->file_id, file_remove->sign);
+        // if sign not verify only -> not broadrcast
+        sendBrodcastMessageFurther(package_data);
+        break;
+    }
+
     case MessageType::DfsCollectionRequest: {
         auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         if (!db_request_result.has_value()) {

@@ -821,9 +821,61 @@ void DfsController::network_response_file_state(const ActorId     &owner_id,
 }
 
 std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {
-    // Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
-    // emit removed(owner_id, );
-    return std::unexpected(false);
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dir_row.has_value()) {
+        return std::unexpected(false);
+    }
+
+    auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+    if (!actor.has_value()) {
+        eWarning("[Dfs] Can't remove file, because no owner");
+        return std::unexpected(false);
+    }
+
+    auto hash = dir_row->calculate_hash(true);
+    auto sign = actor.value().get().key().sign(hash);
+    if (!sign.has_value()) {
+        return std::unexpected(false); // sign
+    }
+    auto remove_file = Dfs::Packets::RemoveFile { .owner_id      = owner_id,
+                                                  .file_id       = file_id,
+                                                  .sign          = sign.value(),
+                                                  .last_modified = 1 };
+
+    remove_local_file(owner_id, file_id);
+    Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
+    // update last time
+    // update dirs
+    node->network()->send_message(remove_file, MessageType::DfsFileRemove, Config::Net::TypeSend::Broadcast);
+    emit removed(owner_id, file_id);
+    return {};
+}
+
+void DfsController::network_remove_stored_file(const ActorId     &owner_id,
+                                               const std::string &file_id,
+                                               const Signature   &sign) {
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dir_row.has_value()) {
+        return;
+    }
+
+    auto actor = node->actorIndex()->get_actor(owner_id);
+    if (!actor.has_value()) {
+        eWarning("[Dfs] Can't remove file, because no owner");
+        return;
+    }
+
+    auto hash   = dir_row->calculate_hash(true);
+    auto verify = actor.value().key().verify(hash, sign);
+    if (!verify) {
+        return;
+    }
+
+    remove_local_file(owner_id, file_id);
+    Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
+    // update last time
+    // update dirs
+    emit removed(owner_id, file_id);
 }
 
 std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_id, const std::string &file_id) {
@@ -839,6 +891,7 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
     }
 
     std::filesystem::remove(file_path->native());
+    emit localRemoved(owner_id, file_id);
     return {};
 }
 

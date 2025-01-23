@@ -199,7 +199,7 @@ public:
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
-    void                      network_remove_stored_file(const ActorId &owner_id, const std::string &file_id);
+    void                      network_remove_stored_file(const ActorId &owner_id, const std::string &file_id, const Signature &sign);
 
     // remove only local copy
     std::expected<void, bool> remove_local_file(const ActorId &owner_id, const std::string &file_id);
@@ -275,7 +275,8 @@ signals:
     void stored(ActorId owner_id, Dfs::DirRow dirRow);
     void added(ActorId owner_id, Dfs::DirRow dirRow);
     void updated(ActorId owner_id, Dfs::DirRow dirRow);
-    void removed(ActorId owner_id, Dfs::DirRow dirRow);
+    void removed(ActorId owner_id, std::string file_id);
+    void localRemoved(ActorId owner_id, std::string file_id);
 
     void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);

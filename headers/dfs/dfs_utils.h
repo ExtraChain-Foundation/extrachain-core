@@ -178,17 +178,18 @@ namespace Dfs {
     enum class FileState {
         Removed    = 0,
         Known      = 1,
-        Partial    = 2,
-        Processing = 3,
-        Ready      = 4,
+        Ready      = 2,
+        Partial    = 3,
+        Processing = 4,
         Unknown    = 100
     };
 
     enum class DataSecurity {
-        Public = 0,
-        Self   = 1,
-        Actor  = 2,
-        Key    = 3
+        Public    = 0,
+        Encrypted = 1,
+        Self      = 111,
+        Actor     = 222,
+        Key       = 333
     };
 
     struct DataSecuritySelf {
@@ -251,6 +252,21 @@ namespace Dfs {
         bool empty() const {
             return file_id.empty() || name.empty();
         }
+
+        std::string calculate_hash(bool with_remove = false) {
+            auto for_hash = std::format("{}{}{}{}{}{}{}{}{}",
+                                        actor_id.to_string(),
+                                        file_id,
+                                        prev_file_id.value_or(""),
+                                        folder.value_or(""),
+                                        std::to_string(created),
+                                        std::to_string(last_modified),
+                                        std::to_string(std::to_underlying(type)),
+                                        std::to_string(std::to_underlying(encryption)),
+                                        (with_remove ? "removed" : ""));
+            auto hash     = Utils::calculate_hash(for_hash);
+            return hash;
+        }
     };
 
     BOOST_DESCRIBE_STRUCT(DirRow,
@@ -292,6 +308,14 @@ namespace Dfs {
             Dfs::FileState state = Dfs::FileState::Known;
         };
         BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state))
+
+        struct RemoveFile {
+            ActorId       owner_id;
+            std::string   file_id;
+            Signature     sign;
+            std::uint64_t last_modified;
+        };
+        BOOST_DESCRIBE_STRUCT(RemoveFile, (), (owner_id, file_id, sign, last_modified))
 
         struct ResponseDfsSize {
             ActorId     actorId;
