@@ -56,6 +56,7 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
+    return;
     const auto actor      = node->accountController()->mainActor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
     auto       amount     = calculateRewardAmount();

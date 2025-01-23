@@ -590,7 +590,7 @@ void NetworkManager::messageReceived(const std::string &message,
     if (sign_actor) {
         if (!sign_actor.value().key().verify(ByteArray(message_body.serializeForSign()).toBytes(),
                                              ByteArray(sign.data()).toArray<crypto_sign_BYTES>())) {
-            eWarning("Sign package is invalid!");
+            // eWarning("Sign package is invalid!");
             // return;
         }
     } else {
@@ -619,7 +619,7 @@ void NetworkManager::messageReceived(const std::string &message,
                      identifier);
             return;
         } else {
-            eInfo("MessageID emplaced: {}", messageId);
+            // eInfo("MessageID emplaced: {}", messageId);
         }
     } else if (status == MessageStatus::Response) {
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
