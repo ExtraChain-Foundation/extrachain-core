@@ -344,6 +344,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const Dfs::CollectionTemplate &collection_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
+    return Dfs::DirRow();
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = DfsPath::file_path(owner_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
