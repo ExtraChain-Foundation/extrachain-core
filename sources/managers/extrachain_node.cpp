@@ -209,6 +209,7 @@ void ExtraChainNode::create_new_network_dfs() {
         eCritical("Can't create token cache database, because {}", template_res.error());
         return;
     }
+    return;
 
     auto store_res =
         m_dfs->store_collection(first_id, first_id, "Tokens", template_res->actor_id, template_res->file_id);
