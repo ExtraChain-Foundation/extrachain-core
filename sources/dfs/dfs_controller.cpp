@@ -1357,9 +1357,17 @@ std::string DfsController::extractFragment(boost::interprocess::file_mapping &fm
 }
 
 std::string DfsController::extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset) {
-    boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset);
-    char                              *rr_ptr = static_cast<char *>(rightRegion.get_address());
-    return std::string(rr_ptr, rightRegion.get_size());
+    try {
+        boost::interprocess::mapped_region rightRegion(fmapTarget, boost::interprocess::read_only, offset);
+        if (rightRegion.get_address() && rightRegion.get_size() > 0) {
+            const char *rr_ptr = static_cast<const char *>(rightRegion.get_address());
+            return std::string(rr_ptr, rightRegion.get_size());
+        }
+        return {};
+    } catch (const boost::interprocess::interprocess_exception &e) {
+        // Обработка ошибки
+        return {};
+    }
 }
 
 void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
@@ -1592,6 +1600,9 @@ std::string DfsController::sendFragment(const DfsP::RequestFileSegmentMessage &m
         data = extractFragment(fmapTarget, msg.offset, DfsB::sectionSize);
     } else {
         data = extractFragment(fmapTarget, msg.offset);
+    }
+    if (data.empty()) {
+        return "";
     }
 
     DfsP::SegmentMessage fragment = { .actorId = msg.actorId,
