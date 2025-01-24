@@ -110,13 +110,6 @@ public:
     bool validateBlock(const BlockVariant &block);
 
     /**
-     * @brief Validates transaction digital signature
-     * @param tx
-     * @return true if transaction is valid
-     */
-    bool validateTx(const Transaction &tx);
-
-    /**
      * @brief getById
      * @param id
      * @return

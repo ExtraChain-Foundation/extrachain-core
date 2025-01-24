@@ -58,7 +58,6 @@ private:
 
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
-                           //    Actor<KeyPrivate>   approver;       // current user.
     // service //
 
 public:
@@ -81,7 +80,6 @@ private:
     std::pair<Transaction, BigNumber> getTxBySenderOrReceiver(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxBySenderOrReceiverAndToken(const ActorId &id,
                                                                       const ActorId &token = TokenId());
-    std::pair<Transaction, BigNumber> getTxByApprover(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
     // genesis blocks //

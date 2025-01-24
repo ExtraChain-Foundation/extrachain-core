@@ -443,9 +443,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Tra
         return std::unexpected(TransactionError::NoLastBlock);
     }
 
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
+    BigNumber lastBlockId = lastRealBlock->getIndex();
     transaction.setPrevBlock(lastBlockId);
     transaction.sign(signer);
+    // !sign -> the конец
 
     eLog("[Blockchain] Send {}", transaction);
     network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::AllParents);
@@ -479,8 +480,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
 
-        // TODO: temp
-        // dataMiningManager()->requestCoinReward();
+        dataMiningManager()->requestCoinReward();
     }
 }
 
@@ -607,7 +607,7 @@ void ExtraChainNode::connectSignals() {
                 QTimer* timer = new QTimer();
                 timer->setSingleShot(true);
 
-                connect(timer, &QTimer::timeout, this, [=, this]() {
+                connect(timer, &QTimer::timeout, this, [=]() {
                     auto actor = m_accountController->currentProfile().get_actor(actorId);
                     if (!actor.has_value()) {
                         return;

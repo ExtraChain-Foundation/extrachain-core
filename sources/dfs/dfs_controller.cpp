@@ -1011,6 +1011,8 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     }
 
     emit added(owner_id, dir_row);
+    increaseSizeTaken(dir_row.size);
+    m_totalDfsSize += dir_row.size;
 
     std::string stored_added = network_stote == Dfs::NetworkStoreFile::Broadcast ? "stored" : "added";
     eLog("[Dfs] File {}/{} was {}", owner_id, dir_row.file_id, stored_added);
