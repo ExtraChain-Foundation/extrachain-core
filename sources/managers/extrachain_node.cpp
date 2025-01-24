@@ -482,6 +482,8 @@ void ExtraChainNode::getAllActorsTimerCall() {
             m_actorIndex->getAllActors(actorId, true);
 
         dataMiningManager()->requestCoinReward();
+
+        m_dfs->download_manager().check_all_files("");
     }
 }
 

@@ -139,12 +139,19 @@ void LoadManager::check_all_files(std::string identifier) {
 
             // TODO: process from queue
             // search file
-            this->node->network()->send_message(file_link,
-                                                MessageType::DfsFileState,
-                                                Config::Net::TypeSend::Focused,
-                                                MessageStatus::Request,
-                                                "",
-                                                identifier);
+            if (identifier.empty()) {
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    Config::Net::TypeSend::AllParents,
+                                                    MessageStatus::Request);
+            } else {
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    Config::Net::TypeSend::Focused,
+                                                    MessageStatus::Request,
+                                                    "",
+                                                    identifier);
+            }
         }
     }
 
@@ -318,6 +325,7 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
         node->dfs()->added(file_link.owner_id, active_download.dir_row);
         node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
+        eLog("[Fragment] Last fragment for {}", file_link);
     }
 
     // eTemp("[Fragment] {}: size: {}, offset: {}, {}",
