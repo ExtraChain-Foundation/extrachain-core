@@ -233,10 +233,7 @@ public:
     DirsManager &dirs_manager();
     LoadManager &download_manager();
 
-    void sync(const std::string &identifier) {
-        load_manager_.check_all_files(identifier);
-        dirs_manager_.sync(identifier);
-    }
+    void sync(const std::string &identifier);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
 
 private:

@@ -61,6 +61,8 @@ enum class MessageType {
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
+    DfsTempSyncAll = 89,
+
     RequestDfsSize  = 90,
     ResponseDfsSize = 91,
     // DfsState = 92,

@@ -921,6 +921,15 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsTempSyncAll: {
+        auto res = MessagePack::deserialize<bool>(serialized);
+        if (!res.has_value()) {
+            break;
+        }
+        node->dfs()->dirs_manager().network_request_all(identifier);
+        break;
+    }
+
     case MessageType::DfsStoreFile: {
         auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
         if (!file_link_result.has_value()) {

@@ -23,6 +23,7 @@
 #include "network/network_manager.h"
 #include "dfs/dfs_controller.h"
 #include "utils/exc_logs.h"
+#include "dfs/dfs_utils.h"
 
 // Implementation file will contain network-related includes that you'll add later
 // #include "network/dfs_sync_messages.h"
@@ -50,6 +51,12 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
+    auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
+    if (row.has_value()) {
+        if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
+            return;
+        }
+    }
     // check dublicate
     if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         return;
@@ -155,7 +162,6 @@ void LoadManager::check_all_files(std::string identifier) {
 //             break; // No more items to process
 //         }
 
-//         // Здесь тебе нужно будет добавить:
 //         // send_search_request(*next);
 
 //         next->last_attempt          = std::chrono::system_clock::now();
@@ -292,6 +298,12 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         return;
     }
 
+    if (fragment_data.offset == 0) {
+        Dfs::Tables::ActorDirFile::update_file_state(fragment_data.owner_id,
+                                                     fragment_data.file_id,
+                                                     Dfs::FileState::Partial);
+    }
+
     auto active_download  = active_downloads.at(file_link);
     bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
     if (is_last_fragment) {
@@ -304,6 +316,7 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         }
         active_downloads.erase(file_link);
         Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
+        node->dfs()->added(file_link.owner_id, active_download.dir_row);
         node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
     }
 

@@ -53,6 +53,10 @@ public:
                                    const std::vector<Dfs::DirRow>& dir_rows,
                                    const std::string&              identifier);
 
+    // temp
+    void temp_sync_all(const std::string& identifier);
+    void network_request_all(const std::string& identifier);
+
 private:
     ExtraChainNode* node;
 };

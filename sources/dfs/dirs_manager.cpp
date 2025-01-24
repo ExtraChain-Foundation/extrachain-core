@@ -25,9 +25,7 @@
 #include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
 
-// тебе нужно будет добавить:
-// #include "blockchain/dirs.h" - для работы с .dirs файлом
-// #include "network/dfs_sync_messages.h"
+#include "blockchain/actor_index.h"
 
 DirsManager::DirsManager(ExtraChainNode* node)
     : node(node) {
@@ -155,7 +153,7 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     Dfs::initialize_actor_folder(owner_id);
 
-    // Need to change adding'
+    // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
     eTemp("~~~~~~~~~~~~~~~~b {}", res);
@@ -167,4 +165,32 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     this->update_dirs(owner_id, max_value);
 
     node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, identifier);
+}
+
+void DirsManager::temp_sync_all(const std::string& identifier) {
+    node->network()->send_message(true,
+                                  MessageType::DfsTempSyncAll,
+                                  Config::Net::TypeSend::Focused,
+                                  MessageStatus::Response,
+                                  "",
+                                  identifier);
+}
+
+void DirsManager::network_request_all(const std::string& identifier) {
+    auto actors = node->actorIndex()->allActors();
+
+    for (const auto& actor : actors) {
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
+
+        if (!dir_rows.has_value()) {
+            return;
+        }
+
+        node->network()->send_message(std::make_pair(actor, dir_rows.value()),
+                                      MessageType::DfsSyncDirRows,
+                                      Config::Net::TypeSend::Focused,
+                                      MessageStatus::Response,
+                                      "",
+                                      identifier);
+    }
 }

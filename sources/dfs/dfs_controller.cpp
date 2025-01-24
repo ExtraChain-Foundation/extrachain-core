@@ -232,6 +232,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     // insertToFiles(dir_row);
     emit stored(owner_id, dir_row);
+    emit added(owner_id, dir_row);
 
     broadcast_stored(owner_id, dir_row);
 
@@ -1202,6 +1203,12 @@ DirsManager &DfsController::dirs_manager() {
 
 LoadManager &DfsController::download_manager() {
     return load_manager_;
+}
+
+void DfsController::sync(const std::string &identifier) {
+    load_manager_.check_all_files(identifier);
+    dirs_manager_.temp_sync_all(identifier);
+    // dirs_manager_.sync(identifier);
 }
 
 // TODO: use dfs size
