@@ -291,8 +291,10 @@ bool ActorIndex::save_actor_index(const Actor<KeyPublic> &actor) {
 
     bool dbInsert = db.insert(Config::DataStorage::actorsTable,
                               { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
-    if (!dbInsert)
-        eFatal("db actor insert error");
+    if (!dbInsert) {
+        eCritical("db actor insert error");
+        return false;
+    }
 
     return true;
 }
