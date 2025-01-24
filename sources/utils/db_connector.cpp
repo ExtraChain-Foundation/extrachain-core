@@ -214,7 +214,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     dbmutex.unlock();
 
     if (rs != SQLITE_DONE) {
-        eWarning("[DbConnector] {} {} error: {}", m_file, m_type, sqlite3_errmsg(db));
+        eWarning("[DbConnector] {}/{} {} {} error: {}", m_file, m_type, query, tableName, sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         return {};
     }
@@ -638,8 +638,8 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
 
     int changes = sqlite3_changes(db);
     if (changes == 0 && !isReplace) {
-        eWarning("[DbConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
-        eWarning("[DbConnector] {}(false): {}", file(), query);
+        // eWarning("[DbConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
+        // eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         dbmutex.unlock();
         return false;

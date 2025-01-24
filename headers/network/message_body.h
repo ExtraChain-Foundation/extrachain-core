@@ -40,32 +40,34 @@ enum class MessageType {
     BlockchainRequestBlock = 36,
     BlockchainSync         = 37,
     BlockchainLastSaved    = 38,
-    BlockchainAnarchy      = 39,
 
-    DfsDirData            = 50,
-    DfsLastModified       = 51,
-    DfsAddFile            = 52,
-    DfsRequestFile        = 53,
-    DfsRequestFileSegment = 54,
-    DfsRemoveFile         = 55,
-    DfsEditSegment        = 56,
-    DfsAddSegment         = 57,
-    DfsDeleteSegment      = 58,
-    DfsSendingFileDone    = 59,
-    DfsVerifyList         = 60,
-    RequestDfsSize        = 61,
-    ResponseDfsSize       = 62,
-    // DfsState = 63,
-    RequestBlockCount  = 64,
-    ResponseBlockCount = 65,
+    DfsStoreFile = 50,
+    // DfsSyncSearchFile   = 51, // parent for now
+    // DfsSyncSearchResult = 52, // true or false
+    DfsSyncDirs     = 53,
+    DfsSyncDirsRows = 54,
+    DfsSyncDirRows  = 55,
+
+    DfsFileState = 56,
+    // DfsFileWant      = 57,
+    DfsStoreFragment = 58,
+    DfsFileRequest   = 59,
+    DfsFileFragment  = 60,
+    // DfsFileThanks   = 61,
+    DfsFileRemove = 62,
 
     DfsCollectionRequest   = 70,
     DfsCollectionContent   = 71,
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
 
-    FragmentDataInfo      = 90,
-    FragmentsDataListInfo = 91,
+    DfsTempSyncAll = 89,
+
+    RequestDfsSize  = 90,
+    ResponseDfsSize = 91,
+    // DfsState = 92,
+    RequestBlockCount  = 93,
+    ResponseBlockCount = 94,
 
     NewListConnections    = 100,
     GetListConnections    = 101,
@@ -93,13 +95,13 @@ MSGPACK_ADD_ENUM(MessageStatus)
 struct MessageBody {
     Config::Net::TypeSend           send_type;
     MessageType                     message_type;
-    MessageStatus status;
-    std::string   message_id;
-    ActorId       sender_id;
+    MessageStatus                   status;
+    std::string                     message_id;
+    ActorId                         sender_id;
     ActorId                         init_sender_id;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
-    std::string   data;
+    std::string                     data;
 
     std::string serializeForSign() const {
         return std::to_string(std::to_underlying(send_type)) + std::to_string(std::to_underlying(message_type))
@@ -143,11 +145,11 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_init_message(const std::string    &data,
+inline MessageBody make_init_message(const std::string&    data,
                                      Config::Net::TypeSend send_type,
                                      MessageType           type,
                                      MessageStatus         status,
-                                     const ActorId        &sender,
+                                     const ActorId&        sender,
                                      std::string           to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
@@ -180,7 +182,7 @@ struct VPNMessage {
     std::set<std::string>    networkIdentifiersToIgnore;
     std::string              localIP;
     std::string              publicIP;
-    std::string              publicKeyFile;
+    std::string              publicKey;
     std::string              uuid;
     std::vector<std::string> allIPsToSet;
     std::string              senderID;
@@ -196,7 +198,7 @@ struct VPNMessage {
                    networkIdentifiersToIgnore,
                    localIP,
                    publicIP,
-                   publicKeyFile,
+                   publicKey,
                    uuid,
                    allIPsToSet,
                    senderID)

@@ -45,6 +45,10 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 
+#ifdef Q_OS_LINUX
+    #include <signal.h>
+#endif
+
 struct TokensDataRow {
     TokenId        token_id;
     std::string    name;
@@ -93,6 +97,10 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
     Logger::instance().set_debug(true);
+
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_DFL);
+#endif
 }
 
 void ExtraChainNode::process() {
@@ -173,9 +181,20 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         if (!firstBlock.has_value())
             return false;
 
-        m_blockchain->addBlockFromNetwork(firstBlock.value(), "");
+        m_blockchain->addBlockFromNetwork(firstBlock.value(), "", "");
     }
 
+    create_network_need_dfs_creation = true;
+
+    eSuccess("[Node] New network created");
+    return true;
+}
+
+void ExtraChainNode::create_new_network_dfs() {
+    // temp while no cached local new store file
+    create_network_need_dfs_creation = false;
+
+    auto first_id        = m_actorIndex->firstId();
     auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
         { Dfs::Field::ActorId("token_id").not_null().unique(),
           Dfs::Field::String("name").not_null().unique().length(3, 20),
@@ -185,31 +204,31 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
           Dfs::Field::String("color").not_null(),
           Dfs::Field::String("smart") });
 
-    auto template_res = m_dfs->store_template(first.id(), tokens_template);
+    auto template_res = m_dfs->store_template(first_id, tokens_template);
     if (!template_res.has_value()) {
         eCritical("Can't create token cache database, because {}", template_res.error());
-        return false;
+        return;
     }
+    return;
 
     auto store_res =
-        m_dfs->store_collection(first.id(), first.id(), "Tokens", template_res->actor_id, template_res->file_id);
+        m_dfs->store_collection(first_id, first_id, "Tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
         eCritical("Can't create token cache database, because {}", store_res.error());
         Utils::wipeDataFiles();
-        return false;
+        return;
     }
 
     auto tokens_row = TokensDataRow { .token_id = ActorId(),
                                       .name     = "ExtraChain",
                                       .ticker   = "EXC",
                                       .count    = BigNumberFloat(0),
-                                      .owner    = first.id(),
+                                      .owner    = first_id,
                                       .color    = "#111111",
                                       .smart    = "" };
     m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
 
-    eSuccess("[Node] New network created");
-    return true;
+    eSuccess("[Node] New network dfs created");
 }
 
 void ExtraChainNode::start() {
@@ -337,30 +356,33 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     return ByteArray(encrypted.value()).toString();
 }
 
-bool ExtraChainNode::importUser(const std::string& data, const std::string& login, const std::string& password) {
+std::string ExtraChainNode::importUser(const std::string& data, const std::string& login,
+                                const std::string& password) {
     if (data.empty()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto login_password = login + password;
     if (login_password.empty()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto hash = Utils::calculate_hash(login_password);
     auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash);
     if (!json.has_value()) {
-        return false; // unexpected
+        return std::string(); // unexpected
     }
 
     auto imported_user = Json::deserialize<ImportedUser>(json.value());
     if (!imported_user.has_value()) {
-        return false;
+        return std::string();
     }
+
+    // TODO: network id check
 
     m_accountController->import_profile(imported_user.value(), hash);
 
-    return true;
+    return hash;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
@@ -422,9 +444,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Tra
         return std::unexpected(TransactionError::NoLastBlock);
     }
 
-    BigNumber lastBlockId = m_blockchain->getLastRealBlock()->getIndex();
+    BigNumber lastBlockId = lastRealBlock->getIndex();
     transaction.setPrevBlock(lastBlockId);
     transaction.sign(signer);
+    // !sign -> the конец
 
     eLog("[Blockchain] Send {}", transaction);
     network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::AllParents);
@@ -458,8 +481,7 @@ void ExtraChainNode::getAllActorsTimerCall() {
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
 
-        // TODO: temp
-        // dataMiningManager()->requestCoinReward();
+        dataMiningManager()->requestCoinReward();
     }
 }
 
@@ -527,8 +549,8 @@ void ExtraChainNode::connectActorIndex() {
 
 void ExtraChainNode::dfsConnection() {
     // init dfs for user
-    connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
-    connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
+    // connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
+    // connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
     connect(this, &ExtraChainNode::ready, m_networkManager, &NetworkManager::startNetwork);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
@@ -553,9 +575,22 @@ void ExtraChainNode::connectSignals() {
     // temp for tests, maybe only for console
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         emit readyInitLocalizationFiles();
-        m_dfs->requestDirFileAllActors();
-        m_dfs->requestSync();
+        // m_dfs->requestDirFileAllActors();
+        // m_dfs->requestSync();
     });
+
+    connect(m_networkManager,
+            &NetworkManager::newSocketActivatedWithParams,
+            [this](const std::string ip, const std::string identifier) {
+                eLog("[WS] Start sync...");
+
+                if (create_network_need_dfs_creation) {
+                    create_new_network_dfs();
+                }
+
+                m_blockchain->sync(BigNumber(), identifier);
+                m_dfs->sync(identifier);
+            });
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
@@ -563,30 +598,27 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendCountRequestMsg(m_accountController->mainActor().id());
     });
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        m_blockchain->sync();
-    });
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
     //         &Blockchain::updateBlockchain);
     connect(m_tokenManager,
-        &TokenManager::sendTransactionCreateToken,
-        this,
-        [this](const ActorId& actorId, const Transaction& tx) {
-            QTimer* timer = new QTimer();
-            timer->setSingleShot(true);
-            
-            connect(timer, &QTimer::timeout, this, [=]() {
-                auto actor = m_accountController->currentProfile().get_actor(actorId);
-                if (!actor.has_value()) {
-                    return;
-                }
-                this->sendTransaction(tx, actor.value());
-                timer->deleteLater();
+            &TokenManager::sendTransactionCreateToken,
+            this,
+            [this](const ActorId& actorId, const Transaction& tx) {
+                QTimer* timer = new QTimer();
+                timer->setSingleShot(true);
+
+                connect(timer, &QTimer::timeout, this, [=]() {
+                    auto actor = m_accountController->currentProfile().get_actor(actorId);
+                    if (!actor.has_value()) {
+                        return;
+                    }
+                    this->sendTransaction(tx, actor.value());
+                    timer->deleteLater();
+                });
+
+                timer->start(2000);
             });
-            
-            timer->start(2000);
-        });
 
     connect(m_tokenManager,
             &TokenManager::sendToken,

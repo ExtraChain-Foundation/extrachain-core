@@ -133,7 +133,7 @@ public:
     static std::expected<FsPath, FsError>                   create(const std::filesystem::path& path);
     [[nodiscard]] std::expected<std::string, FsError>       string() const;
     [[nodiscard]] std::expected<FsPath, FsError>            absolute() const;
-    [[nodiscard]] std::expected<bool, FsError>              exists() const;
+    [[nodiscard]] bool                                      exists() const;
     [[nodiscard]] std::expected<bool, FsError>              is_directory() const;
     [[nodiscard]] std::expected<bool, FsError>              is_regular_file() const;
     [[nodiscard]] std::expected<bool, FsError>              is_file_locked() const;

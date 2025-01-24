@@ -116,13 +116,13 @@ std::expected<FsPath, FsError> FsPath::absolute() const {
     }
 }
 
-std::expected<bool, FsError> FsPath::exists() const {
+bool FsPath::exists() const {
     try {
         auto res = std::filesystem::exists(m_path);
         return res;
     } catch (const std::exception& e) {
         // eCritical("Failed to check path existence: {}", e.what());
-        return std::unexpected(FsError::IoError);
+        return false;
     }
 }
 
@@ -345,10 +345,10 @@ std::expected<DirectoryIterator, FsError> FsPath::end() const {
 }
 
 bool FsPath::exists_and_size_not_zero() const {
-    auto exists    = this->exists();
+    bool exists    = this->exists();
     auto file_size = this->file_size();
-    if (!exists.has_value() || !file_size.has_value()) {
+    if (!file_size.has_value()) {
         return false;
     }
-    return exists.value() && file_size.value() > 0;
+    return exists && file_size.value() > 0;
 }

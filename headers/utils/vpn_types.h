@@ -41,8 +41,8 @@ struct VPNConfigStorage {
         std::string              localIPForSetup;
         std::string              proxyCounter;
         std::vector<std::string> allIPsToSet;
-        std::string              requesterPublicKeyFile;
-        std::string              nextPublicKeyFile;
+        std::string              requesterPublicKey;
+        std::string              nextPublicKey;
     };
 
     struct VPNWorkers {
@@ -59,7 +59,7 @@ struct VPNConfigStorage {
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
 
     std::atomic_bool                           vpnIsClient = false;
-    std::vector<std::string>                   vpnFileAddedFileId;
+    // std::vector<std::string>                   vpnFileAddedFileId;
     SafePtr<std::map<std::string, VPNWorkers>> vpnUuidToVPNWorkers;
     std::optional<NetworkVPNType>              vpnConnectedType;
     std::string                                vpnLocalizationFileId;

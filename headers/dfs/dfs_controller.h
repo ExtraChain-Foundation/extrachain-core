@@ -29,8 +29,6 @@
 #include <QObject>
 
 #include <boost/generator_iterator.hpp>
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
 #include <boost/random.hpp>
 #include <boost/algorithm/string.hpp>
 #include <filesystem>
@@ -38,9 +36,13 @@
 
 #include "blockchain/actor_id.h"
 #include "dfs/dfs_utils.h"
+#include "dfs/dirs_manager.h"
+#include "dfs/load_manager.h"
 #include "dfs/historical_collection.h"
 
 class ExtraChainNode;
+class DirsManager;
+class LoadManager;
 using FileId                   = std::string;
 using ExpectedDirRow           = std::expected<Dfs::DirRow, Dfs::DfsError>;
 using ExpectedDirHistoricalRow = std::expected<std::pair<Dfs::DirRow, HistoricalCollectionRow>, Dfs::DfsError>;
@@ -52,6 +54,11 @@ namespace Dfs {
         Collection,
         CollectionTemplate,
         Chat
+    };
+
+    enum class NetworkStoreFile {
+        Broadcast,
+        Sync
     };
 } // namespace Dfs
 
@@ -66,17 +73,11 @@ private:
     std::uint64_t m_bytesLimit = 10995116277760;
     std::size_t   m_sizeTaken  = 0;
 
-    std::map<std::pair<ActorId, FileId>, Dfs::DirRow> files;
-    std::vector<std::string>                          m_compliteFiles;
-    std::vector<ActorId>                              m_unsynchonizedDirs;
-    std::uint64_t                                     m_totalDfsSize = 0;
-    std::vector<std::pair<ActorId, Dfs::DirRow>>      m_dirRows;
+    std::uint64_t m_totalDfsSize = 0;
 
 public:
     explicit DfsController(ExtraChainNode *node);
     ~DfsController();
-
-    void initializeActor(const ActorId &actorId);
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
@@ -190,17 +191,35 @@ public:
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
+    void network_request_file_state(const ActorId &owner_id, const std::string &file_id, std::string message_id);
+    void network_response_file_state(const ActorId     &owner_id,
+                                     const std::string &file_id,
+                                     Dfs::FileState     state,
+                                     std::string        identifier);
+
+    // full file remove
+    std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
+    void                      network_remove_stored_file(const ActorId     &owner_id,
+                                                         const std::string &file_id,
+                                                         const Signature   &sign,
+                                                         uint64_t           last_modified);
+
+    // remove only local copy
+    std::expected<void, bool> remove_local_file(const ActorId &owner_id, const std::string &file_id);
+
     // TODO: get rows from collection
 
     // TODO: need two function: remove LOCAL file and remove file from STORE
-    bool removeLocalFile(const ActorId &owner_id, const std::string &file_id);
+
     // visualMoveFile
+    void broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row);
+    void sync_stored(const Dfs::FileData &file_data, const std::string &message_id);
 
     // External interfaces
-    std::string network_add_file(const ActorId &owner_id, const Dfs::DirRow &dir_row, bool load_bytes);
+    std::string network_store_file(const ActorId        &owner_id,
+                                   const Dfs::DirRow    &dir_row,
+                                   Dfs::NetworkStoreFile network_stote);
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
-    bool        removeFile(const DfsP::RemoveFileMessage &msg);
-    bool        renameFile(const ActorId &actor, const std::string &fileHash, const std::string &newFileHash);
 
     // Unique file ID: hash+msec+salt
     std::string   create_file_id(std::filesystem::path file);
@@ -208,21 +227,19 @@ public:
     std::uint64_t sizeTaken() const;
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
-    void          insertToFiles(const Dfs::DirRow &dirRow);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::fsActrRoot) const;
-    std::string   makeReferenceFile(const ActorId             &actor,
-                                    const std::string         &nameFile,
-                                    const DfsP::ReferenceData &referenceData);
 
-    void dataFromReferenceString(const std::string   &referenceStr,
-                                 std::string         &actor,
-                                 std::string         &nameFile,
-                                 DfsP::ReferenceData &referenceData);
+    DirsManager &dirs_manager();
+    LoadManager &download_manager();
 
-    void updateDirsLastModified(const ActorId &actorId, std::uint64_t last_modified);
+    void sync(const std::string &identifier);
+    bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
 
 private:
+    DirsManager dirs_manager_;
+    LoadManager load_manager_;
+
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
                                                       DbRow                        row,
@@ -230,55 +247,24 @@ private:
                                                       CollectionOperation          type,
                                                       const Dfs::DataSecurityData &security_data);
 
-    bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
-
-    bool          insertDataChunk(std::string data, std::uint64_t position, std::filesystem::path file);
-    bool          removeDataChunk(std::uint64_t position, std::uint64_t length, std::filesystem::path file);
     std::uint64_t calculateSizeTaken(const std::string &folder = DfsB::fsActrRoot) const;
     std::uint64_t calculateFilesSize(const std::string &folder = DfsB::fsActrRoot) const;
-    std::string   extractNextFragment();
-    std::string   extractFragment(boost::interprocess::file_mapping &fmapTarget,
-                                  std::uint64_t                      offset,
-                                  std::uint64_t                      fragmentSize);
-    std::string   extractFragment(boost::interprocess::file_mapping &fmapTarget, std::uint64_t offset);
-    void          eraseFirstUnsynchronizedDir();
-    void          removeRowFromDB(const DfsP::RemoveFileMessage &msg);
-    bool          requestFileSegment(const ActorId &owner_id, const Dfs::DirRow &dir_row);
-    void          updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
+
+    void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
 public:
-    void        sendSizeRequestMsg(const ActorId &actorId) const;
-    void        sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const std::string &messageId) const;
-    void        sendCountRequestMsg(const ActorId &actorId) const;
-    void        sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                                    const std::string                     &messageId,
-                                    BigNumber                              dfsCount) const;
-    void        requestSync();
-    void        requestDirFileAllActors();
-    void        sendSync(std::uint64_t last_modified, const std::string &messageId);
-    void        requestDirData(const ActorId &owner_id);
-    void        sendDirData(const ActorId &owner_id, std::uint64_t last_modified, const std::string &messageId);
-    void        addDirData(const ActorId &actorId, const std::vector<Dfs::DirRow> &dirRows);
-    void        requestFile(const ActorId &actorId, const std::string &fileName);
-    void        sendFile(const ActorId &owner_id, const std::string &file_id, const std::string &message_id = "");
-    void        beginFetchNextFile();
-    void        process_next_file();
-    void        requestNextFragment(const DfsP::RequestFileSegmentMessage &msg);
-    std::string sendNextFragment(std::uint64_t position, std::size_t size); // Attention~!!!
-    std::string sendFragment(const DfsP::RequestFileSegmentMessage &msg, const std::string &messageId);
-    void        fetchFragments(Dfs::Packets::RequestFileSegmentMessage &msg, std::string &messageId);
-    void        fetchFragment(DfsP::RequestFileSegmentMessage &msg, std::string &messageId);
-    void        verifyFiles(std::vector<DfsP::VerifyFileMessage> &fileList, std::string &messageId);
-    float       percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
-    void        loadVPNLocalizationFiles();
+    void  sendSizeRequestMsg(const ActorId &actorId) const;
+    void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const std::string &messageId) const;
+    void  sendCountRequestMsg(const ActorId &actorId) const;
+    void  sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
+                              const std::string                     &messageId,
+                              BigNumber                              dfsCount) const;
+    float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
+    void  loadVPNLocalizationFiles();
 
 public slots:
-    std::string addFragment(const DfsP::SegmentMessage &msg);
-    void        threadAddFragment(const DfsP::SegmentMessage &msg);
-    std::string insertFragment(const DfsP::SegmentMessage &msg);
 
 public:
-    std::string   deleteFragment(const DfsP::DeleteSegmentMessage &msg);
     std::uint64_t bytesLimit() const;
 
 public:
@@ -286,18 +272,19 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
+    void stored(ActorId owner_id, Dfs::DirRow dirRow);
     void added(ActorId owner_id, Dfs::DirRow dirRow);
     void updated(ActorId owner_id, Dfs::DirRow dirRow);
-    void removed(ActorId owner_id, Dfs::DirRow dirRow);
+    void removed(ActorId owner_id, std::string file_id);
+    void localRemoved(ActorId owner_id, std::string file_id);
 
     void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void uploadProgress(ActorId owner_id, std::string file_id, int progress);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void downloadProgress(ActorId owner_id, std::string file_id, int progress);
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
-
-    void downloadProgress(ActorId owner_id, std::string file_id, int progress);
-    void uploadProgress(ActorId owner_id, std::string file_id, int progress);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

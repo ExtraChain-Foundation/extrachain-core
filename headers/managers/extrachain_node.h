@@ -97,9 +97,10 @@ private:
     ChatManager*        chat_manager_        = nullptr;
     QTimer*             timer                = nullptr;
 
-    bool                        started               = false;
-    bool                        isClientApplication   = false;
-    bool                        allowRunRestApiServer = false;
+    bool                        started                          = false;
+    bool                        isClientApplication              = false;
+    bool                        allowRunRestApiServer            = false;
+    bool                        create_network_need_dfs_creation = false;
     std::uint64_t               blockCount;
     std::vector<BigNumber>      resiveCounts;
     VpnFunctionClearType        m_vpnClearFunc = nullptr;
@@ -109,6 +110,7 @@ public:
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);
+    void create_new_network_dfs();
     void start();
 
     bool isClientApp() {
@@ -156,7 +158,7 @@ public:
     std::string transactionErrorDescription(const TransactionError& error);
 
     std::expected<std::string, ImportError> exportUser();
-    bool importUser(const std::string& data, const std::string& login, const std::string& password);
+    std::string importUser(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file
 
     void createNetworkIdentifier();

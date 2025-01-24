@@ -55,8 +55,8 @@ set(EXTRACHAIN_CORE_INCLUDES
 
 set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragment_storage.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_chain.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dirs_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/load_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/version_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_collection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
@@ -117,9 +117,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/load_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/collection_template.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragment_storage.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_chain.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/version_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
@@ -140,12 +140,12 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/connections_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/transaction_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
@@ -200,7 +200,7 @@ execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree
 string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
 string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
-add_compile_definitions(EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
+add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})

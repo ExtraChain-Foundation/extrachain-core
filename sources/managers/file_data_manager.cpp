@@ -65,40 +65,36 @@ std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
     const auto            pathToActorFolder = Dfs::Path::actorPath(actorId);
     std::vector<FileData> fileStructs;
 
-    for (const auto &entry : std::filesystem::directory_iterator(pathToActorFolder)) {
-        const auto nameFile = entry.path().filename();
-        if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
+    auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
+    if (!dir_rows.has_value()) {
+        return fileStructs;
+    }
+
+    // directory_iterator
+    for (const auto &dir : dir_rows.value()) {
+        const auto nameFile = dir.file_id;
+        /* if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
             continue;
+        */
 
         FileStatus status = FileStatus::None;
-        const auto pathToStorjFile =
-            pathToActorFolder.string() + Utils::platformDelimeter() + nameFile.string() + DfsF::Extension;
-
-        if (std::filesystem::exists(pathToStorjFile)) {
-            DbConnector db(pathToStorjFile);
-            if (db.open()) {
-                auto countRow = db.select(DfsF::GetCountFragmants)[0];
-                if (std::stoi(countRow["COUNT(size)"]) == 0) {
-                    status = FileStatus::NotLoaded;
-                } else {
-                    auto rows = db.select(DfsF::GetSizeFragmants);
-                    if (!rows.empty()) {
-                        const int  sizeFragments = std::stoi(rows.at(0)["SUM(size)"]);
-                        const auto fileSize      = entry.file_size();
-                        if (fileSize == sizeFragments) {
-                            status = FileStatus::Downloaded;
-                        } else if (fileSize > sizeFragments) {
-                            status = FileStatus::NotLoaded;
-                        }
-                    }
-                }
-                db.close();
-            }
+        switch (dir.state) {
+        case Dfs::FileState::Ready:
+            status = FileStatus::Downloaded;
+            break;
+        case Dfs::FileState::Partial:
+            status = FileStatus::Loading;
+            break;
+        case Dfs::FileState::Known:
+            status = FileStatus::NotLoaded;
+            break;
+        default:
+            status = FileStatus::NotLoaded;
+            break;
         }
 
-        FileData fileStruct = FileData { .nameFile = entry.path().filename().string(),
-                                         .pathFile = entry.path().string(),
-                                         .status   = status };
+        FileData fileStruct =
+            FileData { .nameFile = dir.file_id, .pathFile = dir.visual_path(), .status = status };
         fileStructs.emplace_back(fileStruct);
     }
 

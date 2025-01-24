@@ -88,19 +88,30 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
     return blockIndex.getLastTxByHash(hash, token);
 }
 
-void Blockchain::sync(const BigNumber &from) {
+void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
     if (fromBlock < 0)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
-    node->network()->send_message(fromBlock,
-                                  MessageType::BlockchainSync,
-                                  Config::Net::TypeSend::AllParents,
-                                  MessageStatus::Request);
+
+    if (identifier.empty()) {
+        eWarning("[Blockchain] all parent sync");
+        node->network()->send_message(fromBlock,
+                                      MessageType::BlockchainSync,
+                                      Config::Net::TypeSend::AllParents,
+                                      MessageStatus::Request);
+    } else {
+        node->network()->send_message(fromBlock,
+                                      MessageType::BlockchainSync,
+                                      Config::Net::TypeSend::Focused,
+                                      MessageStatus::Request,
+                                      "",
+                                      identifier);
+    }
 }
 
-void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
+void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &identfier) {
     auto lastBlock = getLastBlock();
     if (!lastBlock.has_value()) {
         return;
@@ -135,13 +146,15 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
                                           MessageType::BlockchainGenesisBlock,
                                           Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId);
+                                          "",
+                                          identfier);
         } else {
             node->network()->send_message(block->getBlockConst(),
                                           MessageType::BlockchainNewBlock,
                                           Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId);
+                                          "",
+                                          identfier);
         }
     }
 
@@ -169,12 +182,8 @@ std::pair<Transaction, BigNumber> Blockchain::getTxBySenderOrReceiverAndToken(co
     return blockIndex.getLastTxBySenderOrReceiverAndToken(id, token);
 }
 
-std::pair<Transaction, BigNumber> Blockchain::getTxByApprover(const ActorId &id, const TokenId &token) {
-    return blockIndex.getLastTxByApprover(id, token);
-}
-
 std::pair<Transaction, BigNumber> Blockchain::getTxByUser(const ActorId &id, const TokenId &token) {
-    return blockIndex.getLastTxByApprover(id, token);
+    return blockIndex.getLastTxBySenderOrReceiver(id, token);
 }
 
 BigNumber Blockchain::lastGenesisIdFor(const BigNumber &id) {
@@ -380,8 +389,6 @@ std::pair<Transaction, BigNumber> Blockchain::getTransaction(SearchEnum::TxParam
         return getTxByHash(value, token);
     case SearchEnum::TxParam::User:
         return getTxByUser(ActorId(value), token);
-    case SearchEnum::TxParam::UserApprover:
-        return getTxByApprover(ActorId(value), token);
     case SearchEnum::TxParam::UserReceiver:
         return getTxByReceiver(ActorId(value), token);
     case SearchEnum::TxParam::UserSender:
@@ -426,6 +433,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         return std::unexpected(BlockError::Invalid);
     }
 
+    if (block.isBlock() && block.transactions().empty()) {
+        return std::unexpected(BlockError::Invalid);
+    }
+
     if (blockId != 0) {
         auto prevBlock     = this->getBlockByIndex(blockId - 1);
         auto nextBlock     = getBlockByIndex(blockId + 1);
@@ -456,6 +467,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
         auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : prevBlock->getHash();
         if (checkedPrevHash != expectedPrevHash) {
+            // jestko
             eLog("[Blockchain] Can't chained, sync request");
             // eLog("jb {}", block);
             // if (lastBlock.has_value())
@@ -466,6 +478,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             if (lastRealBlock.has_value())
                 removeBlock(lastRealBlock.value());
 
+            // TODO: hashs incoming, not sync, remove block
+            // TODO: package for removing last block?
             sync(blockId - 1); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }
@@ -483,7 +497,22 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         return std::unexpected(BlockError::Invalid);
     }
 
-    auto newBlock(block);
+    // const auto           &transactions = block.transactions();
+    // std::set<Transaction> transactions_approved;
+    // // TODO: if remove tx -> ignore in prove
+    // for (const auto &tx : block.transactions()) {
+    //     auto res = proveTransaction(tx, transactions);
+
+    //     if (res == TransactionProveError::NoError || res == TransactionProveError::SelfPleasure) {
+    //         transactions_approved.insert(tx);
+    //     }
+    // }
+
+    // recalc hash
+
+    BlockVariant newBlock(block);
+    // newBlock.set_transactions(transactions_approved);
+
     if (block.getType() != BlockType::Dummy) {
         signBlock(newBlock);
     }
@@ -498,6 +527,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             }
 
             auto mergeRes = mergeBlockWithLocal(newBlock);
+            // TODO: prove also
             return mergeRes;
         }
 
@@ -712,6 +742,11 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
             // if (tx.type() != txType)
             //     continue;
 
+            if (tx.sender() == userId && tx.token() == tokenId && tx.type() == TransactionType::Reward) {
+                balance += tx.amount();
+                continue;
+            }
+
             if (tx.receiver() == userId && tx.token() == tokenId) {
                 balance += tx.amount();
             }
@@ -750,7 +785,9 @@ BigNumber Blockchain::getBlockCount() {
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &messageId) {
+void Blockchain::addBlockNetwork(const BlockVariant &block,
+                                 const std::string  &messageId,
+                                 const std::string  &identifier) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
         // eLog("!!!!!!!!!!!");
     }
@@ -772,8 +809,8 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
-                syncResponse(block.getIndex(), messageId);
+            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !identifier.empty()) {
+                syncResponse(block.getIndex(), identifier);
             } // else {
             //     node->network()->send_message("",
             //                                   MessageType::BlockchainAnarchy,
@@ -834,68 +871,9 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
-    if (tx.type() == TransactionType::InitContract) {
-        return TransactionProveError::NoError;
-    }
     if (!tx.token().is_zero()) {
         return TransactionProveError::NoError;
     }
-
-    ActorId        targetSender   = tx.sender();
-    ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->accountController()->mainActor().id();
-    const ActorId &firstId        = node->actorIndex()->firstId();
-
-    const auto accounts = node->accountController()->accountsIds();
-    for (const auto &accountId : accounts) {
-        if (accountId == firstId)
-            continue;
-        if (targetSender == accountId || targetReceiver == accountId) {
-            // reward check
-            if (tx.isRewardTransaction()) {
-                auto approverId = tx.approver();
-                if (targetSender == ActorId() && !approverId.is_zero()) {
-                    auto approver = node->actorIndex()->getActor(approverId);
-                    bool res      = tx.verify(approver);
-                    if (res) {
-                        if (tx.token() != ActorId()) {
-                            return TransactionProveError::RewardInvalidToken;
-                        }
-                        if (tx.amount() == 0) {
-                            return TransactionProveError::AmountZero;
-                        }
-
-                        // continue;
-                        return TransactionProveError::NoError;
-                    }
-                }
-            }
-            return TransactionProveError::SelfPleasure;
-        }
-    }
-
-    // reward check
-    if (tx.isRewardTransaction()) {
-        targetSender = tx.approver();
-        // TODO: add extended check of validity
-        auto res = this->blockIndex.getLastTxByData(tx.data(), ActorId());
-
-        if (tx.token() != ActorId()) {
-            return TransactionProveError::RewardInvalidToken;
-        }
-
-        if (res.second == BigNumber("-1")) {
-            return TransactionProveError::NoError;
-        }
-    }
-
-    Actor<KeyPublic> senderActor;
-    if (!targetSender.is_zero())
-        senderActor = node->actorIndex()->getActor(targetSender);
-    Actor<KeyPublic> receiverActor;
-
-    if (!targetReceiver.is_zero())
-        receiverActor = node->actorIndex()->getActor(targetReceiver);
 
     if (tx.amount() == 0) {
         return TransactionProveError::AmountZero;
@@ -905,7 +883,63 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::AmountLessZero;
     }
 
-    if (targetSender == targetReceiver) {
+    ActorId        targetSender   = tx.sender();
+    ActorId        targetReceiver = tx.receiver();
+    const ActorId &mainActorId    = node->accountController()->mainActor().id();
+
+    const auto accounts = node->accountController()->accountsIds();
+    for (const auto &accountId : accounts) {
+        if (targetSender == accountId || targetReceiver == accountId) {
+            return TransactionProveError::SelfPleasure;
+        }
+    }
+
+    auto tx_copy = tx;
+    tx_copy.calculate_hash();
+    if (tx.hash() != tx_copy.hash()) {
+        return TransactionProveError::WrongHash;
+    }
+
+    auto res = this->blockIndex.getLastTxByHash(tx_copy.hash(), tx.token());
+    if (res.second != BigNumber(-1)) {
+        return TransactionProveError::Duplicate;
+    }
+
+    if (targetSender.is_zero()) {
+        return TransactionProveError::SenderZero;
+    }
+
+    Actor<KeyPublic> senderActor;
+    senderActor = node->actorIndex()->getActor(targetSender);
+    if (senderActor.empty()) {
+        return TransactionProveError::SenderNotExists;
+    }
+
+    if (tx.type() == TransactionType::Burn) {
+        if (!tx.receiver().is_zero()) {
+            return TransactionProveError::BurnIncorrectReceiver;
+        }
+
+        bool verify = tx.verify(senderActor);
+        if (!verify) {
+            return TransactionProveError::InvalidSignature;
+        }
+
+        return TransactionProveError::NoError;
+    }
+
+    if (targetReceiver.is_zero()) {
+        return TransactionProveError::ReceiverZero;
+    }
+
+    Actor<KeyPublic> receiverActor;
+    receiverActor = node->actorIndex()->getActor(targetReceiver);
+    if (receiverActor.empty()) {
+        return TransactionProveError::ReceiverNotExists;
+    }
+
+    if (tx.type() != TransactionType::Reward && tx.type() != TransactionType::InitContract
+        && targetSender == targetReceiver) {
         return TransactionProveError::IdenticalSenderReceiver;
     }
 
@@ -917,94 +951,52 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::EmptyBlockchain;
     }
 
-    // if receiver is not exist
-    if (senderActor.empty() && !targetSender.is_zero()) {
-        return TransactionProveError::SenderNotExists;
-    }
-
-    if (receiverActor.empty() && !targetReceiver.is_zero()) {
-        return TransactionProveError::ReceiverNotExists;
-    }
-
     if (tx.signature().empty()) {
         return TransactionProveError::MissingSignature;
     }
 
-    // special conditions: receiver is null - coins burning
-    if (targetSender.is_zero()) {
-        Actor<KeyPublic> producerActor;
-        if (!tx.producer().is_zero())
-            producerActor = node->actorIndex()->getActor(tx.producer());
-        else {
-            // return TransactionProveError::ZeroProducer;
-        }
-
-        if (!producerActor.key().verify(tx.hash(), ByteArray(tx.signature()).toArray<crypto_sign_BYTES>())) {
-            // return TransactionProveError::ProducerVerify;
-        }
-
-        return TransactionProveError::NoError;
+    bool verify = tx.verify(senderActor);
+    if (!verify) {
+        return TransactionProveError::InvalidSignature;
     }
 
-    //    // if !sig
-    //    if (!senderActor.key().verify(tx->getDataForSignature().toStdString(),
-    //    tx->getSignature().toStdString()))
-    //    {
-    //        eLog("Tx {} not approved: bad signature", tx->getHash());
-    //        return TransactionProveError::InvalidSignature;
-    //    }
+    if (tx.type() == TransactionType::Reward) {
+        return TransactionProveError::NoError;
+    }
 
     // special conditions: receiver is null - coins burning, contract creation
-    if (targetReceiver.is_zero()) {
-        eLog("target received is empty");
+    // TODO: InitContract: check duplicate
+    if (tx.type() == TransactionType::InitContract) {
+        auto count = tx.amount();
+        if (count < 0 || count >= Token::MAX_TOKEN_COUNT) {
+            return TransactionProveError::InvalidTokenCount;
+        }
 
-        // Transaction provedTx(tx);
-        // provedTx.sign(node->accountController()->currentWallet());
         return TransactionProveError::NoError;
-    } else {
-        if (tx.type() == TransactionType::InitContract) {
-            auto count = tx.amount();
-            if (count < 0 || count >= Token::MAX_TOKEN_COUNT) {
-                return TransactionProveError::InvalidTokenCount;
-            }
-
-            return TransactionProveError::NoError;
-        }
-
-        if (targetSender != firstId) {
-            TokenId        token                = tx.token();
-            BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, token);
-
-            BigNumberFloat res;
-            for (const Transaction &tx : std::as_const(transactions)) {
-                if (tx.sender() == targetSender && tx.token() == token) {
-                    res -= tx.amount();
-                } else if (tx.receiver() == targetSender) {
-                    res += tx.amount();
-                }
-            }
-            senderCurrentBalance += res;
-
-            BigNumberFloat transactionAmount = tx.amount();
-            BigNumberFloat transactionFee; // transactionAmount / 100;
-            BigNumberFloat senderNewBalance = senderCurrentBalance - transactionAmount - transactionFee;
-
-            if (senderNewBalance < 0 && targetSender != ActorId() /* && mainActorId == firstId */) {
-                return TransactionProveError::SenderBalanceBelowZero;
-            }
-
-            // sign?
-            return TransactionProveError::NoError;
-        } else {
-            // Transaction provedTx(tx);
-            // provedTx.sign(node->accountController()->currentWallet());
-            return TransactionProveError::NoError;
-        }
-
-        return TransactionProveError::Unknown;
     }
 
-    return TransactionProveError::Unknown;
+    TokenId        token                = tx.token();
+    BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, token);
+    BigNumberFloat amount_res;
+
+    for (const Transaction &tx : std::as_const(transactions)) {
+        if (tx.sender() == targetSender && tx.token() == token) {
+            amount_res -= tx.amount();
+        } else if (tx.receiver() == targetSender) {
+            amount_res += tx.amount();
+        }
+    }
+
+    senderCurrentBalance += amount_res;
+    BigNumberFloat transactionAmount = tx.amount();
+    BigNumberFloat transactionFee; // transactionAmount / 100;
+    BigNumberFloat senderNewBalance = senderCurrentBalance - transactionAmount - transactionFee;
+
+    if (senderNewBalance < 0 && targetSender != ActorId() /* && mainActorId == firstId */) {
+        return TransactionProveError::SenderBalanceBelowZero;
+    }
+
+    return TransactionProveError::NoError;
 }
 
 void Blockchain::process() {

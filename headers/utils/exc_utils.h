@@ -255,14 +255,11 @@ namespace Config {
                                                 "sender       TEXT  NOT NULL, "
                                                 "receiver     TEXT  NOT NULL, "
                                                 "amount       TEXT  NOT NULL, "
-                                                "date         TEXT  NOT NULL, "
                                                 "data         TEXT          , "
                                                 "token        TEXT  NOT NULL, "
-                                                "prevBlock    TEXT  NOT NULL, "
+                                                "prev_block    TEXT  NOT NULL, "
                                                 "hash         TEXT  NOT NULL, "
-                                                "approver     TEXT  NOT NULL, "
-                                                "signature    TEXT  NOT NULL, "
-                                                "producer     TEXT  NOT NULL "
+                                                "signature    TEXT  NOT NULL "
                                                 ");";
         static const std::string SignTable = "Signatures";
         static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
@@ -342,22 +339,6 @@ namespace Config {
 
 MSGPACK_ADD_ENUM(Config::Net::TypeSend)
 // FORMAT_ENUM(Config::Net::TypeSend)
-
-namespace Errors {
-    // IO
-    static const int FILE_NOT_EXISTS     = 0;
-    static const int FILE_ALREADY_EXISTS = 101;
-    static const int FILE_IS_NOT_OPENED  = 102;
-    static const int UNDEFINED           = 103;
-
-    // Blocks
-    // static const int BLOCK_IS_NOT_VALID = 201;
-    // static const int BLOCKS_CANT_MERGE = 202;
-    // static const int BLOCKS_ARE_EQUAL = 203;
-
-    // Mem and Block index
-    // static const int NO_BLOCKS = 401;
-} // namespace Errors
 
 namespace Serialization {
     EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
@@ -497,11 +478,11 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
 
-    static std::uint64_t current_date_secs() {
-        using namespace std::chrono;
-        std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
-        return secs;
-    }
+    // static std::uint64_t current_date_secs() {
+    //     using namespace std::chrono;
+    //     std::uint64_t secs = duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    //     return secs;
+    // }
 
     static std::uint64_t current_date_ms() {
         using namespace std::chrono;
@@ -708,7 +689,7 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT std::expected<std::string, FileHashError> calculate_hash_file(const FsPath &path);
 
-    enum class FileError {
+    enum class ContentError {
         ReadError,
         SizeTooLarge,
         EmptyFile,
@@ -720,7 +701,7 @@ namespace Utils {
      * @param path File path to read
      * @return Expected vector with file contents or FileError
      */
-    EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, FileError> read_file_content(const FsPath &path);
+    EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, ContentError> read_file_content(const FsPath &path);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);
@@ -783,6 +764,26 @@ namespace Utils {
     EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
     EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
+
+    enum class FileError {
+        InvalidInput,
+        OpenError,
+        ReadError,
+        WriteError,
+        SeekError,
+        FileTooLarge,
+        MappingError
+    };
+
+    // Read N bytes from file starting from offset
+    EXTRACHAIN_EXPORT std::expected<std::string, FileError> read_file_chunk(const FsPath &file_path,
+                                                                            std::uint64_t offset,
+                                                                            std::uint64_t size);
+
+    // Write data to file at specific offset
+    EXTRACHAIN_EXPORT std::expected<void, FileError> write_file_chunk(const FsPath          &file_path,
+                                                                      const std::string_view data,
+                                                                      std::uint64_t          offset);
 } // namespace Utils
 
 namespace BlockchainConst {
@@ -827,10 +828,9 @@ namespace SearchEnum {
     enum class TxParam {
         UserSender = 0,
         UserReceiver,
-        UserApprover,
         UserSenderOrReceiver,
         UserSenderOrReceiverOrToken,
-        User, // sender or receiver or approver
+        User, // sender or receiver
         Hash,
         Data,
         Null

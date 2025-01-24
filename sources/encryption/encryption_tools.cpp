@@ -24,7 +24,7 @@ using Cryptography::CryptoError;
 namespace {
     bool validate_file_basic(const FsPath& path) {
         auto exists = path.exists();
-        if (!exists || !*exists)
+        if (!exists)
             return false;
         auto is_file = path.is_regular_file();
         if (!is_file || !*is_file)

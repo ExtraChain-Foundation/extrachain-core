@@ -70,6 +70,7 @@ public:
     static bool                   isValidName(const std::string &name);
     static bool                   isValidTicker(const std::string &ticker);
     static QMap<QString, QString> mapTokens();
+    static QMap<QString, QString> mapTokensByTokenId();
 
 public slots:
     std::expected<TokenData, CreateTokenError> createToken(const std::string &tokenCount,

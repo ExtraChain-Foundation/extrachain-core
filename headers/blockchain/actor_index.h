@@ -33,6 +33,13 @@ enum class ActorIndexError {
     ZeroActor
 };
 
+enum class ActorSaveError {
+    Undefined,
+    NotExists,
+    AlreadyExists,
+    NotOpened
+};
+
 /**
  * @brief Actors that stored in blockchain
  */
@@ -72,8 +79,9 @@ private:
      * @param data
      * @return
      */
-    int  add(const ActorId &id, const QByteArray &data);
-    void sendGetActorMessage(const ActorId &actorId);
+    std::expected<void, ActorSaveError> add(const ActorId &id, const QByteArray &data);
+    void                                sendGetActorMessage(const ActorId &actorId);
+    bool                                save_actor_index(const Actor<KeyPublic> &actor);
 
 public:
     ActorId firstId();
@@ -102,13 +110,6 @@ public:
     bool validateBlock(const BlockVariant &block);
 
     /**
-     * @brief Validates transaction digital signature
-     * @param tx
-     * @return true if transaction is valid
-     */
-    bool validateTx(const Transaction &tx);
-
-    /**
      * @brief getById
      * @param id
      * @return
@@ -120,18 +121,15 @@ public:
     std::string getFolderPath() const;
 
     /**
-     * @brief Attempts to save actor to local storage
-     * @param actor
-     */
-    int handleNewActor(Actor<KeyPublic> actor);
-    /**
      * @brief Serializes an actor and make a file in fs.
      * @param actor
      * @return resultCode, 0 - actor is saved
      */
-    int                  addActor(const Actor<KeyPublic> &actor);
-    std::vector<ActorId> allActors();
-    void                 handleNewAllActors(const std::vector<ActorId> &actors);
+    std::expected<void, ActorSaveError> store_new_actor(const Actor<KeyPublic> &actor);
+    std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
+    std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
+    std::vector<ActorId>                allActors();
+    void                                handleNewAllActors(const std::vector<ActorId> &actors);
 
     void handleGetActor(const ActorId &actorId, const std::string &messageId);
     void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
@@ -140,4 +138,5 @@ public:
 
 signals:
     void newActorSaved(ActorId actor_id);
+    void actorSaved(ActorId actor_id);
 };

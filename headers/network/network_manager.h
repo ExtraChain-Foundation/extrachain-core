@@ -131,6 +131,17 @@ struct MessageIdDataReceived {
     qint64      time;
 };
 
+class Responder {
+public:
+    // send
+    // broadcast send
+
+private:
+    std::string     identifier;
+    std::string     message_id;
+    NetworkManager* network_manager;
+};
+
 static const std::string NetworkCacheFile = "tmp/network.cache";
 
 /**
@@ -203,9 +214,6 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
-    void addFragSignal(const DfsP::SegmentMessage& msg);
-    void fetchFragment(DfsP::RequestFileSegmentMessage& msg, std::string& messageId);
-    void accrual(const ActorId& actorId);
 
 protected:
     void connectToWebSocket(const QString& ip,
@@ -244,7 +252,7 @@ public slots:
 
 private slots:
     void removeWsConnection();
-    void socketError(Network::SocketServiceError error, QString errorData);
+    void socketError(Network::SocketServiceError error, QString errorData, std::string ip, std::string identifier);
 
 public:
     QString localIp(); // TODO: remove
@@ -281,8 +289,12 @@ public:
             typeSend = Config::Net::TypeSend::Focused;
         }
 
+        if (!node) {
+            eCritical("[Network] Send message error: accountController is bye 1!");
+            return "";
+        }
         if (!node->accountController()) {
-            eCritical("[Network] Send message error: accountController is bye!");
+            eCritical("[Network] Send message error: accountController is bye 2!");
             return "";
         }
         if (node->accountController()->empty()) {
@@ -300,7 +312,7 @@ public:
 
         auto serialized          = message.serialize();
         auto serialized_for_sign = message.serializeForSign();
-        auto sign_result         = mainActor.key().sign(serialized_for_sign);
+        auto sign_result         = mainActor.key().sign(ByteArray(serialized_for_sign).toBytes());
         if (!sign_result.has_value()) {
             return "";
         }

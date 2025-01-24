@@ -58,7 +58,6 @@ private:
 
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
-                           //    Actor<KeyPrivate>   approver;       // current user.
     // service //
 
 public:
@@ -70,7 +69,7 @@ public:
                                                             const bool       makeRequestBlock = false);
     std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
-    void sync(const BigNumber &from = BigNumber());
+    void sync(const BigNumber &from = BigNumber(), const std::string &identifier = "");
     void lastSavedRequest();
 
 private:
@@ -81,7 +80,6 @@ private:
     std::pair<Transaction, BigNumber> getTxBySenderOrReceiver(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxBySenderOrReceiverAndToken(const ActorId &id,
                                                                       const ActorId &token = TokenId());
-    std::pair<Transaction, BigNumber> getTxByApprover(const ActorId &id, const TokenId &token = TokenId());
     std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
     // genesis blocks //
@@ -257,7 +255,9 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
-    void addBlockFromNetwork(const BlockVariant &block, const std::string &messageId);
+    void addBlockFromNetwork(const BlockVariant &block,
+                             const std::string  &messageId,
+                             const std::string  &identifier);
     void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
 
     /**
@@ -275,7 +275,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const std::string &messageId);
-    void syncResponse(const BigNumber fromBlock, const std::string &messageId);
+    void addBlockNetwork(const BlockVariant &block, const std::string &messageId, const std::string &identifier);
+    void syncResponse(const BigNumber fromBlock, const std::string &identfier);
     void process();
 };
