@@ -513,7 +513,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     BlockVariant newBlock(block);
     // newBlock.set_transactions(transactions_approved);
 
-    if (block.getType() != BlockType::Dummy) {
+    if (block.getType() != BlockType::Dummy && block.getIndex() != BigNumber(0)) {
         signBlock(newBlock);
     }
 
