@@ -273,7 +273,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const std::string &identifier);
+    void addBlockNetwork(const BlockVariant &block, const std::string &messageId);
     void syncResponse(const BigNumber fromBlock, const std::string &messageId);
     void process();
 };

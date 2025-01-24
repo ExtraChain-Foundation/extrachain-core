@@ -1053,7 +1053,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!genesis_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(genesis_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, identifier);
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
         } else {
             eLog("false genesis block");
         }
@@ -1068,7 +1068,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!new_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(new_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, identifier);
+            node->blockchain()->addBlockFromNetwork(block_variant, messageId);
         }
         break;
     }
@@ -1105,7 +1105,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), identifier);
+        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), messageId);
         break;
     }
 
