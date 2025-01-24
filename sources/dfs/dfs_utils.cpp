@@ -126,6 +126,37 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
     return dirRow.value();
 }
 
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(
+    const ActorId     &owner_id,
+    const std::string &folder,
+    const std::string &name) {
+    auto db = get_actor_dir_file(owner_id);
+    if (!db.is_open()) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
+
+    std::string query_folder = folder.empty() ? "" : std::format("folder = '{}' AND", folder);
+    std::string query        = fmt::format("SELECT * FROM {} WHERE {} name = '{}' AND state != '{}';",
+                                    TableName,
+                                    query_folder,
+                                    name,
+                                    std::to_underlying(FileState::Removed));
+
+    auto rows = db.select(query);
+    if (rows.empty()) {
+        return std::unexpected(Dfs::DfsError::NotExists);
+    }
+
+    auto &row    = rows[0];
+    auto  dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
+
+    if (!dirRow.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirValueNotExists);
+    }
+
+    return dirRow.value();
+}
+
 bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
                                             DirRow                  &dir_row,
                                             const Actor<KeyPrivate> &signer) {

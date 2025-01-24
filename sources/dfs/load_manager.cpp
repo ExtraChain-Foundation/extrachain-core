@@ -57,7 +57,8 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
             return;
         }
     }
-    // check dublicate
+
+    // check duplicate
     if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         return;
     }
