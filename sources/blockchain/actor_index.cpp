@@ -282,8 +282,10 @@ int ActorIndex::addActor(const Actor<KeyPublic> &actor) {
         db.open();
         bool dbInsert = db.insert(Config::DataStorage::actorsTable,
                                   { { "id", actorId }, { "type", std::to_string(int(actor.type())) } });
-        if (!dbInsert)
-            eFatal("db actor insert error");
+        if (!dbInsert) {
+            // eFatal("db actor insert error");
+            return Errors::FILE_ALREADY_EXISTS;
+        }
 
         node->dfs()->initializeActor(actor.id());
 
