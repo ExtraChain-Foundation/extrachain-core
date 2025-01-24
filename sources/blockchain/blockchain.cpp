@@ -747,6 +747,11 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
                 continue;
             }
 
+            if (tx.sender() == userId && tx.token() == tokenId && tx.type() == TransactionType::InitContract) {
+                balance += tx.amount();
+                continue;
+            }
+
             if (tx.receiver() == userId && tx.token() == tokenId) {
                 balance += tx.amount();
             }
@@ -871,10 +876,6 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
-    if (!tx.token().is_zero()) {
-        return TransactionProveError::NoError;
-    }
-
     if (tx.amount() == 0) {
         return TransactionProveError::AmountZero;
     }
@@ -982,7 +983,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
     for (const Transaction &tx : std::as_const(transactions)) {
         if (tx.sender() == targetSender && tx.token() == token) {
             amount_res -= tx.amount();
-        } else if (tx.receiver() == targetSender) {
+        } else if (tx.receiver() == targetReceiver && tx.token() == token) {
             amount_res += tx.amount();
         }
     }
