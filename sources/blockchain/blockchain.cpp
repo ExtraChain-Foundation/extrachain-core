@@ -100,7 +100,7 @@ void Blockchain::sync(const BigNumber &from) {
                                   MessageStatus::Request);
 }
 
-void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &messageId) {
+void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &identifier) {
     auto lastBlock = getLastBlock();
     if (!lastBlock.has_value()) {
         return;
@@ -135,13 +135,15 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &mess
                                           MessageType::BlockchainGenesisBlock,
                                           Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId);
+                                          "",
+                                          identifier);
         } else {
             node->network()->send_message(block->getBlockConst(),
                                           MessageType::BlockchainNewBlock,
                                           Config::Net::TypeSend::Focused,
                                           MessageStatus::Response,
-                                          messageId);
+                                          "",
+                                          identifier);
         }
     }
 
@@ -772,7 +774,7 @@ BigNumber Blockchain::getBlockCount() {
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &messageId) {
+void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &identifier) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
         // eLog("!!!!!!!!!!!");
     }
@@ -794,8 +796,8 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const std::string &m
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !messageId.empty()) {
-                syncResponse(block.getIndex(), messageId);
+            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !identifier.empty()) {
+                syncResponse(block.getIndex(), identifier);
             } // else {
             //     node->network()->send_message("",
             //                                   MessageType::BlockchainAnarchy,
