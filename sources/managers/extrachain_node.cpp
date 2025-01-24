@@ -195,6 +195,9 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         return false;
     }
 
+    eSuccess("[Node] New network created");
+    return true;
+
     auto store_res =
         m_dfs->store_collection(first.id(), first.id(), "Tokens", template_res->actor_id, template_res->file_id);
     if (!store_res.has_value()) {
