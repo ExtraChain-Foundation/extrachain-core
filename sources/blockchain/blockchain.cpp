@@ -121,13 +121,15 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
 
     if (lastIndex < fromBlock) {
         // this->sync();
-        eLog("{} {}", lastIndex, fromBlock);
+        // eLog("{} {}", lastIndex, fromBlock);
         return;
     }
 
     BigNumber from = fromBlock;
     if (from < 0)
         from = 0;
+
+    std::vector<BlockVariant> blocks;
 
     for (; from <= lastIndex; from++) {
         // eLog("[Blockchain] Send sync {}", from);
@@ -141,24 +143,41 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
             continue;
         }
 
-        if (block->isGenesisBlock()) {
-            node->network()->send_message(block->getGenesisBlockConst(),
-                                          MessageType::BlockchainGenesisBlock,
-                                          Config::Net::TypeSend::Focused,
-                                          MessageStatus::Response,
-                                          "",
-                                          identfier);
-        } else {
-            node->network()->send_message(block->getBlockConst(),
-                                          MessageType::BlockchainNewBlock,
-                                          Config::Net::TypeSend::Focused,
-                                          MessageStatus::Response,
-                                          "",
-                                          identfier);
-        }
+        blocks.push_back(block.value());
+
+        // if (block->isGenesisBlock()) {
+        //     node->network()->send_message(block->getGenesisBlockConst(),
+        //                                   MessageType::BlockchainGenesisBlock,
+        //                                   Config::Net::TypeSend::Focused,
+        //                                   MessageStatus::Response,
+        //                                   "",
+        //                                   identfier);
+        // } else {
+        //     node->network()->send_message(block->getBlockConst(),
+        //                                   MessageType::BlockchainNewBlock,
+        //                                   Config::Net::TypeSend::Focused,
+        //                                   MessageStatus::Response,
+        //                                   "",
+        //                                   identfier);
+        // }
     }
 
+    node->network()->send_message(blocks,
+                                  MessageType::BlockchainSyncBlocks,
+                                  Config::Net::TypeSend::Focused,
+                                  MessageStatus::Response,
+                                  "",
+                                  identfier);
+
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
+}
+
+void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks,
+                                    const std::string        &message_id,
+                                    const std::string        &identifier) {
+    for (const auto &block : blocks) {
+        addBlockNetwork(block, message_id, identifier);
+    }
 }
 
 void Blockchain::lastSavedRequest() {
@@ -464,6 +483,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             return std::unexpected(BlockError::Invalid);
         }
 
+        if (!lastGenesis.has_value()) {
+            return std::unexpected(BlockError::Invalid);
+        }
+
         auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
         auto expectedPrevHash = block.isGenesisBlock() ? lastGenesis->getHash() : prevBlock->getHash();
         if (checkedPrevHash != expectedPrevHash) {
@@ -576,7 +599,7 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    eLog("[Blockchain] Attempting to merge {} and {}", blockA, blockB);
+    // eLog("[Blockchain] Attempting to merge {} and {}", blockA, blockB);
 
     if (blockA.getIndex() == 0) {
         return std::unexpected(BlockError::CantMerge);
@@ -1003,6 +1026,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
 void Blockchain::process() {
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
     connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
+    connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
 }
 
 // Other //

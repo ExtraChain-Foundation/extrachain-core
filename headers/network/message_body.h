@@ -41,6 +41,8 @@ enum class MessageType {
     BlockchainSync         = 37,
     BlockchainLastSaved    = 38,
 
+    BlockchainSyncBlocks = 49,
+
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
     // DfsSyncSearchResult = 52, // true or false

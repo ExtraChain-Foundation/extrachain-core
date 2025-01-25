@@ -1170,6 +1170,16 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::BlockchainSyncBlocks: {
+        auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
+        if (!sync_blocks_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+            break;
+        }
+        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), messageId, identifier);
+        break;
+    }
+
     case MessageType::BlockchainCoinReward: {
         auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
         if (!reward_request_result.has_value()) {
