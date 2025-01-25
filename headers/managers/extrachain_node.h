@@ -96,6 +96,7 @@ private:
     TokenManager*       m_tokenManager       = nullptr;
     ChatManager*        chat_manager_        = nullptr;
     QTimer*             timer                = nullptr;
+    QTimer*             timer_reward         = nullptr;
 
     bool                        started                          = false;
     bool                        isClientApplication              = false;
@@ -207,6 +208,7 @@ signals:
 
 private slots:
     void getAllActorsTimerCall();
+    void timer_reward_request();
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);

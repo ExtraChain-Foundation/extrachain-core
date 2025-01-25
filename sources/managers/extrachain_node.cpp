@@ -138,6 +138,10 @@ void ExtraChainNode::process() {
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
     timer->start(30000);
 
+    timer_reward = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
+    timer_reward->start(60000);
+
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
     connectSignals();
@@ -356,8 +360,9 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     return ByteArray(encrypted.value()).toString();
 }
 
-std::string ExtraChainNode::importUser(const std::string& data, const std::string& login,
-                                const std::string& password) {
+std::string ExtraChainNode::importUser(const std::string& data,
+                                       const std::string& login,
+                                       const std::string& password) {
     if (data.empty()) {
         return std::string(); // unexpected
     }
@@ -481,10 +486,12 @@ void ExtraChainNode::getAllActorsTimerCall() {
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
 
-        dataMiningManager()->requestCoinReward();
-
         m_dfs->download_manager().check_all_files("");
     }
+}
+
+void ExtraChainNode::timer_reward_request() {
+    dataMiningManager()->requestCoinReward();
 }
 
 void ExtraChainNode::createNetworkIdentifier() {
