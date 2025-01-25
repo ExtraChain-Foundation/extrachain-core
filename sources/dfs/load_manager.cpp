@@ -34,8 +34,6 @@ LoadManager::LoadManager(ExtraChainNode* node)
 }
 
 void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier) {
-    eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
-
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
@@ -62,6 +60,8 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         return;
     }
+
+    eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
     // // Check in queue
     // bool file_in_queue =
