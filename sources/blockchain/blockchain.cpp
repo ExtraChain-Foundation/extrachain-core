@@ -173,6 +173,10 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         // }
     }
 
+    if (blocks.empty()) {
+        return;
+    }
+
     node->network()->send_message(blocks,
                                   MessageType::BlockchainSyncBlocks,
                                   Config::Net::TypeSend::Focused,
@@ -186,9 +190,15 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
 void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks,
                                     const std::string        &message_id,
                                     const std::string        &identifier) {
-    eLog("[Blockchain] Sync: incomining {} blocks...", blocks.size());
+    if (blocks.empty()) {
+        eLog("[Blockchain] Sync: incoming empty blocks... Why?");
+    }
+    eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
+         blocks.size(),
+         blocks.front().getIndex(),
+         blocks.back().getIndex());
     for (const auto &block : blocks) {
-        blockIndex.addBlock(block /*, message_id, identifier*/);
+        addBlockNetwork(block, message_id, identifier);
     }
 }
 
