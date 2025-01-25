@@ -130,6 +130,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         from = 0;
 
     std::vector<BlockVariant> blocks;
+    blocks.reserve(1000);
 
     for (; from <= lastIndex; from++) {
         // eLog("[Blockchain] Send sync {}", from);
@@ -144,6 +145,16 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         }
 
         blocks.push_back(block.value());
+
+        if (blocks.size() > 1000) {
+            node->network()->send_message(blocks,
+                                          MessageType::BlockchainSyncBlocks,
+                                          Config::Net::TypeSend::Focused,
+                                          MessageStatus::Response,
+                                          "",
+                                          identfier);
+            blocks.clear();
+        }
 
         // if (block->isGenesisBlock()) {
         //     node->network()->send_message(block->getGenesisBlockConst(),
@@ -175,8 +186,9 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
 void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks,
                                     const std::string        &message_id,
                                     const std::string        &identifier) {
+    eLog("[Blockchain] Sync: incomining {} blocks...", blocks.size());
     for (const auto &block : blocks) {
-        addBlockNetwork(block, message_id, identifier);
+        blockIndex.addBlock(block /*, message_id, identifier*/);
     }
 }
 
