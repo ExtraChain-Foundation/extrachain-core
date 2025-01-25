@@ -682,10 +682,11 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
 
-        if (node->isRaccoon)
+        if (node->isRaccoon) {
             emit customMessageReceived(package_data, custom_deserialize_result.value());
-        else
+        } else {
             sendBrodcastMessageFurther(package_data);
+        }
 
         break;
     }

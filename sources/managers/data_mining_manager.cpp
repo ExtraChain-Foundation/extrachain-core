@@ -59,6 +59,10 @@ void DataMiningManager::requestCoinReward() {
 #ifdef Q_OS_LINUX
     return;
 #endif
+    if (node->accountController()->empty()) {
+        return;
+    }
+
     const auto actor      = node->accountController()->mainActor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
     auto       amount     = calculateRewardAmount();

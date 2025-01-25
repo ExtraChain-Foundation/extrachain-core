@@ -139,7 +139,7 @@ void ExtraChainNode::process() {
     timer->start(30000);
 
     timer_reward = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
+    connect(timer_reward, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
     timer_reward->start(60000);
 
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
