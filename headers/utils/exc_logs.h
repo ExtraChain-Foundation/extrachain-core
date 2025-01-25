@@ -56,7 +56,7 @@ class Logger {
     std::ofstream     log_file;
     std::string       current_log_filename;
     bool              debug_enabled       = false;
-    bool              file_output_enabled = true;
+    bool              file_output_enabled = false;
     const std::string logs_directory      = "logs";
     std::thread::id   main_thread_id;
 
@@ -105,11 +105,25 @@ class Logger {
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
     }
 
+    void start_file_logging() {
+        if (!file_output_enabled) {
+            file_output_enabled = true;
+            open_log_file();
+        }
+    }
+
+    void stop_file_logging() {
+        if (file_output_enabled) {
+            if (log_file.is_open()) {
+                log_file.close();
+            }
+            file_output_enabled = false;
+        }
+    }
+
 public:
     Logger() {
         main_thread_id = std::this_thread::get_id();
-        open_log_file();
-
 #ifdef _WIN32
         SetConsoleOutputCP(CP_UTF8);
 #endif
@@ -181,17 +195,6 @@ public:
         return (static_cast<int>(file_module & active_modules) != 0) ^ file_filter.is_inverse_mode();
     }
 
-    void set_file_output(bool enabled) {
-        if (file_output_enabled == enabled)
-            return;
-        file_output_enabled = enabled;
-        if (enabled) {
-            open_log_file();
-        } else if (log_file.is_open()) {
-            log_file.close();
-        }
-    }
-
     bool is_file_output() const {
         return file_output_enabled;
     }
@@ -210,6 +213,14 @@ public:
 
     bool is_main_thread() const {
         return std::this_thread::get_id() == main_thread_id;
+    }
+
+    static void start_file() {
+        instance().start_file_logging();
+    }
+
+    static void stop_file() {
+        instance().stop_file_logging();
     }
 
     static Logger& instance() {
