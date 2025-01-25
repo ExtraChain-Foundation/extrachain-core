@@ -337,7 +337,7 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
 }
 
 void Utils::wipeDataFiles() {
-    QString current = QDir::currentPath();
+    // QString current = QDir::currentPath();
 
     QDir("blockchain").removeRecursively();
     QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
@@ -348,17 +348,17 @@ void Utils::wipeDataFiles() {
     QFile(".settings").remove();
     QFile(".auth_hash").remove();
 
-    QDir dir(QDir::currentPath());
-    dir.cdUp();
-    QDir::setCurrent(dir.canonicalPath());
+    // QDir dir(QDir::currentPath());
+    // dir.cdUp();
+    // QDir::setCurrent(dir.canonicalPath());
     // QString dataName = Utils::dataDir();
     // QDir(dataName).removeRecursively();
     // QDir().mkpath(dataName);
 
-    QString shareFolder = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) + "/Share";
-    QDir(shareFolder).removeRecursively();
+    // QString shareFolder = QStandardPaths::standardLocations(QStandardPaths::AppDataLocation).value(0) +
+    // "/Share"; QDir(shareFolder).removeRecursively();
 
-    QDir::setCurrent(current);
+    // QDir::setCurrent(current);
 }
 
 qint64 Utils::diskFreeMemory() {
