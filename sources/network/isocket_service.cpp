@@ -205,7 +205,7 @@ QByteArray SocketService::generateFirstMessage() {
         auto connections_locked = *node->network()->connections();
         for (auto &it : *connections_locked) {
             auto ip = it->ip().toStdString();
-            if (ip.empty()) {
+            if (ip.empty() || ip == m_ip) {
                 continue;
             }
 

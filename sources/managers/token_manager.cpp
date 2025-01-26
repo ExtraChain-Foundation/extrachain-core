@@ -95,7 +95,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
     for (auto &t : resultSelect) {
-        auto name  = t.at("name").c_str();
+        auto name    = t.at("name").c_str();
         auto tokenId = t.at("actorId").c_str();
         map.insert(name, tokenId);
     }
@@ -103,8 +103,7 @@ QMap<QString, QString> TokenManager::mapTokens() {
     return map;
 }
 
-QMap<QString, QString> TokenManager::mapTokensByTokenId()
-{
+QMap<QString, QString> TokenManager::mapTokensByTokenId() {
     QMap<QString, QString> map = { { ActorId().toQString(), "ExC" } };
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
@@ -114,7 +113,7 @@ QMap<QString, QString> TokenManager::mapTokensByTokenId()
     }
     auto resultSelect = db.select_all(Token::TOKEN_TABLE_NAME);
     for (auto &t : resultSelect) {
-        auto name  = t.at("name").c_str();
+        auto name    = t.at("name").c_str();
         auto tokenId = t.at("actorId").c_str();
         map.insert(tokenId, QString(name).toUpper());
     }
@@ -205,8 +204,8 @@ std::expected<TokenData, CreateTokenError> TokenManager::createToken(const std::
          color);
 
     if (!isValidName(name) || !isValidTicker(ticker)) {
-        eLog("[TokenManager] Incorrecnt name: {} {}", isValidName(name), isValidTicker(ticker));
-        eLog("[TokenManager] Incorrecnt name. Name: {} | ticker: {}", name, ticker);
+        eLog("[TokenManager] Incorrect name: {} {}", isValidName(name), isValidTicker(ticker));
+        eLog("[TokenManager] Incorrect name. Name: {} | ticker: {}", name, ticker);
         emit errorNameTokenExist("name");
         return std::unexpected(CreateTokenError::InvalidName);
     }
