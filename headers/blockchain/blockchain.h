@@ -259,6 +259,9 @@ signals:
                              const std::string  &messageId,
                              const std::string  &identifier);
     void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
+    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks,
+                                       const std::string        &message_id,
+                                       const std::string        &identifier);
 
     /**
      * @brief possibleMiningChange
@@ -277,5 +280,8 @@ public:
 public slots:
     void addBlockNetwork(const BlockVariant &block, const std::string &messageId, const std::string &identifier);
     void syncResponse(const BigNumber fromBlock, const std::string &identfier);
+    void syncResponseVector(std::vector<BlockVariant> blocks,
+                            const std::string        &message_id,
+                            const std::string        &identifier);
     void process();
 };

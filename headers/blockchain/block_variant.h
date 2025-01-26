@@ -26,6 +26,7 @@
 
 class BlockVariant {
 public:
+    BlockVariant() = default;
     explicit BlockVariant(std::variant<Block, GenesisBlock> block);
     explicit BlockVariant(Block block);
     explicit BlockVariant(GenesisBlock block);
@@ -64,8 +65,47 @@ public:
         return getBlockConst() == other.getBlockConst();
     }
 
-private:
+public:
     std::variant<Block, GenesisBlock> m_block;
 
-    BOOST_DESCRIBE_CLASS(BlockVariant, (), (), (), (m_block))
+    // BOOST_DESCRIBE_CLASS(BlockVariant, (), (), (), (m_block))
 };
+
+namespace msgpack {
+    MSGPACK_API_VERSION_NAMESPACE(MSGPACK_DEFAULT_API_NS) {
+        namespace adaptor {
+            template <>
+            struct convert<BlockVariant> {
+                msgpack::object const& operator()(msgpack::object const& o, BlockVariant& v) const {
+                    try {
+                        Block block;
+                        o.convert(block);
+                        v.m_block = std::move(block);
+                    } catch (const msgpack::type_error&) {
+                        try {
+                            GenesisBlock genesis;
+                            o.convert(genesis);
+                            v.m_block = std::move(genesis);
+                        } catch (const msgpack::type_error&) {
+                            throw msgpack::type_error();
+                        }
+                    }
+                    return o;
+                }
+            };
+
+            template <>
+            struct pack<BlockVariant> {
+                template <typename Stream>
+                msgpack::packer<Stream>& operator()(msgpack::packer<Stream>& o, const BlockVariant& v) const {
+                    std::visit(
+                        [&o](const auto& block) {
+                            o.pack(block);
+                        },
+                        v.m_block);
+                    return o;
+                }
+            };
+        } // namespace adaptor
+    }
+} // namespace msgpack

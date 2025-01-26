@@ -253,12 +253,12 @@ void LogsManager::offConsole() {
 void LogsManager::onFile() {
     // QDir().mkpath("logs");
     LogsManager::toFile = true;
-    Logger::instance().set_file_output(true);
+    Logger::start_file();
 }
 
 void LogsManager::offFile() {
     LogsManager::toFile = false;
-    Logger::instance().set_file_output(false);
+    Logger::stop_file();
 }
 
 void LogsManager::onQml() {

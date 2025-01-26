@@ -78,7 +78,7 @@ void DirsManager::network_request_sync(const std::string& message_id) {
 }
 
 void DirsManager::network_response_sync(uint64_t max_last_modified, const std::string& message_id) {
-    eLog("--------------- {} ", max_last_modified);
+    // eTemp("--------------- {} ", max_last_modified);
     send_from_last_modified(max_last_modified, message_id);
 }
 
@@ -108,7 +108,7 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const std::str
 
 void DirsManager::network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
                                                       const std::string&                         identifier) {
-    eTemp("!_!_!_! {}", dirs_rows);
+    // eTemp("!_!_!_! {}", dirs_rows);
     std::vector<ActorId> actors;
     actors.reserve(dirs_rows.size());
 
@@ -148,7 +148,7 @@ void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_ro
 void DirsManager::network_response_dir_rows(const ActorId&                  owner_id,
                                             const std::vector<Dfs::DirRow>& dir_rows,
                                             const std::string&              identifier) {
-    eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
+    // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
     // TODO: add merge for sync dir file
 
     Dfs::initialize_actor_folder(owner_id);
@@ -156,7 +156,7 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
-    eTemp("~~~~~~~~~~~~~~~~b {}", res);
+    // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
     if (dir_rows.empty()) {
         return;

@@ -38,6 +38,7 @@ bool AutologinHash::load() {
 }
 
 void AutologinHash::save(const std::string& hash) {
+#if defined(Q_OS_LINUX) || defined(QT_DEBUG)
     auto  hashBytes = QByteArray::fromStdString(hash);
     QFile file(".auth_hash");
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hashBytes) > 0) {
@@ -48,6 +49,7 @@ void AutologinHash::save(const std::string& hash) {
     file.close();
 
     m_hash = hash;
+#endif
 }
 
 const std::string& AutologinHash::hash() const {

@@ -158,6 +158,7 @@ namespace Dfs {
         AlreadyExists,
         DirError,
         DirValueNotExists,
+        DirDuplicate,
         CollectionCreationError,
         InvalidName,
         InvalidTemplate,
@@ -496,6 +497,10 @@ namespace Dfs {
                                                                                const std::string& field = "file_id");
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& owner_id,
                                                                                 std::uint64_t  last_modified = 0);
+
+            std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const ActorId&     owner_id,
+                                                                                     const std::string& folder,
+                                                                                     const std::string& name);
 
             std::expected<std::string, Dfs::DfsError> last_file_id(const ActorId&     owner_id,
                                                                    const std::string& file_id);

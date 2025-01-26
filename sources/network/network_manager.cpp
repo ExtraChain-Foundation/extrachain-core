@@ -452,7 +452,7 @@ void NetworkManager::saveToCache(const std::string    &serialized_message,
                                  Config::Net::TypeSend typeSend,
                                  const std::string    &receiver_identifier) {
     if (typeSend != Config::Net::TypeSend::Broadcast) {
-        return;
+        // return;
     }
 
     std::ofstream file;
@@ -669,11 +669,11 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
-                 messageId,
-                 message_body.sender_id,
-                 magic_enum::enum_name(status),
-                 identifier);
+        // eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
+        //          messageId,
+        //          message_body.sender_id,
+        //          magic_enum::enum_name(status),
+        //          identifier);
 
         const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
 
@@ -682,10 +682,11 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
 
-        if (node->isRaccoon)
+        if (node->isRaccoon) {
             emit customMessageReceived(package_data, custom_deserialize_result.value());
-        else
+        } else {
             sendBrodcastMessageFurther(package_data);
+        }
 
         break;
     }
@@ -1167,6 +1168,16 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), identifier);
+        break;
+    }
+
+    case MessageType::BlockchainSyncBlocks: {
+        auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
+        if (!sync_blocks_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+            break;
+        }
+        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), messageId, identifier);
         break;
     }
 

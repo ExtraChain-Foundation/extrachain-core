@@ -55,6 +55,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                                     const std::string           &visual_name,
                                                                     Dfs::DataSecurity            data_security,
                                                                     const Dfs::DataSecurityData &security_data) {
+
+    if (visual_folder.contains("'") || visual_name.contains("'")) {
+        return std::unexpected(Dfs::DfsError::InvalidName);
+    }
     // if (!visual_folder.empty()) {
     //     if (visual_folder.front() == ':') {
     //         if (visual_folder == Dfs::Basic::TEMPLATE_COLLECTION
@@ -65,6 +69,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //         // if (:DApp) -> Check if :ActorId is DAppMaster && allow to create his folder everyone
     //     }
     // }
+
+    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
+    if (search_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirDuplicate);
+    }
 
     auto fpath         = FsPath::create(file_path).value();
     auto new_file_path = fpath;

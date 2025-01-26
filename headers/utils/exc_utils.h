@@ -309,7 +309,7 @@ namespace Config {
         static const int SECTION_SIZE = 1000;
 
         // How often to construct block from pending transactions (in miliseconds)
-        static const int BLOCK_CREATION_PERIOD = 2000;
+        static const int BLOCK_CREATION_PERIOD = 5000;
 
         // How often to construct genesis block (in blocks)
         static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
@@ -370,10 +370,10 @@ namespace MessagePack {
             msgpack::object        deserialized = oh.get();
             return deserialized.as<T>();
         } catch (const std::exception &e) {
-            eWarning("[MessagePack] Exception error: {}", e.what());
+            // eWarning("[MessagePack] Exception error: {}", e.what());
 
             auto qt_bytes = QByteArray::fromStdString(data.data());
-            eWarning("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
+            // eWarning("[MessagePack] Incorrect deserialize for {} {}", qt_bytes.toBase64(), qt_bytes);
 
             return std::unexpected(DeserializeError::DeserializationFailed);
         }

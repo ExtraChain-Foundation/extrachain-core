@@ -34,8 +34,6 @@ LoadManager::LoadManager(ExtraChainNode* node)
 }
 
 void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier) {
-    eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
-
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
@@ -57,10 +55,13 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
             return;
         }
     }
-    // check dublicate
+
+    // check duplicate
     if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         return;
     }
+
+    eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
     // // Check in queue
     // bool file_in_queue =
@@ -139,12 +140,19 @@ void LoadManager::check_all_files(std::string identifier) {
 
             // TODO: process from queue
             // search file
-            this->node->network()->send_message(file_link,
-                                                MessageType::DfsFileState,
-                                                Config::Net::TypeSend::Focused,
-                                                MessageStatus::Request,
-                                                "",
-                                                identifier);
+            if (identifier.empty()) {
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    Config::Net::TypeSend::AllParents,
+                                                    MessageStatus::Request);
+            } else {
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    Config::Net::TypeSend::Focused,
+                                                    MessageStatus::Request,
+                                                    "",
+                                                    identifier);
+            }
         }
     }
 
@@ -318,6 +326,7 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
         node->dfs()->added(file_link.owner_id, active_download.dir_row);
         node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
+        eLog("[Fragment] Last fragment for {}", file_link);
     }
 
     // eTemp("[Fragment] {}: size: {}, offset: {}, {}",

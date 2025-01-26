@@ -203,7 +203,7 @@ std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QBy
     QFile   file(path);
 
     if (file.exists()) {
-        eLog("[ActorIndex] Can't save file {}: already exist", path);
+        // eLog("[ActorIndex] Can't save file {}: already exist", path);
         return std::unexpected(ActorSaveError::AlreadyExists);
     }
 
@@ -254,8 +254,7 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     return result;
 }
 
-std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Actor<KeyPublic> &actor)
-{
+std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Actor<KeyPublic> &actor) {
     auto result = this->save_actor(actor);
     if (!result.has_value()) {
         return std::unexpected(result.error());

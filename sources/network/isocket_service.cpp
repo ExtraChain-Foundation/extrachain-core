@@ -104,7 +104,7 @@ bool SocketService::checkFirstMessage(const HandshakeMessage &handshake) {
     bool    something_empty       = json_first_id.is_zero() || current_first_id.is_zero();
 
     if (current_first_id.is_zero() && !json_first_id.is_zero()) {
-        node->actorIndex()->setFirstId(json_first_id);
+        node->actorIndex()->setFirstId(json_first_id); // TODO: request block 0?
     }
 
     if (!(something_empty || is_first_ids_contains)) {
