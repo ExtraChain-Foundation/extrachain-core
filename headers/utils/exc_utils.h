@@ -309,7 +309,7 @@ namespace Config {
         static const int SECTION_SIZE = 1000;
 
         // How often to construct block from pending transactions (in miliseconds)
-        static const int BLOCK_CREATION_PERIOD = 2000;
+        static const int BLOCK_CREATION_PERIOD = 5000;
 
         // How often to construct genesis block (in blocks)
         static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
