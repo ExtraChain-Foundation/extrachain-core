@@ -618,16 +618,16 @@ void NetworkManager::messageReceived(const std::string &message,
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
             || message_body.init_sender_id == node->accountController()->mainActor().id()) {
-            eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
-                     messageId,
-                     identifier);
+            // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
+            // messageId,
+            // identifier);
             return;
         }
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
-            eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
-                     messageId,
-                     identifier);
+            // eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
+            // messageId,
+            // identifier);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -1232,9 +1232,9 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     default: {
-        std::string error_message =
-            fmt::format("[NetworkManager/messageReceived] Not supported message type: {}", type);
-        eFatal("{}", error_message.data());
+        eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
+                  type,
+                  std::to_underlying(type));
         break;
     }
     }
@@ -1491,6 +1491,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
         ip      = jsonObj.value("query").toString();
         country = jsonObj.value("country").toString();
 
+        eLog("Country: {}", country);
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
