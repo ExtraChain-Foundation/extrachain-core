@@ -35,6 +35,7 @@ public:
 
     BlockType              getType() const;
     BigNumber              getIndex() const;
+    std::uint64_t          getDate() const;
     std::set<std::string>  dataService() const;
     std::string            getPrevHash() const;
     std::string            getPrevGenHash() const;

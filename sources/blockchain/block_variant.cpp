@@ -55,6 +55,14 @@ BigNumber BlockVariant::getIndex() const {
         m_block);
 }
 
+uint64_t BlockVariant::getDate() const {
+    return std::visit(
+        [](const auto& b) {
+            return b.getDate();
+        },
+        m_block);
+}
+
 std::set<std::string> BlockVariant::dataService() const {
     return std::visit(
         [](const auto& b) {

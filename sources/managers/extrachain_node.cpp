@@ -655,6 +655,7 @@ void ExtraChainNode::prepareFolders() {
     // QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
+    QFile(".settings").remove();
     if (!QFile(".settings").exists())
         createNetworkIdentifier();
 }

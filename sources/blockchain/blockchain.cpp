@@ -831,7 +831,7 @@ void Blockchain::showBlockchain() const {
 }
 
 BigNumber Blockchain::getBlockCount() {
-    eLog("[Blockchain] Count: {}", this->blockIndex.getLastSavedId());
+    // eLog("[Blockchain] Count: {}", this->blockIndex.getLastSavedId());
     return this->blockIndex.getLastSavedId();
 }
 
