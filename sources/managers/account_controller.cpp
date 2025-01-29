@@ -110,7 +110,7 @@ bool AccountController::load(const std::string &hash) { // if (hash.empty()) { e
             const auto &actors = profile.actors();
             for (auto &actor : actors) {
                 if (node->actorIndex()->getById(actor.id()).isEmpty()) {
-                    node->actorIndex()->store_new_actor(actor.to_public());
+                    node->actorIndex()->save_actor(actor.to_public());
                 }
             }
 
