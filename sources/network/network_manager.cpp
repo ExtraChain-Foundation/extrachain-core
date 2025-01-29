@@ -230,8 +230,8 @@ void NetworkManager::checkConnectionsStatus() {
     {
         auto connectionsLocked = *m_connections;
         std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](SocketService *el) {
-            flag = flag || el->isActive();
-            if (el->isActive()) {
+            flag = flag || el->is_active();
+            if (el->is_active()) {
                 count++;
             }
         });
@@ -356,22 +356,102 @@ void NetworkManager::clearNetworkCaches() {
     }
 }
 
-void NetworkManager::sendMessage(const std::string &serialized_message,
-                                 const MessageBody &non_serialized_message,
-                                 SendMode           type_send,
-                                 const std::string &receiver_identifier,
-                                 MessageType        message_type,
-                                 MessageStatus      status_info) {
+bool NetworkManager::send_message_checker(MessageType   type,
+                                          SendMode      send_mode,
+                                          MessageStatus status,
+                                          std::string   to_message_id,
+                                          std::string   receiver_identifier) {
+    if (status == MessageStatus::Response && to_message_id.empty() && receiver_identifier.empty()) {
+        eCritical("[Network] Send message error: empty message id or receiver identifier for response message");
+        return false;
+    }
+    if (!node) {
+        eCritical("[Network] Send message error: accountController is bye 1!");
+        return false;
+    }
+    if (!node->accountController()) {
+        eCritical("[Network] Send message error: accountController is bye 2!");
+        return false;
+    }
+    if (node->accountController()->empty()) {
+        eCritical("[Network] Send message error: accountController is empty!");
+        return false;
+    }
+
+    return true;
+}
+
+std::string NetworkManager::send_message_send(const std::string &data_serialized,
+                                              MessageType        type,
+                                              SendMode           send_mode,
+                                              MessageStatus      status,
+                                              std::string        to_message_id,
+                                              std::string        receiver_identifier) {
+    auto       &mainActor = node->accountController()->mainActor();
+    MessageBody message =
+        make_init_message(data_serialized, send_mode, type, status, mainActor.id(), to_message_id);
+
+    if (send_mode == SendMode::Broadcast) {
+        addAllServicesIdentifiersToMessage(message);
+    }
+
+    auto serialized      = message.serialize();
+    auto serialized_hash = message.calculate_hash();
+    auto sign_result     = mainActor.key().sign(ByteArray(serialized_hash).toBytes());
+    if (!sign_result.has_value()) {
+        return "";
+    }
+
+    auto sign = ByteArray(sign_result.value()).toString();
+
+    if (!to_message_id.empty()) {
+        auto messages_locked = *m_messages;
+        if (messages_locked->count(to_message_id)) {
+            receiver_identifier = messages_locked->at(to_message_id).first;
+        } else {
+            eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
+                     to_message_id);
+            return "";
+        }
+        //            if (receiver_identifier.empty())
+        //                eFatal("Network send message error: receiver_identifier is empty");
+        // m_messages.erase(to_message_id);
+    }
+
+#ifdef QT_DEBUG
+    if (Network::networkDebug) {
+        msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
+        msgpack::object        deserialized = oh.get();
+        eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
+             message.message_type,
+             message.status,
+             message.message_id,
+             send_mode,
+             (std::stringstream() << deserialized).str());
+    }
+#endif
+
+    this->send_message_connections(serialized + sign, message, send_mode, receiver_identifier, type, status);
+
+    return message.message_id;
+}
+
+void NetworkManager::send_message_connections(const std::string &serialized_message,
+                                              const MessageBody &non_serialized_message,
+                                              SendMode           send_mode,
+                                              const std::string &receiver_identifier,
+                                              MessageType        message_type,
+                                              MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
         eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
-        saveToCache(serialized_message, type_send, receiver_identifier);
+        saveToCache(serialized_message, send_mode, receiver_identifier);
         return;
     }
 
-    static auto isSendCheck = [](const SendMode    &type_send,
-                                 const std::string &receiver_identifier,
-                                 const std::string &socket_identifier,
-                                 const MessageBody &package) {
+    static auto is_send_check = [](const SendMode    &type_send,
+                                   const std::string &receiver_identifier,
+                                   const std::string &socket_identifier,
+                                   const MessageBody &package) {
         switch (type_send) {
         case SendMode::Except:
             return socket_identifier != receiver_identifier;
@@ -392,28 +472,60 @@ void NetworkManager::sendMessage(const std::string &serialized_message,
         }
     };
 
-    auto connectionsLocked = *m_connections;
-    for (const auto &service : *connectionsLocked) {
-        if (service->isActive()
-            && isSendCheck(type_send,
-                           receiver_identifier,
-                           service->identifier().toStdString(),
-                           non_serialized_message)) {
+    SocketService::Priority priority = SocketService::Priority::Normal;
+
+    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment) {
+        priority = SocketService::Priority::Low;
+    }
+
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+        priority = SocketService::Priority::High;
+    }
+
+    auto connections_locked = *m_connections;
+
+    if (send_mode == SendMode::NeighboursRandom || send_mode == SendMode::OneNeighbourRandom) {
+        std::vector<SocketService *> active_identifiers;
+        const int                    randoms = send_mode == SendMode::NeighboursRandom ? 3 : 1;
+
+        for (auto service : *connections_locked) {
+            if (service->is_active()) {
+                active_identifiers.push_back(service);
+            }
+        }
+
+        auto indexes = Utils::random_indices<3>(active_identifiers.size());
+        if (send_mode == SendMode::NeighboursRandom && active_identifiers.size() > 3) {
+
+            for (int index : indexes) {
+                active_identifiers[index]->send_message(QByteArray::fromStdString(serialized_message), priority);
+            }
+
+            return;
+        }
+
+        if (send_mode == SendMode::OneNeighbourRandom) {
+            active_identifiers[indexes[0]]->send_message(QByteArray::fromStdString(serialized_message), priority);
+        }
+    }
+
+    for (const auto &service : *connections_locked) {
+        if (!service->is_active()) {
+            continue;
+        }
+
+        bool send_checked = is_send_check(send_mode,
+                                          receiver_identifier,
+                                          service->identifier().toStdString(),
+                                          non_serialized_message);
+
+        if (send_checked) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
+            service->send_message(QByteArray::fromStdString(serialized_message), priority);
 
-            SocketService::Priority priority = SocketService::Priority::Normal;
-
-            if (message_type == MessageType::DfsStoreFragment) {
-                priority = SocketService::Priority::Low;
-            }
-            if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
-                priority = SocketService::Priority::High;
-            }
-
-            service->sendMessage(QByteArray::fromStdString(serialized_message), priority);
-
-            if (type_send == SendMode::Focused)
+            if (send_mode == SendMode::Focused) {
                 break;
+            }
         }
     }
 }
@@ -439,7 +551,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
     addAllServicesIdentifiersToMessage(message_edited);
 
     auto serialized = message_edited.serialize();
-    sendMessage(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
+    send_message_connections(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
@@ -449,9 +561,9 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
 }
 
 void NetworkManager::saveToCache(const std::string &serialized_message,
-                                 SendMode           typeSend,
+                                 SendMode           send_mode,
                                  const std::string &receiver_identifier) {
-    if (typeSend != SendMode::Broadcast) {
+    if (send_mode != SendMode::Broadcast) {
         // return;
     }
 
@@ -460,24 +572,13 @@ void NetworkManager::saveToCache(const std::string &serialized_message,
     if (!file.is_open()) {
         eFatal("[NetworkManager/saveToCache] Error open cache file");
     }
-    auto size             = std::filesystem::file_size(NetworkCacheFile);
-    auto typeSendToString = [=](SendMode ts) -> std::string {
-        switch (ts) {
-        case SendMode::Neighbours:
-            return "AllParents";
-        case SendMode::Except:
-            return "Except";
-        case SendMode::Focused:
-            return "Focused";
-        case SendMode::Broadcast:
-            return "Broadcast";
-        }
-        return "";
-    };
+    auto size = std::filesystem::file_size(NetworkCacheFile);
 
     if (size == 0) {
-        std::string serializedMessage = Serialization::serialize(
-            std::vector<std::string> { serialized_message, typeSendToString(typeSend), receiver_identifier });
+        std::string serializedMessage =
+            Serialization::serialize(std::vector<std::string> { serialized_message,
+                                                                Utils::enum_value_name_value(send_mode),
+                                                                receiver_identifier });
         file << Serialization::serialize(std::vector<std::string> { serializedMessage });
         file.flush();
         file.close();
@@ -490,9 +591,11 @@ void NetworkManager::saveToCache(const std::string &serialized_message,
         }
         inputFile.close();
 
-        std::vector<std::string> list              = Serialization::deserialize(data);
-        std::string              serializedMessage = Serialization::serialize(
-            std::vector<std::string> { serialized_message, typeSendToString(typeSend), receiver_identifier });
+        std::vector<std::string> list = Serialization::deserialize(data);
+        std::string              serializedMessage =
+            Serialization::serialize(std::vector<std::string> { serialized_message,
+                                                                Utils::enum_value_name_value(send_mode),
+                                                                receiver_identifier });
         list.push_back(serializedMessage);
         file.close();
         file.open(NetworkCacheFile, std::ofstream::out | std::ofstream::trunc);
@@ -513,34 +616,31 @@ void NetworkManager::sendFromCache() {
     file.close();
     file.remove();
 
-    auto typeSendFromString = [=](std::string typeSendStr) -> SendMode {
-        if (typeSendStr == "AllParents")
-            return SendMode::Neighbours;
-        else if (typeSendStr == "Except")
-            return SendMode::Except;
-        else if (typeSendStr == "Focused")
-            return SendMode::Focused;
-        else if (typeSendStr == "Broadcast")
-            return SendMode::Broadcast;
-        return SendMode::Neighbours;
-    };
-
     for (const auto &item : allPackages) {
         const std::vector<std::string> deserializedList = Serialization::deserialize(item);
         if (deserializedList.size() < 3) {
             eWarning("Size deserialized data in not correct");
             continue;
         }
+
         const std::string deserialized_message = deserializedList[0];
-        MessageBody       message_body = MessagePack::deserialize<MessageBody>(deserialized_message).value();
-        const SendMode    typeSend     = typeSendFromString(deserializedList[1]);
+        MessageBody       message_body     = MessagePack::deserialize<MessageBody>(deserialized_message).value();
+        auto              send_mode_result = magic_enum::enum_cast<SendMode>(deserializedList[1]);
+
+        if (!send_mode_result.has_value()) {
+            eWarning("[SendFromCache] Incorrecnt send mode type");
+            continue;
+        }
+
+        const SendMode    send_mode           = send_mode_result.value();
         const std::string receiver_identifier = deserializedList[2];
-        sendMessage(deserialized_message,
-                    message_body,
-                    typeSend,
-                    receiver_identifier,
-                    MessageType::Unknown,
-                    MessageStatus::NoStatus);
+
+        send_message_connections(deserialized_message,
+                                 message_body,
+                                 send_mode,
+                                 receiver_identifier,
+                                 MessageType::Unknown,
+                                 MessageStatus::NoStatus);
     }
 }
 
@@ -550,7 +650,7 @@ bool NetworkManager::isActiveConnectionExists() {
         return false;
 
     for (const auto &el : *connectionsLocked) {
-        if (el->isActive())
+        if (el->is_active())
             return true;
     }
 
@@ -597,17 +697,32 @@ void NetworkManager::messageReceived(const std::string &message,
 
     MessageBody message_body = message_body_expected.value();
 
-    // auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
-    // if (sign_actor) {
-    //     if (!sign_actor.value().key().verify(ByteArray(message_body.serializeForSign()).toBytes(),
-    //                                          ByteArray(sign.data()).toArray<crypto_sign_BYTES>())) {
-    //         // eWarning("Sign package is invalid!");
-    //         // return;
-    //     }
-    // } else {
-    //     // TODO: what if no actor?
-    //     //  return;
-    // }
+    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
+    if (!sign_actor.has_value() && message_body.message_type == MessageType::NewActor) {
+        auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
+        if (!actor_result.has_value()) {
+            return;
+        }
+        sign_actor = actor_result.value();
+    }
+
+    if (sign_actor.has_value()) {
+        auto verify = sign_actor.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
+                                                      ByteArray(sign.data()).toArray<crypto_sign_BYTES>());
+        if (!verify.has_value()) {
+            eWarning("[Network] Can't verify message");
+            return;
+        }
+        if (!verify) {
+            eWarning("[Network] Sign package is invalid!");
+            return;
+        }
+
+    } else {
+        // if (message_body.message_type != MessageType::NewActor) {
+        return;
+        // }
+    }
 
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
@@ -641,10 +756,10 @@ void NetworkManager::messageReceived(const std::string &message,
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
-            sendMessage(serialized + std::string(sign.data()),
-                        message_edited,
-                        SendMode::Focused,
-                        searchRes->second.first);
+            send_message_connections(serialized + std::string(sign.data()),
+                                     message_edited,
+                                     SendMode::Focused,
+                                     searchRes->second.first);
 
             return;
         }
@@ -1364,7 +1479,7 @@ void NetworkManager::onNewWsConnection() {
         }
     }
 
-    auto service = new WebSocketService(ws, node, this, false, needToDelete);
+    auto service = new WebSocketService(ws, node, this, false);
     connectWsService(service);
     if (!needToDelete)
         m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
@@ -1377,7 +1492,7 @@ bool NetworkManager::removeOneConnection() {
     auto connectionsLocked = *m_connections;
     bool isChanged         = false;
     for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
-        if (!(*it)->isConstant()) {
+        if (!(*it)->is_constant()) {
             eLog("[NetworkManager] Socket with ip {} was changed to another", (*it)->ip());
             connectionsLocked->erase(it);
 

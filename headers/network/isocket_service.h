@@ -32,18 +32,18 @@ class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
-    enum class SendType {
-        All,
+    enum class SocketType {
+        Full,
+        Part,
         None,
-        // OnlySubNetwork
     };
-    Q_ENUM(SendType)
+    Q_ENUM(SocketType)
 
     struct HandshakeMessage {
-        std::string           first_id;
+        std::string           network_id;
         std::string           version;
         std::string           identifier;
-        SendType              send_type = SendType::All;
+        SocketType            socket_type = SocketType::Full;
         std::set<std::string> connections;
         bool                  is_available = false;
         bool                  is_constant  = false;
@@ -57,24 +57,24 @@ public:
 
     explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
     const QString            &identifier() const;
-    virtual QString           protocolString() const = 0;
-    virtual Network::Protocol protocol() const       = 0;
-    virtual bool              isActive() const       = 0;
-    virtual quint16           port() const           = 0;
-    virtual quint16           serverPort() const     = 0;
+    virtual QString           protocol_string() const = 0;
+    virtual Network::Protocol protocol() const        = 0;
+    virtual bool              is_active() const       = 0;
+    virtual quint16           port() const            = 0;
+    virtual quint16           server_port() const      = 0;
     const QString            &ip() const;
-    const SendType            sendType() const;
-    int                       bytesCompressed() const;
-    int                       bytesOutgoing() const;
-    int                       bytesIncoming() const;
-    bool                      isConstant() const;
-    void                      setConstant(bool isConstant);
-    bool                      isVPN() const;
-    void                      setVPN(bool isVPN);
+    const SocketType          socket_type() const;
+    int                       bytes_compressed() const;
+    int                       bytes_outgoing() const;
+    int                       bytes_incoming() const;
+    bool                      is_constant() const;
+    void                      set_constant(bool isConstant);
+    bool                      is_vpn() const;
+    void                      set_vpn(bool isVPN);
 
 public:
-    virtual void final()                                                                 = 0;
-    virtual void sendMessage(const QByteArray &data, Priority priority = Priority::High) = 0;
+    virtual void flush()                                                                  = 0;
+    virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
 
 protected slots:
     virtual void closeSocket();
@@ -89,41 +89,39 @@ signals:
     void shareConnections(const std::set<std::string> &);
 
 protected:
-    bool       checkFirstMessage(const HandshakeMessage &msg);
-    QByteArray generateFirstMessage();
+    bool       check_first_message(const HandshakeMessage &msg);
+    QByteArray generate_first_message();
     QByteArray prepareSendMessage(const QByteArray &message);
     QByteArray prepareReceiveMessage(const QByteArray &message);
 
     ExtraChainNode  *node;
-    QString          m_identifier;
-    QString          m_ip;
-    quint16          m_port          = 0;
-    bool             m_activated     = false;
-    bool             is_disconnected = false;
-    bool             m_needToDelete;
-    int              m_bytesIncoming   = 0;
-    int              m_bytesOutgoing   = 0;
-    int              m_bytesCompressed = 0;
-    SendType         m_sendType        = SendType::All;
-    std::atomic_bool m_isConstant      = false;
-    std::atomic_bool m_isVPN           = false;
-    // ActorId subNetwork;
+    QString          identifier_;
+    QString          ip_;
+    quint16          port_             = 0;
+    bool             activated_        = false;
+    bool             is_disconnected_  = false;
+    int              bytes_incoming_   = 0;
+    int              bytes_outgoing_   = 0;
+    int              bytes_compressed_ = 0;
+    SocketType       socket_type_      = SocketType::Full;
+    std::atomic_bool is_constant_      = false;
+    std::atomic_bool is_vpn_           = false;
 
-    QMutex             m_queueMutex;
-    QQueue<QByteArray> m_highQueue;
-    QQueue<QByteArray> m_normalQueue;
-    QQueue<QByteArray> m_lowQueue;
+    QMutex             queue_mutex_;
+    QQueue<QByteArray> high_queue_;
+    QQueue<QByteArray> normal_queue_;
+    QQueue<QByteArray> low_queue_;
 
-    static constexpr qint64 MAX_BUFFER_SIZE         = 10 * 1024 * 1024; // 10MB
-    bool                    m_waitingForBufferSpace = false;
+    static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
+    bool                    waiting_buffer_space_ = false;
 
-    KeyPrivate priv   = KeyPrivate();
-    KeyPublic  pub    = KeyPublic();
-    bool       is_pub = false;
+    KeyPrivate priv_   = KeyPrivate();
+    KeyPublic  pub_    = KeyPublic();
+    bool       is_pub_ = false;
 };
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                       (),
-                      (first_id, version, identifier, send_type, connections, is_available))
+                      (network_id, version, identifier, socket_type, connections, is_available))
 
 #endif // ISOCKETSERVICE_H

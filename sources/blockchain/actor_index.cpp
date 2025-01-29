@@ -130,10 +130,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
     if (!node->accountController()->empty()) {
-        node->network()->send_message(id,
-                                      MessageType::ActorAll,
-                                      SendMode::Neighbours,
-                                      MessageStatus::Request);
+        node->network()->send_message(id, MessageType::ActorAll, SendMode::Neighbours, MessageStatus::Request);
 
         eLog("[ActorIndex] Get all actors request");
     }
@@ -250,7 +247,7 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     }
 
     emit newActorSaved(actor.id());
-    node->network()->send_message(actor, MessageType::NewActor, SendMode::Broadcast);
+    node->network()->send_broadcast(actor, MessageType::NewActor);
     return result;
 }
 

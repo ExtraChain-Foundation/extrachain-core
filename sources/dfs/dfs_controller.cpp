@@ -70,7 +70,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
     if (search_result.has_value()) {
         return std::unexpected(Dfs::DfsError::DirDuplicate);
     }
@@ -856,7 +857,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
     // update last time
     // update dirs
-    node->network()->send_message(remove_file, MessageType::DfsFileRemove, SendMode::Broadcast);
+    node->network()->send_broadcast(remove_file, MessageType::DfsFileRemove);
     emit removed(owner_id, file_id);
     return {};
 }
@@ -913,7 +914,7 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
 
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
     auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
-    node->network()->send_message(file_data, MessageType::DfsStoreFile, SendMode::Broadcast);
+    node->network()->send_broadcast(file_data, MessageType::DfsStoreFile);
 }
 
 void DfsController::sync_stored(const Dfs::FileData &file_data, const std::string &message_id) {
@@ -1223,10 +1224,7 @@ void DfsController::sync(const std::string &identifier) {
 // TODO: use dfs size
 void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
-    node->network()->send_message(msg,
-                                  MessageType::RequestDfsSize,
-                                  SendMode::Neighbours,
-                                  MessageStatus::Request);
+    node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Neighbours, MessageStatus::Request);
 }
 
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg,

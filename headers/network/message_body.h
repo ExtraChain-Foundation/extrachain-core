@@ -115,9 +115,30 @@ struct MessageBody {
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string                     data;
 
-    std::string serializeForSign() const {
-        return std::to_string(std::to_underlying(send_type)) + std::to_string(std::to_underlying(message_type))
-               + std::to_string(std::to_underlying(status)) + message_id + init_sender_id.to_string() + data;
+    std::string calculate_hash() const {
+        blake3_hasher hasher;
+        blake3_hasher_init(&hasher);
+
+        auto send_type_val = std::to_underlying(send_type);
+        blake3_hasher_update(&hasher, &send_type_val, sizeof(send_type_val));
+
+        auto message_type_val = std::to_underlying(message_type);
+        blake3_hasher_update(&hasher, &message_type_val, sizeof(message_type_val));
+
+        auto status_val = std::to_underlying(status);
+        blake3_hasher_update(&hasher, &status_val, sizeof(status_val));
+
+        blake3_hasher_update(&hasher, message_id.data(), message_id.size());
+
+        std::string init_sender_str = init_sender_id.to_string();
+        blake3_hasher_update(&hasher, init_sender_str.data(), init_sender_str.size());
+
+        blake3_hasher_update(&hasher, data.data(), data.size());
+
+        uint8_t output[BLAKE3_OUT_LEN];
+        blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+
+        return fmt::format("{:02x}", fmt::join(std::span(output, BLAKE3_OUT_LEN), ""));
     }
 
     std::string serialize() const {
