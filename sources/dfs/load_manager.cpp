@@ -82,7 +82,7 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     // temp: request file
     this->node->network()->send_message(file_link,
                                         MessageType::DfsFileRequest,
-                                        Config::Net::TypeSend::Focused,
+                                        SendMode::Focused,
                                         MessageStatus::NoStatus,
                                         "",
                                         identifier);
@@ -143,12 +143,12 @@ void LoadManager::check_all_files(std::string identifier) {
             if (identifier.empty()) {
                 this->node->network()->send_message(file_link,
                                                     MessageType::DfsFileState,
-                                                    Config::Net::TypeSend::Neighbours,
+                                                    SendMode::Neighbours,
                                                     MessageStatus::Request);
             } else {
                 this->node->network()->send_message(file_link,
                                                     MessageType::DfsFileState,
-                                                    Config::Net::TypeSend::Focused,
+                                                    SendMode::Focused,
                                                     MessageStatus::Request,
                                                     "",
                                                     identifier);
@@ -268,7 +268,7 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
 
             auto message_type = identifier.empty() ? MessageType::DfsStoreFragment : MessageType::DfsFileFragment;
             auto type_send =
-                identifier.empty() ? Config::Net::TypeSend::Broadcast : Config::Net::TypeSend::Focused;
+                identifier.empty() ? SendMode::Broadcast : SendMode::Focused;
             this->node->network()
                 ->send_message(file_fragment, message_type, type_send, MessageStatus::NoStatus, "", identifier);
 

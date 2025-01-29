@@ -94,8 +94,18 @@ enum class MessageStatus {
 MSGPACK_ADD_ENUM(MessageStatus)
 // FORMAT_ENUM(MessageStatus)
 
+enum class SendMode {
+    Neighbours,
+    NeighboursRandom,
+    OneNeighbourRandom,
+    Broadcast,
+    Except,
+    Focused
+};
+MSGPACK_ADD_ENUM(SendMode)
+
 struct MessageBody {
-    Config::Net::TypeSend           send_type;
+    SendMode                        send_type;
     MessageType                     message_type;
     MessageStatus                   status;
     std::string                     message_id;
@@ -147,12 +157,12 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_init_message(const std::string&    data,
-                                     Config::Net::TypeSend send_type,
-                                     MessageType           type,
-                                     MessageStatus         status,
-                                     const ActorId&        sender,
-                                     std::string           to_message_id) {
+inline MessageBody make_init_message(const std::string& data,
+                                     SendMode           send_type,
+                                     MessageType        type,
+                                     MessageStatus      status,
+                                     const ActorId&     sender,
+                                     std::string        to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
     }

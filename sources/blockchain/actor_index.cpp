@@ -100,7 +100,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messa
     if (!actor.empty()) {
         node->network()->send_message(actor,
                                       MessageType::Actor,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Response,
                                       messageId);
     } else {
@@ -117,7 +117,7 @@ void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::str
     if (!result.empty()) {
         node->network()->send_message(result,
                                       MessageType::ActorAll,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Response,
                                       messageId);
     } else {
@@ -132,7 +132,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     if (!node->accountController()->empty()) {
         node->network()->send_message(id,
                                       MessageType::ActorAll,
-                                      Config::Net::TypeSend::Neighbours,
+                                      SendMode::Neighbours,
                                       MessageStatus::Request);
 
         eLog("[ActorIndex] Get all actors request");
@@ -149,7 +149,7 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string 
 
     node->network()->send_message(std::to_string(this->getRecords()),
                                   MessageType::ActorCount,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response);
 }
 
@@ -226,7 +226,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
 
     node->network()->send_message(actorId.to_string(),
                                   MessageType::Actor,
-                                  Config::Net::TypeSend::Neighbours,
+                                  SendMode::Neighbours,
                                   MessageStatus::Request);
 }
 
@@ -250,7 +250,7 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     }
 
     emit newActorSaved(actor.id());
-    node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::Broadcast);
+    node->network()->send_message(actor, MessageType::NewActor, SendMode::Broadcast);
     return result;
 }
 

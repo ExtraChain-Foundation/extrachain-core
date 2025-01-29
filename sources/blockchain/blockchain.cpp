@@ -99,12 +99,12 @@ void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
         eWarning("[Blockchain] all parent sync");
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
-                                      Config::Net::TypeSend::Neighbours,
+                                      SendMode::Neighbours,
                                       MessageStatus::Request);
     } else {
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Request,
                                       "",
                                       identifier);
@@ -149,7 +149,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         if (blocks.size() > 1000) {
             node->network()->send_message(blocks,
                                           MessageType::BlockchainSyncBlocks,
-                                          Config::Net::TypeSend::Focused,
+                                          SendMode::Focused,
                                           MessageStatus::Response,
                                           "",
                                           identfier);
@@ -159,14 +159,14 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         // if (block->isGenesisBlock()) {
         //     node->network()->send_message(block->getGenesisBlockConst(),
         //                                   MessageType::BlockchainGenesisBlock,
-        //                                   Config::Net::TypeSend::Focused,
+        //                                   SendMode::Focused,
         //                                   MessageStatus::Response,
         //                                   "",
         //                                   identfier);
         // } else {
         //     node->network()->send_message(block->getBlockConst(),
         //                                   MessageType::BlockchainNewBlock,
-        //                                   Config::Net::TypeSend::Focused,
+        //                                   SendMode::Focused,
         //                                   MessageStatus::Response,
         //                                   "",
         //                                   identfier);
@@ -179,7 +179,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
 
     node->network()->send_message(blocks,
                                   MessageType::BlockchainSyncBlocks,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   "",
                                   identfier);
@@ -248,12 +248,12 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
         auto genesisBlock = block.getGenesisBlockConst();
         node->network()->send_message(*genesisBlock,
                                       MessageType::BlockchainGenesisBlock,
-                                      Config::Net::TypeSend::Neighbours);
+                                      SendMode::Neighbours);
     } else {
         auto dataBlock = block.getBlockConst();
         node->network()->send_message(*dataBlock,
                                       MessageType::BlockchainNewBlock,
-                                      Config::Net::TypeSend::Neighbours);
+                                      SendMode::Neighbours);
     }
 
     // eLog("Send {}", block);
@@ -866,7 +866,7 @@ void Blockchain::addBlockNetwork(const BlockVariant &block,
             //                                   MessageType::BlockchainAnarchy,
             //                                   MessageStatus::Response,
             //                                   messageId,
-            //                                   Config::Net::TypeSend::Focused);
+            //                                   SendMode::Focused);
             // }
 
             return;

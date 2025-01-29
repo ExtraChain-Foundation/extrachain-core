@@ -58,7 +58,7 @@ void DirsManager::sync(const std::string& identifier) {
 
     node->network()->send_message(0,
                                   MessageType::DfsSyncDirs,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Request,
                                   "",
                                   identifier);
@@ -72,7 +72,7 @@ void DirsManager::network_request_sync(const std::string& message_id) {
 
     node->network()->send_message(max_last_modified.value(),
                                   MessageType::DfsSyncDirs,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 }
@@ -100,7 +100,7 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const std::str
     // }
     node->network()->send_message(allall.value(),
                                   MessageType::DfsSyncDirsRows,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   "",
                                   message_id);
@@ -125,7 +125,7 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
         node->network()->send_message(Dfs::DirsFile::DirsRow { .actor_id      = dirs_row.actor_id,
                                                                .last_modified = last_modified.value() },
                                       MessageType::DfsSyncDirRows,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Request,
                                       "",
                                       identifier);
@@ -140,7 +140,7 @@ void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_ro
     }
     node->network()->send_message(std::make_pair(dirs_row.actor_id, dir_rows.value()),
                                   MessageType::DfsSyncDirRows,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 }
@@ -170,7 +170,7 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 void DirsManager::temp_sync_all(const std::string& identifier) {
     node->network()->send_message(true,
                                   MessageType::DfsTempSyncAll,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   "",
                                   identifier);
@@ -188,7 +188,7 @@ void DirsManager::network_request_all(const std::string& identifier) {
 
         node->network()->send_message(std::make_pair(actor, dir_rows.value()),
                                       MessageType::DfsSyncDirRows,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Response,
                                       "",
                                       identifier);

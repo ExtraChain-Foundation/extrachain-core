@@ -194,12 +194,12 @@ public:
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
-    void sendMessage(const std::string&    serialized_message,
-                     const MessageBody&    non_serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier,
-                     MessageType           message_type = MessageType::Unknown,
-                     MessageStatus         status_info  = MessageStatus::NoStatus);
+    void sendMessage(const std::string& serialized_message,
+                     const MessageBody& non_serialized_message,
+                     SendMode           typeSend,
+                     const std::string& receiver_identifier,
+                     MessageType        message_type = MessageType::Unknown,
+                     MessageStatus      status_info  = MessageStatus::NoStatus);
 
     void clearNetworkCaches();
 
@@ -259,9 +259,9 @@ public:
 
     void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
 
-    void saveToCache(const std::string&    serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier);
+    void saveToCache(const std::string& serialized_message,
+                     SendMode           typeSend,
+                     const std::string& receiver_identifier);
     void sendFromCache();
     bool isActiveConnectionExists();
 
@@ -270,23 +270,23 @@ public:
     QString foundCurrentIdentifier(QString ip, quint16 port);
 
     template <class T>
-    std::string send_message(T                     data,
-                             MessageType           type,
-                             Config::Net::TypeSend typeSend,
-                             MessageStatus         status              = MessageStatus::NoStatus,
-                             std::string           to_message_id       = "",
-                             std::string           receiver_identifier = "") {
+    std::string send_message(T             data,
+                             MessageType   type,
+                             SendMode      typeSend,
+                             MessageStatus status              = MessageStatus::NoStatus,
+                             std::string   to_message_id       = "",
+                             std::string   receiver_identifier = "") {
         if (status == MessageStatus::Response && to_message_id.empty() && receiver_identifier.empty()) {
             eCritical(
                 "[Network] Send message error: empty message id or receiver identifier for response message");
             return "";
         }
-        if (status == MessageStatus::Response && typeSend != Config::Net::TypeSend::Focused) {
+        if (status == MessageStatus::Response && typeSend != SendMode::Focused) {
             eWarning(
                 "[Network] Send message warning: incorrect type send for response message, set to focused, type: "
                 "{}",
                 type);
-            typeSend = Config::Net::TypeSend::Focused;
+            typeSend = SendMode::Focused;
         }
 
         if (!node) {
@@ -306,7 +306,7 @@ public:
         MessageBody message =
             make_init_message(MessagePack::serialize(data), typeSend, type, status, mainActor.id(), to_message_id);
 
-        if (typeSend == Config::Net::TypeSend::Broadcast) {
+        if (typeSend == SendMode::Broadcast) {
             addAllServicesIdentifiersToMessage(message);
         }
 

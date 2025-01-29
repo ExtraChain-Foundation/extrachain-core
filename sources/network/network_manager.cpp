@@ -356,30 +356,30 @@ void NetworkManager::clearNetworkCaches() {
     }
 }
 
-void NetworkManager::sendMessage(const std::string    &serialized_message,
-                                 const MessageBody    &non_serialized_message,
-                                 Config::Net::TypeSend type_send,
-                                 const std::string    &receiver_identifier,
-                                 MessageType           message_type,
-                                 MessageStatus         status_info) {
+void NetworkManager::sendMessage(const std::string &serialized_message,
+                                 const MessageBody &non_serialized_message,
+                                 SendMode           type_send,
+                                 const std::string &receiver_identifier,
+                                 MessageType        message_type,
+                                 MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
         eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, type_send, receiver_identifier);
         return;
     }
 
-    static auto isSendCheck = [](const Config::Net::TypeSend &type_send,
-                                 const std::string           &receiver_identifier,
-                                 const std::string           &socket_identifier,
-                                 const MessageBody           &package) {
+    static auto isSendCheck = [](const SendMode    &type_send,
+                                 const std::string &receiver_identifier,
+                                 const std::string &socket_identifier,
+                                 const MessageBody &package) {
         switch (type_send) {
-        case Config::Net::TypeSend::Except:
+        case SendMode::Except:
             return socket_identifier != receiver_identifier;
-        case Config::Net::TypeSend::Focused:
+        case SendMode::Focused:
             return socket_identifier == receiver_identifier;
-        case Config::Net::TypeSend::Neighbours:
+        case SendMode::Neighbours:
             return true;
-        case Config::Net::TypeSend::Broadcast: {
+        case SendMode::Broadcast: {
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
@@ -412,14 +412,14 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
 
             service->sendMessage(QByteArray::fromStdString(serialized_message), priority);
 
-            if (type_send == Config::Net::TypeSend::Focused)
+            if (type_send == SendMode::Focused)
                 break;
         }
     }
 }
 
 void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data) {
-    if (package_data.msg_body.send_type != Config::Net::TypeSend::Broadcast) {
+    if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
     }
@@ -439,7 +439,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
     addAllServicesIdentifiersToMessage(message_edited);
 
     auto serialized = message_edited.serialize();
-    sendMessage(serialized + package_data.sign, message_edited, Config::Net::TypeSend::Broadcast, "");
+    sendMessage(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
@@ -448,10 +448,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
                                                               QDateTime::currentDateTime()));
 }
 
-void NetworkManager::saveToCache(const std::string    &serialized_message,
-                                 Config::Net::TypeSend typeSend,
-                                 const std::string    &receiver_identifier) {
-    if (typeSend != Config::Net::TypeSend::Broadcast) {
+void NetworkManager::saveToCache(const std::string &serialized_message,
+                                 SendMode           typeSend,
+                                 const std::string &receiver_identifier) {
+    if (typeSend != SendMode::Broadcast) {
         // return;
     }
 
@@ -461,15 +461,15 @@ void NetworkManager::saveToCache(const std::string    &serialized_message,
         eFatal("[NetworkManager/saveToCache] Error open cache file");
     }
     auto size             = std::filesystem::file_size(NetworkCacheFile);
-    auto typeSendToString = [=](Config::Net::TypeSend ts) -> std::string {
+    auto typeSendToString = [=](SendMode ts) -> std::string {
         switch (ts) {
-        case Config::Net::TypeSend::Neighbours:
+        case SendMode::Neighbours:
             return "AllParents";
-        case Config::Net::TypeSend::Except:
+        case SendMode::Except:
             return "Except";
-        case Config::Net::TypeSend::Focused:
+        case SendMode::Focused:
             return "Focused";
-        case Config::Net::TypeSend::Broadcast:
+        case SendMode::Broadcast:
             return "Broadcast";
         }
         return "";
@@ -513,16 +513,16 @@ void NetworkManager::sendFromCache() {
     file.close();
     file.remove();
 
-    auto typeSendFromString = [=](std::string typeSendStr) -> Config::Net::TypeSend {
+    auto typeSendFromString = [=](std::string typeSendStr) -> SendMode {
         if (typeSendStr == "AllParents")
-            return Config::Net::TypeSend::Neighbours;
+            return SendMode::Neighbours;
         else if (typeSendStr == "Except")
-            return Config::Net::TypeSend::Except;
+            return SendMode::Except;
         else if (typeSendStr == "Focused")
-            return Config::Net::TypeSend::Focused;
+            return SendMode::Focused;
         else if (typeSendStr == "Broadcast")
-            return Config::Net::TypeSend::Broadcast;
-        return Config::Net::TypeSend::Neighbours;
+            return SendMode::Broadcast;
+        return SendMode::Neighbours;
     };
 
     for (const auto &item : allPackages) {
@@ -532,9 +532,9 @@ void NetworkManager::sendFromCache() {
             continue;
         }
         const std::string deserialized_message = deserializedList[0];
-        MessageBody       message_body       = MessagePack::deserialize<MessageBody>(deserialized_message).value();
-        const Config::Net::TypeSend typeSend = typeSendFromString(deserializedList[1]);
-        const std::string           receiver_identifier = deserializedList[2];
+        MessageBody       message_body = MessagePack::deserialize<MessageBody>(deserialized_message).value();
+        const SendMode    typeSend     = typeSendFromString(deserializedList[1]);
+        const std::string receiver_identifier = deserializedList[2];
         sendMessage(deserialized_message,
                     message_body,
                     typeSend,
@@ -643,7 +643,7 @@ void NetworkManager::messageReceived(const std::string &message,
             auto serialized = message_edited.serialize();
             sendMessage(serialized + std::string(sign.data()),
                         message_edited,
-                        Config::Net::TypeSend::Focused,
+                        SendMode::Focused,
                         searchRes->second.first);
 
             return;
@@ -710,7 +710,7 @@ void NetworkManager::messageReceived(const std::string &message,
             if (!available_ips.empty()) {
                 node->network()->send_message(MessagePack::serialize_container(available_ips),
                                               MessageType::ShareConnections,
-                                              Config::Net::TypeSend::Focused,
+                                              SendMode::Focused,
                                               MessageStatus::Response,
                                               messageId);
             }
@@ -1218,11 +1218,9 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         node->connectionsManager()->addConnection(connection_result.value());
         for (const auto &active_connection : node->connectionsManager()->getActiveConnection()) {
-            this->send_message(active_connection,
-                               MessageType::NewListConnections,
-                               Config::Net::TypeSend::Neighbours);
+            this->send_message(active_connection, MessageType::NewListConnections, SendMode::Neighbours);
         }
-        this->send_message("", MessageType::ProcessNewConnections, Config::Net::TypeSend::Neighbours);
+        this->send_message("", MessageType::ProcessNewConnections, SendMode::Neighbours);
         break;
     }
 

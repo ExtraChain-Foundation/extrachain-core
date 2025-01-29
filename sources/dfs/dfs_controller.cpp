@@ -508,7 +508,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
 
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_row.value()),
                                   MessageType::DfsCollectionRowChange,
-                                  Config::Net::TypeSend::Neighbours);
+                                  SendMode::Neighbours);
 
     return std::pair { dir_row_result.value(), historical_row.value() };
 }
@@ -620,7 +620,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
     eLog("[Dfs] Response for request collection: {} / {}", owner_id, file_id);
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_rows.value()),
                                   MessageType::DfsCollectionHistory,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 
@@ -628,7 +628,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
                                                   file_id,
                                                   rows.has_value() ? rows.value() : std::vector<DbRow> {}),
                                   MessageType::DfsCollectionContent,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 }
@@ -782,7 +782,7 @@ void DfsController::network_change_collection(const ActorId                 &own
     // TODO: broadcast
     node->network()->send_message(std::make_tuple(owner_id, file_id, row),
                                   MessageType::DfsCollectionRowChange,
-                                  Config::Net::TypeSend::Except,
+                                  SendMode::Except,
                                   MessageStatus::NoStatus,
                                   message_id);
 
@@ -799,7 +799,7 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
             Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = Dfs::FileState::Unknown };
         node->network()->send_message(file_state,
                                       MessageType::DfsFileState,
-                                      Config::Net::TypeSend::Focused,
+                                      SendMode::Focused,
                                       MessageStatus::Response,
                                       message_id);
         return;
@@ -809,7 +809,7 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = dir_row->state };
     node->network()->send_message(file_state,
                                   MessageType::DfsFileState,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 }
@@ -856,7 +856,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
     // update last time
     // update dirs
-    node->network()->send_message(remove_file, MessageType::DfsFileRemove, Config::Net::TypeSend::Broadcast);
+    node->network()->send_message(remove_file, MessageType::DfsFileRemove, SendMode::Broadcast);
     emit removed(owner_id, file_id);
     return {};
 }
@@ -913,13 +913,13 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
 
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
     auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
-    node->network()->send_message(file_data, MessageType::DfsStoreFile, Config::Net::TypeSend::Broadcast);
+    node->network()->send_message(file_data, MessageType::DfsStoreFile, SendMode::Broadcast);
 }
 
 void DfsController::sync_stored(const Dfs::FileData &file_data, const std::string &message_id) {
     node->network()->send_message(file_data,
                                   MessageType::DfsStoreFile,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   message_id);
 }
@@ -996,7 +996,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     //                                                        .offset  = 0 };
     //         // node->network()->send_message(reqMessage,
     //         //                               MessageType::DfsRequestFileSegment,
-    //         //                               Config::Net::TypeSend::AllParents,
+    //         //                               SendMode::AllParents,
     //         //                               MessageStatus::Request);
     //     }
     // }
@@ -1004,7 +1004,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     // if (network_stote && dir_row.type == Dfs::FileType::Collection) {
     //     node->network()->send_message(std::make_pair(owner_id, dir_row.file_id),
     //                                   MessageType::DfsCollectionRequest,
-    //                                   Config::Net::TypeSend::AllParents,
+    //                                   SendMode::AllParents,
     //                                   MessageStatus::Request);
     // }
 
@@ -1225,7 +1225,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg,
                                   MessageType::RequestDfsSize,
-                                  Config::Net::TypeSend::Neighbours,
+                                  SendMode::Neighbours,
                                   MessageStatus::Request);
 }
 
@@ -1235,7 +1235,7 @@ void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg,
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     node->network()->send_message(response,
                                   MessageType::ResponseDfsSize,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   messageId);
 }
@@ -1244,7 +1244,7 @@ void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg,
                                   MessageType::RequestBlockCount,
-                                  Config::Net::TypeSend::Neighbours,
+                                  SendMode::Neighbours,
                                   MessageStatus::Request);
 }
 
@@ -1254,7 +1254,7 @@ void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &m
     DfsP::ResponseBlockCount response { .actorId = msg.actorId, .blockCount = dfsCount };
     node->network()->send_message(response,
                                   MessageType::ResponseBlockCount,
-                                  Config::Net::TypeSend::Focused,
+                                  SendMode::Focused,
                                   MessageStatus::Response,
                                   messageId);
 }

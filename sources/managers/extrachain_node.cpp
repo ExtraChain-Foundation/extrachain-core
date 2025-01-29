@@ -455,7 +455,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Tra
     // !sign -> the конец
 
     eLog("[Blockchain] Send {}", transaction);
-    network()->send_message(transaction, MessageType::BlockchainTransaction, Config::Net::TypeSend::Neighbours);
+    network()->send_message(transaction, MessageType::BlockchainTransaction, SendMode::Neighbours);
 
     return transaction;
 }
@@ -666,7 +666,7 @@ void ExtraChainNode::calculateBlockCount() {
 
     m_networkManager->send_message(msg,
                                    MessageType::RequestBlockCount,
-                                   Config::Net::TypeSend::Neighbours,
+                                   SendMode::Neighbours,
                                    MessageStatus::Request);
 }
 

@@ -327,18 +327,8 @@ namespace Config {
         // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
         // responses
         static const int NECESSARY_RESPONSE_COUNT = 1; // 3
-
-        enum class TypeSend {
-            Neighbours,
-            Broadcast,
-            Except,
-            Focused
-        };
     } // namespace Net
 } // namespace Config
-
-MSGPACK_ADD_ENUM(Config::Net::TypeSend)
-// FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Serialization {
     EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
