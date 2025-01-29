@@ -105,7 +105,7 @@ void DataMiningManager::requestCoinReward() {
 
     node->network()->send_message(requestReward,
                                   MessageType::BlockchainCoinReward,
-                                  Config::Net::TypeSend::AllParents,
+                                  Config::Net::TypeSend::Neighbours,
                                   MessageStatus::Request);
 }
 

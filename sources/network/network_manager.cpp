@@ -377,7 +377,7 @@ void NetworkManager::sendMessage(const std::string    &serialized_message,
             return socket_identifier != receiver_identifier;
         case Config::Net::TypeSend::Focused:
             return socket_identifier == receiver_identifier;
-        case Config::Net::TypeSend::AllParents:
+        case Config::Net::TypeSend::Neighbours:
             return true;
         case Config::Net::TypeSend::Broadcast: {
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
@@ -463,7 +463,7 @@ void NetworkManager::saveToCache(const std::string    &serialized_message,
     auto size             = std::filesystem::file_size(NetworkCacheFile);
     auto typeSendToString = [=](Config::Net::TypeSend ts) -> std::string {
         switch (ts) {
-        case Config::Net::TypeSend::AllParents:
+        case Config::Net::TypeSend::Neighbours:
             return "AllParents";
         case Config::Net::TypeSend::Except:
             return "Except";
@@ -515,14 +515,14 @@ void NetworkManager::sendFromCache() {
 
     auto typeSendFromString = [=](std::string typeSendStr) -> Config::Net::TypeSend {
         if (typeSendStr == "AllParents")
-            return Config::Net::TypeSend::AllParents;
+            return Config::Net::TypeSend::Neighbours;
         else if (typeSendStr == "Except")
             return Config::Net::TypeSend::Except;
         else if (typeSendStr == "Focused")
             return Config::Net::TypeSend::Focused;
         else if (typeSendStr == "Broadcast")
             return Config::Net::TypeSend::Broadcast;
-        return Config::Net::TypeSend::AllParents;
+        return Config::Net::TypeSend::Neighbours;
     };
 
     for (const auto &item : allPackages) {
@@ -1220,9 +1220,9 @@ void NetworkManager::messageReceived(const std::string &message,
         for (const auto &active_connection : node->connectionsManager()->getActiveConnection()) {
             this->send_message(active_connection,
                                MessageType::NewListConnections,
-                               Config::Net::TypeSend::AllParents);
+                               Config::Net::TypeSend::Neighbours);
         }
-        this->send_message("", MessageType::ProcessNewConnections, Config::Net::TypeSend::AllParents);
+        this->send_message("", MessageType::ProcessNewConnections, Config::Net::TypeSend::Neighbours);
         break;
     }
 

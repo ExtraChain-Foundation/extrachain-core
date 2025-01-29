@@ -99,7 +99,7 @@ void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
         eWarning("[Blockchain] all parent sync");
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
-                                      Config::Net::TypeSend::AllParents,
+                                      Config::Net::TypeSend::Neighbours,
                                       MessageStatus::Request);
     } else {
         node->network()->send_message(fromBlock,
@@ -248,12 +248,12 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
         auto genesisBlock = block.getGenesisBlockConst();
         node->network()->send_message(*genesisBlock,
                                       MessageType::BlockchainGenesisBlock,
-                                      Config::Net::TypeSend::AllParents);
+                                      Config::Net::TypeSend::Neighbours);
     } else {
         auto dataBlock = block.getBlockConst();
         node->network()->send_message(*dataBlock,
                                       MessageType::BlockchainNewBlock,
-                                      Config::Net::TypeSend::AllParents);
+                                      Config::Net::TypeSend::Neighbours);
     }
 
     // eLog("Send {}", block);

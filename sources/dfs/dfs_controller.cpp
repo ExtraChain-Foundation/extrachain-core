@@ -508,7 +508,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
 
     node->network()->send_message(std::make_tuple(owner_id, file_id, historical_row.value()),
                                   MessageType::DfsCollectionRowChange,
-                                  Config::Net::TypeSend::AllParents);
+                                  Config::Net::TypeSend::Neighbours);
 
     return std::pair { dir_row_result.value(), historical_row.value() };
 }
@@ -1225,7 +1225,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg,
                                   MessageType::RequestDfsSize,
-                                  Config::Net::TypeSend::AllParents,
+                                  Config::Net::TypeSend::Neighbours,
                                   MessageStatus::Request);
 }
 
@@ -1244,7 +1244,7 @@ void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
     DfsP::RequestDfsSize msg { .actorId = actorId };
     node->network()->send_message(msg,
                                   MessageType::RequestBlockCount,
-                                  Config::Net::TypeSend::AllParents,
+                                  Config::Net::TypeSend::Neighbours,
                                   MessageStatus::Request);
 }
 

@@ -132,7 +132,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     if (!node->accountController()->empty()) {
         node->network()->send_message(id,
                                       MessageType::ActorAll,
-                                      Config::Net::TypeSend::AllParents,
+                                      Config::Net::TypeSend::Neighbours,
                                       MessageStatus::Request);
 
         eLog("[ActorIndex] Get all actors request");
@@ -226,7 +226,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
 
     node->network()->send_message(actorId.to_string(),
                                   MessageType::Actor,
-                                  Config::Net::TypeSend::AllParents,
+                                  Config::Net::TypeSend::Neighbours,
                                   MessageStatus::Request);
 }
 

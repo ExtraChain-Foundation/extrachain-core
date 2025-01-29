@@ -143,7 +143,7 @@ void LoadManager::check_all_files(std::string identifier) {
             if (identifier.empty()) {
                 this->node->network()->send_message(file_link,
                                                     MessageType::DfsFileState,
-                                                    Config::Net::TypeSend::AllParents,
+                                                    Config::Net::TypeSend::Neighbours,
                                                     MessageStatus::Request);
             } else {
                 this->node->network()->send_message(file_link,
