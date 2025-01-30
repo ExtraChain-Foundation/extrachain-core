@@ -56,33 +56,33 @@ void DirsManager::sync(const std::string& identifier) {
         return;
     }
 
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
     node->network()->send_message(0,
                                   MessageType::DfsSyncDirs,
                                   SendMode::Focused,
                                   MessageStatus::Request,
-                                  "",
-                                  identifier);
+                                  responder);
 }
 
-void DirsManager::network_request_sync(const std::string& message_id) {
+void DirsManager::network_request_sync(const Responder& responder) {
     auto max_last_modified = Dfs::DirsFile::max_last_modified();
     if (!max_last_modified.has_value()) {
         eFatal("[Dfs] Sync error");
     }
 
-    node->network()->send_message(max_last_modified.value(),
-                                  MessageType::DfsSyncDirs,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  message_id);
+    responder.send_response(max_last_modified.value(),
+                            MessageType::DfsSyncDirs,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 }
 
-void DirsManager::network_response_sync(uint64_t max_last_modified, const std::string& message_id) {
+void DirsManager::network_response_sync(uint64_t max_last_modified, const Responder& responder) {
     // eTemp("--------------- {} ", max_last_modified);
-    send_from_last_modified(max_last_modified, message_id);
+    send_from_last_modified(max_last_modified, responder);
 }
 
-void DirsManager::send_from_last_modified(uint64_t last_modified, const std::string& message_id) {
+void DirsManager::send_from_last_modified(uint64_t last_modified, const Responder& responder) {
     if (last_modified > 300'000)
         last_modified -= 300'000;
     auto allall = Dfs::DirsFile::load_from_modified(last_modified);
@@ -98,16 +98,14 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const std::str
     // for (const auto& dirs_row : allall.value()) {
     //     actors.push_back(dirs_row.actor_id);
     // }
-    node->network()->send_message(allall.value(),
-                                  MessageType::DfsSyncDirsRows,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  "",
-                                  message_id);
+    responder.send_response(allall.value(),
+                            MessageType::DfsSyncDirsRows,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 }
 
 void DirsManager::network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
-                                                      const std::string&                         identifier) {
+                                                      const Responder&                           responder) {
     // eTemp("!_!_!_! {}", dirs_rows);
     std::vector<ActorId> actors;
     actors.reserve(dirs_rows.size());
@@ -122,32 +120,30 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
             continue;
         }
 
-        node->network()->send_message(Dfs::DirsFile::DirsRow { .actor_id      = dirs_row.actor_id,
-                                                               .last_modified = last_modified.value() },
-                                      MessageType::DfsSyncDirRows,
-                                      SendMode::Focused,
-                                      MessageStatus::Request,
-                                      "",
-                                      identifier);
+        responder.send_response(Dfs::DirsFile::DirsRow { .actor_id      = dirs_row.actor_id,
+                                                         .last_modified = last_modified.value() },
+                                MessageType::DfsSyncDirRows,
+                                SendMode::Focused,
+                                MessageStatus::Request);
     }
 }
 
-void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const std::string& message_id) {
+void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const Responder& responder) {
     auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dirs_row.actor_id, dirs_row.last_modified);
 
     if (!dir_rows.has_value()) {
         return;
     }
-    node->network()->send_message(std::make_pair(dirs_row.actor_id, dir_rows.value()),
-                                  MessageType::DfsSyncDirRows,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  message_id);
+
+    responder.send_response(std::make_pair(dirs_row.actor_id, dir_rows.value()),
+                            MessageType::DfsSyncDirRows,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 }
 
 void DirsManager::network_response_dir_rows(const ActorId&                  owner_id,
                                             const std::vector<Dfs::DirRow>& dir_rows,
-                                            const std::string&              identifier) {
+                                            const Responder&                responder) {
     // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
     // TODO: add merge for sync dir file
 
@@ -164,19 +160,20 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
     this->update_dirs(owner_id, max_value);
 
-    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, identifier);
+    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
     node->network()->send_message(true,
                                   MessageType::DfsTempSyncAll,
                                   SendMode::Focused,
                                   MessageStatus::Response,
-                                  "",
-                                  identifier);
+                                  responder);
 }
 
-void DirsManager::network_request_all(const std::string& identifier) {
+void DirsManager::network_request_all(const Responder& responder) {
     auto actors = node->actorIndex()->allActors();
 
     for (const auto& actor : actors) {
@@ -186,11 +183,9 @@ void DirsManager::network_request_all(const std::string& identifier) {
             return;
         }
 
-        node->network()->send_message(std::make_pair(actor, dir_rows.value()),
-                                      MessageType::DfsSyncDirRows,
-                                      SendMode::Focused,
-                                      MessageStatus::Response,
-                                      "",
-                                      identifier);
+        responder.send_response(std::make_pair(actor, dir_rows.value()),
+                                MessageType::DfsSyncDirRows,
+                                SendMode::Focused,
+                                MessageStatus::Response);
     }
 }

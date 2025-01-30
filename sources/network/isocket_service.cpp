@@ -182,6 +182,9 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // 8. If all checks are passed - activate the connection
     eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
     activated_ = true;
+    Responder responder(node->network());
+    responder.add_identifier(identifier_.toStdString());
+    node->actorIndex()->send_system_actor(responder);
     emit activated();
     emit shareConnections(handshake.connections);
 

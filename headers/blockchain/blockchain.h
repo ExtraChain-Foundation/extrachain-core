@@ -24,7 +24,7 @@
 #include "blockchain/genesis_block.h"
 #include "blockchain/block_index.h"
 #include "blockchain/transaction.h"
-#include "dfs/dfs_utils.h"
+#include "network/network_manager.h"
 #include "utils/bignumber.h"
 
 #include <QByteArray>
@@ -34,6 +34,7 @@
 #include <cassert>
 
 class TransactionManager;
+class Responder;
 
 /*
  * Main database class
@@ -46,6 +47,12 @@ class TransactionManager;
  */
 
 class ExtraChainNode;
+
+enum class BlockchainStatus {
+    Process,
+    Sync,
+    Ready
+};
 
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -69,7 +76,7 @@ public:
                                                             const bool       makeRequestBlock = false);
     std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
-    void sync(const BigNumber &from = BigNumber(), const std::string &identifier = "");
+    void sync(const BigNumber &from = BigNumber(), std::optional<Responder> responder = std::nullopt);
     void lastSavedRequest();
 
 private:
@@ -255,13 +262,9 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
-    void addBlockFromNetwork(const BlockVariant &block,
-                             const std::string  &messageId,
-                             const std::string  &identifier);
-    void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
-    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks,
-                                       const std::string        &message_id,
-                                       const std::string        &identifier);
+    void addBlockFromNetwork(const BlockVariant &block, const Responder &responder);
+    void syncResponseFromNetwork(const BigNumber fromBlock, const Responder &responder);
+    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks, const Responder &responder);
 
     /**
      * @brief possibleMiningChange
@@ -278,10 +281,8 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const std::string &messageId, const std::string &identifier);
-    void syncResponse(const BigNumber fromBlock, const std::string &identfier);
-    void syncResponseVector(std::vector<BlockVariant> blocks,
-                            const std::string        &message_id,
-                            const std::string        &identifier);
+    void addBlockNetwork(const BlockVariant &block, const Responder &responder);
+    void syncResponse(const BigNumber fromBlock, const Responder &responder);
+    void syncResponseVector(std::vector<BlockVariant> blocks, const Responder &responder);
     void process();
 };

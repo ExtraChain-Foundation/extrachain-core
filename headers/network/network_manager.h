@@ -131,18 +131,65 @@ struct MessageIdDataReceived {
     qint64      time;
 };
 
+static const std::string NetworkCacheFile = "tmp/network.cache";
+
 class Responder {
 public:
-    // send
-    // broadcast send
+    Responder(NetworkManager* manager)
+        : network_manager(manager) {
+    }
+
+    template <class T>
+    std::string send_response(const T& data, MessageType type, SendMode send_mode, MessageStatus status) const {
+        if (network_manager == nullptr) {
+            return "";
+        }
+
+        auto data_serialized = MessagePack::serialize(data);
+        auto send_result     = send_response_impl(data_serialized, type, send_mode, status);
+        return send_result;
+    }
+
+    std::string send_response_impl(const std::string& data_serialized,
+                                   MessageType        type,
+                                   SendMode           send_mode,
+                                   MessageStatus      status) const;
+
+    const std::string& message_id() const {
+        return message_id_;
+    }
+
+    const std::unordered_set<std::string>& identifiers() const {
+        return identifiers_;
+    }
+
+    bool add_identifier(const std::string& identifier) {
+        if (identifier.empty()) {
+            return false;
+        }
+
+        return identifiers_.insert(identifier).second;
+    }
+
+    bool remove_identifier(const std::string& identifier) {
+        if (identifier.empty()) {
+            return false;
+        }
+
+        return identifiers_.erase(identifier) != 0;
+    }
+
+    void set_message_id(const std::string& message_id) {
+        message_id_ = message_id;
+    }
 
 private:
-    std::string     identifier;
-    std::string     message_id;
-    NetworkManager* network_manager;
+    MessageType message_type;
+    // MessageStatus                   message_status;
+    std::unordered_set<std::string> identifiers_;
+    std::string                     message_id_;
+    NetworkManager*                 network_manager = nullptr;
 };
-
-static const std::string NetworkCacheFile = "tmp/network.cache";
 
 /**
  * @brief The NetworkManager class
@@ -269,42 +316,29 @@ public:
 
     QString foundCurrentIdentifier(QString ip, quint16 port);
 
-    bool        send_message_checker(MessageType   type,
-                                     SendMode      send_mode,
-                                     MessageStatus status,
-                                     std::string   to_message_id,
-                                     std::string   receiver_identifier);
+    bool        send_message_checker(MessageType      type,
+                                     SendMode         send_mode,
+                                     MessageStatus    status,
+                                     const Responder& responder);
     std::string send_message_send(const std::string& data_serialized,
                                   MessageType        type,
                                   SendMode           send_mode,
                                   MessageStatus      status,
-                                  std::string        to_message_id,
-                                  std::string        receiver_identifier);
+                                  const Responder&   responder);
 
     template <class T>
-    std::string send_message(const T&      data,
-                             MessageType   type,
-                             SendMode      send_mode,
-                             MessageStatus status              = MessageStatus::NoStatus,
-                             std::string   to_message_id       = "",
-                             std::string   receiver_identifier = "") {
-        bool check = send_message_checker(type, send_mode, status, to_message_id, receiver_identifier);
+    std::string send_message(const T&         data,
+                             MessageType      type,
+                             SendMode         send_mode,
+                             MessageStatus    status    = MessageStatus::NoStatus,
+                             const Responder& responder = Responder(nullptr)) {
+        bool check = send_message_checker(type, send_mode, status, responder);
         if (!check) {
             return "";
         }
 
-        if (status == MessageStatus::Response && send_mode != SendMode::Focused) {
-            eWarning(
-                "[Network] Send message warning: incorrect type send for response message, set to focused, "
-                "type: "
-                "{}",
-                type);
-            send_mode = SendMode::Focused;
-        }
-
         auto data_serialized = MessagePack::serialize(data);
-        auto message_id =
-            send_message_send(data_serialized, type, send_mode, status, to_message_id, receiver_identifier);
+        auto message_id      = send_message_send(data_serialized, type, send_mode, status, responder);
         return message_id;
     }
 
@@ -326,6 +360,4 @@ signals:
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
-
-    friend class DfsNetworkManager;
 };

@@ -20,7 +20,6 @@
 #pragma once
 
 #include "blockchain/blockchain.h"
-#include "blockchain/contract.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 
@@ -39,6 +38,7 @@ Q_DECLARE_METATYPE(QList<Notification>)
 Q_DECLARE_METATYPE(ActorType)
 Q_DECLARE_METATYPE(Network::Protocol)
 Q_DECLARE_METATYPE(Network::SocketServiceError)
+Q_DECLARE_METATYPE(Responder)
 
 void registerMetaTypes() {
     qRegisterMetaType<BigNumber>();
@@ -55,4 +55,5 @@ void registerMetaTypes() {
     qRegisterMetaType<ActorType>();
     qRegisterMetaType<Network::Protocol>();
     qRegisterMetaType<Network::SocketServiceError>();
+    qRegisterMetaType<Responder>();
 }

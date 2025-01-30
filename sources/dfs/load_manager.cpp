@@ -80,12 +80,13 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     // download_queue.push(load_info);
 
     // temp: request file
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
     this->node->network()->send_message(file_link,
                                         MessageType::DfsFileRequest,
                                         SendMode::Focused,
                                         MessageStatus::NoStatus,
-                                        "",
-                                        identifier);
+                                        responder);
 
     // Try to process queue if we have space for new downloads
     if (active_downloads.size() < MAX_CONCURRENT_DOWNLOADS) {
@@ -146,12 +147,13 @@ void LoadManager::check_all_files(std::string identifier) {
                                                     SendMode::Neighbours,
                                                     MessageStatus::Request);
             } else {
+                Responder responder(nullptr);
+                responder.add_identifier(identifier);
                 this->node->network()->send_message(file_link,
                                                     MessageType::DfsFileState,
                                                     SendMode::Focused,
                                                     MessageStatus::Request,
-                                                    "",
-                                                    identifier);
+                                                    responder);
             }
         }
     }
@@ -267,10 +269,16 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
             }
 
             auto message_type = identifier.empty() ? MessageType::DfsStoreFragment : MessageType::DfsFileFragment;
-            auto type_send =
-                identifier.empty() ? SendMode::Broadcast : SendMode::Focused;
-            this->node->network()
-                ->send_message(file_fragment, message_type, type_send, MessageStatus::NoStatus, "", identifier);
+            auto type_send    = identifier.empty() ? SendMode::Broadcast : SendMode::Focused;
+
+            Responder responder(nullptr);
+            responder.add_identifier(identifier);
+
+            this->node->network()->send_message(file_fragment,
+                                                message_type,
+                                                type_send,
+                                                MessageStatus::NoStatus,
+                                                responder);
 
             offset += Dfs::Basic::FRAGMENT_SIZE;
             std::this_thread::sleep_for(std::chrono::milliseconds(15));
@@ -312,6 +320,10 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
                                                      Dfs::FileState::Partial);
     }
 
+    if (active_downloads.find(file_link) == active_downloads.end()) {
+        eWarning("Unknown fragment");
+        return;
+    }
     auto active_download  = active_downloads.at(file_link);
     bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
     if (is_last_fragment) {

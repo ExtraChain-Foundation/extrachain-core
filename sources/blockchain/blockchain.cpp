@@ -88,14 +88,14 @@ std::pair<Transaction, BigNumber> Blockchain::getTxByHash(const std::string &has
     return blockIndex.getLastTxByHash(hash, token);
 }
 
-void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
+void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder) {
     auto lastBlock = getLastBlock();
     auto fromBlock = lastBlock.has_value() ? lastBlock->getIndex() : from;
     if (fromBlock < 0)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
 
-    if (identifier.empty()) {
+    if (!responder.has_value()) {
         eWarning("[Blockchain] all parent sync");
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
@@ -106,12 +106,11 @@ void Blockchain::sync(const BigNumber &from, const std::string &identifier) {
                                       MessageType::BlockchainSync,
                                       SendMode::Focused,
                                       MessageStatus::Request,
-                                      "",
-                                      identifier);
+                                      responder.value());
     }
 }
 
-void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &identfier) {
+void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &responder) {
     auto lastBlock = getLastBlock();
     if (!lastBlock.has_value()) {
         return;
@@ -147,12 +146,10 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         blocks.push_back(block.value());
 
         if (blocks.size() > 1000) {
-            node->network()->send_message(blocks,
-                                          MessageType::BlockchainSyncBlocks,
-                                          SendMode::Focused,
-                                          MessageStatus::Response,
-                                          "",
-                                          identfier);
+            responder.send_response(blocks,
+                                    MessageType::BlockchainSyncBlocks,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
             blocks.clear();
         }
 
@@ -177,19 +174,12 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const std::string &iden
         return;
     }
 
-    node->network()->send_message(blocks,
-                                  MessageType::BlockchainSyncBlocks,
-                                  SendMode::Focused,
-                                  MessageStatus::Response,
-                                  "",
-                                  identfier);
+    responder.send_response(blocks, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
 
-void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks,
-                                    const std::string        &message_id,
-                                    const std::string        &identifier) {
+void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks, const Responder &responder) {
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
@@ -198,7 +188,7 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks,
          blocks.front().getIndex(),
          blocks.back().getIndex());
     for (const auto &block : blocks) {
-        addBlockNetwork(block, message_id, identifier);
+        addBlockNetwork(block, responder);
     }
 }
 
@@ -246,14 +236,10 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
 
     if (block.isGenesisBlock()) {
         auto genesisBlock = block.getGenesisBlockConst();
-        node->network()->send_message(*genesisBlock,
-                                      MessageType::BlockchainGenesisBlock,
-                                      SendMode::Neighbours);
+        node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock, SendMode::Neighbours);
     } else {
         auto dataBlock = block.getBlockConst();
-        node->network()->send_message(*dataBlock,
-                                      MessageType::BlockchainNewBlock,
-                                      SendMode::Neighbours);
+        node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock, SendMode::Neighbours);
     }
 
     // eLog("Send {}", block);
@@ -835,9 +821,7 @@ BigNumber Blockchain::getBlockCount() {
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant &block,
-                                 const std::string  &messageId,
-                                 const std::string  &identifier) {
+void Blockchain::addBlockNetwork(const BlockVariant &block, const Responder &responder) {
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
         // eLog("!!!!!!!!!!!");
     }
@@ -859,8 +843,8 @@ void Blockchain::addBlockNetwork(const BlockVariant &block,
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !identifier.empty()) {
-                syncResponse(block.getIndex(), identifier);
+            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !responder.identifiers().empty()) {
+                syncResponse(block.getIndex(), responder);
             } // else {
             //     node->network()->send_message("",
             //                                   MessageType::BlockchainAnarchy,

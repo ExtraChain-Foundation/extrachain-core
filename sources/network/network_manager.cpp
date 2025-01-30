@@ -162,8 +162,8 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
         auto service = qobject_cast<SocketService *>(senderObj);
 
-        emit this->newSocketActivated();
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
+        emit this->newSocketActivated();
     });
 
     {
@@ -224,6 +224,7 @@ NetworkManager::~NetworkManager() {
 }
 
 void NetworkManager::checkConnectionsStatus() {
+    std::unordered_set<std::string> ind_temp;
     m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
@@ -233,15 +234,12 @@ void NetworkManager::checkConnectionsStatus() {
             flag = flag || el->is_active();
             if (el->is_active()) {
                 count++;
+                ind_temp.insert(el->identifier().toStdString());
             }
         });
     }
     emit connectionStatusChanged(flag);
     emit connectionsCountChanged(count); // TODO: check prev count value
-
-    if (flag) { // TODO: replace to networkStatusChanged slot
-        sendFromCache();
-    }
 }
 
 void NetworkManager::startNetwork() {
@@ -356,13 +354,12 @@ void NetworkManager::clearNetworkCaches() {
     }
 }
 
-bool NetworkManager::send_message_checker(MessageType   type,
-                                          SendMode      send_mode,
-                                          MessageStatus status,
-                                          std::string   to_message_id,
-                                          std::string   receiver_identifier) {
-    if (status == MessageStatus::Response && to_message_id.empty() && receiver_identifier.empty()) {
-        eCritical("[Network] Send message error: empty message id or receiver identifier for response message");
+bool NetworkManager::send_message_checker(MessageType      type,
+                                          SendMode         send_mode,
+                                          MessageStatus    status,
+                                          const Responder &responder) {
+    if (status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
+        eCritical("[Network] Send message error: empty message id or receiver identifiers for response message");
         return false;
     }
     if (!node) {
@@ -377,6 +374,14 @@ bool NetworkManager::send_message_checker(MessageType   type,
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
+    if (status == MessageStatus::Response && send_mode != SendMode::Focused) {
+        eWarning(
+            "[Network] Send message warning: incorrect type send for response message, set to focused, "
+            "type: "
+            "{}",
+            type);
+        send_mode = SendMode::Focused;
+    }
 
     return true;
 }
@@ -385,11 +390,10 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               MessageType        type,
                                               SendMode           send_mode,
                                               MessageStatus      status,
-                                              std::string        to_message_id,
-                                              std::string        receiver_identifier) {
+                                              const Responder   &responder) {
     auto       &mainActor = node->accountController()->mainActor();
     MessageBody message =
-        make_init_message(data_serialized, send_mode, type, status, mainActor.id(), to_message_id);
+        make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
     if (send_mode == SendMode::Broadcast) {
         addAllServicesIdentifiersToMessage(message);
@@ -404,18 +408,24 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
 
     auto sign = ByteArray(sign_result.value()).toString();
 
+    std::string to_message_id = responder.message_id();
+    std::string receiver_identifier;
     if (!to_message_id.empty()) {
         auto messages_locked = *m_messages;
         if (messages_locked->count(to_message_id)) {
             receiver_identifier = messages_locked->at(to_message_id).first;
         } else {
-            eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
-                     to_message_id);
-            return "";
+            // eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
+            //          to_message_id);
+            // return "";
         }
         //            if (receiver_identifier.empty())
         //                eFatal("Network send message error: receiver_identifier is empty");
         // m_messages.erase(to_message_id);
+    }
+
+    if (!responder.identifiers().empty()) {
+        receiver_identifier = *responder.identifiers().begin();
     }
 
 #ifdef QT_DEBUG
@@ -431,7 +441,13 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
     }
 #endif
 
-    this->send_message_connections(serialized + sign, message, send_mode, receiver_identifier, type, status);
+    this->send_message_connections(serialized + sign,
+                                   message,
+                                   send_mode,
+                                   receiver_identifier,
+                                   // responder.identifiers().empty() ? "" : *responder.identifiers().begin(),
+                                   type,
+                                   status);
 
     return message.message_id;
 }
@@ -697,8 +713,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
     MessageBody message_body = message_body_expected.value();
 
-    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id);
-    if (!sign_actor.has_value() && message_body.message_type == MessageType::NewActor) {
+    auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
+    if (!sign_actor.has_value()
+        && (message_body.message_type == MessageType::NewActor
+            || message_body.message_type == MessageType::Actor)) {
         auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(message_body.data);
         if (!actor_result.has_value()) {
             return;
@@ -767,6 +785,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
     const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
 
+    Responder responder(this);
+    responder.set_message_id(messageId);
+    responder.add_identifier(identifier);
+
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
@@ -827,7 +849,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                               MessageType::ShareConnections,
                                               SendMode::Focused,
                                               MessageStatus::Response,
-                                              messageId);
+                                              responder);
             }
         } else if (status == MessageStatus::Response) {
             eInfo("Achieved ShareConnections(Response) {}", messageId);
@@ -879,7 +901,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for request dfs size", type);
             return;
         }
-        node->dfs()->sendSizeReponseMsg(dfs_request_result.value(), messageId);
+        node->dfs()->sendSizeReponseMsg(dfs_request_result.value(), responder);
         break;
     }
 
@@ -902,7 +924,7 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
         BigNumber dfs_block_count = node->blockchain()->getBlockCount();
-        node->dfs()->sendCountReponseMsg(block_request_result.value(), messageId, dfs_block_count);
+        node->dfs()->sendCountReponseMsg(block_request_result.value(), dfs_block_count, responder);
         break;
     }
 
@@ -926,7 +948,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
                 break;
             }
-            node->actorIndex()->handleGetActor(actor_id_result.value(), messageId);
+            node->actorIndex()->handleGetActor(actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             if (!actor_result.has_value()) {
@@ -947,13 +969,15 @@ void NetworkManager::messageReceived(const std::string &message,
                          status);
                 break;
             }
-            node->actorIndex()->handleGetAllActor(ignored_actor_id_result.value(), messageId);
+
+            node->actorIndex()->handleGetAllActor(ignored_actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
             if (!actors_list_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
                 break;
             }
+
             node->actorIndex()->handleNewAllActors(actors_list_result.value());
         }
         break;
@@ -987,7 +1011,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::DfsSyncDirs: {
         if (status == MessageStatus::Request) {
-            node->dfs()->dirs_manager().network_request_sync(messageId);
+            node->dfs()->dirs_manager().network_request_sync(responder);
         } else if (status == MessageStatus::Response) {
             auto last_modified_result = MessagePack::deserialize<std::uint64_t>(serialized);
 
@@ -996,7 +1020,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->dfs()->dirs_manager().network_response_sync(last_modified_result.value(), identifier);
+            node->dfs()->dirs_manager().network_response_sync(last_modified_result.value(), responder);
         }
 
         break;
@@ -1008,7 +1032,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
         }
-        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), identifier);
+        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), responder);
 
         break;
     }
@@ -1021,7 +1045,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), messageId);
+            node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto dirs_row_result =
                 MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
@@ -1031,7 +1055,7 @@ void NetworkManager::messageReceived(const std::string &message,
             }
             auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, identifier);
+            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
         }
 
         break;
@@ -1042,7 +1066,7 @@ void NetworkManager::messageReceived(const std::string &message,
         if (!res.has_value()) {
             break;
         }
-        node->dfs()->dirs_manager().network_request_all(identifier);
+        node->dfs()->dirs_manager().network_request_all(responder);
         break;
     }
 
@@ -1086,7 +1110,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, messageId);
+            node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, responder);
         } else if (status == MessageStatus::Response) {
             auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
             if (!file_state_result.has_value()) {
@@ -1097,7 +1121,7 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->network_response_file_state(file_state_result->owner_id,
                                                      file_state_result->file_id,
                                                      file_state_result->state,
-                                                     identifier);
+                                                     responder);
         }
 
         break;
@@ -1139,7 +1163,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[actor_id, file_id] = db_request_result.value();
-        node->dfs()->network_request_collection(actor_id, file_id, messageId);
+        node->dfs()->network_request_collection(actor_id, file_id, responder);
 
         break;
     }
@@ -1177,7 +1201,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
-        node->dfs()->network_change_collection(actor_id, file_id, historical_row, messageId);
+        node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
         break;
     }
 
@@ -1230,7 +1254,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!genesis_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(genesis_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, messageId, identifier);
+            node->blockchain()->addBlockFromNetwork(block_variant, responder);
         } else {
             eLog("false genesis block");
         }
@@ -1245,7 +1269,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         if (!new_block_result.value().isEmpty()) {
             auto block_variant = BlockVariant(new_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, messageId, identifier);
+            node->blockchain()->addBlockFromNetwork(block_variant, responder);
         }
         break;
     }
@@ -1282,7 +1306,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), identifier);
+        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), responder);
         break;
     }
 
@@ -1292,7 +1316,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
             break;
         }
-        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), messageId, identifier);
+        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder);
         break;
     }
 
@@ -1621,4 +1645,17 @@ NetworkPackageStorage::NetworkPackageStorage(const MessageBody &body,
     : msg_body(body)
     , prev_identifier(identifier)
     , sign(signature) {
+}
+
+std::string Responder::send_response_impl(const std::string &data_serialized,
+                                          MessageType        type,
+                                          SendMode           send_mode,
+                                          MessageStatus      status) const {
+    bool check = network_manager->send_message_checker(type, send_mode, status, *this);
+    if (!check) {
+        return "";
+    }
+
+    auto message_id = network_manager->send_message_send(data_serialized, type, send_mode, status, *this);
+    return message_id;
 }
