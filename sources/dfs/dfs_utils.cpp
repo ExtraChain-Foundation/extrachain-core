@@ -67,7 +67,10 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
 
     std::vector<Dfs::DirRow> dirRows;
     auto                     actrDirData =
-        db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {} NOT LIKE ':%'", TableName, last_modified));
+        db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {} AND state != '0' AND name NOT LIKE ':%'",
+                              TableName,
+                              last_modified,
+                              std::to_underlying(FileState::Removed)));
 
     for (auto &row : actrDirData) {
         auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
