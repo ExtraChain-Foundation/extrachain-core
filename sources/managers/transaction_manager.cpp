@@ -107,8 +107,7 @@ void TransactionManager::makeBlock() {
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
-            // node->network()->send_message(genesis.value(), MessageType::BlockchainNewBlock,
-            // SendMode::Neighbours);
+            node->network()->send_message(genesis.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
         }
 
         return;
