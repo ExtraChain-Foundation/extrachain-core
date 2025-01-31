@@ -186,7 +186,9 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
             return false;
 
         Responder responder(this->m_networkManager);
-        m_blockchain->addBlockFromNetwork(firstBlock.value(), responder);
+        auto      block = m_blockchain->addBlock(firstBlock.value());
+        // network()->send_message(block.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
+        blockchain()->status_ = BlockchainStatus::Ready;
     }
 
     create_network_need_dfs_creation = true;
@@ -456,7 +458,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Tra
     // !sign -> the конец
 
     eLog("[Blockchain] Send {}", transaction);
-    network()->send_message(transaction, MessageType::BlockchainTransaction, SendMode::Neighbours);
+    network()->send_message(transaction, MessageType::BlockchainTransaction, SendMode::Broadcast);
 
     return transaction;
 }
@@ -603,7 +605,8 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
-                m_blockchain->sync(BigNumber(), responder);
+                m_blockchain->start_check();
+                // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });
 

@@ -194,5 +194,5 @@ inline bool operator<(const Block &l, const Block &r) {
 
 inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
-           && l.transactions() == r.transactions();
+           && l.transactions() == r.transactions() && l.signatures() == r.signatures();
 }

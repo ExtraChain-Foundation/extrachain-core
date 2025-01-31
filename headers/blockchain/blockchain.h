@@ -49,10 +49,24 @@ class Responder;
 class ExtraChainNode;
 
 enum class BlockchainStatus {
-    Process,
+    // Process,
+    Started,
+    Ready,
     Sync,
-    Ready
+    Maybe
 };
+
+enum class BlockchainSyncStatus {
+    None,
+    LastInfo,
+    Blocks
+};
+
+struct BlockchainLastInfo {
+    BigNumber   last_block_id;
+    std::string last_hash;
+};
+BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash))
 
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -60,12 +74,20 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
 
+    friend class ExtraChainNode;
+
 private:
     ExtraChainNode *node;
 
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
+
+    BlockchainStatus                                    status_        = BlockchainStatus::Started;
+    BlockchainSyncStatus                                sync_status_   = BlockchainSyncStatus::None;
+    BlockchainSyncStatus                                check_status_  = BlockchainSyncStatus::None;
+    int                                                 requests_count = 0;
+    std::unordered_map<std::string, BlockchainLastInfo> last_info_;
 
 public:
     explicit Blockchain(ExtraChainNode *node);
@@ -78,6 +100,163 @@ public:
 
     void sync(const BigNumber &from = BigNumber(), std::optional<Responder> responder = std::nullopt);
     void lastSavedRequest();
+
+    BlockchainStatus status();
+
+    void start_sync() {
+        if (status_ == BlockchainStatus::Sync) {
+            return;
+        }
+
+        if (status_ != BlockchainStatus::Sync) {
+            status_ = BlockchainStatus::Sync;
+            emit statusChanged(status_);
+        }
+
+        last_info_.clear();
+        sync_status_   = BlockchainSyncStatus::LastInfo;
+        requests_count = node->network()->active_connections_count();
+        node->network()->send_message(true,
+                                      MessageType::BlockchainSyncLastInfo,
+                                      SendMode::Neighbours,
+                                      MessageStatus::Request);
+    }
+
+    void start_check() {
+        if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
+            start_sync();
+            return;
+        }
+
+        last_info_.clear();
+        check_status_  = BlockchainSyncStatus::LastInfo;
+        requests_count = node->network()->active_connections_count();
+        node->network()->send_message(true,
+                                      MessageType::BlockchainSyncLastInfo,
+                                      SendMode::Neighbours,
+                                      MessageStatus::Request);
+    }
+
+    // to slot
+    void network_status_sync_request(const Responder &responder) {
+        auto        block     = this->getLastRealBlock();
+        BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
+        std::string hash      = block.has_value() ? block->getHash() : "";
+        auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash };
+        responder.send_response(last_info,
+                                MessageType::BlockchainSyncLastInfo,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    }
+
+    // to slot
+    void network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder) {
+        if (sync_status_ != BlockchainSyncStatus::LastInfo && check_status_ != BlockchainSyncStatus::LastInfo) {
+            return;
+        }
+        // min(connections size, 5)
+
+        int count = std::min(requests_count, 3);
+
+        last_info_.insert({ *responder.identifiers().begin(), last_info });
+
+        if (sync_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
+            sync_status_  = BlockchainSyncStatus::Blocks;
+            check_status_ = BlockchainSyncStatus::None;
+            send_request_blocks();
+        }
+
+        if (check_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
+            check_status_ = BlockchainSyncStatus::Blocks;
+            send_request_blocks();
+        }
+    }
+
+    void send_request_blocks() {
+        auto block = this->getLastRealBlock();
+
+        if (last_info_.empty()) {
+            return;
+        }
+
+        // Проверяем, нужна ли синхронизация
+        bool need_sync = false;
+
+        if (!block.has_value()) {
+            // Если у нас пустой блокчейн - проверяем есть ли ноды с непустым
+            for (const auto &[_, info] : last_info_) {
+                if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+                    need_sync = true;
+                    break;
+                }
+            }
+        } else {
+            const auto my_index = block->getIndex();
+            const auto my_hash  = block->getHash();
+
+            for (const auto &[_, info] : last_info_) {
+                if (info.last_block_id > my_index
+                    || (info.last_block_id == my_index && info.last_hash != my_hash)) {
+                    need_sync = true;
+                    break;
+                }
+            }
+        }
+
+        if (!need_sync) {
+            sync_status_  = BlockchainSyncStatus::None;
+            check_status_ = BlockchainSyncStatus::None;
+            status_       = BlockchainStatus::Ready;
+            emit statusChanged(status_);
+            return; // Синхронизация не требуется
+        }
+
+        // Определяем количество нод для запроса
+        int connections = node->network()->active_connections_count();
+        int max_nodes   = std::min(connections, 3);
+
+        std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
+        for (const auto &[id, info] : last_info_) {
+            // Добавляем только ноды с непустым блокчейном
+            if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+                nodes_by_block.emplace_back(id, info.last_block_id);
+            }
+        }
+
+        // Если нет нод с непустым блокчейном - выходим
+        if (nodes_by_block.empty()) {
+            return;
+        }
+
+        if (nodes_by_block.size() > max_nodes) {
+            std::partial_sort(nodes_by_block.begin(),
+                              nodes_by_block.begin() + max_nodes,
+                              nodes_by_block.end(),
+                              [](const auto &a, const auto &b) {
+                                  return a.second > b.second;
+                              });
+            nodes_by_block.resize(max_nodes);
+        } else {
+            std::sort(nodes_by_block.begin(), nodes_by_block.end(), [](const auto &a, const auto &b) {
+                return a.second > b.second;
+            });
+        }
+
+        if (sync_status_ != BlockchainSyncStatus::Blocks) {
+            start_sync();
+            return;
+        } else {
+        }
+
+        Responder responder(node->network());
+        for (const auto &[id, _] : nodes_by_block) {
+            responder.add_identifier(id);
+        }
+
+        sync(block.has_value() ? block->getIndex() : BigNumber(0), responder);
+        check_status_ = BlockchainSyncStatus::None;
+        check_status_ = BlockchainSyncStatus::None;
+    }
 
 private:
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
@@ -262,9 +441,15 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
-    void addBlockFromNetwork(const BlockVariant &block, const Responder &responder);
+    void addBlockFromNetwork(const BlockVariant &block,
+                             const Responder    &responder,
+                             const NetworkPackageStorage,
+                             bool resend);
     void syncResponseFromNetwork(const BigNumber fromBlock, const Responder &responder);
-    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks, const Responder &responder);
+    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks,
+                                       const Responder          &responder,
+                                       const NetworkPackageStorage);
+    void statusChanged(BlockchainStatus status);
 
     /**
      * @brief possibleMiningChange
@@ -281,8 +466,13 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const Responder &responder);
+    void addBlockNetwork(const BlockVariant &block,
+                         const Responder    &responder,
+                         const NetworkPackageStorage,
+                         bool resend);
     void syncResponse(const BigNumber fromBlock, const Responder &responder);
-    void syncResponseVector(std::vector<BlockVariant> blocks, const Responder &responder);
+    void syncResponseVector(std::vector<BlockVariant>    blocks,
+                            const Responder             &responder,
+                            const NetworkPackageStorage &package_storage);
     void process();
 };

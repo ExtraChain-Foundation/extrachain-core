@@ -666,11 +666,27 @@ bool NetworkManager::isActiveConnectionExists() {
         return false;
 
     for (const auto &el : *connectionsLocked) {
-        if (el->is_active())
+        if (el->is_active()) {
             return true;
+        }
     }
 
     return false;
+}
+
+int NetworkManager::active_connections_count() {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty())
+        return 0;
+
+    int count = 0;
+    for (const auto &el : *connectionsLocked) {
+        if (el->is_active()) {
+            count++;
+        }
+    }
+
+    return count;
 }
 
 bool NetworkManager::checkMsgCount(const std::string &msg) {
@@ -1246,31 +1262,34 @@ void NetworkManager::messageReceived(const std::string &message,
            }
        */
 
-    case MessageType::BlockchainGenesisBlock: {
-        auto genesis_block_result = MessagePack::deserialize<GenesisBlock>(serialized);
-        if (!genesis_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for genesis block", type);
-            break;
-        }
-        if (!genesis_block_result.value().isEmpty()) {
-            auto block_variant = BlockVariant(genesis_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, responder);
-        } else {
-            eLog("false genesis block");
-        }
-        break;
-    }
-
     case MessageType::BlockchainNewBlock: {
-        auto new_block_result = MessagePack::deserialize<Block>(serialized);
+        auto new_block_result = MessagePack::deserialize<BlockVariant>(serialized);
+
         if (!new_block_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for new block", type);
             break;
         }
+
         if (!new_block_result.value().isEmpty()) {
-            auto block_variant = BlockVariant(new_block_result.value());
-            node->blockchain()->addBlockFromNetwork(block_variant, responder);
+            // need verify:
+            node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
         }
+
+        break;
+    }
+
+    case MessageType::BlockchainSyncBlock: {
+        auto sync_block_result = MessagePack::deserialize<BlockVariant>(serialized);
+
+        if (!sync_block_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for new block", type);
+            break;
+        }
+
+        if (!sync_block_result.value().isEmpty()) {
+            node->blockchain()->addBlockFromNetwork(sync_block_result.value(), responder, package_data, false);
+        }
+
         break;
     }
 
@@ -1282,6 +1301,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
         node->transactionManager()->addTransaction(transaction_result.value());
+        sendBrodcastMessageFurther(package_data);
         break;
     }
 
@@ -1316,8 +1336,30 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
             break;
         }
-        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder);
+        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder, package_data);
         break;
+    }
+
+    case MessageType::BlockchainSyncLastInfo: {
+        if (status == MessageStatus::Request) {
+            auto last_info_result = MessagePack::deserialize<bool>(serialized);
+            if (!last_info_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->blockchain()->network_status_sync_request(responder);
+            break;
+        } else if (status == MessageStatus::Response) {
+            auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
+            if (!last_info_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->blockchain()->network_status_sync_response(last_info_result.value(), responder);
+            break;
+        }
     }
 
     case MessageType::BlockchainCoinReward: {
@@ -1382,8 +1424,12 @@ void NetworkManager::removeWsConnection() {
         return;
 
     auto connection = qobject_cast<SocketService *>(QObject::sender());
-    auto removed    = m_connections->erase(connection);
-    eLog("[WS] Removed {}", fmt::ptr(connection));
+
+    {
+        auto connections_locked = connections();
+        auto removed            = connections_locked->erase(connection);
+        eLog("[WS] Removed {}", fmt::ptr(connection));
+    }
     //    m_reconnections.remove(NetworkReconnect {
     //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket
     //        });

@@ -23,8 +23,8 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor.h"
-#include "utils/exc_utils.h"
+#include "blockchain/actor_id.h"
+// #include "utils/exc_utils.h"
 
 enum class MessageType {
     Custom     = 0,
@@ -33,13 +33,15 @@ enum class MessageType {
     ActorCount = 3,
     ActorAll   = 4,
 
-    BlockchainGenesisBlock = 30,
-    BlockchainNewBlock     = 31,
+    BlockchainNewBlock     = 30,
+    BlockchainSyncBlock    = 31,
     BlockchainTransaction  = 32,
     BlockchainCoinReward   = 35,
     BlockchainRequestBlock = 36,
     BlockchainSync         = 37,
     BlockchainLastSaved    = 38,
+
+    BlockchainSyncLastInfo = 40, // last id, last hash
 
     BlockchainSyncBlocks = 49,
 

@@ -96,7 +96,7 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     // eLog("[Blockchain] Request sync from {}", fromBlock);
 
     if (!responder.has_value()) {
-        eWarning("[Blockchain] all parent sync");
+        eFatal("[Blockchain] all parent sync");
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
                                       SendMode::Neighbours,
@@ -179,21 +179,31 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
 
-void Blockchain::syncResponseVector(std::vector<BlockVariant> blocks, const Responder &responder) {
+void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
+                                    const Responder             &responder,
+                                    const NetworkPackageStorage &package_storage) {
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
+
     eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
          blocks.size(),
          blocks.front().getIndex(),
          blocks.back().getIndex());
+
+    status_ = BlockchainStatus::Maybe;
     for (const auto &block : blocks) {
-        addBlockNetwork(block, responder);
+        addBlockNetwork(block, responder, package_storage, false);
     }
+    start_check();
 }
 
 void Blockchain::lastSavedRequest() {
     // node->network()->send_message(0, MessageType::BlockchainLastSaved, MessageStatus::Request);
+}
+
+BlockchainStatus Blockchain::status() {
+    return status_;
 }
 
 std::pair<Transaction, BigNumber> Blockchain::getTxBySender(const ActorId &id, const TokenId &token) {
@@ -230,17 +240,18 @@ std::set<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber 
 }
 
 bool Blockchain::sendBlock(const BlockVariant &block) const {
+    eFatal("NO sendBlock");
     if (block.isEmpty()) {
         return false;
     }
 
-    if (block.isGenesisBlock()) {
-        auto genesisBlock = block.getGenesisBlockConst();
-        node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock, SendMode::Neighbours);
-    } else {
-        auto dataBlock = block.getBlockConst();
-        node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock, SendMode::Neighbours);
-    }
+    // if (block.isGenesisBlock()) {
+    //     auto genesisBlock = block.getGenesisBlockConst();
+    //     node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock, SendMode::Neighbours);
+    // } else {
+    //     auto dataBlock = block.getBlockConst();
+    //     node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock, SendMode::Neighbours);
+    // }
 
     // eLog("Send {}", block);
 
@@ -481,13 +492,14 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         }
 
         if (!block.isGenesisBlock() && !prevBlock.has_value()) {
-            sync();
+            // sync();
+            start_sync();
             return std::unexpected(BlockError::Invalid);
         }
 
         if (!block.isGenesisBlock() && blockId > prevBlock->getIndex() + 1) {
             eLog("[Blockchain] New block id is greater than last id, sync request");
-            sync();
+            start_sync();
             return std::unexpected(BlockError::Invalid);
         }
 
@@ -511,7 +523,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
             // TODO: hashs incoming, not sync, remove block
             // TODO: package for removing last block?
-            sync(blockId - 1); // TODO: request only chel who sended block?
+            start_sync();
+            // sync(blockId - 1); // TODO: request only chel who sended block?
             return std::unexpected(BlockError::Invalid);
         }
     }
@@ -821,7 +834,15 @@ BigNumber Blockchain::getBlockCount() {
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant &block, const Responder &responder) {
+void Blockchain::addBlockNetwork(const BlockVariant         &block,
+                                 const Responder            &responder,
+                                 const NetworkPackageStorage package,
+                                 bool                        resend) {
+    if (status_ == BlockchainStatus::Sync && block.getIndex() != BigNumber(0)) {
+        //
+        return;
+    }
+
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
         // eLog("!!!!!!!!!!!");
     }
@@ -863,7 +884,16 @@ void Blockchain::addBlockNetwork(const BlockVariant &block, const Responder &res
     }
 
     // if (res->getType() != BlockType::Dummy) {
-    sendBlock(res.value());
+    // sendBlock(res.value());
+
+    if (resend) {
+        if (block == res.value()) {
+            node->network()->sendBrodcastMessageFurther(package);
+        } else {
+            node->network()->send_message(res.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
+        }
+    }
+    // broadcast another block
     // }
     // sendBlockByNumber(block.getIndex());
 

@@ -129,13 +129,27 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 4. Checking for duplicate connections
     bool duplicate = false;
+
     {
         auto connections_locked = *node->network()->connections();
-        std::for_each(connections_locked->begin(),
-                      connections_locked->end(),
-                      [&duplicate, this](SocketService *el) {
-                          duplicate = duplicate || (this != el && el->identifier() == identifier_);
-                      });
+        for (auto el : *connections_locked) {
+            // pointers
+            if (this == el) {
+                continue;
+            }
+
+            if (el->identifier() != identifier_) {
+                continue;
+            }
+
+            if (el->is_active()) {
+                duplicate = true;
+            }
+
+            if (!el->is_active()) {
+                el->closeSocket();
+            }
+        }
     }
 
     if (duplicate) {

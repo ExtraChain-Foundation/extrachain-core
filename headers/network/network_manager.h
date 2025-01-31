@@ -150,11 +150,6 @@ public:
         return send_result;
     }
 
-    std::string send_response_impl(const std::string& data_serialized,
-                                   MessageType        type,
-                                   SendMode           send_mode,
-                                   MessageStatus      status) const;
-
     const std::string& message_id() const {
         return message_id_;
     }
@@ -184,6 +179,11 @@ public:
     }
 
 private:
+    std::string send_response_impl(const std::string& data_serialized,
+                                   MessageType        type,
+                                   SendMode           send_mode,
+                                   MessageStatus      status) const;
+
     MessageType message_type;
     // MessageStatus                   message_status;
     std::unordered_set<std::string> identifiers_;
@@ -311,6 +311,7 @@ public:
                      const std::string& receiver_identifier);
     void sendFromCache();
     bool isActiveConnectionExists();
+    int  active_connections_count();
 
     void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
 

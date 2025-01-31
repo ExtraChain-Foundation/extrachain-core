@@ -63,13 +63,20 @@ void TransactionManager::makeBlock() {
     auto lastBlock     = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
-        eLog("[TransactionManager] last or real last block is not exists");
+        eLog("[Blockchain] last or real last block is not exists");
         // TODO: request once!
         // node->blockchain()->sync();
         return;
     }
     if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
-        eLog("[TransactionManager] last or real last block is empty");
+        eLog("[Blockchain] last or real last block is empty");
+        return;
+    }
+
+    if (node->blockchain()->status() == BlockchainStatus::Sync) {
+        eLog("[Blockchain] Blockchain: try to sync... Last block: {}, type: {}",
+             lastRealBlock->getIndex(),
+             lastRealBlock->getType());
         return;
     }
 
@@ -100,7 +107,8 @@ void TransactionManager::makeBlock() {
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
-            node->blockchain()->sendBlock(genesis.value());
+            // node->network()->send_message(genesis.value(), MessageType::BlockchainNewBlock,
+            // SendMode::Neighbours);
         }
 
         return;
@@ -137,7 +145,7 @@ void TransactionManager::makeBlock() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
-    node->blockchain()->sendBlock(blockVariant);
+    node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
