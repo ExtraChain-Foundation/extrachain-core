@@ -75,7 +75,7 @@ void DataMiningManager::requestCoinReward() {
     //      totalBytes.second,
     //      node->blockchain()->getBlocksStored());
 
-    if (amount <= 0) {
+    if (amount == 0) {
         // eLog("[Reward] Can't send amount, because amount = 0");
         return;
     }
@@ -111,6 +111,7 @@ void DataMiningManager::requestCoinReward() {
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
+    node->dfs()->refresh_calculate();
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
@@ -138,6 +139,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
     auto res              = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
                + (blocksStored / BigNumberFloat(lastIndex) * 100);
+    res *= KoefReward;
 
     // eLog(
     //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Blocks ratio: {}/{}, Multiplier:

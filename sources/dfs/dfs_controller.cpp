@@ -1166,8 +1166,20 @@ std::uint64_t DfsController::calculateSizeTaken(const std::string &folder) const
     std::size_t size = 0;
 
     for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
+        const auto entry_path = entry.path().string();
+
         if (entry.is_regular_file()) {
-            size += entry.file_size();
+            const bool isMapFile = entry_path.find(Dfs::Basic::fsMapName) != std::string::npos;
+            if (isMapFile && folder != Dfs::Basic::fsActrRoot) {
+                std::string actor = folder.substr(folder.find('/') + 1);
+                if (auto rows = Dfs::Tables::ActorDirFile::get_dir_rows(ActorId(actor)); rows) {
+                    for (const auto &row : rows.value()) {
+                        if (row.state == Dfs::FileState::Ready) {
+                            size += row.size;
+                        }
+                    }
+                }
+            }
         } else if (entry.is_directory()) {
             size += calculateSizeTaken(entry.path().string());
         }
