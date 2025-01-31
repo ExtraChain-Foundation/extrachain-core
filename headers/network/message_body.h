@@ -24,7 +24,7 @@
 #include <msgpack.hpp>
 
 #include "blockchain/actor_id.h"
-// #include "utils/exc_utils.h"
+#include "utils/exc_utils.h"
 
 enum class MessageType {
     Custom     = 0,
