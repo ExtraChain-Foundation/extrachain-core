@@ -1349,7 +1349,6 @@ void NetworkManager::messageReceived(const std::string &message,
             }
 
             node->blockchain()->network_status_sync_request(responder);
-            break;
         } else if (status == MessageStatus::Response) {
             auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
             if (!last_info_result.has_value()) {
@@ -1358,8 +1357,8 @@ void NetworkManager::messageReceived(const std::string &message,
             }
 
             node->blockchain()->network_status_sync_response(last_info_result.value(), responder);
-            break;
         }
+        break;
     }
 
     case MessageType::BlockchainCoinReward: {
