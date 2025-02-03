@@ -106,49 +106,9 @@ public:
 
     BlockchainStatus status();
 
-    void start_sync() {
-        // start timer, after end -> again request
-        if (status_ == BlockchainStatus::Sync) {
-            eLog("BC 11 start_sync return");
-            return;
-        }
+    void start_sync();
 
-        timer_sync->stop();
-        timer_sync->start(10000);
-
-        if (status_ != BlockchainStatus::Sync) {
-            status_ = BlockchainStatus::Sync;
-            emit statusChanged(status_);
-        }
-
-        last_info_.clear();
-        sync_status_   = BlockchainSyncStatus::LastInfo;
-        requests_count = node->network()->active_connections_count();
-        node->network()->send_message(true,
-                                      MessageType::BlockchainSyncLastInfo,
-                                      SendMode::Neighbours,
-                                      MessageStatus::Request);
-
-        eLog("BC 10 start_sync");
-    }
-
-    void start_check() {
-        if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
-            start_sync();
-            eLog("BC 12 start_check return");
-            return;
-        }
-
-        last_info_.clear();
-        check_status_  = BlockchainSyncStatus::LastInfo;
-        requests_count = node->network()->active_connections_count();
-        node->network()->send_message(true,
-                                      MessageType::BlockchainSyncLastInfo,
-                                      SendMode::Neighbours,
-                                      MessageStatus::Request);
-
-        eLog("BC 9 start_check");
-    }
+    void start_check();
 
     // to slot
     void network_status_sync_request(const Responder &responder) {

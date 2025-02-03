@@ -206,6 +206,185 @@ BlockchainStatus Blockchain::status() {
     return status_;
 }
 
+void Blockchain::start_sync() {
+    // start timer, after end -> again request
+    if (status_ == BlockchainStatus::Sync) {
+        eLog("BC 11 start_sync return");
+        return;
+    }
+
+    timer_sync->stop();
+    timer_sync->start(10000);
+
+    if (status_ != BlockchainStatus::Sync) {
+        status_ = BlockchainStatus::Sync;
+        emit statusChanged(status_);
+    }
+
+    last_info_.clear();
+    sync_status_   = BlockchainSyncStatus::LastInfo;
+    requests_count = node->network()->active_connections_count();
+    node->network()->send_message(true,
+                                  MessageType::BlockchainSyncLastInfo,
+                                  SendMode::Neighbours,
+                                  MessageStatus::Request);
+
+    eLog("BC 10 start_sync");
+}
+
+void Blockchain::start_check() {
+    if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
+        start_sync();
+        eLog("BC 12 start_check return");
+        return;
+    }
+
+    last_info_.clear();
+    check_status_  = BlockchainSyncStatus::LastInfo;
+    requests_count = node->network()->active_connections_count();
+    node->network()->send_message(true,
+                                  MessageType::BlockchainSyncLastInfo,
+                                  SendMode::Neighbours,
+                                  MessageStatus::Request);
+
+    eLog("BC 9 start_check");
+}
+
+void Blockchain::network_status_sync_request(const Responder &responder) {
+    auto        block     = this->getLastRealBlock();
+    BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
+    std::string hash      = block.has_value() ? block->getHash() : "";
+    auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash };
+    eLog("network_status_sync_request, send: {}", last_info);
+    responder.send_response(last_info,
+                            MessageType::BlockchainSyncLastInfo,
+                            SendMode::Focused,
+                            MessageStatus::Response);
+}
+
+void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder) {
+    if (sync_status_ != BlockchainSyncStatus::LastInfo && check_status_ != BlockchainSyncStatus::LastInfo) {
+        return;
+    }
+    // min(connections size, 5)
+
+    int count = std::min(requests_count, 5);
+
+    last_info_.insert({ *responder.identifiers().begin(), last_info });
+
+    if (sync_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
+        sync_status_  = BlockchainSyncStatus::Blocks;
+        check_status_ = BlockchainSyncStatus::None;
+        eLog("BC 6 sync status");
+        send_request_blocks();
+    }
+
+    if (check_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
+        check_status_ = BlockchainSyncStatus::Blocks;
+        eLog("BC 7 check status");
+        send_request_blocks();
+    }
+}
+
+void Blockchain::send_request_blocks() {
+    auto block = this->getLastRealBlock();
+
+    if (last_info_.empty()) {
+        eLog("BC 5");
+        return;
+    }
+
+    // Проверяем, нужна ли синхронизация
+    bool need_sync = false;
+
+    if (!block.has_value()) {
+        // Если у нас пустой блокчейн - проверяем есть ли ноды с непустым
+        for (const auto &[_, info] : last_info_) {
+            if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+                need_sync = true;
+                break;
+            }
+        }
+    } else {
+        const auto my_index = block->getIndex();
+        const auto my_hash  = block->getHash();
+
+        for (const auto &[_, info] : last_info_) {
+            if (info.last_block_id > my_index) {
+                need_sync = true;
+                break;
+            }
+            if (info.last_block_id == my_index && info.last_hash != my_hash) {
+                need_sync = true;
+                break;
+            }
+        }
+    }
+
+    if (!need_sync) {
+        sync_status_  = BlockchainSyncStatus::None;
+        check_status_ = BlockchainSyncStatus::None;
+        status_       = BlockchainStatus::Ready;
+        emit statusChanged(status_);
+        timer_sync->stop();
+
+        eLog("BC 4");
+        return; // end sync
+    }
+
+    int connections = requests_count;
+    int max_nodes   = std::min(connections, 5);
+
+    std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
+    for (const auto &[id, info] : last_info_) {
+        // Добавляем только ноды с непустым блокчейном
+        if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+            nodes_by_block.emplace_back(id, info.last_block_id);
+        }
+    }
+
+    // Если нет нод с непустым блокчейном - выходим
+    if (nodes_by_block.empty()) {
+        eLog("BC 3");
+        sync_status_  = BlockchainSyncStatus::None;
+        check_status_ = BlockchainSyncStatus::None;
+        status_       = BlockchainStatus::Ready;
+        emit statusChanged(status_);
+        timer_sync->stop();
+
+        return;
+    }
+
+    if (nodes_by_block.size() > max_nodes) {
+        std::partial_sort(nodes_by_block.begin(),
+                          nodes_by_block.begin() + max_nodes,
+                          nodes_by_block.end(),
+                          [](const auto &a, const auto &b) {
+                              return a.second > b.second;
+                          });
+        nodes_by_block.resize(max_nodes);
+    } else {
+        std::sort(nodes_by_block.begin(), nodes_by_block.end(), [](const auto &a, const auto &b) {
+            return a.second > b.second;
+        });
+    }
+
+    if (sync_status_ != BlockchainSyncStatus::Blocks) {
+        start_sync();
+        eLog("BC 1");
+        return;
+    }
+
+    eLog("BC 2");
+    Responder responder(node->network());
+    for (const auto &[id, _] : nodes_by_block) {
+        responder.add_identifier(id);
+    }
+
+    sync(block.has_value() ? block->getIndex() : BigNumber(0), responder);
+    check_status_ = BlockchainSyncStatus::None;
+}
+
 std::pair<Transaction, BigNumber> Blockchain::getTxBySender(const ActorId &id, const TokenId &token) {
     return blockIndex.getLastTxBySender(id, token);
 }
