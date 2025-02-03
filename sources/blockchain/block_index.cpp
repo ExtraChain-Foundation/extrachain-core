@@ -25,10 +25,9 @@
 #include "blockchain/blockchain.h"
 
 BlockIndex::BlockIndex() {
-    this->folderName  = BlockchainConst::BLOCK_INDEX_FOLDER_NAME;
     this->sectionSize = Config::DataStorage::SECTION_SIZE;
 
-    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX) + '/' + "last_id");
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
         auto last_id_result  = BigNumber::create(last_id_content.toStdString());
@@ -36,26 +35,15 @@ BlockIndex::BlockIndex() {
             lastSavedId  = last_id_result.value();
             firstSavedId = 0;
         }
+    } else {
+        QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
     }
 
     // last id > 0 -> first id
     // if no zero block or no last block ->
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + '/' + folderName));
-}
-
-BlockIndex::BlockIndex(const BigNumber &recordsLimit)
-    : BlockIndex() {
-    this->recordsLimit = recordsLimit;
-    eLog("[BlockIndex] constructor: recordLimits: {}", recordsLimit);
-}
-
-BlockIndex::BlockIndex(const QString &folderName) {
-    eLog("[BlockIndex] constructor: folder name: {}", folderName);
-}
-
-BlockIndex::BlockIndex(const QString &folderName, const BigNumber &recordsLimit)
-    : BlockIndex(folderName) {
-    this->recordsLimit = recordsLimit;
+    if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
+        QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    }
 }
 
 void BlockIndex::setBlockCompress(bool newBlockCompress) {
@@ -117,7 +105,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getGenesisBlockById(const Bi
 
 std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber &id) const {
     if (id < 0) {
-        eFatal("getBlockById < 0");
+        return std::unexpected(BlockError::NotExists);
+        // eFatal("getBlockById < 0");
     }
 
     auto block = this->getById(id);
@@ -440,7 +429,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         if (id > this->lastSavedId) {
             this->lastSavedId  = id;
             this->firstSavedId = 0;
-            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX) + '/' + "last_id");
+            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
             file.open(QFile::WriteOnly);
             file.write(this->lastSavedId.to_string().data());
             file.close();
@@ -498,7 +487,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         if (id > this->lastSavedId) {
             this->lastSavedId  = id;
             this->firstSavedId = 0;
-            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX) + '/' + "last_id");
+            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
             file.open(QFile::WriteOnly);
             file.write(this->lastSavedId.to_string().data());
             file.close();
@@ -532,9 +521,9 @@ int BlockIndex::removeById(const BigNumber &id) {
 
 int BlockIndex::removeById(const BlockVariant &block) {
     //    block.getIndex(), block.getType()
-    BigNumber id             = block.getIndex();
-    BlockType typeBlock      = block.getType();
-    auto      countTxInBlock = block.transactions().size();
+    BigNumber id = block.getIndex();
+    // BlockType typeBlock      = block.getType();
+    // auto      countTxInBlock = block.transactions().size();
 
     // if (block.getType() != BlockType::Dummy) {
     //     eLog("[BlockIndex] Removing block with id {} {}", id, block.getType());
@@ -551,7 +540,8 @@ int BlockIndex::removeById(const BlockVariant &block) {
     QFile file(pathToFile);
 
     if (file.exists() && !file.isOpen()) {
-        bool isRemoved = file.remove();
+        bool isRemoved    = file.remove();
+        this->lastSavedId = this->lastSavedId - 1;
         // if (isRemoved) {
         //     this->records--;
         // }
@@ -559,9 +549,12 @@ int BlockIndex::removeById(const BlockVariant &block) {
         // if (isRemoved && (typeBlock == BlockType::Data || typeBlock == BlockType::Genesis)) {
         //     countTransactions -= countTxInBlock;
         // }
+    } else {
+        if (file.exists()) {
+            eFatal("Blockchain remove block error");
+        }
     }
 
-    this->lastSavedId = this->lastSavedId - 1;
     return 0;
 }
 
@@ -586,11 +579,7 @@ void BlockIndex::removeAll() {
 }
 
 std::string BlockIndex::getFolderPath() const {
-    return BlockchainConst::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
-}
-
-std::string BlockIndex::getFolderName() const {
-    return this->folderName;
+    return BlockchainConst::BLOCKCHAIN_FOLDER;
 }
 
 BigNumber BlockIndex::getFirstSavedId() const {

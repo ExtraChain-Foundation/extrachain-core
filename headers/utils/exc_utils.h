@@ -819,6 +819,7 @@ namespace BlockchainConst {
     static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
     static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
     static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
+    static const std::string BLOCKCHAIN_FOLDER       = "blockchain/index/" + BLOCK_INDEX_FOLDER_NAME;
 
     // Dfs
     static const int DATA_OFFSET = 512;

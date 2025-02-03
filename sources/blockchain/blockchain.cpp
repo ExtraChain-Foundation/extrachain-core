@@ -544,7 +544,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(const Actor<KeyPrivate> &actor) {
-    if (blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
+    if (blockIndex.getFirstSavedId() != -1 || blockIndex.getLastSavedId() != -1) {
         return std::unexpected(BlockError::CantCreateFirst);
     }
 

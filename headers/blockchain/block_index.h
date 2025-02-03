@@ -29,15 +29,10 @@
 class EXTRACHAIN_EXPORT BlockIndex {
 public:
     BlockIndex();
-    explicit BlockIndex(const BigNumber &recordsLimit);
+    // explicit BlockIndex(const BigNumber &recordsLimit);
 
-    /// custom folder name
-    explicit BlockIndex(const QString &folderName);
-    explicit BlockIndex(const QString &folderName, const BigNumber &recordsLimit);
-
-    std::string folderName;                   // set in subclasses
-    int         sectionSize;                  // todo: 0 = use only one folder
-    BigNumber   recordsLimit = BigNumber(-1); // -1 = no limit
+    int       sectionSize;                  // todo: 0 = use only one folder
+    BigNumber recordsLimit = BigNumber(-1); // -1 = no limit
 
     // current state //
     // BigNumber records           = BigNumber(0);
@@ -125,7 +120,6 @@ private:
     bool                                    hasRecordLimit() const;
     // bool                                    recordLimitIsReached() const;
     std::string                             getFolderPath() const;
-    std::string                             getFolderName() const;
     BigNumber                               calcSection(BigNumber id) const;
     std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
