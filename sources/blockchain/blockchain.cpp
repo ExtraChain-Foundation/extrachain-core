@@ -182,6 +182,11 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
 void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
+    static bool busy = false;
+    if (busy) {
+        return;
+    }
+
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
@@ -201,9 +206,12 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
             // blockIndex.removeById(block.getIndex());
             // blockIndex.removeById(block.getIndex() - 1);
             start_sync();
+            busy = false;
             return;
         }
     }
+
+    busy = false;
     start_check();
 }
 
@@ -396,7 +404,8 @@ void Blockchain::send_request_blocks() {
         responder.add_identifier(id);
     }
 
-    sync(block.has_value() ? block->getIndex() : BigNumber(0), responder);
+    auto last_block = this->getLastRealBlock();
+    sync(last_block.has_value() ? last_block->getIndex() + 1 : BigNumber(0), responder);
     check_status_ = BlockchainSyncStatus::None;
 }
 
