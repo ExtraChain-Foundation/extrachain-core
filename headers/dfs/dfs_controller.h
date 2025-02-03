@@ -60,6 +60,11 @@ namespace Dfs {
         Broadcast,
         Sync
     };
+
+    struct DfsSize {
+        std::size_t all   = 0;
+        std::size_t local = 0;
+    };
 } // namespace Dfs
 
 class ThreadAddFiles;
@@ -250,8 +255,7 @@ private:
                                                       CollectionOperation          type,
                                                       const Dfs::DataSecurityData &security_data);
 
-    std::uint64_t calculateSizeTaken(const std::string &folder = DfsB::fsActrRoot) const;
-    std::uint64_t calculateFilesSize(const std::string &folder = DfsB::fsActrRoot) const;
+    Dfs::DfsSize calculate_size() const;
 
     void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 

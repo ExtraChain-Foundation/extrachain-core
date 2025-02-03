@@ -551,8 +551,9 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 }
 
 void DfsController::refresh_calculate() {
-    m_sizeTaken    = calculateSizeTaken();
-    m_totalDfsSize = calculateFilesSize();
+    auto dfs_size  = calculate_size();
+    m_sizeTaken    = dfs_size.local;
+    m_totalDfsSize = dfs_size.all;
 }
 
 ExpectedDirHistoricalRow DfsController::add_collection_row(const ActorId               &owner_id,
@@ -1155,45 +1156,26 @@ void DfsController::exportFile(const std::string &pathTo,
     }
 }
 
-std::uint64_t DfsController::calculateSizeTaken(const std::string &folder) const {
-    std::size_t size = 0;
+Dfs::DfsSize DfsController::calculate_size() const {
+    Dfs::DfsSize dfs_size;
 
-    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
-        const auto entry_path = entry.path().string();
+    auto all_actors = node->actorIndex()->allActors();
+    for (const auto &actor_id : all_actors) {
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor_id);
+        if (!dir_rows.has_value()) {
+            continue;
+        }
 
-        if (entry.is_regular_file()) {
-            const bool isMapFile = entry_path.find(Dfs::Basic::fsMapName) != std::string::npos;
-            if (isMapFile && folder != Dfs::Basic::fsActrRoot) {
-                std::string actor = folder.substr(folder.find('/') + 1);
-                if (auto rows = Dfs::Tables::ActorDirFile::get_dir_rows(ActorId(actor)); rows) {
-                    for (const auto &row : rows.value()) {
-                        if (row.state == Dfs::FileState::Ready) {
-                            size += row.size;
-                        }
-                    }
-                }
+        for (const auto &row : dir_rows.value()) {
+            dfs_size.all += row.size;
+
+            if (row.state == Dfs::FileState::Ready) {
+                dfs_size.local += row.size;
             }
-        } else if (entry.is_directory()) {
-            size += calculateSizeTaken(entry.path().string());
         }
     }
 
-    return size;
-}
-
-std::uint64_t DfsController::calculateFilesSize(const std::string &folder) const {
-    std::size_t size = 0;
-
-    for (std::filesystem::directory_entry const &entry : std::filesystem::directory_iterator(folder)) {
-        if (entry.path().filename() == Dfs::Basic::fsMapName) {
-            const auto actorId = ActorId(entry.path().parent_path().filename().string());
-            size += DfsT::ActorDirFile::totalFileSize(actorId);
-        } else if (entry.is_directory()) {
-            size += calculateFilesSize(entry.path().string());
-        }
-    }
-
-    return size;
+    return dfs_size;
 }
 
 std::uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const {
@@ -1232,7 +1214,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
 }
 
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) const {
-    const auto            dfsSize = calculateSizeTaken();
+    const auto            dfsSize = calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);
 }
