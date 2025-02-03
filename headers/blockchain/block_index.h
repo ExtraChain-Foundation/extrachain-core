@@ -106,6 +106,8 @@ public:
     int         removeById(const BlockVariant &block);
     std::string buildFilePath(const BigNumber &id) const;
 
+    void update_last_id(const BigNumber &id);
+
 private:
     std::pair<Transaction, BigNumber> getLastTxByParam(const std::string  &data,
                                                        SearchEnum::TxParam param,

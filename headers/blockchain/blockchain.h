@@ -296,6 +296,7 @@ public:
     void getSmContractMembers(const BlockVariant &block) const;
 
 signals:
+    void need_check();
     void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
@@ -306,8 +307,8 @@ signals:
                              const NetworkPackageStorage,
                              bool resend);
     void syncResponseFromNetwork(const BigNumber fromBlock, const Responder &responder);
-    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks,
-                                       const Responder          &responder,
+    void syncResponseVectorFromNetwork(const std::string &blocks,
+                                       const Responder   &responder,
                                        const NetworkPackageStorage);
     void statusChanged(BlockchainStatus status);
 
@@ -316,6 +317,9 @@ signals:
      * @param possibleMinig
      */
     void possibleMiningChange(const bool &possibleMinig);
+
+    void network_status_sync_request_signal(const Responder &responder);
+    void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
 
 public:
     BigNumber getBlockCount();
@@ -330,10 +334,11 @@ public slots:
                                                             const Responder    &responder,
                                                             const NetworkPackageStorage,
                                                             bool resend);
-    void                                    syncResponse(const BigNumber fromBlock, const Responder &responder);
-    void                                    syncResponseVector(std::vector<BlockVariant>    blocks,
-                                                               const Responder             &responder,
-                                                               const NetworkPackageStorage &package_storage);
-    void                                    timer_sync_tick();
-    void                                    process();
+
+    void syncResponse(const BigNumber fromBlock, const Responder &responder);
+    void syncResponseVector(const std::string           &blocks,
+                            const Responder             &responder,
+                            const NetworkPackageStorage &package_storage);
+    void timer_sync_tick();
+    void process();
 };

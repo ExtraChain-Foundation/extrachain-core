@@ -1331,11 +1331,13 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainSyncBlocks: {
-        auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
+        // auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
+        auto sync_blocks_result = MessagePack::deserialize<std::string>(serialized);
         if (!sync_blocks_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
             break;
         }
+
         node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder, package_data);
         break;
     }
@@ -1348,7 +1350,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->blockchain()->network_status_sync_request(responder);
+            node->blockchain()->network_status_sync_request_signal(responder);
         } else if (status == MessageStatus::Response) {
             auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
             if (!last_info_result.has_value()) {
@@ -1356,7 +1358,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->blockchain()->network_status_sync_response(last_info_result.value(), responder);
+            node->blockchain()->network_status_sync_response_signal(last_info_result.value(), responder);
         }
         break;
     }

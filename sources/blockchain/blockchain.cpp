@@ -129,7 +129,8 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
     if (from < 0)
         from = 0;
 
-    std::vector<BlockVariant> blocks;
+    // std::vector<BlockVariant> blocks;
+    std::vector<std::pair<BigNumber, std::string>> blocks;
     blocks.reserve(1000);
 
     for (; from <= lastIndex; from++) {
@@ -144,10 +145,21 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
             continue;
         }
 
-        blocks.push_back(block.value());
+        auto  block_path = blockIndex.buildFilePath(block->getIndex());
+        QFile file(block_path.c_str());
+        auto  is_open = file.open(QFile::ReadOnly);
+        if (!is_open) {
+            return;
+        }
+        auto content = file.readAll().toStdString();
+        blocks.push_back({ block->getIndex(), content });
+        // blocks.push_back(block.value());
 
         if (blocks.size() >= 1000) {
-            responder.send_response(blocks,
+            auto ser = MessagePack::serialize(blocks);
+            auto res = qCompress(QByteArray::fromStdString(ser));
+
+            responder.send_response(res.toStdString(),
                                     MessageType::BlockchainSyncBlocks,
                                     SendMode::Focused,
                                     MessageStatus::Response);
@@ -175,12 +187,18 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
         return;
     }
 
-    responder.send_response(blocks, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
+    auto ser = MessagePack::serialize(blocks);
+    auto res = qCompress(QByteArray::fromStdString(ser));
+
+    responder.send_response(res.toStdString(),
+                            MessageType::BlockchainSyncBlocks,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
 
-void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
+void Blockchain::syncResponseVector(const std::string           &blocks_,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
     static bool busy = false;
@@ -188,35 +206,50 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
         return;
     }
 
+    auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
+    auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(des);
+    if (!blocks_result.has_value()) {
+        return;
+    }
+    auto blocks = blocks_result.value();
+
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
 
     eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
          blocks.size(),
-         blocks.front().getIndex(),
-         blocks.back().getIndex());
+         blocks.front().first,
+         blocks.back().first);
 
     status_ = BlockchainStatus::Maybe;
-    for (const auto &block : blocks) {
-        auto res = addBlockNetwork(block, responder, package_storage, false);
-        if (!res.has_value()) {
-            if (res.error() == BlockError::BlockEqual || res.error() == BlockError::AlreadyExists) {
-                continue;
-            }
 
-            eLog("[Blockchain] Incorrect block vector sync, try to sync {} with error {}",
-                 block.getIndex(),
-                 res.error());
-            remove_last_block();
-            remove_last_block();
-            // blockIndex.removeById(block.getIndex());
-            // blockIndex.removeById(block.getIndex() - 1);
-            start_sync();
-            busy = false;
-            return;
-        }
+    for (const auto &block : blocks) {
+        auto  block_path = blockIndex.buildFilePath(block.first);
+        QFile file(block_path.c_str());
+        file.open(QFile::WriteOnly);
+        file.write(QByteArray::fromStdString(block.second));
+        file.close();
+        //     auto res = addBlockNetwork(block, responder, package_storage, false);
+        //     if (!res.has_value()) {
+        //         if (res.error() == BlockError::BlockEqual || res.error() == BlockError::AlreadyExists) {
+        //             continue;
+        //         }
+
+        //         eLog("[Blockchain] Incorrect block vector sync, try to sync {} with error {}",
+        //              block.getIndex(),
+        //              res.error());
+        //         remove_last_block();
+        //         remove_last_block();
+        //         // blockIndex.removeById(block.getIndex());
+        //         // blockIndex.removeById(block.getIndex() - 1);
+        //         start_sync();
+        //         busy = false;
+        //         return;
+        //     }
     }
+
+    blockIndex.update_last_id(blocks.back().first);
 
     busy = false;
     start_check();
@@ -457,7 +490,8 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
 
     // if (block.isGenesisBlock()) {
     //     auto genesisBlock = block.getGenesisBlockConst();
-    //     node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock, SendMode::Neighbours);
+    //     node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock,
+    //     SendMode::Neighbours);
     // } else {
     //     auto dataBlock = block.getBlockConst();
     //     node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock, SendMode::Neighbours);
@@ -788,6 +822,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         if (res.error() == BlockError::AlreadyExists && newBlock.getIndex() > 0) {
             if (newBlock.getType() == BlockType::Dummy) {
                 return res;
+            }
+
+            // if sign.count < ... -> ?
+            if (res.error() == BlockError::Equal) {
+                return newBlock;
             }
 
             auto mergeRes = mergeBlockWithLocal(newBlock);
@@ -1278,9 +1317,17 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
 }
 
 void Blockchain::process() {
+    connect(this, &Blockchain::need_check, [this] {
+        this->start_check();
+    });
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
     connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
+    connect(this, &Blockchain::network_status_sync_request_signal, this, &Blockchain::network_status_sync_request);
+    connect(this,
+            &Blockchain::network_status_sync_response_signal,
+            this,
+            &Blockchain::network_status_sync_response);
 
     timer_sync = new QTimer(this);
     connect(timer_sync, &QTimer::timeout, this, &Blockchain::timer_sync_tick);

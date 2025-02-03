@@ -65,6 +65,7 @@ enum class BlockError {
     NotExists,
     Empty,
     DbNotOpen,
+    Equal,
     AlreadyExists,
     AlreadyChained,
     BlockchainBusy,

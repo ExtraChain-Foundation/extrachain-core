@@ -56,19 +56,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::addBlock(const BlockVariant 
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastBlock() const {
-    BigNumber id = this->lastSavedId;
-
-    while (id >= getFirstSavedId()) {
-        auto block = this->getBlockById(id);
-
-        if (block.has_value() && !block->isEmpty()) {
-            return block;
-        }
-
-        --id;
-    }
-
-    return std::unexpected(BlockError::NotExists);
+    return this->getBlockById(lastSavedId);
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastRealBlock() const {
@@ -360,6 +348,15 @@ std::string BlockIndex::buildFilePath(const BigNumber &id) const {
     return pathToFolder + "/" + id.to_string();
 }
 
+void BlockIndex::update_last_id(const BigNumber &id) {
+    this->lastSavedId  = id;
+    this->firstSavedId = 0;
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    file.open(QFile::WriteOnly);
+    file.write(this->lastSavedId.to_string().data());
+    file.close();
+}
+
 std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
     QString path = QString::fromStdString(buildFilePath(id));
 
@@ -368,6 +365,11 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         auto block = getBlockById(id);
 
         if (block.has_value() && !block->isEmpty()) {
+            // if sign -> add only signs
+            if (block == newBlock) {
+                return std::unexpected(BlockError::Equal);
+            }
+
             return std::unexpected(BlockError::AlreadyExists);
         }
 
@@ -427,12 +429,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         }
 
         if (id > this->lastSavedId) {
-            this->lastSavedId  = id;
-            this->firstSavedId = 0;
-            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
-            file.open(QFile::WriteOnly);
-            file.write(this->lastSavedId.to_string().data());
-            file.close();
+            update_last_id(id);
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
@@ -485,12 +482,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         }
 
         if (id > this->lastSavedId) {
-            this->lastSavedId  = id;
-            this->firstSavedId = 0;
-            QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
-            file.open(QFile::WriteOnly);
-            file.write(this->lastSavedId.to_string().data());
-            file.close();
+            update_last_id(id);
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
@@ -540,8 +532,8 @@ int BlockIndex::removeById(const BlockVariant &block) {
     QFile file(pathToFile);
 
     if (file.exists() && !file.isOpen()) {
-        bool isRemoved    = file.remove();
-        this->lastSavedId = this->lastSavedId - 1;
+        bool isRemoved = file.remove();
+        update_last_id(this->lastSavedId - 1);
         // if (isRemoved) {
         //     this->records--;
         // }
@@ -575,6 +567,7 @@ void BlockIndex::removeAll() {
     // this->records           = 0;
     this->firstSavedId = -1;
     this->lastSavedId  = -1;
+    QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
     // this->countTransactions = 0;
 }
 
