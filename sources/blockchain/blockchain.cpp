@@ -102,6 +102,7 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
                                       SendMode::Neighbours,
                                       MessageStatus::Request);
     } else {
+        eLog("[Blockchain] Sync from {}", fromBlock);
         node->network()->send_message(fromBlock,
                                       MessageType::BlockchainSync,
                                       SendMode::Focused,
@@ -145,7 +146,7 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
 
         blocks.push_back(block.value());
 
-        if (blocks.size() > 1000) {
+        if (blocks.size() >= 1000) {
             responder.send_response(blocks,
                                     MessageType::BlockchainSyncBlocks,
                                     SendMode::Focused,
@@ -200,7 +201,13 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
     for (const auto &block : blocks) {
         auto res = addBlockNetwork(block, responder, package_storage, false);
         if (!res.has_value()) {
-            eLog("[Blockchain] Incorrect block vector sync, try to sync {}", res.error());
+            if (res.error() == BlockError::BlockEqual) {
+                continue;
+            }
+
+            eLog("[Blockchain] Incorrect block vector sync, try to sync {} with error {}",
+                 block.getIndex(),
+                 res.error());
             remove_last_block();
             remove_last_block();
             // blockIndex.removeById(block.getIndex());
@@ -405,7 +412,8 @@ void Blockchain::send_request_blocks() {
     }
 
     auto last_block = this->getLastRealBlock();
-    sync(last_block.has_value() ? last_block->getIndex() + 1 : BigNumber(0), responder);
+    auto sync_index = last_block.has_value() ? last_block->getIndex() + 1 : BigNumber(0);
+    sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
 }
 
@@ -769,9 +777,9 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         signBlock(newBlock);
     }
 
-    TIMER_START(BlockIndexAdd)
+    // TIMER_START(BlockIndexAdd)
     const auto res = blockIndex.addBlock(newBlock);
-    TIMER_END(BlockIndexAdd)
+    // TIMER_END(BlockIndexAdd)
 
     const auto blockType = newBlock.getType();
 
@@ -1050,6 +1058,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const Responder            &responder,
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
+    TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.getIndex() != BigNumber(0)) {
         //
         return std::unexpected(BlockError::BlockchainBusy);
@@ -1142,6 +1151,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     //                      Notification::NotifyType::TxToMe,
     //                      tmp.getSender().toByteArray() });
     // }
+    TIMER_END(addBlockNetwork)
 }
 
 // Actors //
