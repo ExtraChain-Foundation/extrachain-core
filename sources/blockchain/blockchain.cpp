@@ -529,7 +529,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
 
 std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(const Actor<KeyPrivate> &actor) {
     if (blockIndex.getRecords() != 0 || blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::CantCreateFirst);
     }
 
     GenesisBlock genesis;
@@ -655,18 +655,25 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant &block) {
-    if (block.isEmpty())
-        return std::unexpected(BlockError::Invalid);
+    if (block.isEmpty()) {
+        eLog("[Blockchain] Try to add: block is empty");
+        return std::unexpected(BlockError::Empty);
+    }
 
     const auto blockId = block.getIndex();
+    if (blockId < 0) {
+        return std::unexpected(BlockError::IncorrectBlockId);
+    }
+
     if (block.isGenesisBlock() && !Blockchain::isGenesisId(blockId)) {
-        eLog("[Blockchain] Incorrect genesis");
+        eLog("[Blockchain] Try to add: incorrect genesis");
         // eFatal("Incorrect genesis");
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::IncorrectGenesisId);
     }
 
     if (block.isBlock() && block.transactions().empty()) {
-        return std::unexpected(BlockError::Invalid);
+        eLog("[Blockchain] Try to add: to transactions");
+        return std::unexpected(BlockError::NoTransactions);
     }
 
     if (blockId != 0) {
@@ -689,18 +696,18 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             // sync();
             remove_last_block();
             start_sync();
-            return std::unexpected(BlockError::Invalid);
+            return std::unexpected(BlockError::NoPrevBlock);
         }
 
         if (!block.isGenesisBlock() && blockId > prevBlock->getIndex() + 1) {
             eLog("[Blockchain] New block id is greater than last id, sync request");
             remove_last_block();
             start_sync();
-            return std::unexpected(BlockError::Invalid);
+            return std::unexpected(BlockError::GreaterLast);
         }
 
         if (!lastGenesis.has_value()) {
-            return std::unexpected(BlockError::Invalid);
+            return std::unexpected(BlockError::NoLastGenesis);
         }
 
         auto checkedPrevHash  = block.isGenesisBlock() ? block.getPrevGenHash() : block.getPrevHash();
@@ -721,7 +728,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             // TODO: package for removing last block?
             start_sync();
             // sync(blockId - 1); // TODO: request only chel who sended block?
-            return std::unexpected(BlockError::Invalid);
+            return std::unexpected(BlockError::InvalidHash);
         }
     }
 
@@ -732,10 +739,6 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     this->updateFirstId(block);
-
-    if (blockId < 0) {
-        return std::unexpected(BlockError::Invalid);
-    }
 
     // const auto           &transactions = block.transactions();
     // std::set<Transaction> transactions_approved;

@@ -440,7 +440,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
     auto bl = newBlock;
     if (!db.open()) {
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::DbNotOpen);
     }
 
     if (newBlock.isGenesisBlock()) {
@@ -713,7 +713,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     std::uint64_t date    = std::stoll(res[0].at("date"));
 
     if (id != blockId) {
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::IdNotEqual);
     }
 
     std::vector<DbRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");

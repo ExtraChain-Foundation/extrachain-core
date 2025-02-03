@@ -63,13 +63,23 @@ enum class BlockError {
     EmptyBlockchain,
     NoGenesis,
     NotExists,
-    Invalid,
+    Empty,
+    DbNotOpen,
     AlreadyExists,
     AlreadyChained,
     BlockchainBusy,
     CantMerge,
     BlockEqual,
-    MergeEqual
+    MergeEqual,
+    IncorrectGenesisId,
+    NoTransactions,
+    NoLastGenesis,
+    GreaterLast,
+    NoPrevBlock,
+    InvalidHash,
+    IncorrectBlockId,
+    IdNotEqual,
+    CantCreateFirst
 };
 // FORMAT_ENUM(BlockError)
 
