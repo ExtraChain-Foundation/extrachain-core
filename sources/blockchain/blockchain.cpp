@@ -316,8 +316,8 @@ void Blockchain::send_request_blocks() {
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
-                // blockIndex.removeById(my_index);
-                // eLog("[Blockchain] Sync: remove block {}", my_index);
+                blockIndex.removeById(my_index);
+                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
         }
