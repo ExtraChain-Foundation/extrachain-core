@@ -312,7 +312,7 @@ void Blockchain::network_status_sync_request(const Responder &responder) {
     BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
     std::string hash      = block.has_value() ? block->getHash() : "";
     auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash };
-    eLog("network_status_sync_request, send: {}", last_info);
+    // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
                             SendMode::Focused,

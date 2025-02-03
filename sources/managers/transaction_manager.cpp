@@ -152,8 +152,12 @@ void TransactionManager::makeBlock() {
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
 #ifdef IS_R
+    auto last_block = node->blockchain()->getLastBlock();
+    auto last_id    = last_block.has_value() ? last_block->getIndex() : BigNumber(-1);
+    eLog("[Blockchain] Last id: {}. Blockchain status: {}", last_id, node->blockchain()->status());
     return;
 #endif
+
     makeBlock();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {
@@ -166,11 +170,11 @@ void TransactionManager::proveTransactions() {
         TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
-            eLog("[TransactionManager] Transaction approved: {}", tx);
+            eLog("[Blockchain] Transaction approved: {}", tx);
             // eLog("[TransactionManager] Transaction approved!");
             this->addProvedTransaction(tx);
         } else {
-            eLog("[TransactionManager] Transaction not approved: {} {}", tx, res);
+            eLog("[Blockchain] Transaction not approved: {} {}", tx, res);
             // eLog("[TransactionManager] Transaction not approved: {}", res);
         }
     }
