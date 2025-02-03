@@ -790,7 +790,7 @@ void NetworkManager::messageReceived(const std::string &message,
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
-            send_message_connections(serialized + std::string(sign.data()),
+            send_message_connections(serialized + std::string(sign),
                                      message_edited,
                                      SendMode::Focused,
                                      searchRes->second.first);
