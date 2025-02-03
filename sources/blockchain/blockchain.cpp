@@ -213,6 +213,12 @@ void Blockchain::start_sync() {
         return;
     }
 
+    auto block = this->getLastRealBlock();
+    if (block.has_value() && block->getIndex() != BigNumber(0)) {
+        blockIndex.removeById(block->getIndex());
+        eLog("[Blockchain] Start sync... Aslo remove block {}", block->getIndex());
+    }
+
     timer_sync->stop();
     timer_sync->start(10000);
 
@@ -316,8 +322,8 @@ void Blockchain::send_request_blocks() {
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
-                blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
+                // blockIndex.removeById(my_index);
+                // eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
         }
