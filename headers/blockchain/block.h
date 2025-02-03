@@ -66,7 +66,7 @@ enum class BlockError {
     Invalid,
     AlreadyExists,
     AlreadyChained,
-
+    BlockchainBusy,
     CantMerge,
     BlockEqual,
     MergeEqual

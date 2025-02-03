@@ -193,7 +193,16 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
 
     status_ = BlockchainStatus::Maybe;
     for (const auto &block : blocks) {
-        addBlockNetwork(block, responder, package_storage, false);
+        auto res = addBlockNetwork(block, responder, package_storage, false);
+        if (!res.has_value()) {
+            eLog("[Blockchain] Incorrect block vector sync, try to sync");
+            remove_last_block();
+            remove_last_block();
+            // blockIndex.removeById(block.getIndex());
+            // blockIndex.removeById(block.getIndex() - 1);
+            start_sync();
+            return;
+        }
     }
     start_check();
 }
@@ -312,11 +321,15 @@ void Blockchain::send_request_blocks() {
         for (const auto &[_, info] : last_info_) {
             if (info.last_block_id > my_index) {
                 need_sync = true;
+                remove_last_block();
+                // blockIndex.removeById(my_index);
+                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
-                blockIndex.removeById(my_index);
+                remove_last_block();
+                // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
@@ -781,6 +794,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
 std::expected<BlockVariant, BlockError> Blockchain::replaceBlock(const BlockVariant &block) {
     blockIndex.removeById(block.getIndex());
+    // remove_last_block();
     return addBlock(block);
 }
 
@@ -1020,13 +1034,13 @@ BigNumber Blockchain::getBlockCount() {
     return this->blockIndex.getLastSavedId();
 }
 
-void Blockchain::addBlockNetwork(const BlockVariant         &block,
-                                 const Responder            &responder,
-                                 const NetworkPackageStorage package,
-                                 bool                        resend) {
+std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockVariant         &block,
+                                                                    const Responder            &responder,
+                                                                    const NetworkPackageStorage package,
+                                                                    bool                        resend) {
     if (status_ == BlockchainStatus::Sync && block.getIndex() != BigNumber(0)) {
         //
-        return;
+        return std::unexpected(BlockError::BlockchainBusy);
     }
 
     if (block.getIndex() > 0 && block.isGenesisBlock()) {
@@ -1038,7 +1052,7 @@ void Blockchain::addBlockNetwork(const BlockVariant         &block,
 
     auto lastBlock = this->getLastBlock();
     if (block.getIndex() != 0 && (!lastBlock.has_value() || (lastBlock.has_value() && block.isEmpty()))) {
-        return;
+        return std::unexpected(BlockError::EmptyBlockchain);
     }
 
     if (block.getType() != BlockType::Dummy) {
@@ -1050,23 +1064,23 @@ void Blockchain::addBlockNetwork(const BlockVariant         &block,
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            if (blockIndex.lastSavedId - 100 <= block.getIndex() && !responder.identifiers().empty()) {
-                syncResponse(block.getIndex(), responder);
-            } // else {
-            //     node->network()->send_message("",
-            //                                   MessageType::BlockchainAnarchy,
-            //                                   MessageStatus::Response,
-            //                                   messageId,
-            //                                   SendMode::Focused);
-            // }
+            // if (blockIndex.lastSavedId - 100 <= block.getIndex() && !responder.identifiers().empty()) {
+            //     // syncResponse(block.getIndex(), responder);
+            //  } // else {
+            //      node->network()->send_message("",
+            //                                    MessageType::BlockchainAnarchy,
+            //                                    MessageStatus::Response,
+            //                                    messageId,
+            //                                    SendMode::Focused);
+            //  }
 
-            return;
+            return res;
         }
         default:
             break;
         }
 
-        return;
+        return res;
     }
 
     // if (res->getType() != BlockType::Dummy) {
@@ -1085,7 +1099,7 @@ void Blockchain::addBlockNetwork(const BlockVariant         &block,
 
     // notifications for clients
     if (res->getType() != BlockType::Data) {
-        return;
+        return res;
     }
 
     auto       transactions = block.transactions();
@@ -1104,6 +1118,8 @@ void Blockchain::addBlockNetwork(const BlockVariant         &block,
             }
         }
     }
+
+    return res;
 
     // if (list.contains(tmp.getSender())) {
     //     emit newNotify({ QDateTime::currentMSecsSinceEpoch(),

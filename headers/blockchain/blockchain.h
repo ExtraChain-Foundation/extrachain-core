@@ -331,7 +331,7 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block,
+    std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
                          const Responder    &responder,
                          const NetworkPackageStorage,
                          bool resend);
