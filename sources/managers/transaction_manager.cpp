@@ -151,7 +151,9 @@ void TransactionManager::makeBlock() {
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
-    // return;
+#ifdef IS_R
+    return;
+#endif
     makeBlock();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {
