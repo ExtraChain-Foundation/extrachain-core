@@ -1083,7 +1083,7 @@ void Blockchain::removeAll() {
 }
 
 void Blockchain::timer_sync_tick() {
-    eLog("[Blockchain] Timer sync tick";
+    eLog("[Blockchain] Timer sync tick");
     status_ = BlockchainStatus::Timered;
     start_sync();
 }
