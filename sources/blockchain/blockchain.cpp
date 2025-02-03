@@ -561,7 +561,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         signBlock(newBlock);
     }
 
-    const auto res       = blockIndex.addBlock(newBlock);
+    TIMER_START(BlockIndexAdd)
+    const auto res = blockIndex.addBlock(newBlock);
+    TIMER_END(BlockIndexAdd)
+
     const auto blockType = newBlock.getType();
 
     if (!res.has_value()) {
@@ -735,7 +738,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeGenesisBlocks(const Gen
 }
 
 void Blockchain::signBlock(BlockVariant &block) const {
-    block.sign(node->accountController()->currentWallet());
+    block.sign(node->accountController()->mainActor());
 }
 
 BigNumber Blockchain::getRecords() const {
@@ -1063,6 +1066,9 @@ void Blockchain::process() {
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
     connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
+
+    timer_sync = new QTimer(this);
+    connect(timer_sync, &QTimer::timeout, this, &Blockchain::timer_sync_tick);
 }
 
 // Other //
@@ -1074,4 +1080,10 @@ BlockIndex &Blockchain::getBlockIndex() {
 void Blockchain::removeAll() {
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
+}
+
+void Blockchain::timer_sync_tick() {
+    eLog("[Blockchain] Timer sync tick";
+    status_ = BlockchainStatus::Timered;
+    start_sync();
 }

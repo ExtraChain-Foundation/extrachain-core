@@ -44,6 +44,10 @@ void TransactionManager::removeTransaction(int i) {
 
 void TransactionManager::addTransactionNetwork(const Transaction &tx) {
     // eLog("[TransactionManager] Added to the waiting list: {}", tx);
+    if (node->blockchain()->status() != BlockchainStatus::Ready) {
+        return;
+    }
+
     m_receivedTxList.insert(tx);
 }
 
@@ -74,9 +78,10 @@ void TransactionManager::makeBlock() {
     }
 
     if (node->blockchain()->status() == BlockchainStatus::Sync) {
-        eLog("[Blockchain] Blockchain: try to sync... Last block: {}, type: {}",
+        eLog("[Blockchain] Blockchain: try to sync... Last block: {}, type: {}, connections: {}",
              lastRealBlock->getIndex(),
-             lastRealBlock->getType());
+             lastRealBlock->getType(),
+             node->network()->active_connections_count());
         return;
     }
 

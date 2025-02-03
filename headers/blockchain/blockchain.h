@@ -53,7 +53,8 @@ enum class BlockchainStatus {
     Started,
     Ready,
     Sync,
-    Maybe
+    Maybe,
+    Timered,
 };
 
 enum class BlockchainSyncStatus {
@@ -89,6 +90,8 @@ private:
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
 
+    QTimer *timer_sync;
+
 public:
     explicit Blockchain(ExtraChainNode *node);
     std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash);
@@ -104,9 +107,13 @@ public:
     BlockchainStatus status();
 
     void start_sync() {
+        // start timer, after end -> again request
         if (status_ == BlockchainStatus::Sync) {
             return;
         }
+
+        timer_sync->stop();
+        timer_sync->start(10000);
 
         if (status_ != BlockchainStatus::Sync) {
             status_ = BlockchainStatus::Sync;
@@ -208,6 +215,7 @@ public:
             check_status_ = BlockchainSyncStatus::None;
             status_       = BlockchainStatus::Ready;
             emit statusChanged(status_);
+            timer_sync->stop();
             return; // Синхронизация не требуется
         }
 
@@ -245,7 +253,6 @@ public:
         if (sync_status_ != BlockchainSyncStatus::Blocks) {
             start_sync();
             return;
-        } else {
         }
 
         Responder responder(node->network());
@@ -254,7 +261,6 @@ public:
         }
 
         sync(block.has_value() ? block->getIndex() : BigNumber(0), responder);
-        check_status_ = BlockchainSyncStatus::None;
         check_status_ = BlockchainSyncStatus::None;
     }
 
@@ -474,5 +480,6 @@ public slots:
     void syncResponseVector(std::vector<BlockVariant>    blocks,
                             const Responder             &responder,
                             const NetworkPackageStorage &package_storage);
+    void timer_sync_tick();
     void process();
 };
