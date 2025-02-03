@@ -195,7 +195,7 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
     for (const auto &block : blocks) {
         auto res = addBlockNetwork(block, responder, package_storage, false);
         if (!res.has_value()) {
-            eLog("[Blockchain] Incorrect block vector sync, try to sync");
+            eLog("[Blockchain] Incorrect block vector sync, try to sync {}", res.error());
             remove_last_block();
             remove_last_block();
             // blockIndex.removeById(block.getIndex());
