@@ -152,6 +152,10 @@ public:
 
     // to slot
     void network_status_sync_request(const Responder &responder) {
+        if (status_ != BlockchainStatus::Ready) {
+            return;
+        }
+
         auto        block     = this->getLastRealBlock();
         BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
         std::string hash      = block.has_value() ? block->getHash() : "";
