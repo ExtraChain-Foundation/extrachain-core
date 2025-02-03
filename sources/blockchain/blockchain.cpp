@@ -757,6 +757,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
     this->updateFirstId(block);
 
+    // check hash...
+
     // const auto           &transactions = block.transactions();
     // std::set<Transaction> transactions_approved;
     // // TODO: if remove tx -> ignore in prove

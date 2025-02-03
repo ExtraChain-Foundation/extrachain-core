@@ -603,7 +603,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
         }
     }
 
-    // this->lastSavedId = BigNumber(id) - 1;
+    this->lastSavedId = BigNumber(id) - 1;
     return 0;
 }
 
