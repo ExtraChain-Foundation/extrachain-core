@@ -34,8 +34,7 @@ DfsController::DfsController(ExtraChainNode *node)
     , node(node)
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
-    m_sizeTaken    = calculateSizeTaken();
-    m_totalDfsSize = calculateFilesSize();
+    refresh_calculate();
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
@@ -548,6 +547,11 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
     }
 
     return false;
+}
+
+void DfsController::refresh_calculate() {
+    m_sizeTaken    = calculateSizeTaken();
+    m_totalDfsSize = calculateFilesSize();
 }
 
 ExpectedDirHistoricalRow DfsController::add_collection_row(const ActorId               &owner_id,

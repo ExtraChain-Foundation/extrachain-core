@@ -235,10 +235,7 @@ public:
 
     void sync(const std::string &identifier);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
-    void refresh_calculate() {
-        m_sizeTaken    = calculateSizeTaken();
-        m_totalDfsSize = calculateFilesSize();
-    };
+    void refresh_calculate();
 
 private:
     DirsManager dirs_manager_;

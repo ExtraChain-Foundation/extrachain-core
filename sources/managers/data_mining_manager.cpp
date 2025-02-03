@@ -75,7 +75,7 @@ void DataMiningManager::requestCoinReward() {
     //      totalBytes.second,
     //      node->blockchain()->getBlocksStored());
 
-    if (amount == 0) {
+    if (amount <= 0) {
         // eLog("[Reward] Can't send amount, because amount = 0");
         return;
     }
