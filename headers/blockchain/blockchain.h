@@ -114,6 +114,15 @@ public:
     void network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder);
     void send_request_blocks();
 
+    void remove_last_block() {
+        auto block = this->getLastRealBlock();
+
+        if (block.has_value() && block->getIndex() != BigNumber(0)) {
+            blockIndex.removeById(block->getIndex());
+            eLog("[Blockchain] Remove last block: {}", block->getIndex());
+        }
+    }
+
 private:
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
 

@@ -213,12 +213,6 @@ void Blockchain::start_sync() {
         return;
     }
 
-    auto block = this->getLastRealBlock();
-    if (block.has_value() && block->getIndex() != BigNumber(0)) {
-        blockIndex.removeById(block->getIndex());
-        eLog("[Blockchain] Start sync... Aslo remove block {}", block->getIndex());
-    }
-
     timer_sync->stop();
     timer_sync->start(10000);
 
@@ -680,12 +674,14 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
         if (!block.isGenesisBlock() && !prevBlock.has_value()) {
             // sync();
+            remove_last_block();
             start_sync();
             return std::unexpected(BlockError::Invalid);
         }
 
         if (!block.isGenesisBlock() && blockId > prevBlock->getIndex() + 1) {
             eLog("[Blockchain] New block id is greater than last id, sync request");
+            remove_last_block();
             start_sync();
             return std::unexpected(BlockError::Invalid);
         }
@@ -705,8 +701,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             // if (lastGenesis.has_value())
             //     eLog("lg {}", lastGenesis.value());
             // if (block.getType() != BlockType::Dummy)
-            if (lastRealBlock.has_value())
-                removeBlock(lastRealBlock.value());
+
+            remove_last_block();
 
             // TODO: hashs incoming, not sync, remove block
             // TODO: package for removing last block?
