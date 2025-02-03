@@ -109,6 +109,7 @@ public:
     void start_sync() {
         // start timer, after end -> again request
         if (status_ == BlockchainStatus::Sync) {
+            eLog("BC 11 start_sync return");
             return;
         }
 
@@ -127,11 +128,14 @@ public:
                                       MessageType::BlockchainSyncLastInfo,
                                       SendMode::Neighbours,
                                       MessageStatus::Request);
+
+        eLog("BC 10 start_sync");
     }
 
     void start_check() {
         if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
             start_sync();
+            eLog("BC 12 start_check return");
             return;
         }
 
@@ -142,6 +146,8 @@ public:
                                       MessageType::BlockchainSyncLastInfo,
                                       SendMode::Neighbours,
                                       MessageStatus::Request);
+
+        eLog("BC 9 start_check");
     }
 
     // to slot
@@ -154,6 +160,8 @@ public:
                                 MessageType::BlockchainSyncLastInfo,
                                 SendMode::Focused,
                                 MessageStatus::Response);
+
+        eLog("BC 8 network_status_sync_request");
     }
 
     // to slot
@@ -170,11 +178,13 @@ public:
         if (sync_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
             sync_status_  = BlockchainSyncStatus::Blocks;
             check_status_ = BlockchainSyncStatus::None;
+            eLog("BC 6 sync status");
             send_request_blocks();
         }
 
         if (check_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
             check_status_ = BlockchainSyncStatus::Blocks;
+            eLog("BC 7 check status");
             send_request_blocks();
         }
     }
@@ -183,6 +193,7 @@ public:
         auto block = this->getLastRealBlock();
 
         if (last_info_.empty()) {
+            eLog("BC 5");
             return;
         }
 
@@ -216,11 +227,12 @@ public:
             status_       = BlockchainStatus::Ready;
             emit statusChanged(status_);
             timer_sync->stop();
-            return; // Синхронизация не требуется
+
+            eLog("BC 4");
+            return; // end sync
         }
 
-        // Определяем количество нод для запроса
-        int connections = node->network()->active_connections_count();
+        int connections = requests_count;
         int max_nodes   = std::min(connections, 3);
 
         std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
@@ -233,6 +245,7 @@ public:
 
         // Если нет нод с непустым блокчейном - выходим
         if (nodes_by_block.empty()) {
+            eLog("BC 3");
             return;
         }
 
@@ -252,9 +265,11 @@ public:
 
         if (sync_status_ != BlockchainSyncStatus::Blocks) {
             start_sync();
+            eLog("BC 1");
             return;
         }
 
+        eLog("BC 2");
         Responder responder(node->network());
         for (const auto &[id, _] : nodes_by_block) {
             responder.add_identifier(id);
