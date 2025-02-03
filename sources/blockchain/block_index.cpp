@@ -31,7 +31,7 @@ BlockIndex::BlockIndex() {
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
         auto last_id_result  = BigNumber::create(last_id_content.toStdString());
-        if (!last_id_result.has_value()) {
+        if (last_id_result.has_value()) {
             lastSavedId  = last_id_result.value();
             firstSavedId = 0;
         }
