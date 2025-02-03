@@ -201,7 +201,7 @@ void Blockchain::syncResponseVector(std::vector<BlockVariant>    blocks,
     for (const auto &block : blocks) {
         auto res = addBlockNetwork(block, responder, package_storage, false);
         if (!res.has_value()) {
-            if (res.error() == BlockError::BlockEqual) {
+            if (res.error() == BlockError::BlockEqual || res.error() == BlockError::AlreadyExists) {
                 continue;
             }
 
