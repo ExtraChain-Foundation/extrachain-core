@@ -40,11 +40,10 @@ public:
     BigNumber   recordsLimit = BigNumber(-1); // -1 = no limit
 
     // current state //
-    BigNumber records           = BigNumber(0);
-    BigNumber firstSavedId      = BigNumber(-1);
-    BigNumber lastSavedId       = BigNumber(-1);
-    BigNumber realBlockRecords  = BigNumber(0);
-    int       countTransactions = 0;
+    // BigNumber records           = BigNumber(0);
+    BigNumber firstSavedId = BigNumber(-1);
+    BigNumber lastSavedId  = BigNumber(-1);
+    // int       countTransactions = 0;
 
     bool m_blockCompress = false;
 
@@ -84,7 +83,6 @@ public:
     std::expected<BlockVariant, BlockError> getBlockById(const BigNumber &id) const;
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
-    std::expected<BlockVariant, BlockError> getBlockByPosition(const BigNumber &position) const;
     std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash) const;
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data) const;
 
@@ -108,15 +106,10 @@ public:
     void        removeAll();
     BigNumber   getLastSavedId() const;
     BigNumber   getFirstSavedId() const;
-    BigNumber   getRecords() const;
-    BigNumber   getCountRealBlocks() const;
     int         getCountTransactionsInBlocks() const;
     int         removeById(const BigNumber &id);
     int         removeById(const BlockVariant &block);
-    void        removeDummyBlocks();
     std::string buildFilePath(const BigNumber &id) const;
-
-    void calculationCountBlock();
 
 private:
     std::pair<Transaction, BigNumber> getLastTxByParam(const std::string  &data,
@@ -130,15 +123,10 @@ private:
 
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
     bool                                    hasRecordLimit() const;
-    bool                                    recordLimitIsReached() const;
+    // bool                                    recordLimitIsReached() const;
     std::string                             getFolderPath() const;
     std::string                             getFolderName() const;
     BigNumber                               calcSection(BigNumber id) const;
     std::expected<BlockVariant, BlockError> getByIdUnsafe(const BigNumber &id) const;
     std::expected<BlockVariant, BlockError> getById(const BigNumber &id) const;
-    BigNumber                               loadFirstId();
-    BigNumber loadFileFromSection(std::function<std::string(const std::vector<std::string> &folders)> getFolder,
-                                  std::function<std::string(const std::vector<std::string> &files)>   getFile);
-
-    BigNumber loadLastId();
 };

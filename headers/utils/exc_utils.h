@@ -307,7 +307,7 @@ namespace Config {
                                                ");";
 
         // How many files one section folder will store
-        static const int SECTION_SIZE = 1000;
+        static const int SECTION_SIZE = 100000;
 
         // How often to construct block from pending transactions (in miliseconds)
         static const int BLOCK_CREATION_PERIOD = 5000;

@@ -318,11 +318,9 @@ void Blockchain::send_request_blocks() {
         return;
     }
 
-    // Проверяем, нужна ли синхронизация
     bool need_sync = false;
 
     if (!block.has_value()) {
-        // Если у нас пустой блокчейн - проверяем есть ли ноды с непустым
         for (const auto &[_, info] : last_info_) {
             if (info.last_block_id >= 0 && !info.last_hash.empty()) {
                 need_sync = true;
@@ -373,7 +371,7 @@ void Blockchain::send_request_blocks() {
         }
     }
 
-    // Если нет нод с непустым блокчейном - выходим
+    // TODO: recheck
     if (nodes_by_block.empty()) {
         eLog("BC 3");
         sync_status_  = BlockchainSyncStatus::None;
@@ -408,6 +406,7 @@ void Blockchain::send_request_blocks() {
     eLog("BC 2");
     Responder responder(node->network());
     for (const auto &[id, _] : nodes_by_block) {
+        // TODO
         responder.add_identifier(id);
     }
 
@@ -497,7 +496,7 @@ bool Blockchain::isGenesisId(const BigNumber &id) {
 std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Actor<KeyPrivate> &actor) {
     eLog("Creating genesis block");
 
-    if (blockIndex.getLastSavedId() == -1 || blockIndex.getRecords() == 0) {
+    if (blockIndex.getLastSavedId() == -1 || blockIndex.getFirstSavedId() == -1) {
         return std::unexpected(BlockError::EmptyBlockchain);
     }
 
@@ -545,7 +544,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::createFirstBlock(const Actor<KeyPrivate> &actor) {
-    if (blockIndex.getRecords() != 0 || blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
+    if (blockIndex.getFirstSavedId() != 0 || blockIndex.getLastSavedId() != 0) {
         return std::unexpected(BlockError::CantCreateFirst);
     }
 
@@ -824,10 +823,6 @@ int Blockchain::removeBlock(const BlockVariant &block) {
     return blockIndex.removeById(block);
 }
 
-void Blockchain::removeDummyBlocks() {
-    blockIndex.removeDummyBlocks();
-}
-
 bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVariant &existedBlock) {
     // 1) Blocks are approved
     // 2) Blocks has one type
@@ -961,15 +956,15 @@ void Blockchain::signBlock(BlockVariant &block) const {
 }
 
 BigNumber Blockchain::getRecords() const {
-    return blockIndex.getRecords();
+    return blockIndex.getLastSavedId();
 }
 
 BigNumber Blockchain::getCountRealBlockRecords() const {
-    return blockIndex.getCountRealBlocks();
+    return BigNumber(0);
 }
 
 int Blockchain::getCountTransactionsInBlocks() const {
-    return blockIndex.getCountTransactionsInBlocks();
+    return 0;
 }
 
 BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, TransactionType txType) const {
@@ -1063,6 +1058,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.getIndex() != BigNumber(0)) {
         //
+        node->network()->sendBrodcastMessageFurther(package);
         return std::unexpected(BlockError::BlockchainBusy);
     }
 
@@ -1076,10 +1072,6 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     auto lastBlock = this->getLastBlock();
     if (block.getIndex() != 0 && (!lastBlock.has_value() || (lastBlock.has_value() && block.isEmpty()))) {
         return std::unexpected(BlockError::EmptyBlockchain);
-    }
-
-    if (block.getType() != BlockType::Dummy) {
-        this->removeDummyBlocks();
     }
 
     auto res = addBlock(block);

@@ -227,11 +227,6 @@ public:
     int removeBlock(const BlockVariant &block);
 
     /**
-     *
-     */
-    void removeDummyBlocks();
-
-    /**
      * @brief Check if two blocks can be merged
      * (has identical id and at least one common transaction)
      * @param blockA
@@ -332,13 +327,13 @@ public:
 
 public slots:
     std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
-                         const Responder    &responder,
-                         const NetworkPackageStorage,
-                         bool resend);
-    void syncResponse(const BigNumber fromBlock, const Responder &responder);
-    void syncResponseVector(std::vector<BlockVariant>    blocks,
-                            const Responder             &responder,
-                            const NetworkPackageStorage &package_storage);
-    void timer_sync_tick();
-    void process();
+                                                            const Responder    &responder,
+                                                            const NetworkPackageStorage,
+                                                            bool resend);
+    void                                    syncResponse(const BigNumber fromBlock, const Responder &responder);
+    void                                    syncResponseVector(std::vector<BlockVariant>    blocks,
+                                                               const Responder             &responder,
+                                                               const NetworkPackageStorage &package_storage);
+    void                                    timer_sync_tick();
+    void                                    process();
 };

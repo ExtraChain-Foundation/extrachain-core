@@ -98,9 +98,6 @@ void TransactionManager::makeBlock() {
     if (!node->network()->isActiveConnectionExists()) {
         // eLog("[TransactionManager] No active connections");
 
-        if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-            node->blockchain()->removeDummyBlocks();
-        }
         return;
     }
 

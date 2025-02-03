@@ -53,7 +53,7 @@ struct Approver {
 enum class BlockType {
     Data,
     Genesis,
-    Dummy,
+    Dummy
 };
 MSGPACK_ADD_ENUM(BlockType)
 // FORMAT_ENUM(BlockType)
