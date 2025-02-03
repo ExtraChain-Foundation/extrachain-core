@@ -164,8 +164,6 @@ public:
                                 MessageType::BlockchainSyncLastInfo,
                                 SendMode::Focused,
                                 MessageStatus::Response);
-
-        eLog("BC 8 network_status_sync_request");
     }
 
     // to slot
@@ -175,7 +173,7 @@ public:
         }
         // min(connections size, 5)
 
-        int count = std::min(requests_count, 3);
+        int count = std::min(requests_count, 5);
 
         last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -237,7 +235,7 @@ public:
         }
 
         int connections = requests_count;
-        int max_nodes   = std::min(connections, 3);
+        int max_nodes   = std::min(connections, 5);
 
         std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
         for (const auto &[id, info] : last_info_) {

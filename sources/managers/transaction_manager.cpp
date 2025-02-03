@@ -44,6 +44,7 @@ void TransactionManager::removeTransaction(int i) {
 
 void TransactionManager::addTransactionNetwork(const Transaction &tx) {
     // eLog("[TransactionManager] Added to the waiting list: {}", tx);
+    eLog("addTransactionNetwork {}", node->blockchain()->status());
     if (node->blockchain()->status() != BlockchainStatus::Ready) {
         return;
     }
