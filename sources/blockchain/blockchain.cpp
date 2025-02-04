@@ -808,7 +808,7 @@ void Blockchain::updateFirstId(const BlockVariant &block) {
     if (!block.isGenesisBlock() || block.getIndex() != 0)
         return;
 
-    if (block.dataService().size() > 1 || block.dataService().empty())
+    if (block.dataService().empty())
         eFatal("Incorrect first genesis");
 
     auto firstId = ActorId(*block.dataService().begin());
