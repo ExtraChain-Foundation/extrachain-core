@@ -312,6 +312,8 @@ signals:
                                        const NetworkPackageStorage);
     void statusChanged(BlockchainStatus status);
 
+    void zeroBlock();
+
     /**
      * @brief possibleMiningChange
      * @param possibleMinig
