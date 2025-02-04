@@ -19,7 +19,9 @@
 
 #pragma once
 
+#include <expected>
 #include <msgpack.hpp>
+
 #include "extrachain_global.h"
 #include "utils/exc_magic.h"
 
@@ -36,12 +38,19 @@ enum class ActorType {
 MSGPACK_ADD_ENUM(ActorType)
 // FORMAT_ENUM(ActorType)
 
+enum class ActorError {
+    IncorrectSize,
+    IncorrectFormat
+};
+
 class EXTRACHAIN_EXPORT ActorId final {
 public:
     ActorId();
     explicit ActorId(const std::string &actorId);
     ActorId(const ActorId &other);
     ActorId(ActorId &&other) noexcept;
+
+    static std::expected<ActorId, ActorError> create(const std::string actor_id);
 
     QByteArray toQByteArray() const;
     QString    toQString() const;

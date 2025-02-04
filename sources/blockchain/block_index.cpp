@@ -37,6 +37,7 @@ BlockIndex::BlockIndex() {
         }
     } else {
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        QFile::remove("tmp/cachedTxs.db");
     }
 
     // last id > 0 -> first id
@@ -568,6 +569,7 @@ void BlockIndex::removeAll() {
     this->firstSavedId = -1;
     this->lastSavedId  = -1;
     QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    QFile::remove("tmp/cachedTxs.db");
     // this->countTransactions = 0;
 }
 

@@ -39,6 +39,19 @@ ActorId::ActorId(ActorId &&other) noexcept {
     other.m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
 }
 
+std::expected<ActorId, ActorError> ActorId::create(const std::string actor_id) {
+    if (actor_id.size() > BlockchainConst::ACTOR_SIZE) {
+        return std::unexpected(ActorError::IncorrectSize);
+    }
+
+    if (!Utils::is_hex_string_lower(actor_id)) {
+        return std::unexpected(ActorError::IncorrectFormat);
+    }
+
+    auto actor_id_result = ActorId(std::string(BlockchainConst::ACTOR_SIZE - actor_id.length(), '0') + actor_id);
+    return actor_id_result;
+}
+
 QByteArray ActorId::toQByteArray() const {
     return QByteArray::fromStdString(m_id);
 }

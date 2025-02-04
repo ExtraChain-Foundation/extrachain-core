@@ -143,6 +143,8 @@ public:
 
     std::expected<BlockVariant, BlockError> createGenesisBlock(const Actor<KeyPrivate> &actor);
 
+    std::expected<BlockVariant, BlockError> create_mega_genesis_block(const Actor<KeyPrivate> &actor);
+
     std::expected<BlockVariant, BlockError> createFirstBlock(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
@@ -284,9 +286,7 @@ public:
      */
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat getUserBalance(ActorId         userId,
-                                  TokenId         tokenId = TokenId(),
-                                  TransactionType txType  = TransactionType::Regular) const;
+    BigNumberFloat calculate_actor_balance(const ActorId &actor_id, const TokenId &token_id) const;
 
     /**
      * @brief Show blockchain
@@ -311,6 +311,8 @@ signals:
                                        const Responder   &responder,
                                        const NetworkPackageStorage);
     void statusChanged(BlockchainStatus status);
+
+    void zeroBlock();
 
     /**
      * @brief possibleMiningChange

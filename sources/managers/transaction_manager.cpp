@@ -61,8 +61,12 @@ void TransactionManager::addProvedTransaction(const Transaction &tx) {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if (node->accountController()->empty())
+    if (node->accountController()->empty()) {
+        eLog("[Blockchain] Account is empty");
         return;
+    }
+
+    eLog("- makeBlock()");
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
     auto lastBlock     = node->blockchain()->getLastBlock();
@@ -99,8 +103,7 @@ void TransactionManager::makeBlock() {
     }
 
     if (!node->network()->isActiveConnectionExists()) {
-        // eLog("[TransactionManager] No active connections");
-
+        eLog("[TransactionManager] No active connections");
         return;
     }
 
@@ -120,26 +123,7 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
-        // TODO: temp
-        /*
-        static BigNumber prevDummy = BigNumber(-1);
-
-        // if (prevDummy == lastBlock.getIndex() + 1) {
-        //     eLog("[TransactionManager] prevDummy == lastBlock.getIndex() + 1");
-        //     return;
-        // }
-
-        // creating dummy block in as ordinary block
-        // return;
-        Block dummyBlock = Block();
-        dummyBlock.setType(BlockType::Dummy);
-        dummyBlock.setPrev(lastBlock.value());
-        dummyBlock.addData(lastRealBlock->getIndex().to_string());
-        auto dummyBlockVariant = BlockVariant(dummyBlock);
-        node->blockchain()->signBlock(dummyBlockVariant);
-        node->blockchain()->sendBlock(dummyBlockVariant);
-        prevDummy = lastBlock->getIndex() + 1;
-        */
+        eLog("[TransactionManager] Try to create block, but pending list is empty");
         return;
     }
 
@@ -150,6 +134,8 @@ void TransactionManager::makeBlock() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
+    eLog("[TransactionManager] Send block... {}", blockVariant.getIndex());
+
     node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 
@@ -158,9 +144,11 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
     auto last_block = node->blockchain()->getLastBlock();
     auto last_id    = last_block.has_value() ? last_block->getIndex() : BigNumber(-1);
     eLog("[Blockchain] Last id: {}. Blockchain status: {}", last_id, node->blockchain()->status());
+    m_receivedTxList.clear();
     return;
 #endif
 
+    eLog("[TransactionManager] Make block... {}", node->blockchain()->status());
     makeBlock();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {

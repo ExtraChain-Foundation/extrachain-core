@@ -300,7 +300,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     tx.setPrevBlock(lastRealBlock->getIndex());
 
     // 2) check coin availability
-    if (blockchain()->getUserBalance(actor.id(), tx.token()) < tx.amount()) {
+    if (blockchain()->calculate_actor_balance(actor.id(), tx.token()) < tx.amount()) {
         eWarning("Can not create: {}. There is not enough coins/tokens in wallet", tx);
         return std::unexpected(TransactionError::InsufficientFunds);
     }
