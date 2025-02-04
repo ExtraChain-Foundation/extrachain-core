@@ -26,10 +26,9 @@
 using boost::multiprecision::cpp_int;
 
 BigNumber::BigNumber()
-    : m_data(0) {
-}
+    : m_data(0) { UPDATE_DEBUG() }
 
-BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
+    BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
     if (bigNumber == "inf")
         eFatal("BigNumber: infinity");
     try {

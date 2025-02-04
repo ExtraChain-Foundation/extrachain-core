@@ -80,7 +80,8 @@ enum class BlockError {
     InvalidHash,
     IncorrectBlockId,
     IdNotEqual,
-    CantCreateFirst
+    CantCreateFirst,
+    NoLastBlock
 };
 // FORMAT_ENUM(BlockError)
 

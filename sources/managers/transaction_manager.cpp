@@ -119,26 +119,7 @@ void TransactionManager::makeBlock() {
     }
 
     if (m_pendingTxList.empty()) {
-        // TODO: temp
-        /*
-        static BigNumber prevDummy = BigNumber(-1);
-
-        // if (prevDummy == lastBlock.getIndex() + 1) {
-        //     eLog("[TransactionManager] prevDummy == lastBlock.getIndex() + 1");
-        //     return;
-        // }
-
-        // creating dummy block in as ordinary block
-        // return;
-        Block dummyBlock = Block();
-        dummyBlock.setType(BlockType::Dummy);
-        dummyBlock.setPrev(lastBlock.value());
-        dummyBlock.addData(lastRealBlock->getIndex().to_string());
-        auto dummyBlockVariant = BlockVariant(dummyBlock);
-        node->blockchain()->signBlock(dummyBlockVariant);
-        node->blockchain()->sendBlock(dummyBlockVariant);
-        prevDummy = lastBlock->getIndex() + 1;
-        */
+        eLog("[TransactionManager] Try to create block, but pending list is empty");
         return;
     }
 

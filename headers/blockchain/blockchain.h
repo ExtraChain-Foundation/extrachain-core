@@ -143,6 +143,8 @@ public:
 
     std::expected<BlockVariant, BlockError> createGenesisBlock(const Actor<KeyPrivate> &actor);
 
+    std::expected<BlockVariant, BlockError> create_mega_genesis_block(const Actor<KeyPrivate> &actor);
+
     std::expected<BlockVariant, BlockError> createFirstBlock(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 

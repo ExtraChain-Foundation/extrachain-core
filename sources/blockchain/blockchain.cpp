@@ -201,28 +201,20 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
 void Blockchain::syncResponseVector(const std::string           &blocks_,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
-    static bool busy = false;
-    if (busy) {
-        return;
-    }
-
     auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
     auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(des);
     if (!blocks_result.has_value()) {
         return;
     }
     auto blocks = blocks_result.value();
-
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
-
     eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
          blocks.size(),
          blocks.front().first,
          blocks.back().first);
 
-    std::set<BigNumber> self_block_ids;
     status_ = BlockchainStatus::Maybe;
 
     for (const auto &block : blocks) {
@@ -231,56 +223,45 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.open(QFile::WriteOnly);
         file.write(QByteArray::fromStdString(block.second));
         file.close();
-        //     auto res = addBlockNetwork(block, responder, package_storage, false);
-        //     if (!res.has_value()) {
-        //         if (res.error() == BlockError::BlockEqual || res.error() == BlockError::AlreadyExists) {
-        //             continue;
-        //         }
-
-        //         eLog("[Blockchain] Incorrect block vector sync, try to sync {} with error {}",
-        //              block.getIndex(),
-        //              res.error());
-        //         remove_last_block();
-        //         remove_last_block();
-        //         // blockIndex.removeById(block.getIndex());
-        //         // blockIndex.removeById(block.getIndex() - 1);
-        //         start_sync();
-        //         busy = false;
-        //         return;
-        //     }
         blockIndex.update_last_id(blocks.back().first);
+    }
 
 #ifdef IS_RC
-        auto added_block = blockIndex.getBlockById(block.first);
-        if (!added_block.has_value()) {
-            continue;
-        }
-        auto       transactions = added_block->transactions();
-        const auto accounts     = node->accountController()->accountsIds();
-        for (const auto &transaction : transactions) {
-            // vefify
+    std::thread rc_thread([this, blocks]() {
+        std::set<BigNumber> self_block_ids;
 
-            if (transaction.type() == TransactionType::InitContract) {
-                node->actorIndex()->getActor(transaction.sender());
-                // TODO: subscribe dfs for waiting token json?
+        for (const auto &block : blocks) {
+            auto added_block = blockIndex.getBlockById(block.first);
+            if (!added_block.has_value()) {
+                continue;
             }
 
-            for (const auto &accountId : accounts) {
-                if (transaction.sender() == accountId || transaction.receiver() == accountId) {
-                    self_block_ids.insert(added_block->getIndex());
+            auto       transactions = added_block->transactions();
+            const auto accounts     = node->accountController()->accountsIds();
+
+            for (const auto &transaction : transactions) {
+                if (transaction.type() == TransactionType::InitContract) {
+                    node->actorIndex()->getActor(transaction.sender());
+                }
+
+                for (const auto &accountId : accounts) {
+                    if (transaction.sender() == accountId || transaction.receiver() == accountId) {
+                        self_block_ids.insert(added_block->getIndex());
+                    }
                 }
             }
         }
+
+        for (const auto &index : self_block_ids) {
+            emit updateSelf(index);
+        }
+
+        start_check();
+    });
+
+    rc_thread.detach();
 #endif
-    }
 
-    // blockIndex.update_last_id(blocks.back().first);
-
-    for (const auto &index : self_block_ids) {
-        emit updateSelf(index);
-    }
-
-    busy = false;
     start_check();
 }
 
@@ -595,13 +576,87 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
             auto sender   = transaction.sender();
             auto receiver = transaction.receiver();
             auto tokenId  = transaction.token();
-            if (sender == ActorId() || tokenId != TokenId() && transaction.type() == TransactionType::InitContract)
-                lastDataRows[{ sender, tokenId }].state -= transaction.amount();
+
+            if (transaction.type() == TransactionType::Reward) {
+                lastDataRows[{ sender, tokenId }].state += transaction.amount();
+                continue;
+            }
+
+            if (transaction.type() == TransactionType::InitContract) {
+                lastDataRows[{ sender, tokenId }].state += transaction.amount();
+                continue;
+            }
+
+            lastDataRows[{ sender, tokenId }].state -= transaction.amount();
             lastDataRows[{ receiver, tokenId }].state += transaction.amount();
         }
     }
 
     genesis.addRows(lastDataRows);
+    genesis.sign(actor);
+    return BlockVariant(genesis);
+}
+
+std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(const Actor<KeyPrivate> &actor) {
+    eLog("Creating MEGA genesis block");
+
+    if (blockIndex.getLastSavedId() == -1 || blockIndex.getFirstSavedId() == -1) {
+        return std::unexpected(BlockError::EmptyBlockchain);
+    }
+
+    GenesisBlock genesis;
+    genesis.setIndex(BigNumber(0));
+
+    auto lastBlock = getLastBlock();
+
+    if (!lastBlock.has_value()) {
+        return std::unexpected(BlockError::NoLastBlock);
+    }
+
+    // get from zero block
+    GenesisDataRows map;
+
+    for (auto i = BigNumber(0); i != lastBlock->getIndex(); i++) {
+        auto block = getBlockByIndex(i);
+
+        if (!block->isBlock() || block->getType() != BlockType::Data) {
+            continue;
+        }
+
+        if (!block.has_value()) {
+            eCritical("[MEGA] Block {} not exists", block->getIndex());
+            continue;
+        }
+
+        if (block->isEmpty()) {
+            eCritical("[MEGA] Block {} is empty", block->getIndex());
+            continue;
+        }
+
+        auto transactions = block->transactions();
+        eInfo("[MEGA] Block {} from {} ({} transactions)",
+              block->getIndex().to_string(NumeralBase::Dec),
+              lastBlock->getIndex().to_string(NumeralBase::Dec),
+              transactions.size());
+
+        for (auto &tx : transactions) {
+            if (tx.type() == TransactionType::Reward) {
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                continue;
+            }
+
+            if (tx.type() == TransactionType::InitContract) {
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                continue;
+            }
+
+            auto receiver = GenesisDataActor { .actorId = tx.receiver(), .tokenId = tx.token() };
+            map[{ tx.sender(), tx.token() }].state -= tx.amount();
+            map[{ tx.receiver(), tx.token() }].state += tx.amount();
+        }
+    }
+
+    genesis.addRows(map);
     genesis.sign(actor);
     return BlockVariant(genesis);
 }
