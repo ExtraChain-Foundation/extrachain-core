@@ -174,9 +174,11 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
         // return BigNumberFloat(0);
     }
 
-    return (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-            + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-            + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
+    auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+                + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+                + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
+    res *= KoefReward;
+    return res;
 }
 
 void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward) {
