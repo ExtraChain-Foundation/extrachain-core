@@ -99,8 +99,7 @@ void TransactionManager::makeBlock() {
     }
 
     if (!node->network()->isActiveConnectionExists()) {
-        // eLog("[TransactionManager] No active connections");
-
+        eLog("[TransactionManager] No active connections");
         return;
     }
 
@@ -158,9 +157,11 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
     auto last_block = node->blockchain()->getLastBlock();
     auto last_id    = last_block.has_value() ? last_block->getIndex() : BigNumber(-1);
     eLog("[Blockchain] Last id: {}. Blockchain status: {}", last_id, node->blockchain()->status());
+    m_receivedTxList.clear();
     return;
 #endif
 
+    eLog("[TransactionManager] Make block... {}", node->blockchain()->status());
     makeBlock();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {
