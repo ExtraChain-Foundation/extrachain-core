@@ -33,30 +33,26 @@ class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
 public:
     explicit WebSocketService(QWebSocket     *ws,
                               ExtraChainNode *node,
-                              QObject        *parent       = nullptr,
-                              const bool      isConstant   = false,
-                              const bool      needToDelete = false);
+                              QObject        *parent      = nullptr,
+                              const bool      is_constant = false);
     // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
-    QWebSocket     *socket() const;
-    bool            isActive() const override;
-    void            open(const QString &ip, quint16 port);
-    virtual QString protocolString() const override {
-        return "WebSocket";
-    }
-    virtual Network::Protocol protocol() const override {
-        return Network::Protocol::WebSocket;
-    }
+    QWebSocket               *socket() const;
+    bool                      is_active() const override;
+    void                      open(const QString &ip, quint16 port);
+    virtual QString           protocol_string() const override;
+    virtual Network::Protocol protocol() const override;
 
     bool operator==(const WebSocketService &service) const;
 
     quint16 port() const override;
-    quint16 serverPort() const override;
+    quint16 server_port() const override;
 
 public:
-    void         sendMessage(const QByteArray &data, Priority priority = Priority::High) override;
-    virtual void final() override;
+    void send_message(const QByteArray &data, Priority priority = Priority::High) override;
+
+    virtual void flush() override;
 
 signals:
     void sendMessageInternal(const QByteArray &data);

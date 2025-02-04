@@ -131,18 +131,65 @@ struct MessageIdDataReceived {
     qint64      time;
 };
 
+static const std::string NetworkCacheFile = "tmp/network.cache";
+
 class Responder {
 public:
-    // send
-    // broadcast send
+    Responder(NetworkManager* manager)
+        : network_manager(manager) {
+    }
+
+    template <class T>
+    std::string send_response(const T& data, MessageType type, SendMode send_mode, MessageStatus status) const {
+        if (network_manager == nullptr) {
+            return "";
+        }
+
+        auto data_serialized = MessagePack::serialize(data);
+        auto send_result     = send_response_impl(data_serialized, type, send_mode, status);
+        return send_result;
+    }
+
+    const std::string& message_id() const {
+        return message_id_;
+    }
+
+    const std::unordered_set<std::string>& identifiers() const {
+        return identifiers_;
+    }
+
+    bool add_identifier(const std::string& identifier) {
+        if (identifier.empty()) {
+            return false;
+        }
+
+        return identifiers_.insert(identifier).second;
+    }
+
+    bool remove_identifier(const std::string& identifier) {
+        if (identifier.empty()) {
+            return false;
+        }
+
+        return identifiers_.erase(identifier) != 0;
+    }
+
+    void set_message_id(const std::string& message_id) {
+        message_id_ = message_id;
+    }
 
 private:
-    std::string     identifier;
-    std::string     message_id;
-    NetworkManager* network_manager;
-};
+    std::string send_response_impl(const std::string& data_serialized,
+                                   MessageType        type,
+                                   SendMode           send_mode,
+                                   MessageStatus      status) const;
 
-static const std::string NetworkCacheFile = "tmp/network.cache";
+    MessageType message_type;
+    // MessageStatus                   message_status;
+    std::unordered_set<std::string> identifiers_;
+    std::string                     message_id_;
+    NetworkManager*                 network_manager = nullptr;
+};
 
 /**
  * @brief The NetworkManager class
@@ -194,12 +241,12 @@ public:
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
-    void sendMessage(const std::string&    serialized_message,
-                     const MessageBody&    non_serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier,
-                     MessageType           message_type = MessageType::Unknown,
-                     MessageStatus         status_info  = MessageStatus::NoStatus);
+    void send_message_connections(const std::string& serialized_message,
+                                  const MessageBody& non_serialized_message,
+                                  SendMode           send_mode,
+                                  const std::string& receiver_identifier,
+                                  MessageType        message_type = MessageType::Unknown,
+                                  MessageStatus      status_info  = MessageStatus::NoStatus);
 
     void clearNetworkCaches();
 
@@ -259,94 +306,47 @@ public:
 
     void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
 
-    void saveToCache(const std::string&    serialized_message,
-                     Config::Net::TypeSend typeSend,
-                     const std::string&    receiver_identifier);
+    void saveToCache(const std::string& serialized_message,
+                     SendMode           send_mode,
+                     const std::string& receiver_identifier);
     void sendFromCache();
     bool isActiveConnectionExists();
+    int  active_connections_count();
 
     void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
 
     QString foundCurrentIdentifier(QString ip, quint16 port);
 
+    bool        send_message_checker(MessageType      type,
+                                     SendMode         send_mode,
+                                     MessageStatus    status,
+                                     const Responder& responder);
+    std::string send_message_send(const std::string& data_serialized,
+                                  MessageType        type,
+                                  SendMode           send_mode,
+                                  MessageStatus      status,
+                                  const Responder&   responder);
+
     template <class T>
-    std::string send_message(T                     data,
-                             MessageType           type,
-                             Config::Net::TypeSend typeSend,
-                             MessageStatus         status              = MessageStatus::NoStatus,
-                             std::string           to_message_id       = "",
-                             std::string           receiver_identifier = "") {
-        if (status == MessageStatus::Response && to_message_id.empty() && receiver_identifier.empty()) {
-            eCritical(
-                "[Network] Send message error: empty message id or receiver identifier for response message");
-            return "";
-        }
-        if (status == MessageStatus::Response && typeSend != Config::Net::TypeSend::Focused) {
-            eWarning(
-                "[Network] Send message warning: incorrect type send for response message, set to focused, type: "
-                "{}",
-                type);
-            typeSend = Config::Net::TypeSend::Focused;
-        }
-
-        if (!node) {
-            eCritical("[Network] Send message error: accountController is bye 1!");
-            return "";
-        }
-        if (!node->accountController()) {
-            eCritical("[Network] Send message error: accountController is bye 2!");
-            return "";
-        }
-        if (node->accountController()->empty()) {
-            eCritical("[Network] Send message error: accountController is empty!");
+    std::string send_message(const T&         data,
+                             MessageType      type,
+                             SendMode         send_mode,
+                             MessageStatus    status    = MessageStatus::NoStatus,
+                             const Responder& responder = Responder(nullptr)) {
+        bool check = send_message_checker(type, send_mode, status, responder);
+        if (!check) {
             return "";
         }
 
-        auto&       mainActor = node->accountController()->mainActor();
-        MessageBody message =
-            make_init_message(MessagePack::serialize(data), typeSend, type, status, mainActor.id(), to_message_id);
+        auto data_serialized = MessagePack::serialize(data);
+        auto message_id      = send_message_send(data_serialized, type, send_mode, status, responder);
+        return message_id;
+    }
 
-        if (typeSend == Config::Net::TypeSend::Broadcast) {
-            addAllServicesIdentifiersToMessage(message);
-        }
-
-        auto serialized          = message.serialize();
-        auto serialized_for_sign = message.serializeForSign();
-        auto sign_result         = mainActor.key().sign(ByteArray(serialized_for_sign).toBytes());
-        if (!sign_result.has_value()) {
-            return "";
-        }
-        auto sign = ByteArray(sign_result.value()).toString();
-        if (!to_message_id.empty()) {
-            auto messages_locked = *m_messages;
-            if (messages_locked->count(to_message_id)) {
-                receiver_identifier = messages_locked->at(to_message_id).first;
-            } else {
-                eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
-                         to_message_id);
-                return "";
-            }
-            //            if (receiver_identifier.empty())
-            //                eFatal("Network send message error: receiver_identifier is empty");
-            // m_messages.erase(to_message_id);
-        }
-
-#ifdef QT_DEBUG
-        if (Network::networkDebug) {
-            msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
-            msgpack::object        deserialized = oh.get();
-            eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
-                 message.message_type,
-                 message.status,
-                 message.message_id,
-                 typeSend,
-                 (std::stringstream() << deserialized).str());
-        }
-#endif
-
-        this->sendMessage(serialized + sign, message, typeSend, receiver_identifier, type, status);
-
-        return message.message_id;
+    template <class T>
+    std::string send_broadcast(const T& data, MessageType type, MessageStatus status = MessageStatus::NoStatus) {
+        auto message_id = send_message(data, type, SendMode::Broadcast, status);
+        return message_id;
     }
 
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
@@ -361,6 +361,4 @@ signals:
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
-
-    friend class DfsNetworkManager;
 };

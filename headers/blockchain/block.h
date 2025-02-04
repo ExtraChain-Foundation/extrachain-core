@@ -53,7 +53,7 @@ struct Approver {
 enum class BlockType {
     Data,
     Genesis,
-    Dummy,
+    Dummy
 };
 MSGPACK_ADD_ENUM(BlockType)
 // FORMAT_ENUM(BlockType)
@@ -63,13 +63,24 @@ enum class BlockError {
     EmptyBlockchain,
     NoGenesis,
     NotExists,
-    Invalid,
+    Empty,
+    DbNotOpen,
+    Equal,
     AlreadyExists,
     AlreadyChained,
-
+    BlockchainBusy,
     CantMerge,
     BlockEqual,
-    MergeEqual
+    MergeEqual,
+    IncorrectGenesisId,
+    NoTransactions,
+    NoLastGenesis,
+    GreaterLast,
+    NoPrevBlock,
+    InvalidHash,
+    IncorrectBlockId,
+    IdNotEqual,
+    CantCreateFirst
 };
 // FORMAT_ENUM(BlockError)
 
@@ -194,5 +205,5 @@ inline bool operator<(const Block &l, const Block &r) {
 
 inline bool operator==(const Block &l, const Block &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
-           && l.transactions() == r.transactions();
+           && l.transactions() == r.transactions() && l.signatures() == r.signatures();
 }

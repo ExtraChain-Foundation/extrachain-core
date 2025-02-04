@@ -48,7 +48,8 @@ BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
         }
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
-        eFatal("Incorrect BigNumber value: {}", bigNumber);
+        this->m_data = -100000;
+        // eFatal("Incorrect BigNumber value: {}", bigNumber);
     }
 
     UPDATE_DEBUG()
@@ -290,7 +291,7 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
         return bn;
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
-        assert(false);
+        // assert(false);
         return std::unexpected(BigNumberError::InvalidNumber);
     }
 }

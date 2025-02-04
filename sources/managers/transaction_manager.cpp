@@ -44,6 +44,11 @@ void TransactionManager::removeTransaction(int i) {
 
 void TransactionManager::addTransactionNetwork(const Transaction &tx) {
     // eLog("[TransactionManager] Added to the waiting list: {}", tx);
+    // eLog("addTransactionNetwork {}", node->blockchain()->status());
+    if (node->blockchain()->status() != BlockchainStatus::Ready) {
+        return;
+    }
+
     m_receivedTxList.insert(tx);
 }
 
@@ -63,13 +68,21 @@ void TransactionManager::makeBlock() {
     auto lastBlock     = node->blockchain()->getLastBlock();
 
     if (!lastBlock.has_value() || !lastRealBlock.has_value()) {
-        eLog("[TransactionManager] last or real last block is not exists");
+        eLog("[Blockchain] last or real last block is not exists");
         // TODO: request once!
         // node->blockchain()->sync();
         return;
     }
     if (lastBlock->isEmpty() || lastRealBlock->isEmpty()) {
-        eLog("[TransactionManager] last or real last block is empty");
+        eLog("[Blockchain] last or real last block is empty");
+        return;
+    }
+
+    if (node->blockchain()->status() == BlockchainStatus::Sync) {
+        eLog("[Blockchain] Blockchain: try to sync... Last block: {}, type: {}, connections: {}",
+             lastRealBlock->getIndex(),
+             lastRealBlock->getType(),
+             node->network()->active_connections_count());
         return;
     }
 
@@ -85,9 +98,6 @@ void TransactionManager::makeBlock() {
     if (!node->network()->isActiveConnectionExists()) {
         // eLog("[TransactionManager] No active connections");
 
-        if (lastRealBlock->getIndex() != lastBlock->getIndex()) {
-            node->blockchain()->removeDummyBlocks();
-        }
         return;
     }
 
@@ -100,7 +110,7 @@ void TransactionManager::makeBlock() {
         const auto genesis = node->blockchain()->createGenesisBlock(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
-            node->blockchain()->sendBlock(genesis.value());
+            node->network()->send_message(genesis.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
         }
 
         return;
@@ -137,13 +147,22 @@ void TransactionManager::makeBlock() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
-    node->blockchain()->sendBlock(blockVariant);
+    node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 
 void TransactionManager::makeBlockAndProveTransactionsInThread() {
-    // return;
+#ifdef IS_R
+    auto last_block = node->blockchain()->getLastBlock();
+    auto last_id    = last_block.has_value() ? last_block->getIndex() : BigNumber(-1);
+    eLog("[Blockchain] Last id: {}. Blockchain status: {}", last_id, node->blockchain()->status());
+    return;
+#endif
+
     makeBlock();
-    proveTransactions();
+
+    if (node->blockchain()->status() == BlockchainStatus::Ready) {
+        proveTransactions();
+    }
 }
 
 void TransactionManager::proveTransactions() {
@@ -151,11 +170,11 @@ void TransactionManager::proveTransactions() {
         TransactionProveError res = node->blockchain()->proveTransaction(tx, m_pendingTxList);
 
         if (res == TransactionProveError::NoError) {
-            eLog("[TransactionManager] Transaction approved: {}", tx);
+            eLog("[Blockchain] Transaction approved: {}", tx);
             // eLog("[TransactionManager] Transaction approved!");
             this->addProvedTransaction(tx);
         } else {
-            eLog("[TransactionManager] Transaction not approved: {} {}", tx, res);
+            eLog("[Blockchain] Transaction not approved: {} {}", tx, res);
             // eLog("[TransactionManager] Transaction not approved: {}", res);
         }
     }

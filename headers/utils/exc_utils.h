@@ -28,6 +28,7 @@
 #include <charconv>
 #include <system_error>
 #include <concepts>
+#include <random>
 
 #include <QFile>
 #include <QObject>
@@ -306,7 +307,7 @@ namespace Config {
                                                ");";
 
         // How many files one section folder will store
-        static const int SECTION_SIZE = 1000;
+        static const int SECTION_SIZE = 100000;
 
         // How often to construct block from pending transactions (in miliseconds)
         static const int BLOCK_CREATION_PERIOD = 5000;
@@ -327,18 +328,8 @@ namespace Config {
         // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
         // responses
         static const int NECESSARY_RESPONSE_COUNT = 1; // 3
-
-        enum class TypeSend {
-            AllParents,
-            Broadcast,
-            Except,
-            Focused
-        };
     } // namespace Net
 } // namespace Config
-
-MSGPACK_ADD_ENUM(Config::Net::TypeSend)
-// FORMAT_ENUM(Config::Net::TypeSend)
 
 namespace Serialization {
     EXTRACHAIN_EXPORT std::string serialize(const std::vector<std::string> &list);
@@ -569,6 +560,11 @@ namespace Utils {
         return std::string(magic_enum::enum_type_name<E>()) + "::" + std::string(magic_enum::enum_name(value));
     }
 
+    template <typename E>
+    std::string enum_value_name_value(E value) {
+        return std::string(magic_enum::enum_name(value));
+    }
+
     EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
@@ -709,6 +705,30 @@ namespace Utils {
 
     std::string generate_random_hex(size_t length);
 
+    template <size_t N>
+    std::array<size_t, N> random_indices(size_t max_index) {
+        std::array<size_t, N> indices {};
+
+        if (max_index == 0) {
+            return indices;
+        }
+
+        const size_t actual_size = std::min(N, max_index);
+
+        std::vector<size_t> all_indices(max_index);
+        std::iota(all_indices.begin(), all_indices.end(), 0);
+
+        std::random_device rd;
+        std::mt19937       gen(rd());
+        std::shuffle(all_indices.begin(), all_indices.end(), gen);
+
+        for (size_t i = 0; i < actual_size; ++i) {
+            indices[i] = all_indices[i];
+        }
+
+        return indices;
+    }
+
     template <typename T>
     concept Container = std::ranges::range<T>;
 
@@ -799,6 +819,7 @@ namespace BlockchainConst {
     static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
     static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
     static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
+    static const std::string BLOCKCHAIN_FOLDER       = "blockchain/index/" + BLOCK_INDEX_FOLDER_NAME;
 
     // Dfs
     static const int DATA_OFFSET = 512;

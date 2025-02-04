@@ -60,6 +60,11 @@ namespace Dfs {
         Broadcast,
         Sync
     };
+
+    struct DfsSize {
+        std::size_t all   = 0;
+        std::size_t local = 0;
+    };
 } // namespace Dfs
 
 class ThreadAddFiles;
@@ -176,7 +181,7 @@ public:
 
     void network_request_collection(const ActorId     &owner_id,
                                     const std::string &file_id,
-                                    const std::string &message_id);
+                                    const Responder   &responder);
     void network_response_historical_collection(const ActorId                              &owner_id,
                                                 const std::string                          &file_id,
                                                 const std::vector<HistoricalCollectionRow> &historical_rows);
@@ -186,16 +191,18 @@ public:
     void network_change_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row,
-                                   const std::string             &message_id);
+                                   const Responder               &responder);
     void network_remove_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
-    void network_request_file_state(const ActorId &owner_id, const std::string &file_id, std::string message_id);
+    void network_request_file_state(const ActorId     &owner_id,
+                                    const std::string &file_id,
+                                    const Responder   &responder);
     void network_response_file_state(const ActorId     &owner_id,
                                      const std::string &file_id,
                                      Dfs::FileState     state,
-                                     std::string        identifier);
+                                     const Responder   &responder);
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
@@ -213,7 +220,7 @@ public:
 
     // visualMoveFile
     void broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row);
-    void sync_stored(const Dfs::FileData &file_data, const std::string &message_id);
+    void sync_stored(const Dfs::FileData &file_data, const Responder &responder);
 
     // External interfaces
     std::string network_store_file(const ActorId        &owner_id,
@@ -235,6 +242,7 @@ public:
 
     void sync(const std::string &identifier);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
+    void refresh_calculate();
 
 private:
     DirsManager dirs_manager_;
@@ -247,18 +255,17 @@ private:
                                                       CollectionOperation          type,
                                                       const Dfs::DataSecurityData &security_data);
 
-    std::uint64_t calculateSizeTaken(const std::string &folder = DfsB::fsActrRoot) const;
-    std::uint64_t calculateFilesSize(const std::string &folder = DfsB::fsActrRoot) const;
+    Dfs::DfsSize calculate_size() const;
 
     void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
-    void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const std::string &messageId) const;
+    void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder) const;
     void  sendCountRequestMsg(const ActorId &actorId) const;
     void  sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                              const std::string                     &messageId,
-                              BigNumber                              dfsCount) const;
+                              BigNumber                              dfsCount,
+                              const Responder                       &responder) const;
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
     void  loadVPNLocalizationFiles();
 

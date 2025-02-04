@@ -23,7 +23,7 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor.h"
+#include "blockchain/actor_id.h"
 #include "utils/exc_utils.h"
 
 enum class MessageType {
@@ -33,13 +33,15 @@ enum class MessageType {
     ActorCount = 3,
     ActorAll   = 4,
 
-    BlockchainGenesisBlock = 30,
-    BlockchainNewBlock     = 31,
+    BlockchainNewBlock     = 30,
+    BlockchainSyncBlock    = 31,
     BlockchainTransaction  = 32,
     BlockchainCoinReward   = 35,
     BlockchainRequestBlock = 36,
     BlockchainSync         = 37,
     BlockchainLastSaved    = 38,
+
+    BlockchainSyncLastInfo = 40, // last id, last hash
 
     BlockchainSyncBlocks = 49,
 
@@ -94,8 +96,18 @@ enum class MessageStatus {
 MSGPACK_ADD_ENUM(MessageStatus)
 // FORMAT_ENUM(MessageStatus)
 
+enum class SendMode {
+    Neighbours,
+    NeighboursRandom,
+    OneNeighbourRandom,
+    Broadcast,
+    Except,
+    Focused
+};
+MSGPACK_ADD_ENUM(SendMode)
+
 struct MessageBody {
-    Config::Net::TypeSend           send_type;
+    SendMode                        send_type;
     MessageType                     message_type;
     MessageStatus                   status;
     std::string                     message_id;
@@ -105,9 +117,30 @@ struct MessageBody {
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string                     data;
 
-    std::string serializeForSign() const {
-        return std::to_string(std::to_underlying(send_type)) + std::to_string(std::to_underlying(message_type))
-               + std::to_string(std::to_underlying(status)) + message_id + init_sender_id.to_string() + data;
+    std::string calculate_hash() const {
+        blake3_hasher hasher;
+        blake3_hasher_init(&hasher);
+
+        auto send_type_val = std::to_underlying(send_type);
+        blake3_hasher_update(&hasher, &send_type_val, sizeof(send_type_val));
+
+        auto message_type_val = std::to_underlying(message_type);
+        blake3_hasher_update(&hasher, &message_type_val, sizeof(message_type_val));
+
+        auto status_val = std::to_underlying(status);
+        blake3_hasher_update(&hasher, &status_val, sizeof(status_val));
+
+        blake3_hasher_update(&hasher, message_id.data(), message_id.size());
+
+        std::string init_sender_str = init_sender_id.to_string();
+        blake3_hasher_update(&hasher, init_sender_str.data(), init_sender_str.size());
+
+        blake3_hasher_update(&hasher, data.data(), data.size());
+
+        uint8_t output[BLAKE3_OUT_LEN];
+        blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+
+        return fmt::format("{:02x}", fmt::join(std::span(output, BLAKE3_OUT_LEN), ""));
     }
 
     std::string serialize() const {
@@ -147,12 +180,12 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline MessageBody make_init_message(const std::string&    data,
-                                     Config::Net::TypeSend send_type,
-                                     MessageType           type,
-                                     MessageStatus         status,
-                                     const ActorId&        sender,
-                                     std::string           to_message_id) {
+inline MessageBody make_init_message(const std::string& data,
+                                     SendMode           send_type,
+                                     MessageType        type,
+                                     MessageStatus      status,
+                                     const ActorId&     sender,
+                                     std::string        to_message_id) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
     }

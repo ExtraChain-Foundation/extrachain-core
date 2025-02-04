@@ -118,5 +118,5 @@ public:
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
     return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
-           && l.dataRows() == r.dataRows();
+           && l.dataRows() == r.dataRows() && l.signatures() == r.signatures();
 }

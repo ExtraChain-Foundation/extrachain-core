@@ -24,7 +24,7 @@
 #include "blockchain/genesis_block.h"
 #include "blockchain/block_index.h"
 #include "blockchain/transaction.h"
-#include "dfs/dfs_utils.h"
+#include "network/network_manager.h"
 #include "utils/bignumber.h"
 
 #include <QByteArray>
@@ -34,6 +34,7 @@
 #include <cassert>
 
 class TransactionManager;
+class Responder;
 
 /*
  * Main database class
@@ -47,11 +48,34 @@ class TransactionManager;
 
 class ExtraChainNode;
 
+enum class BlockchainStatus {
+    // Process,
+    Started,
+    Ready,
+    Sync,
+    Maybe,
+    Timered,
+};
+
+enum class BlockchainSyncStatus {
+    None,
+    LastInfo,
+    Blocks
+};
+
+struct BlockchainLastInfo {
+    BigNumber   last_block_id;
+    std::string last_hash;
+};
+BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash))
+
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
     //                  "Your type is not supported."
     //                  "Supportable types: BigNumber, Transaction, Block, TxPair, Actor");
     Q_OBJECT
+
+    friend class ExtraChainNode;
 
 private:
     ExtraChainNode *node;
@@ -59,6 +83,14 @@ private:
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
+
+    BlockchainStatus                                    status_        = BlockchainStatus::Started;
+    BlockchainSyncStatus                                sync_status_   = BlockchainSyncStatus::None;
+    BlockchainSyncStatus                                check_status_  = BlockchainSyncStatus::None;
+    int                                                 requests_count = 0;
+    std::unordered_map<std::string, BlockchainLastInfo> last_info_;
+
+    QTimer *timer_sync;
 
 public:
     explicit Blockchain(ExtraChainNode *node);
@@ -69,8 +101,27 @@ public:
                                                             const bool       makeRequestBlock = false);
     std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
 
-    void sync(const BigNumber &from = BigNumber(), const std::string &identifier = "");
+    void sync(const BigNumber &from = BigNumber(), std::optional<Responder> responder = std::nullopt);
     void lastSavedRequest();
+
+    BlockchainStatus status();
+
+    void start_sync();
+    void start_check();
+    // to slot
+    void network_status_sync_request(const Responder &responder);
+    // to slot
+    void network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder);
+    void send_request_blocks();
+
+    void remove_last_block() {
+        auto block = this->getLastRealBlock();
+
+        if (block.has_value() && block->getIndex() != BigNumber(0)) {
+            blockIndex.removeById(block->getIndex());
+            eLog("[Blockchain] Remove last block: {}", block->getIndex());
+        }
+    }
 
 private:
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
@@ -176,11 +227,6 @@ public:
     int removeBlock(const BlockVariant &block);
 
     /**
-     *
-     */
-    void removeDummyBlocks();
-
-    /**
      * @brief Check if two blocks can be merged
      * (has identical id and at least one common transaction)
      * @param blockA
@@ -250,24 +296,30 @@ public:
     void getSmContractMembers(const BlockVariant &block) const;
 
 signals:
+    void need_check();
     void finished();
     void newNotify(Notification ntf);
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
     void addBlockFromNetwork(const BlockVariant &block,
-                             const std::string  &messageId,
-                             const std::string  &identifier);
-    void syncResponseFromNetwork(const BigNumber fromBlock, const std::string &messageId);
-    void syncResponseVectorFromNetwork(std::vector<BlockVariant> blocks,
-                                       const std::string        &message_id,
-                                       const std::string        &identifier);
+                             const Responder    &responder,
+                             const NetworkPackageStorage,
+                             bool resend);
+    void syncResponseFromNetwork(const BigNumber fromBlock, const Responder &responder);
+    void syncResponseVectorFromNetwork(const std::string &blocks,
+                                       const Responder   &responder,
+                                       const NetworkPackageStorage);
+    void statusChanged(BlockchainStatus status);
 
     /**
      * @brief possibleMiningChange
      * @param possibleMinig
      */
     void possibleMiningChange(const bool &possibleMinig);
+
+    void network_status_sync_request_signal(const Responder &responder);
+    void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
 
 public:
     BigNumber getBlockCount();
@@ -278,10 +330,15 @@ public:
     TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
-    void addBlockNetwork(const BlockVariant &block, const std::string &messageId, const std::string &identifier);
-    void syncResponse(const BigNumber fromBlock, const std::string &identfier);
-    void syncResponseVector(std::vector<BlockVariant> blocks,
-                            const std::string        &message_id,
-                            const std::string        &identifier);
+    std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
+                                                            const Responder    &responder,
+                                                            const NetworkPackageStorage,
+                                                            bool resend);
+
+    void syncResponse(const BigNumber fromBlock, const Responder &responder);
+    void syncResponseVector(const std::string           &blocks,
+                            const Responder             &responder,
+                            const NetworkPackageStorage &package_storage);
+    void timer_sync_tick();
     void process();
 };

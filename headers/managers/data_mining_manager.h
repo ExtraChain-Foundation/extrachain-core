@@ -31,9 +31,10 @@
 class DataMiningManager : public QObject {
     Q_OBJECT
 
-    ExtraChainNode *node;
-    const int       CoinProductionRate = 100;
-    bool            isRecalculate      = false;
+    ExtraChainNode      *node;
+    const int            CoinProductionRate = 100;
+    const BigNumberFloat KoefReward         = BigNumberFloat("0.25", NumeralBase::Dec);
+    bool                 isRecalculate      = false;
 
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);

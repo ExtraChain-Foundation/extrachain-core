@@ -26,6 +26,7 @@
 #include "managers/extrachain_node.h"
 
 class ExtraChainNode;
+class Responder;
 
 enum class ActorIndexError {
     Unknown,
@@ -38,6 +39,11 @@ enum class ActorSaveError {
     NotExists,
     AlreadyExists,
     NotOpened
+};
+
+enum class ActorGetType {
+    NoRequest,
+    Request
 };
 
 /**
@@ -100,7 +106,8 @@ public:
      */
     Actor<KeyPublic> getActor(const ActorId &id);
 
-    std::expected<Actor<KeyPublic>, ActorIndexError> get_actor(const ActorId &id);
+    std::expected<Actor<KeyPublic>, ActorIndexError> get_actor(const ActorId &id,
+                                                               ActorGetType   get_type = ActorGetType::Request);
 
     /**
      * @brief Validates block digital signature
@@ -131,10 +138,12 @@ public:
     std::vector<ActorId>                allActors();
     void                                handleNewAllActors(const std::vector<ActorId> &actors);
 
-    void handleGetActor(const ActorId &actorId, const std::string &messageId);
-    void handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId);
+    void send_system_actor(const Responder &responder);
+
+    void handleGetActor(const ActorId &actorId, const Responder &responder);
+    void handleGetAllActor(const ActorId &ignoredActorId, const Responder &responder);
     void getAllActors(ActorId id, bool isUser);
-    void getActorCount(const QByteArray &requestHash, const std::string &messageId);
+    void getActorCount(const QByteArray &requestHash, const Responder &responder);
 
 signals:
     void newActorSaved(ActorId actor_id);

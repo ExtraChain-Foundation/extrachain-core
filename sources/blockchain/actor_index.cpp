@@ -56,7 +56,7 @@ Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
     }
 }
 
-std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const ActorId &id) {
+std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const ActorId &id, ActorGetType get_type) {
     if (id.is_zero()) {
         eWarning("[ActorIndex] Error: try get actor with id: {}", id);
         return std::unexpected(ActorIndexError::ZeroActor);
@@ -67,7 +67,10 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const Act
         auto actor = Actor<KeyPublic>::fromJson(serialized_actor);
         return actor;
     } else {
-        sendGetActorMessage(id);
+        if (get_type == ActorGetType::Request) {
+            sendGetActorMessage(id);
+        }
+
         eWarning("[ActorIndex] There no actor with id: {}", id);
         return std::unexpected(ActorIndexError::NoActor);
     }
@@ -91,35 +94,27 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
     return true;
 }
 
-void ActorIndex::handleGetActor(const ActorId &actorId, const std::string &messageId) {
+void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &responder) {
     // receive id
     // create response message
     if (actorId.is_zero())
         eFatal("handleGetActor: empty actor");
     Actor<KeyPublic> actor = getActor(actorId);
     if (!actor.empty()) {
-        node->network()->send_message(actor,
-                                      MessageType::Actor,
-                                      Config::Net::TypeSend::Focused,
-                                      MessageStatus::Response,
-                                      messageId);
+        responder.send_response(actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
     } else {
         sendGetActorMessage(actorId);
     }
 }
 
-void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const std::string &messageId) {
+void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const Responder &responder) {
     if (node->accountController()->empty())
         return;
 
     auto result = allActors();
     result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
     if (!result.empty()) {
-        node->network()->send_message(result,
-                                      MessageType::ActorAll,
-                                      Config::Net::TypeSend::Focused,
-                                      MessageStatus::Response,
-                                      messageId);
+        responder.send_response(result, MessageType::ActorAll, SendMode::Focused, MessageStatus::Response);
     } else {
         // send empty response
     }
@@ -130,10 +125,7 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     Q_UNUSED(isUser)
 
     if (!node->accountController()->empty()) {
-        node->network()->send_message(id,
-                                      MessageType::ActorAll,
-                                      Config::Net::TypeSend::AllParents,
-                                      MessageStatus::Request);
+        node->network()->send_message(id, MessageType::ActorAll, SendMode::Neighbours, MessageStatus::Request);
 
         eLog("[ActorIndex] Get all actors request");
     }
@@ -144,13 +136,18 @@ void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
         getActor(actor);
 }
 
-void ActorIndex::getActorCount(const QByteArray &requestHash, const std::string &messageId) {
+void ActorIndex::send_system_actor(const Responder &responder) {
+    auto system_actor = node->accountController()->mainActor().to_public();
+    responder.send_response(system_actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
+}
+
+void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &responder) {
     eLog("[ActorIndex] Get actor count response: {}", this->getRecords());
 
-    node->network()->send_message(std::to_string(this->getRecords()),
-                                  MessageType::ActorCount,
-                                  Config::Net::TypeSend::Focused,
-                                  MessageStatus::Response);
+    responder.send_response(std::to_string(this->getRecords()),
+                            MessageType::ActorCount,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 }
 
 bool ActorIndex::actorExist(const ActorId &actorId) {
@@ -226,7 +223,7 @@ void ActorIndex::sendGetActorMessage(const ActorId &actorId) {
 
     node->network()->send_message(actorId.to_string(),
                                   MessageType::Actor,
-                                  Config::Net::TypeSend::AllParents,
+                                  SendMode::Neighbours,
                                   MessageStatus::Request);
 }
 
@@ -250,7 +247,7 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     }
 
     emit newActorSaved(actor.id());
-    node->network()->send_message(actor, MessageType::NewActor, Config::Net::TypeSend::Broadcast);
+    node->network()->send_broadcast(actor, MessageType::NewActor);
     return result;
 }
 

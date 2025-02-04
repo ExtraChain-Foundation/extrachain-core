@@ -25,30 +25,25 @@
 #include "blockchain/blockchain.h"
 
 BlockIndex::BlockIndex() {
-    this->folderName  = BlockchainConst::BLOCK_INDEX_FOLDER_NAME;
     this->sectionSize = Config::DataStorage::SECTION_SIZE;
-    firstSavedId      = loadFirstId();
-    lastSavedId       = loadLastId();
-    QDir          dir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + '/' + folderName));
-    QFileInfoList sectionList = dir.entryInfoList(QDir::Filter::Dirs | QDir::NoDotAndDotDot);
 
-    removeDummyBlocks();
-    calculationCountBlock();
-}
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    if (file.open(QFile::ReadOnly)) {
+        auto last_id_content = file.readAll();
+        auto last_id_result  = BigNumber::create(last_id_content.toStdString());
+        if (last_id_result.has_value()) {
+            lastSavedId  = last_id_result.value();
+            firstSavedId = 0;
+        }
+    } else {
+        QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    }
 
-BlockIndex::BlockIndex(const BigNumber &recordsLimit)
-    : BlockIndex() {
-    this->recordsLimit = recordsLimit;
-    eLog("[BlockIndex] constructor: recordLimits: {}", recordsLimit);
-}
-
-BlockIndex::BlockIndex(const QString &folderName) {
-    eLog("[BlockIndex] constructor: folder name: {}", folderName);
-}
-
-BlockIndex::BlockIndex(const QString &folderName, const BigNumber &recordsLimit)
-    : BlockIndex(folderName) {
-    this->recordsLimit = recordsLimit;
+    // last id > 0 -> first id
+    // if no zero block or no last block ->
+    if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
+        QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    }
 }
 
 void BlockIndex::setBlockCompress(bool newBlockCompress) {
@@ -61,35 +56,11 @@ std::expected<BlockVariant, BlockError> BlockIndex::addBlock(const BlockVariant 
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastBlock() const {
-    BigNumber id = this->lastSavedId;
-
-    while (id >= getFirstSavedId()) {
-        auto block = this->getBlockById(id);
-
-        if (block.has_value() && !block->isEmpty()) {
-            return block;
-        }
-
-        --id;
-    }
-
-    return std::unexpected(BlockError::NotExists);
+    return this->getBlockById(lastSavedId);
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastRealBlock() const {
-    BigNumber id = this->lastSavedId;
-    // eLog("[BlockIndex] Last real block: {}", this->lastSavedId);
-    while (id >= getFirstSavedId()) {
-        auto block = this->getBlockById(id);
-
-        if (block.has_value() && block->getType() != BlockType::Dummy && !block->isEmpty()) {
-            return block;
-        }
-
-        --id;
-    }
-
-    return std::unexpected(BlockError::NotExists);
+    return getLastBlock();
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const BigNumber &from) const {
@@ -122,7 +93,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::getGenesisBlockById(const Bi
 
 std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber &id) const {
     if (id < 0) {
-        eFatal("getBlockById < 0");
+        return std::unexpected(BlockError::NotExists);
+        // eFatal("getBlockById < 0");
     }
 
     auto block = this->getById(id);
@@ -131,16 +103,6 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber
     }
 
     // eLog("[BlockIndex] {} not exists, maybe past dummy?", id);
-    return std::unexpected(BlockError::NotExists);
-}
-
-std::expected<BlockVariant, BlockError> BlockIndex::getBlockByPosition(const BigNumber &position) const {
-    BigNumber blockId = getFirstSavedId() + position;
-    if (blockId <= this->lastSavedId) {
-        auto block = this->getBlockById(blockId);
-        return block;
-    }
-
     return std::unexpected(BlockError::NotExists);
 }
 
@@ -226,9 +188,9 @@ std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber 
 std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string  &data,
                                                                SearchEnum::TxParam param,
                                                                const TokenId      &tokenId) const {
-    BigNumber records = getRecords();
+    BigNumber records = getLastSavedId();
 
-    if (records == 0) {
+    if (records <= 0) {
         eLog("[BlockIndex] There no tx's in block index");
         return { Transaction(), BigNumber("-1") };
     }
@@ -301,9 +263,8 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
                                                      int                 count,
                                                      ActorId             token) const {
     std::set<Transaction> currentTxs;
-    BigNumber             records = getRecords();
 
-    if (records == 0) {
+    if (firstSavedId == -1 || lastSavedId == -1) {
         eLog("[BlockIndex] There no tx's in block index");
         return currentTxs;
     }
@@ -387,31 +348,13 @@ std::string BlockIndex::buildFilePath(const BigNumber &id) const {
     return pathToFolder + "/" + id.to_string();
 }
 
-void BlockIndex::calculationCountBlock() {
-    BigNumber id = this->lastSavedId;
-    eLog("[BlockIndex] getLastBlock: last saved id: {}", this->lastSavedId);
-
-    while (id >= firstSavedId) {
-        auto block = this->getBlockById(id);
-
-        if (block.has_value() && !block->isEmpty()) {
-            if (block->getType() == BlockType::Data) {
-                // eLog("[BlockIndex] Block by index {} is real", block.getIndex());
-                realBlockRecords++;
-                // eLog("[BlockIndex] Count real blocks: {}", realBlockRecords);
-            }
-
-            if (block->isBlock() && block->getType() == BlockType::Dummy) {
-                countTransactions += block->transactions().size();
-            }
-
-            records++;
-        }
-
-        --id;
-    }
-
-    eLog("[BlockIndex] Count records: {} ", records);
+void BlockIndex::update_last_id(const BigNumber &id) {
+    this->lastSavedId  = id;
+    this->firstSavedId = 0;
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    file.open(QFile::WriteOnly);
+    file.write(this->lastSavedId.to_string().data());
+    file.close();
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, const BlockVariant &newBlock) {
@@ -422,25 +365,30 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         auto block = getBlockById(id);
 
         if (block.has_value() && !block->isEmpty()) {
+            // if sign -> add only signs
+            if (block == newBlock) {
+                return std::unexpected(BlockError::Equal);
+            }
+
             return std::unexpected(BlockError::AlreadyExists);
         }
 
         file.remove();
     }
 
-    if (recordLimitIsReached()) {
-        // start from genesis, remove first 100 blocks?
-        // if (this->firstSavedId != 0) {
-        //     this->removeById(getBlockById(getFirstSavedId()));
-        //     this->firstSavedId++; // todo: check!
-        // }
-    }
+    // if (recordLimitIsReached()) {
+    // start from genesis, remove first 100 blocks?
+    // if (this->firstSavedId != 0) {
+    //     this->removeById(getBlockById(getFirstSavedId()));
+    //     this->firstSavedId++; // todo: check!
+    // }
+    // }
 
     DbConnector db(path.toStdString(), m_blockCompress ? DbConnectorType::Compressed : DbConnectorType::Regular);
 
     auto bl = newBlock;
     if (!db.open()) {
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::DbNotOpen);
     }
 
     if (newBlock.isGenesisBlock()) {
@@ -480,11 +428,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
-        realBlockRecords++;
-        this->records = records + 1;
-
         if (id > this->lastSavedId) {
-            this->lastSavedId = id;
+            update_last_id(id);
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
@@ -523,8 +468,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             rowRow.insert({ "signature", ByteArray(tmp.signature()).toBase64() });
 
             bool txInserted = db.insert(Config::DataStorage::TxBlockTable, rowRow);
-            if (txInserted)
-                countTransactions++;
+            // if (txInserted)
+            // countTransactions++;
         }
 
         auto signatures = block.signatures();
@@ -536,13 +481,8 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
-        if (block.getType() == BlockType::Data)
-            realBlockRecords++;
-
-        this->records = records + 1;
-
         if (id > this->lastSavedId) {
-            this->lastSavedId = id;
+            update_last_id(id);
         }
 
         if (id < this->firstSavedId || firstSavedId == -1) {
@@ -558,9 +498,9 @@ bool BlockIndex::hasRecordLimit() const {
     return this->recordsLimit != -1;
 }
 
-bool BlockIndex::recordLimitIsReached() const {
-    return this->hasRecordLimit() && (this->records >= this->recordsLimit);
-}
+// bool BlockIndex::recordLimitIsReached() const {
+//     return this->hasRecordLimit() && (this->records >= this->recordsLimit);
+// }
 
 int BlockIndex::removeById(const BigNumber &id) {
     auto block = getBlockById(id);
@@ -573,13 +513,13 @@ int BlockIndex::removeById(const BigNumber &id) {
 
 int BlockIndex::removeById(const BlockVariant &block) {
     //    block.getIndex(), block.getType()
-    BigNumber id             = block.getIndex();
-    BlockType typeBlock      = block.getType();
-    auto      countTxInBlock = block.transactions().size();
+    BigNumber id = block.getIndex();
+    // BlockType typeBlock      = block.getType();
+    // auto      countTxInBlock = block.transactions().size();
 
-    if (block.getType() != BlockType::Dummy) {
-        eLog("[BlockIndex] Removing block with id {} {}", id, block.getType());
-    }
+    // if (block.getType() != BlockType::Dummy) {
+    //     eLog("[BlockIndex] Removing block with id {} {}", id, block.getType());
+    // }
 
     // if (id < firstSavedId) {
     //     removeAll();
@@ -593,43 +533,21 @@ int BlockIndex::removeById(const BlockVariant &block) {
 
     if (file.exists() && !file.isOpen()) {
         bool isRemoved = file.remove();
-        if (isRemoved) {
-            this->records--;
-        }
+        update_last_id(this->lastSavedId - 1);
+        // if (isRemoved) {
+        //     this->records--;
+        // }
 
-        if (isRemoved && (typeBlock == BlockType::Data || typeBlock == BlockType::Genesis)) {
-            this->realBlockRecords--;
-            countTransactions -= countTxInBlock;
+        // if (isRemoved && (typeBlock == BlockType::Data || typeBlock == BlockType::Genesis)) {
+        //     countTransactions -= countTxInBlock;
+        // }
+    } else {
+        if (file.exists()) {
+            eFatal("Blockchain remove block error");
         }
     }
 
-    // this->lastSavedId = BigNumber(id) - 1;
     return 0;
-}
-
-void BlockIndex::removeDummyBlocks() {
-    std::vector<std::string> removedForLogs;
-    bool                     isNotDummyBlock = false;
-
-    if (lastSavedId < 0 && firstSavedId <= 0)
-        return;
-
-    for (auto i = firstSavedId; i <= lastSavedId; i++) {
-        const auto block = getBlockById(i);
-
-        if (!block.has_value() || (block.has_value() && block->isEmpty())) {
-            continue;
-        }
-
-        if (block->getType() == BlockType::Dummy) {
-            removeById(block.value());
-            removedForLogs.push_back(block->getIndex().to_string());
-        }
-    }
-
-    if (!removedForLogs.empty()) {
-        eLog("[BlockIndex] Remove dummy blocks: {}", removedForLogs);
-    }
 }
 
 void BlockIndex::removeAll() {
@@ -646,19 +564,15 @@ void BlockIndex::removeAll() {
     }
 
     // update state
-    this->records           = 0;
-    this->firstSavedId      = 0;
-    this->lastSavedId       = 0;
-    this->realBlockRecords  = 0;
-    this->countTransactions = 0;
+    // this->records           = 0;
+    this->firstSavedId = -1;
+    this->lastSavedId  = -1;
+    QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    // this->countTransactions = 0;
 }
 
 std::string BlockIndex::getFolderPath() const {
-    return BlockchainConst::BLOCKCHAIN_INDEX + "/" + this->getFolderName();
-}
-
-std::string BlockIndex::getFolderName() const {
-    return this->folderName;
+    return BlockchainConst::BLOCKCHAIN_FOLDER;
 }
 
 BigNumber BlockIndex::getFirstSavedId() const {
@@ -671,18 +585,6 @@ BigNumber BlockIndex::calcSection(BigNumber id) const {
 
 BigNumber BlockIndex::getLastSavedId() const {
     return this->lastSavedId;
-}
-
-BigNumber BlockIndex::getRecords() const {
-    return this->records;
-}
-
-BigNumber BlockIndex::getCountRealBlocks() const {
-    return this->realBlockRecords;
-}
-
-int BlockIndex::getCountTransactionsInBlocks() const {
-    return countTransactions;
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
@@ -713,7 +615,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumbe
     std::uint64_t date    = std::stoll(res[0].at("date"));
 
     if (id != blockId) {
-        return std::unexpected(BlockError::Invalid);
+        return std::unexpected(BlockError::IdNotEqual);
     }
 
     std::vector<DbRow> dbSigns = db.select("SELECT * FROM " + Config::DataStorage::SignTable + ";");
@@ -790,90 +692,4 @@ std::expected<BlockVariant, BlockError> BlockIndex::getById(const BigNumber &id)
     } catch (const std::exception &e) {
         return std::unexpected(BlockError::NotExists);
     }
-}
-
-BigNumber BlockIndex::loadFirstId() {
-    BigNumber firstSavedId = loadFileFromSection(
-        [](const std::vector<std::string> &folders) {
-            return folders[0];
-        },
-        [](const std::vector<std::string> &files) {
-            return files[0];
-        });
-
-    if (firstSavedId != -1) {
-        eLog("[BlockIndex] loadFirsId: Loaded first saved id: {}", firstSavedId);
-    } else {
-        eLog("[BlockIndex] loadFirsId: First saved id is not loaded");
-    }
-
-    return firstSavedId;
-}
-
-BigNumber BlockIndex::loadFileFromSection(
-    std::function<std::string(const std::vector<std::string> &folders)> getFolder,
-    std::function<std::string(const std::vector<std::string> &files)>   getFile) {
-    auto asBigNumComparator = [](const QString &file1, const QString &file2) {
-        return BigNumber(file1.toStdString()) < BigNumber(file2.toStdString());
-    };
-
-    QDir folder(QString::fromStdString(getFolderPath()));
-
-    // sections
-    eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
-    QStringList list = folder.entryList(QDir::Filter::Dirs | QDir::Filter::NoDotAndDotDot);
-
-    if (list.isEmpty()) {
-        eLog("[BlockIndex] loadFileFromSection(): folder.entryList: empty");
-        return BigNumber();
-    }
-
-    list = list.filter(QRegularExpression("^[0-9A-Fa-f]+$"));
-    std::sort(list.begin(), list.end(), asBigNumComparator);
-    std::vector<std::string> list_stl;
-    list_stl.reserve(list.size());
-
-    for (const QString &str : list) {
-        list_stl.push_back(str.toStdString());
-    }
-    folder.cd(getFolder(list_stl).c_str()); // go to section
-
-    // files in sections
-    eLog("[BlockIndex] loadFileFromSection(): {}", folder.path());
-    list = folder.entryList(QDir::Filter::Files | QDir::Filter::NoDotAndDotDot);
-    if (list.isEmpty()) {
-        eLog("[BlockIndex] loadFileFromSection(): folder.entryList->folder.entryList: empty");
-        return BigNumber();
-    }
-
-    list = list.filter(QRegularExpression("^[0-9A-Fa-f]+$"));
-    std::sort(list.begin(), list.end(), asBigNumComparator);
-
-    list_stl.clear();
-    list_stl.reserve(list.size());
-
-    for (const QString &str : list) {
-        list_stl.push_back(str.toStdString());
-    }
-
-    auto file = BigNumber(getFile(list_stl));
-    eLog("[BlockIndex] loadFileFromSection(): lastId: {}", (list.isEmpty() ? BigNumber() : file));
-    return list.isEmpty() ? BigNumber() : file;
-}
-
-BigNumber BlockIndex::loadLastId() {
-    BigNumber lastSavedId = loadFileFromSection(
-        [](const std::vector<std::string> &folders) {
-            return folders.back();
-        },
-        [](const std::vector<std::string> &files) {
-            return files.back();
-        });
-
-    if (lastSavedId != -1) {
-        eLog("[BlockIndex] Loaded last saved id: {}", lastSavedId);
-    } else {
-        eLog("[BlockIndex] Last saved id is not loaded");
-    }
-    return lastSavedId;
 }
