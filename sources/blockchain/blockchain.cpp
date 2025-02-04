@@ -571,24 +571,45 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
             continue;
         }
 
+        // tx check
         auto transactions = block->transactions();
-        for (auto &transaction : transactions) {
-            auto sender   = transaction.sender();
-            auto receiver = transaction.receiver();
-            auto tokenId  = transaction.token();
+        for (auto &tx : transactions) {
+            auto sender   = tx.sender();
+            auto receiver = tx.receiver();
+            auto tokenId  = tx.token();
 
-            if (transaction.type() == TransactionType::Reward) {
-                lastDataRows[{ sender, tokenId }].state += transaction.amount();
+            if (tx.type() == TransactionType::Reward && tx.sender() == tx.receiver()) {
+                lastDataRows[{ sender, tokenId }].state += tx.amount();
                 continue;
             }
 
-            if (transaction.type() == TransactionType::InitContract) {
-                lastDataRows[{ sender, tokenId }].state += transaction.amount();
+            if (tx.type() == TransactionType::InitContract && tx.sender() == tx.receiver()) {
+                lastDataRows[{ sender, tokenId }].state += tx.amount();
                 continue;
             }
 
-            lastDataRows[{ sender, tokenId }].state -= transaction.amount();
-            lastDataRows[{ receiver, tokenId }].state += transaction.amount();
+            if (tx.type() == TransactionType::Conversion) {
+                auto from_token = ActorId::create(tx.data());
+                if (!from_token.has_value()) {
+                    continue;
+                }
+
+                if (from_token.value() == tx.token()) {
+                    continue;
+                }
+
+                if (from_token.value() == tokenId) {
+                    lastDataRows[{ sender, from_token.value() }].state -= tx.amount();
+                }
+
+                if (tx.token() == tokenId) {
+                    lastDataRows[{ sender, tokenId }].state += tx.amount();
+                }
+                continue;
+            }
+
+            lastDataRows[{ sender, tokenId }].state -= tx.amount();
+            lastDataRows[{ receiver, tokenId }].state += tx.amount();
         }
     }
 
@@ -616,6 +637,7 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
     // get from zero block
     GenesisDataRows map;
 
+    // tx check
     for (auto i = BigNumber(0); i != lastBlock->getIndex(); i++) {
         auto block = getBlockByIndex(i);
 
@@ -1090,7 +1112,7 @@ int Blockchain::getCountTransactionsInBlocks() const {
     return 0;
 }
 
-BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, TransactionType txType) const {
+BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id, const TokenId &token_id) const {
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -1111,7 +1133,7 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
             const auto rows    = genesis->dataRows();
 
             for (const auto &[key, row] : rows) {
-                if (key.actorId == userId && key.tokenId == tokenId)
+                if (key.actorId == actor_id && key.tokenId == token_id)
                     balance += row.state;
             }
 
@@ -1121,26 +1143,44 @@ BigNumberFloat Blockchain::getUserBalance(ActorId userId, TokenId tokenId, Trans
         if (currentBlock->isEmpty())
             break;
 
+        // tx check
         auto txs = currentBlock->transactions();
         for (auto &tx : txs) {
-            // if (tx.type() != txType)
-            //     continue;
-
-            if (tx.sender() == userId && tx.token() == tokenId && tx.type() == TransactionType::Reward) {
+            if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
                 continue;
             }
 
-            if (tx.sender() == userId && tx.token() == tokenId && tx.type() == TransactionType::InitContract) {
+            if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
                 continue;
             }
 
-            if (tx.receiver() == userId && tx.token() == tokenId) {
+            if (tx.type() == TransactionType::Conversion) {
+                auto from_token = ActorId::create(tx.data());
+                if (!from_token.has_value()) {
+                    continue;
+                }
+
+                if (from_token.value() == tx.token()) {
+                    continue;
+                }
+
+                if (from_token.value() == token_id) {
+                    balance -= tx.amount();
+                }
+
+                if (tx.token() == token_id) {
+                    balance += tx.amount();
+                }
+                continue;
+            }
+
+            if (tx.receiver() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
             }
 
-            if (tx.sender() == userId && tx.token() == tokenId) {
+            if (tx.sender() == actor_id && tx.token() == token_id) {
                 balance -= tx.amount();
             }
         }
@@ -1253,6 +1293,21 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
         for (const auto &accountId : accounts) {
             if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                 emit updateSelf(block.getIndex());
+
+#ifdef IS_R
+                if (transaction.type() == TransactionType::Reward
+                    && accountId == node->accountController()->mainActor().id()) {
+                    Transaction tx;
+                    tx.setSender(accountId);
+                    tx.setReceiver(accountId);
+                    tx.setType(TransactionType::Conversion);
+                    tx.setData(ActorId().to_string());
+                    tx.setAmount(transaction.amount());
+                    tx.setPrevBlock(block.getIndex());
+                    tx.setToken(ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
+                    node->sendTransaction(tx, node->accountController()->mainActor());
+                }
+#endif
             }
         }
     }
@@ -1339,12 +1394,18 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::ReceiverNotExists;
     }
 
-    if (tx.type() != TransactionType::Reward && tx.type() != TransactionType::InitContract
-        && targetSender == targetReceiver) {
-        return TransactionProveError::IdenticalSenderReceiver;
+    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::InitContract
+        || tx.type() == TransactionType::Conversion) {
+        if (targetSender != targetReceiver) {
+            return TransactionProveError::NotIdenticalSenderReceiver;
+        }
+    } else {
+        if (targetSender == targetReceiver) {
+            return TransactionProveError::IdenticalSenderReceiver;
+        }
     }
 
-    auto block = getLastRealBlock();
+    auto block = getLastBlock();
     if (!block.has_value()) {
         return TransactionProveError::EmptyBlockchain;
     }
@@ -1376,24 +1437,61 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::NoError;
     }
 
-    TokenId        token                = tx.token();
-    BigNumberFloat senderCurrentBalance = getUserBalance(targetSender, token);
-    BigNumberFloat amount_res;
+    TokenId token = tx.token();
+    if (tx.type() == TransactionType::Conversion) {
+        auto from_token = TokenId::create(tx.data());
+        if (!from_token.has_value()) {
+            return TransactionProveError::ConversionIncorrectFromToken;
+        }
 
-    for (const Transaction &tx : std::as_const(transactions)) {
-        if (tx.sender() == targetSender && tx.token() == token) {
-            amount_res -= tx.amount();
-        } else if (tx.receiver() == targetReceiver && tx.token() == token) {
-            amount_res += tx.amount();
+        token = from_token.value();
+    }
+
+    BigNumberFloat transactionAmount = tx.amount();
+    BigNumberFloat senderBalance     = calculate_actor_balance(targetSender, token);
+
+    // tx check
+    for (const Transaction &tx_check : std::as_const(transactions)) {
+        if (tx.hash() == tx_check.hash()) {
+            continue;
+        }
+
+        if (tx_check.token() != token) {
+            continue;
+        }
+
+        if (tx_check.type() == TransactionType::Reward && tx_check.sender() == tx_check.receiver()
+            && tx_check.token() == token) {
+            senderBalance += tx_check.amount();
+            continue;
+        }
+
+        if (tx_check.type() == TransactionType::InitContract && tx_check.sender() == tx_check.receiver()
+            && tx_check.token() == token) {
+            senderBalance += tx_check.amount();
+            continue;
+        }
+
+        if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == tx_check.receiver()) {
+            if (tx_check.data() == token.to_string()) {
+                senderBalance -= tx_check.amount();
+            }
+            if (tx_check.token() == token) {
+                senderBalance += tx_check.amount();
+            }
+            continue;
+        }
+
+        if (tx_check.sender() == targetSender && tx_check.token() == token) {
+            senderBalance -= tx_check.amount();
+        }
+
+        if (tx_check.receiver() == targetReceiver && tx_check.token() == token) {
+            senderBalance += tx_check.amount();
         }
     }
 
-    senderCurrentBalance += amount_res;
-    BigNumberFloat transactionAmount = tx.amount();
-    BigNumberFloat transactionFee; // transactionAmount / 100;
-    BigNumberFloat senderNewBalance = senderCurrentBalance - transactionAmount - transactionFee;
-
-    if (senderNewBalance < 0 && targetSender != ActorId() /* && mainActorId == firstId */) {
+    if (senderBalance < transactionAmount) {
         return TransactionProveError::SenderBalanceBelowZero;
     }
 

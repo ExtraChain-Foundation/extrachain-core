@@ -286,9 +286,7 @@ public:
      */
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat getUserBalance(ActorId         userId,
-                                  TokenId         tokenId = TokenId(),
-                                  TransactionType txType  = TransactionType::Regular) const;
+    BigNumberFloat calculate_actor_balance(const ActorId &actor_id, const TokenId &token_id) const;
 
     /**
      * @brief Show blockchain

@@ -28,10 +28,10 @@ enum class TransactionType {
     Burn         = 1,
     InitContract = 2,
     Reward       = 3,
-    Repeatable   = 4
+    Repeatable   = 4,
+    Conversion   = 5
 };
 MSGPACK_ADD_ENUM(TransactionType)
-// FORMAT_ENUM(TransactionType)
 
 enum class TransactionError {
     Unknown,
@@ -42,8 +42,6 @@ enum class TransactionError {
     NoCurrentUser,
     ZeroAmount
 };
-// MSGPACK_ADD_ENUM(TransactionError)
-// FORMAT_ENUM(TransactionError)
 
 enum class TransactionProveError {
     NoError,
@@ -53,7 +51,8 @@ enum class TransactionProveError {
     AmountZero,              // amount == 0
     AmountLessZero,          // amount less 0
     IdenticalSenderReceiver, // sender == receiver
-    EmptyBlockchain,         // no real block
+    NotIdenticalSenderReceiver,
+    EmptyBlockchain, // no real block
     SenderZero,
     ReceiverZero,
     SenderNotExists,        // sender is not exist
@@ -64,7 +63,9 @@ enum class TransactionProveError {
     InvalidSignature,
     RewardInvalidToken,
     InvalidTokenCount,
-    BurnIncorrectReceiver
+    BurnIncorrectReceiver,
+    ConversionIncorrectFromToken,
+    ConversionIncorrectBalance
 };
 // FORMAT_ENUM(TransactionProveError)
 
