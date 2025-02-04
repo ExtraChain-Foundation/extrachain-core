@@ -61,8 +61,12 @@ void TransactionManager::addProvedTransaction(const Transaction &tx) {
 // Block making
 
 void TransactionManager::makeBlock() {
-    if (node->accountController()->empty())
+    if (node->accountController()->empty()) {
+        eLog("[Blockchain] Account is empty");
         return;
+    }
+
+    eLog("- makeBlock()");
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
     auto lastBlock     = node->blockchain()->getLastBlock();
