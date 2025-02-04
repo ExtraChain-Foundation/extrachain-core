@@ -92,7 +92,10 @@ void TransactionManager::makeBlock() {
              lastRealBlock->getIndex(),
              lastRealBlock->getType());
     } else {
-        eLog("[Blockchain] Last block: {}, type: {}", lastRealBlock->getIndex(), lastRealBlock->getType());
+        eLog("[Blockchain] Last block: {}, type: {}, status: {}",
+             lastRealBlock->getIndex(),
+             lastRealBlock->getType(),
+             node->blockchain()->status());
     }
 
     if (!node->network()->isActiveConnectionExists()) {

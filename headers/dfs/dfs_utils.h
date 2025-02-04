@@ -457,6 +457,11 @@ namespace Dfs {
 
             MSGPACK_DEFINE(DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction)
         };
+
+        BOOST_DESCRIBE_STRUCT(
+            RequestReward,
+            (),
+            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction))
     } // namespace Reward
 
     namespace Tables {

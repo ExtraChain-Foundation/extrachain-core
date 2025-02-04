@@ -62,6 +62,9 @@ void DataMiningManager::requestCoinReward() {
     if (node->accountController()->empty()) {
         return;
     }
+    if (node->blockchain()->status() != BlockchainStatus::Ready) {
+        return;
+    }
 
     const auto actor      = node->accountController()->mainActor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
@@ -76,7 +79,7 @@ void DataMiningManager::requestCoinReward() {
     //      node->blockchain()->getBlocksStored());
 
     if (amount <= 0) {
-        // eLog("[Reward] Can't send amount, because amount = 0");
+        eLog("[Reward] Can't send amount, because amount = 0");
         return;
     }
 
@@ -107,6 +110,8 @@ void DataMiningManager::requestCoinReward() {
                                   MessageType::BlockchainCoinReward,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
+
+    eLog("[Reward] Sended {}", requestReward);
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {
@@ -175,11 +180,17 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
 }
 
 void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward) {
-    if ((calculateRewardAmount(requestReward) - requestReward.transaction.amount()) <= Dfs::Reward::TOLERANCE) {
+    auto calc   = calculateRewardAmount(requestReward);
+    auto amount = requestReward.transaction.amount();
+
+    if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }
 
+        eLog("[Reward] Add request: {}", requestReward);
         node->transactionManager()->addTransaction(requestReward.transaction);
+    } else {
+        eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
 }
