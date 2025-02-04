@@ -655,6 +655,8 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
             continue;
         }
 
+        auto temp_default_actor = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
+
         auto transactions = block->transactions();
         eInfo("[MEGA] Block {} from {} ({} transactions)",
               block->getIndex().to_string(NumeralBase::Dec),
@@ -663,18 +665,18 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
 
         for (auto &tx : transactions) {
             if (tx.type() == TransactionType::Reward) {
-                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
                 continue;
             }
 
             if (tx.type() == TransactionType::InitContract) {
-                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
                 continue;
             }
 
-            auto receiver = GenesisDataActor { .actorId = tx.receiver(), .tokenId = tx.token() };
-            map[{ tx.sender(), tx.token() }].state -= tx.amount();
-            map[{ tx.receiver(), tx.token() }].state += tx.amount();
+            auto receiver = GenesisDataActor { .actorId = tx.receiver(), .tokenId = temp_default_actor };
+            map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
+            map[{ tx.receiver(), temp_default_actor }].state += tx.amount();
         }
     }
 
