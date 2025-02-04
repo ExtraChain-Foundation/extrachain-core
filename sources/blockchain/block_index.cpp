@@ -37,13 +37,13 @@ BlockIndex::BlockIndex() {
         }
     } else {
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        QFile::remove("tmp/cachedTxs.db");
     }
 
     // last id > 0 -> first id
     // if no zero block or no last block ->
     if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
         QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-        QFile::remove("tmp/cachedTxs.db");
     }
 }
 

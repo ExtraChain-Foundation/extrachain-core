@@ -684,6 +684,7 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
         }
     }
 
+    genesis.addData(actor.id().to_string());
     genesis.addRows(map);
     genesis.sign(actor);
     return BlockVariant(genesis);
