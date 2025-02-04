@@ -222,6 +222,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
          blocks.front().first,
          blocks.back().first);
 
+    std::set<BigNumber> self_block_ids;
     status_ = BlockchainStatus::Maybe;
 
     for (const auto &block : blocks) {
@@ -247,9 +248,37 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         //         busy = false;
         //         return;
         //     }
+        blockIndex.update_last_id(blocks.back().first);
+
+#ifdef IS_RC
+        auto added_block = blockIndex.getBlockById(block.first);
+        if (!added_block.has_value()) {
+            continue;
+        }
+        auto       transactions = added_block->transactions();
+        const auto accounts     = node->accountController()->accountsIds();
+        for (const auto &transaction : transactions) {
+            // vefify
+
+            if (transaction.type() == TransactionType::InitContract) {
+                node->actorIndex()->getActor(transaction.sender());
+                // TODO: subscribe dfs for waiting token json?
+            }
+
+            for (const auto &accountId : accounts) {
+                if (transaction.sender() == accountId || transaction.receiver() == accountId) {
+                    self_block_ids.insert(added_block->getIndex());
+                }
+            }
+        }
+#endif
     }
 
-    blockIndex.update_last_id(blocks.back().first);
+    // blockIndex.update_last_id(blocks.back().first);
+
+    for (const auto &index : self_block_ids) {
+        emit updateSelf(index);
+    }
 
     busy = false;
     start_check();
