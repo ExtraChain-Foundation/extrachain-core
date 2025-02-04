@@ -149,6 +149,8 @@ void TransactionManager::makeBlock() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
+    eLog("[TransactionManager] Send block... {}", blockVariant.getIndex());
+
     node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 
