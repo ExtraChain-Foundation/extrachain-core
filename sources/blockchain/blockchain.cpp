@@ -223,7 +223,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.open(QFile::WriteOnly);
         file.write(QByteArray::fromStdString(block.second));
         file.close();
-        blockIndex.update_last_id(blocks.back().first);)
+        blockIndex.update_last_id(blocks.back().first);
     }
 
 #ifdef IS_RC
