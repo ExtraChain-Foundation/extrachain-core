@@ -223,7 +223,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.open(QFile::WriteOnly);
         file.write(QByteArray::fromStdString(block.second));
         file.close();
-        blockIndex.update_last_id(blocks.back().first);
+        blockIndex.update_last_id(blocks.back().first);)
     }
 
 #ifdef IS_RC
@@ -234,6 +234,10 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
             auto added_block = blockIndex.getBlockById(block.first);
             if (!added_block.has_value()) {
                 continue;
+            }
+
+            if (added_block->getIndex() == BigNumber(0)) {
+                emit zeroBlock();
             }
 
             auto       transactions = added_block->transactions();
@@ -1223,6 +1227,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.getIndex() != BigNumber(0)) {
         //
+        eLog("[Blockchain] Ignore add block, because blockhain sync");
         node->network()->sendBrodcastMessageFurther(package);
         return std::unexpected(BlockError::BlockchainBusy);
     }
@@ -1436,6 +1441,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
             return TransactionProveError::InvalidTokenCount;
         }
 
+        return TransactionProveError::NoError;
+    }
+
+    if (tx.type() == TransactionType::Conversion) {
         return TransactionProveError::NoError;
     }
 
