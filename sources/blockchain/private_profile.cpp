@@ -169,6 +169,7 @@ void PrivateProfile::load() {
     this->current_ = profile->system_;
     this->actors_  = profile->actors_;
     this->imports_ = profile->imports_;
+    this->wallet_names_ = profile->wallet_names_;
 }
 
 std::filesystem::path PrivateProfile::path() {
