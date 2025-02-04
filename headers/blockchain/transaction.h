@@ -135,6 +135,7 @@ public:
     void            setSender(const ActorId &value);
     void            setReceiver(const ActorId &value);
     bool            isRewardTransaction() const;
+    bool            isConversionTransaction() const;
     TransactionType type() const;
     virtual void    setType(TransactionType newType);
 

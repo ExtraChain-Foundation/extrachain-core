@@ -85,6 +85,11 @@ bool Transaction::isRewardTransaction() const {
     return m_type == TransactionType::Reward;
 }
 
+bool Transaction::isConversionTransaction() const
+{
+    return m_type == TransactionType::Conversion;
+}
+
 void Transaction::setSignature(const Signature &value) {
     m_signature = value;
 }
