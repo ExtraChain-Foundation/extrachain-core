@@ -190,7 +190,6 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     {
                         auto connections_locked = *m_connections;
                         for (const auto &conn_item : *connections_locked) {
-
                             if (ip == init_ip) {
                                 can_connect = false;
                                 break;

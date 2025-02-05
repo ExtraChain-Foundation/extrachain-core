@@ -42,6 +42,8 @@ public:
     struct SocketPair {
         std::string ip;
         std::string identifier;
+
+        auto operator<=>(const SocketPair &) const = default;
     };
 
     struct HandshakeMessage {
