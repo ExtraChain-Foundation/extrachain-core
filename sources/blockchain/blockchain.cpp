@@ -1119,7 +1119,9 @@ int Blockchain::getCountTransactionsInBlocks() const {
     return 0;
 }
 
-BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id, const TokenId &token_id) const {
+BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
+                                                   const TokenId &token_id,
+                                                   bool           ignore_genesis) const {
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -1135,6 +1137,10 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id, cons
             continue;
         }
 
+        if (ignore_genesis && currentBlock->isGenesisBlock()) {
+            continue;
+        }
+
         if (currentBlock->isGenesisBlock()) {
             auto       genesis = blockIndex.getGenesisBlockById(i);
             const auto rows    = genesis->dataRows();
@@ -1147,8 +1153,9 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id, cons
             return balance;
         }
 
-        if (currentBlock->isEmpty())
+        if (currentBlock->isEmpty()) {
             break;
+        }
 
         // tx check
         auto txs = currentBlock->transactions();
