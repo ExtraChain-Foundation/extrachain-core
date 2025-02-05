@@ -172,17 +172,11 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 6.
-    {
-        auto connections_locked = *node->network()->connections();
-        if (connections_locked->size() >= Network::maxConnections) {
-            emit error(Network::SocketServiceError::MaxConnections,
-                       "",
-                       ip_.toStdString(),
-                       identifier_.toStdString());
-            eLog("[Socket] Max connections");
-            closeSocket();
-            return false;
-        }
+    if (node->network()->active_connections_count() >= Network::maxConnections) {
+        emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
+        eLog("[Socket] Max connections");
+        closeSocket();
+        return false;
     }
 
     // 7. Checking slots availability
@@ -225,11 +219,15 @@ QByteArray SocketService::generate_first_message() {
             if (ip.empty() || ip == ip_) {
                 continue;
             }
+            if (!it->is_active()) {
+                continue;
+            }
 
-            msg.connections.insert(ip);
+            msg.connections.insert(SocketPair { .ip = ip, .identifier = it->identifier_.toStdString() });
         }
-        msg.is_available = connections_locked->size() < Network::maxConnections;
     }
+
+    msg.is_available = node->network()->active_connections_count() < Network::maxConnections;
 
     auto handshake = Json::serialize(msg);
     return QByteArray::fromStdString(handshake);
