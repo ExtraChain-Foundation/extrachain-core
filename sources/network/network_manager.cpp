@@ -200,7 +200,12 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                                 break;
                             }
 
-                            if (conn_item->identifier() == identifier && conn_item->is_active()) {
+                            if (conn_item->identifier() == identifier) {
+                                can_connect = false;
+                                break;
+                            }
+
+                            if (conn_item->ip() == ip) {
                                 can_connect = false;
                                 break;
                             }
