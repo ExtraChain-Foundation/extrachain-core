@@ -571,6 +571,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
         if (!block.has_value()) {
             continue;
         }
+
         if (block->isEmpty() || !block->isBlock() || block->getType() != BlockType::Data) {
             continue;
         }
@@ -592,7 +593,7 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
                 continue;
             }
 
-            if (tx.type() == TransactionType::Conversion) {
+            if (tx.type() == TransactionType::Conversion && tx.sender() == tx.receiver()) {
                 auto from_token = ActorId::create(tx.data());
                 if (!from_token.has_value()) {
                     continue;
@@ -602,13 +603,8 @@ std::expected<BlockVariant, BlockError> Blockchain::createGenesisBlock(const Act
                     continue;
                 }
 
-                if (from_token.value() == tokenId) {
-                    lastDataRows[{ sender, from_token.value() }].state -= tx.amount();
-                }
-
-                if (tx.token() == tokenId) {
-                    lastDataRows[{ sender, tokenId }].state += tx.amount();
-                }
+                lastDataRows[{ sender, from_token.value() }].state -= tx.amount();
+                lastDataRows[{ sender, tokenId }].state += tx.amount();
                 continue;
             }
 
@@ -645,12 +641,12 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
     for (auto i = BigNumber(0); i != lastBlock->getIndex(); i++) {
         auto block = getBlockByIndex(i);
 
-        if (!block->isBlock() || block->getType() != BlockType::Data) {
+        if (!block.has_value()) {
+            eCritical("[MEGA] Block {} not exists", block->getIndex());
             continue;
         }
 
-        if (!block.has_value()) {
-            eCritical("[MEGA] Block {} not exists", block->getIndex());
+        if (!block->isBlock() || block->getType() != BlockType::Data) {
             continue;
         }
 
@@ -661,6 +657,7 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
 
         auto temp_default_actor = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
 
+        // tx check
         auto transactions = block->transactions();
         eInfo("[MEGA] Block {} from {} ({} transactions)",
               block->getIndex().to_string(NumeralBase::Dec),
@@ -674,6 +671,21 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
             }
 
             if (tx.type() == TransactionType::InitContract) {
+                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                continue;
+            }
+
+            if (tx.type() == TransactionType::Conversion && tx.sender() == tx.receiver()) {
+                auto from_token = ActorId::create(tx.data());
+                if (!from_token.has_value()) {
+                    continue;
+                }
+
+                if (from_token.value() == tx.token()) {
+                    continue;
+                }
+
+                map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
                 map[{ tx.sender(), temp_default_actor }].state += tx.amount();
                 continue;
             }
@@ -1137,11 +1149,16 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
             continue;
         }
 
-        if (ignore_genesis && currentBlock->isGenesisBlock()) {
+        if (ignore_genesis && currentBlock->isGenesisBlock() && currentBlock->getIndex() != BigNumber(0)) {
             continue;
         }
 
         if (currentBlock->isGenesisBlock()) {
+            if (ignore_genesis && currentBlock->getIndex() != BigNumber(0)) {
+                // if not mega
+                continue;
+            }
+
             auto       genesis = blockIndex.getGenesisBlockById(i);
             const auto rows    = genesis->dataRows();
 
@@ -1162,15 +1179,17 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
         for (auto &tx : txs) {
             if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
+                eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balance);
                 continue;
             }
 
             if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
+                eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balance);
                 continue;
             }
 
-            if (tx.type() == TransactionType::Conversion) {
+            if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
                 auto from_token = ActorId::create(tx.data());
                 if (!from_token.has_value()) {
                     continue;
@@ -1182,20 +1201,24 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
 
                 if (from_token.value() == token_id) {
                     balance -= tx.amount();
+                    eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balance);
                 }
 
                 if (tx.token() == token_id) {
                     balance += tx.amount();
+                    eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balance);
                 }
                 continue;
             }
 
             if (tx.receiver() == actor_id && tx.token() == token_id) {
                 balance += tx.amount();
+                eLog("{} BAALANCE += {}, = {}", i, tx.amount(), balance);
             }
 
             if (tx.sender() == actor_id && tx.token() == token_id) {
                 balance -= tx.amount();
+                eLog("{} BAALANCE -= {}, = {}", i, tx.amount(), balance);
             }
         }
     }
@@ -1464,6 +1487,10 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         }
 
         token = from_token.value();
+
+        if (from_token == tx.token()) {
+            return TransactionProveError::ConversionEqualToken;
+        }
     }
 
     BigNumberFloat transactionAmount = tx.amount();

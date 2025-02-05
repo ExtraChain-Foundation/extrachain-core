@@ -747,6 +747,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     MessageBody message_body = message_body_expected.value();
 
+    /*
     auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
     if (!sign_actor.has_value()
         && (message_body.message_type == MessageType::NewActor
@@ -775,6 +776,7 @@ void NetworkManager::messageReceived(const std::string &message,
         return;
         // }
     }
+    */
 
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
