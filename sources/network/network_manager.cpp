@@ -171,34 +171,52 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         if (!connectionsLocked->contains(service))
             connectionsLocked->insert(service);
     }
-    connect(service, &WebSocketService::shareConnections, this, [&](const std::set<std::string> &connections) {
-        eLog("shareConnections: {}", connections);
+    connect(service,
+            &WebSocketService::shareConnections,
+            this,
+            [&](const std::set<SocketService::SocketPair> &connections) {
+                eLog("shareConnections: {}", connections);
 
-        auto init_ip = node->getInitPublicIPAndCountry().first;
+                auto init_ip = node->getInitPublicIPAndCountry().first;
 
-        if (m_connections->size() >= Network::maxConnections) {
-            eLog("shareConnections ignored by max connections limit");
-            return;
-        }
+                if (active_connections_count() >= Network::maxConnections) {
+                    eLog("shareConnections ignored by max connections limit");
+                    return;
+                }
 
-        for (const auto &ip : connections) {
-            bool can_connect = true;
+                for (const auto &[ip, identifier] : connections) {
+                    bool can_connect = true;
 
-            {
-                auto connections_locked = *m_connections;
-                for (const auto &conn_item : *connections_locked) {
-                    if (ip == conn_item->ip().toStdString() || ip == init_ip) {
-                        can_connect = false;
-                        break;
+                    {
+                        auto connections_locked = *m_connections;
+                        for (const auto &conn_item : *connections_locked) {
+                            if (ip == init_ip) {
+                                can_connect = false;
+                                break;
+                            }
+
+                            if (identifier == Network::currentIdentifier()) {
+                                can_connect = false;
+                                break;
+                            }
+
+                            if (conn_item->identifier() == identifier) {
+                                can_connect = false;
+                                break;
+                            }
+
+                            if (conn_item->ip() == ip) {
+                                can_connect = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (can_connect) {
+                        connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
-            }
-
-            if (can_connect) {
-                connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
-            }
-        }
-    });
+            });
 }
 
 void NetworkManager::removeConnection(const QString &identifier) {
@@ -287,7 +305,7 @@ void NetworkManager::connectToNode(const QString    &ip,
                                    Network::Protocol protocol,
                                    const bool        request,
                                    const bool        isConstant) {
-    if (m_connections->size() >= Network::maxConnections) {
+    if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
@@ -729,6 +747,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     MessageBody message_body = message_body_expected.value();
 
+    /*
     auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
     if (!sign_actor.has_value()
         && (message_body.message_type == MessageType::NewActor
@@ -757,6 +776,7 @@ void NetworkManager::messageReceived(const std::string &message,
         return;
         // }
     }
+    */
 
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
@@ -1541,7 +1561,7 @@ void NetworkManager::onNewWsConnection() {
         eFatal("[WS] Error: ws == nulltpr");
 
     bool needToDelete = false;
-    if (m_connections->size() >= Network::maxConnections) {
+    if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog(
                 "[NetworkManager] Can't connect from WS server because the maximum number of "
@@ -1565,6 +1585,7 @@ bool NetworkManager::removeOneConnection() {
     for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
         if (!(*it)->is_constant()) {
             eLog("[NetworkManager] Socket with ip {} was changed to another", (*it)->ip());
+            //
             connectionsLocked->erase(it);
 
             NetworkReconnect tempConnection { .ip       = (*it)->ip(),

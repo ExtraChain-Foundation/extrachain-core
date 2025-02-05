@@ -68,8 +68,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         eLog("[WS] Open {}", url);
         connections();
         m_ws->open(url);
-        ip_   = m_ws->peerAddress().toString();
-        port_ = m_ws->peerPort();
+        ip_ = ip; // m_ws->peerAddress().toString();
+        // port_ = m_ws->peerPort();
     }
 }
 

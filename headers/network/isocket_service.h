@@ -39,14 +39,21 @@ public:
     };
     Q_ENUM(SocketType)
 
+    struct SocketPair {
+        std::string ip;
+        std::string identifier;
+
+        auto operator<=>(const SocketPair &) const = default;
+    };
+
     struct HandshakeMessage {
-        std::string           network_id;
-        std::string           version;
-        std::string           identifier;
-        SocketType            socket_type = SocketType::Full;
-        std::set<std::string> connections;
-        bool                  is_available = false;
-        bool                  is_constant  = false;
+        std::string          network_id;
+        std::string          version;
+        std::string          identifier;
+        SocketType           socket_type = SocketType::Full;
+        std::set<SocketPair> connections;
+        bool                 is_available = false;
+        bool                 is_constant  = false;
     };
 
     enum class Priority {
@@ -61,7 +68,7 @@ public:
     virtual Network::Protocol protocol() const        = 0;
     virtual bool              is_active() const       = 0;
     virtual quint16           port() const            = 0;
-    virtual quint16           server_port() const      = 0;
+    virtual quint16           server_port() const     = 0;
     const QString            &ip() const;
     const SocketType          socket_type() const;
     int                       bytes_compressed() const;
@@ -86,7 +93,7 @@ signals:
     void close();
     void activated();
     void finished(); // if threads
-    void shareConnections(const std::set<std::string> &);
+    void shareConnections(const std::set<SocketPair> &);
 
 protected:
     bool       check_first_message(const HandshakeMessage &msg);
@@ -123,5 +130,7 @@ protected:
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                       (),
                       (network_id, version, identifier, socket_type, connections, is_available))
+
+BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 
 #endif // ISOCKETSERVICE_H
