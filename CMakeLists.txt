@@ -1,15 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 
-# configure_file(
-#     "${CMAKE_CURRENT_LIST_DIR}/extrachain_version"
-#     "${CMAKE_BINARY_DIR}/extrachain_version"
-#     COPYONLY
-# )
-
-file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/extrachain_version" EXTRACHAIN_VERSION)
-
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
-    project(extrachain LANGUAGES CXX VERSION ${EXTRACHAIN_VERSION} DESCRIPTION "ExtraChain Core")
+    project(extrachain LANGUAGES CXX DESCRIPTION "ExtraChain Core")
     add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
@@ -54,6 +46,7 @@ set(EXTRACHAIN_CORE_INCLUDES
     )
 
 set(EXTRACHAIN_CORE_SOURCES
+    ${CMAKE_CURRENT_LIST_DIR}/extrachain_version.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dirs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/load_manager.h
@@ -200,7 +193,7 @@ execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree
 string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
 string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
-add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" EXTRACHAIN_VERSION="${EXTRACHAIN_VERSION}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
+add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})

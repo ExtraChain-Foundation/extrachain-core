@@ -44,6 +44,8 @@
 #include "boost/version.hpp"
 
 #include "cpp-base64/base64.cpp"
+
+#include "extrachain_version.h"
 #include "encryption/encryption_tools.h"
 // #include "managers/data_mining_manager.h"
 #include "dfs/dfs_utils.h"
@@ -555,7 +557,7 @@ void Utils::benchmark(std::function<void()> func, int count) {
 }
 
 std::string Utils::extrachainVersion() {
-    return EXTRACHAIN_VERSION;
+    return extrachain_version;
 }
 
 std::string Utils::sodiumVersion() {

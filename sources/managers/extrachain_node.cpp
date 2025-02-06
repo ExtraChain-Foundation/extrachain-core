@@ -24,6 +24,7 @@
 #include <QJsonObject>
 #include <sodium/core.h>
 
+#include "extrachain_version.h"
 #include "blockchain/actor.h"
 #include "blockchain/block.h"
 #include "blockchain/block_variant.h"
@@ -345,7 +346,7 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     }
 
     auto imported_user = ImportedUser { .network      = network_id,
-                                        .version      = EXTRACHAIN_VERSION,
+                                        .version      = extrachain_version,
                                         .date         = Utils::current_date_ms(),
                                         .system       = current_profile.system().id(),
                                         .actors       = current_profile.actors(),

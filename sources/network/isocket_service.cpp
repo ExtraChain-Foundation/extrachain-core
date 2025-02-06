@@ -17,9 +17,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include "extrachain_version.h"
 #include "network/isocket_service.h"
 #include "blockchain/actor_index.h"
-
 #include "encryption/encryption_tools.h"
 #include "network/network_manager.h"
 
@@ -82,13 +82,16 @@ void SocketService::set_vpn(bool isVPN) {
 }
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
-    eLog("[Socket] First message: {} | Current first: {}", handshake, node->actorIndex()->firstId());
+    eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
+         handshake,
+         node->actorIndex()->firstId(),
+         ip_);
     identifier_  = QString::fromStdString(handshake.identifier);
     socket_type_ = handshake.socket_type;
 
     // 1. Checking the version
-    if (handshake.version != EXTRACHAIN_VERSION) {
-        eLog("[Socket] Close, because version incompatible {}", EXTRACHAIN_VERSION);
+    if (handshake.version != extrachain_version) {
+        eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
         emit error(Network::SocketServiceError::IncompatibleVersion,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
@@ -108,7 +111,9 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     if (!(something_empty || is_first_ids_contains)) {
-        eLog("[Socket] Close, because network incompatible");
+        eLog("[Socket] Closing: network version mismatch (local: {}, remote: {})",
+             our_network_id,
+             json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
@@ -157,7 +162,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        eLog("[Socket] Duplicate identifier");
+        eLog("[Socket] Closing: duplicate identifier");
         closeSocket();
         return false;
     }
@@ -174,21 +179,21 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // 6.
     if (node->network()->active_connections_count() >= Network::maxConnections) {
         emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
-        eLog("[Socket] Max connections");
+        eLog("[Socket] Closing: maximum connections reached");
         closeSocket();
         return false;
     }
 
     // 7. Checking slots availability
     if (!handshake.is_available) {
-        eLog("[Socket] Peer not available");
+        eLog("[Socket] Closing: peer unavailable");
         closeSocket();
         emit shareConnections(handshake.connections);
         return false;
     }
 
     // 8. If all checks are passed - activate the connection
-    eLog("[Socket] Activated {} {} {}", fmt::ptr(this), ip(), protocol());
+    eLog("[Socket] Activated: {} with IP: {}", fmt::ptr(this), ip());
     activated_ = true;
     Responder responder(node->network());
     responder.add_identifier(identifier_.toStdString());
@@ -205,7 +210,7 @@ void SocketService::closeSocket() {
 
 QByteArray SocketService::generate_first_message() {
     HandshakeMessage msg { .network_id   = node->actorIndex()->firstId().to_string(),
-                           .version      = EXTRACHAIN_VERSION,
+                           .version      = extrachain_version,
                            .identifier   = Network::currentIdentifier().toStdString(),
                            .socket_type  = socket_type_,
                            .connections  = {},
