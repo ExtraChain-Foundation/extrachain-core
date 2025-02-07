@@ -175,7 +175,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             &WebSocketService::shareConnections,
             this,
             [&](const std::set<SocketService::SocketPair> &connections) {
-                eLog("shareConnections: {}", connections);
+                // eLog("shareConnections: {}", connections);
 
                 auto init_ip = node->getInitPublicIPAndCountry().first;
 

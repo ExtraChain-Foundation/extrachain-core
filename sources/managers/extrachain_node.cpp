@@ -606,7 +606,7 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
-                m_blockchain->start_check();
+                m_blockchain->need_check();
                 // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });
