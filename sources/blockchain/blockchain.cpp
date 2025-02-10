@@ -1585,9 +1585,10 @@ void Blockchain::removeAll() {
 #ifndef IS_R
     return;
 #endif
+    eLog("[Blockchain] Remove all...");
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
-
+    eLog("[Blockchain] Removed all");
 #ifdef IS_RC
     qApp->exit();
 #endif
