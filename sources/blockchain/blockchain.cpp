@@ -322,11 +322,13 @@ void Blockchain::start_check() {
 }
 
 void Blockchain::network_status_sync_request(const Responder &responder) {
-    auto        block     = this->getLastBlock();
-    BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
-    std::string hash      = block.has_value() ? block->getHash() : "";
-    auto        zero_block     = this->getBlockByIndex(BigNumber(0));
-    auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash, .zero_date = zero_block.has_value() ? zero_block->getDate() : 0};
+    auto        block      = this->getLastBlock();
+    BigNumber   block_id   = block.has_value() ? block->getIndex() : BigNumber(-1);
+    std::string hash       = block.has_value() ? block->getHash() : "";
+    auto        zero_block = this->getBlockByIndex(BigNumber(0));
+    auto        last_info  = BlockchainLastInfo { .last_block_id = block_id,
+                                                  .last_hash     = hash,
+                                                  .zero_date = zero_block.has_value() ? zero_block->getDate() : 0 };
     // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
@@ -339,6 +341,12 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
         return;
     }
     // min(connections size, 5)
+
+    auto zero_block = getBlockByIndex(BigNumber(0));
+    if (zero_block.has_value() && last_info.last_hash != "" && last_info.last_block_id != BigNumber(-1)
+        && zero_block->getDate() < last_info.zero_date) {
+        removeAll();
+    }
 
     int count = std::min(requests_count, 5);
 
@@ -1367,7 +1375,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 
 // Actors //
 TransactionProveError Blockchain::prove_transaction(const Transaction          &tx,
-                                                   const std::set<Transaction> transactions) {
+                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
     if (tx.amount() == 0) {
@@ -1571,6 +1579,9 @@ BlockIndex &Blockchain::getBlockIndex() {
 }
 
 void Blockchain::removeAll() {
+#ifndef IS_R
+    return;
+#endif
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
 }
