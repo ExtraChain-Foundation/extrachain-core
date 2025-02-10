@@ -46,11 +46,11 @@ std::expected<BlockVariant, BlockError> Blockchain::getBlockByIndex(const BigNum
     auto block = blockIndex.getBlockById(index);
     if (!block.has_value())
         return std::unexpected(BlockError::NotExists);
-    if (block->isEmpty() && index >= 0 && makeRequestBlock) {
-        std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
-        // node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
-        return std::unexpected(BlockError::NotExists);
-    }
+    // if (block->isEmpty() && index >= 0 && makeRequestBlock) {
+    //     std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
+    //     // node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
+    //     return std::unexpected(BlockError::NotExists);
+    // }
     return block;
 }
 
@@ -322,10 +322,11 @@ void Blockchain::start_check() {
 }
 
 void Blockchain::network_status_sync_request(const Responder &responder) {
-    auto        block     = this->getLastRealBlock();
+    auto        block     = this->getLastBlock();
     BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
     std::string hash      = block.has_value() ? block->getHash() : "";
-    auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash };
+    auto        zero_block     = this->getBlockByIndex(BigNumber(0));
+    auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash, .zero_date = zero_block.has_value() ? zero_block->getDate() : 0};
     // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
@@ -1365,7 +1366,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 }
 
 // Actors //
-TransactionProveError Blockchain::proveTransaction(const Transaction          &tx,
+TransactionProveError Blockchain::prove_transaction(const Transaction          &tx,
                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
@@ -1394,7 +1395,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::WrongHash;
     }
 
-    auto res = this->blockIndex.getLastTxByHash(tx_copy.hash(), tx.token());
+    auto res = this->blockIndex.search_duplicate(tx_copy.hash());
     if (res.second != BigNumber(-1)) {
         return TransactionProveError::Duplicate;
     }
@@ -1492,6 +1493,8 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
             return TransactionProveError::ConversionEqualToken;
         }
     }
+
+    return TransactionProveError::NoError;
 
     BigNumberFloat transactionAmount = tx.amount();
     BigNumberFloat senderBalance     = calculate_actor_balance(targetSender, token);

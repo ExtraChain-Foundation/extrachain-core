@@ -66,6 +66,7 @@ enum class BlockchainSyncStatus {
 struct BlockchainLastInfo {
     BigNumber   last_block_id;
     std::string last_hash;
+    std::uint64_t zero_date;
 };
 BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash))
 
@@ -331,7 +332,7 @@ public:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
+    TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
     std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,

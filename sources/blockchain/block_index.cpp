@@ -151,6 +151,45 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByParam(const std::s
     return std::unexpected(BlockError::NotExists);
 }
 
+std::pair<Transaction, BigNumber> BlockIndex::search_duplicate(const std::string &hash) const {
+    BigNumber records = getLastSavedId();
+    BigNumber lastBlockId = getLastSavedId();
+
+    if (records <= 0) {
+        eLog("[BlockIndex] There no tx's in block index");
+        return { Transaction(), BigNumber("-1") };
+    }
+
+    auto to_block = std::max(getFirstSavedId(), lastBlockId - 30);
+
+    while (lastBlockId >= to_block) {
+        auto lastBlock = getBlockById(lastBlockId);
+
+        if (!lastBlock.has_value()) {
+            --lastBlockId;
+            continue;
+        }
+
+        if (lastBlock->isGenesisBlock() || lastBlock->isEmpty()) {
+            --lastBlockId;
+            continue;
+        }
+
+        auto txs = lastBlock->transactions();
+
+        for (const Transaction &tx : txs) {
+            if (tx.hash() == hash) {
+                return { tx, lastBlockId };
+            }
+        }
+
+        --lastBlockId;
+    }
+
+    return { Transaction(), BigNumber("-1") };
+}
+
+
 std::pair<Transaction, BigNumber> BlockIndex::getLastTxByHash(const std::string &hash,
                                                               const TokenId     &token) const {
     return getLastTxByParam(hash, SearchEnum::TxParam::Hash, token);

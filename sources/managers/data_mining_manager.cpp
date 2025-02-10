@@ -191,7 +191,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        node->transactionManager()->addTransaction(requestReward.transaction);
+        node->transactionManager()->network_add_transaction_signal(requestReward.transaction);
     } else {
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }

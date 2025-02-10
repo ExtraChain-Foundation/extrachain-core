@@ -1320,7 +1320,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
-        node->transactionManager()->addTransaction(transaction_result.value());
+        node->transactionManager()->network_add_transaction_signal(transaction_result.value());
         sendBrodcastMessageFurther(package_data);
         break;
     }

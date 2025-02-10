@@ -37,11 +37,11 @@ class EXTRACHAIN_EXPORT TransactionManager : public QObject {
 
 private:
     // to create block's from pending txs
-    QTimer *blockTimer;
+    QTimer *timer_make_block;
 
     // received transactions that will be packed into block
-    std::set<Transaction> m_pendingTxList;
-    std::set<Transaction> m_receivedTxList;
+    std::set<Transaction> unproved_transactions_;
+    std::set<Transaction> proved_transactions_;
 
     ExtraChainNode *node;
     // received transactions that we need to compare between network and blockchain
@@ -51,24 +51,23 @@ public:
     TransactionManager(ExtraChainNode *node);
 
 private:
-    void proveTransactions();
-    void addProvedTransaction(const Transaction &tx);
-    void makeBlock();
-    void removeTransaction(int i);
+    void prove_transactions();
+    void add_proved_transaction(const Transaction &tx);
+    void make_block();
 
     friend class NetworkManager;
 
 public:
-    std::set<Transaction> getReceivedTxList() const;
-    std::set<Transaction> getPendingTxs() const;
+    std::set<Transaction> unproved_transactions() const;
+    std::set<Transaction> proved_transactions() const;
 
 public slots:
-    void makeBlockAndProveTransactionsInThread();
-    void addTransactionNetwork(const Transaction &tx);
+    void timer_block_tick();
+    void network_add_transaction(const Transaction &tx);
     void process();
 
 signals:
     void finished();
     void addToCache(std::string actor, Transaction tx);
-    void addTransaction(const Transaction &tx);
+    void network_add_transaction_signal(const Transaction &tx);
 };
