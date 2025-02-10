@@ -257,7 +257,7 @@ public:
     /**
      * @brief remove all blocks
      */
-    void removeAll();
+    void removeAll(bool is_mega = false);
 
     /**
      * @brief Return's reference to blockIndex

@@ -1581,9 +1581,11 @@ BlockIndex &Blockchain::getBlockIndex() {
     return blockIndex;
 }
 
-void Blockchain::removeAll() {
+void Blockchain::removeAll(bool is_mega) {
 #ifndef IS_R
-    return;
+    if (!is_mega) {
+        return;
+    }
 #endif
     eLog("[Blockchain] Remove all...");
     this->blockIndex.removeAll();
