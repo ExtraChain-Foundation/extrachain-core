@@ -637,21 +637,26 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
     GenesisBlock genesis;
     genesis.setIndex(BigNumber(0));
 
-    auto lastBlock = getLastBlock();
+    auto zero_genesis = blockIndex.getBlockById(BigNumber(0));
+    auto lastBlock    = getLastBlock();
 
-    if (!lastBlock.has_value()) {
+    if (!lastBlock.has_value() || !zero_genesis.has_value()) {
         return std::unexpected(BlockError::NoLastBlock);
     }
 
+    int rewards     = 0;
+    int conversions = 0;
+
     // get from zero block
-    GenesisDataRows map;
+    GenesisDataRows map = zero_genesis->dataRows();
+    eLog("[Mega] Zero size: {}", map.size());
 
     // tx check
     for (auto i = BigNumber(0); i != lastBlock->getIndex(); i++) {
         auto block = getBlockByIndex(i);
 
         if (!block.has_value()) {
-            eCritical("[MEGA] Block {} not exists", block->getIndex());
+            eCritical("[MEGA] Block {} not exists", i);
             continue;
         }
 
@@ -672,21 +677,19 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
               transactions.size());
 
         for (auto &tx : transactions) {
-            auto sender   = tx.sender();
-            auto receiver = tx.receiver();
-            auto tokenId  = tx.token();
-
             if (tx.type() == TransactionType::Reward) {
-                map[{ tx.sender(), tokenId }].state += tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                rewards += 1;
                 continue;
             }
 
             if (tx.type() == TransactionType::InitContract) {
-                map[{ tx.sender(), tokenId }].state += tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
                 continue;
             }
 
             if (tx.type() == TransactionType::Conversion && tx.sender() == tx.receiver()) {
+                conversions += 1;
                 auto from_token = ActorId::create(tx.data());
                 if (!from_token.has_value()) {
                     continue;
@@ -696,15 +699,24 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
                     continue;
                 }
 
-                map[{ sender, from_token.value() }].state -= tx.amount();
-                map[{ sender, tokenId }].state += tx.amount();
+                map[{ tx.sender(), from_token.value() }].state -= tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+
                 continue;
             }
 
-            map[{ tx.sender(), tokenId }].state -= tx.amount();
-            map[{ tx.receiver(), tokenId }].state += tx.amount();
+            map[{ tx.sender(), tx.token() }].state -= tx.amount();
+            map[{ tx.receiver(), tx.token() }].state += tx.amount();
         }
     }
+
+    for (const auto &[actor_token, state] : map) {
+        if (state.state < 0) {
+            map[actor_token].state = BigNumberFloat(0);
+        }
+    }
+
+    eLog("[MEGA] Stat. Reward: {}, conversions: {}", rewards, conversions);
 
     genesis.addData(actor.id().to_string());
     genesis.addRows(map);
