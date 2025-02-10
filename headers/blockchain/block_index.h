@@ -83,7 +83,7 @@ public:
 
     std::expected<BlockVariant, BlockError> getBlockByParam(const std::string     &id,
                                                             SearchEnum::BlockParam param) const;
-
+    std::pair<Transaction, BigNumber> search_duplicate(const std::string  &hash) const;
     std::pair<Transaction, BigNumber> getLastTxByHash(const std::string &hash, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxByData(const std::string &data, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxBySender(const ActorId &id, const TokenId &token) const;

@@ -175,7 +175,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             &WebSocketService::shareConnections,
             this,
             [&](const std::set<SocketService::SocketPair> &connections) {
-                eLog("shareConnections: {}", connections);
+                // eLog("shareConnections: {}", connections);
 
                 auto init_ip = node->getInitPublicIPAndCountry().first;
 
@@ -1320,7 +1320,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
-        node->transactionManager()->addTransaction(transaction_result.value());
+        node->transactionManager()->network_add_transaction_signal(transaction_result.value());
         sendBrodcastMessageFurther(package_data);
         break;
     }

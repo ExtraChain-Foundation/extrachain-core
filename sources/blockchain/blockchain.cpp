@@ -46,11 +46,11 @@ std::expected<BlockVariant, BlockError> Blockchain::getBlockByIndex(const BigNum
     auto block = blockIndex.getBlockById(index);
     if (!block.has_value())
         return std::unexpected(BlockError::NotExists);
-    if (block->isEmpty() && index >= 0 && makeRequestBlock) {
-        std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
-        // node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
-        return std::unexpected(BlockError::NotExists);
-    }
+    // if (block->isEmpty() && index >= 0 && makeRequestBlock) {
+    //     std::pair<BlockType, BigNumber> requestData(BlockType::Data, index);
+    //     // node->network()->send_message(requestData, MessageType::BlockchainRequestBlock);
+    //     return std::unexpected(BlockError::NotExists);
+    // }
     return block;
 }
 
@@ -322,10 +322,13 @@ void Blockchain::start_check() {
 }
 
 void Blockchain::network_status_sync_request(const Responder &responder) {
-    auto        block     = this->getLastRealBlock();
-    BigNumber   block_id  = block.has_value() ? block->getIndex() : BigNumber(-1);
-    std::string hash      = block.has_value() ? block->getHash() : "";
-    auto        last_info = BlockchainLastInfo { .last_block_id = block_id, .last_hash = hash };
+    auto        block      = this->getLastBlock();
+    BigNumber   block_id   = block.has_value() ? block->getIndex() : BigNumber(-1);
+    std::string hash       = block.has_value() ? block->getHash() : "";
+    auto        zero_block = this->getBlockByIndex(BigNumber(0));
+    auto        last_info  = BlockchainLastInfo { .last_block_id = block_id,
+                                                  .last_hash     = hash,
+                                                  .zero_date = zero_block.has_value() ? zero_block->getDate() : 0 };
     // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
@@ -338,6 +341,12 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
         return;
     }
     // min(connections size, 5)
+
+    auto zero_block = getBlockByIndex(BigNumber(0));
+    if (zero_block.has_value() && last_info.last_hash != "" && last_info.last_block_id != BigNumber(-1)
+        && zero_block->getDate() < last_info.zero_date) {
+        removeAll();
+    }
 
     int count = std::min(requests_count, 5);
 
@@ -628,21 +637,26 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
     GenesisBlock genesis;
     genesis.setIndex(BigNumber(0));
 
-    auto lastBlock = getLastBlock();
+    auto zero_genesis = blockIndex.getBlockById(BigNumber(0));
+    auto lastBlock    = getLastBlock();
 
-    if (!lastBlock.has_value()) {
+    if (!lastBlock.has_value() || !zero_genesis.has_value()) {
         return std::unexpected(BlockError::NoLastBlock);
     }
 
+    int rewards     = 0;
+    int conversions = 0;
+
     // get from zero block
-    GenesisDataRows map;
+    GenesisDataRows map = zero_genesis->dataRows();
+    eLog("[Mega] Zero size: {}", map.size());
 
     // tx check
     for (auto i = BigNumber(0); i != lastBlock->getIndex(); i++) {
         auto block = getBlockByIndex(i);
 
         if (!block.has_value()) {
-            eCritical("[MEGA] Block {} not exists", block->getIndex());
+            eCritical("[MEGA] Block {} not exists", i);
             continue;
         }
 
@@ -655,8 +669,6 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
             continue;
         }
 
-        auto temp_default_actor = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
-
         // tx check
         auto transactions = block->transactions();
         eInfo("[MEGA] Block {} from {} ({} transactions)",
@@ -666,16 +678,18 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
 
         for (auto &tx : transactions) {
             if (tx.type() == TransactionType::Reward) {
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+                rewards += 1;
                 continue;
             }
 
             if (tx.type() == TransactionType::InitContract) {
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
                 continue;
             }
 
             if (tx.type() == TransactionType::Conversion && tx.sender() == tx.receiver()) {
+                conversions += 1;
                 auto from_token = ActorId::create(tx.data());
                 if (!from_token.has_value()) {
                     continue;
@@ -685,16 +699,24 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
                     continue;
                 }
 
-                map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ tx.sender(), from_token.value() }].state -= tx.amount();
+                map[{ tx.sender(), tx.token() }].state += tx.amount();
+
                 continue;
             }
 
-            auto receiver = GenesisDataActor { .actorId = tx.receiver(), .tokenId = temp_default_actor };
-            map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
-            map[{ tx.receiver(), temp_default_actor }].state += tx.amount();
+            map[{ tx.sender(), tx.token() }].state -= tx.amount();
+            map[{ tx.receiver(), tx.token() }].state += tx.amount();
         }
     }
+
+    for (const auto &[actor_token, state] : map) {
+        if (state.state < 0) {
+            map[actor_token].state = BigNumberFloat(0);
+        }
+    }
+
+    eLog("[MEGA] Stat. Reward: {}, conversions: {}", rewards, conversions);
 
     genesis.addData(actor.id().to_string());
     genesis.addRows(map);
@@ -1365,8 +1387,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 }
 
 // Actors //
-TransactionProveError Blockchain::proveTransaction(const Transaction          &tx,
-                                                   const std::set<Transaction> transactions) {
+TransactionProveError Blockchain::prove_transaction(const Transaction          &tx,
+                                                    const std::set<Transaction> transactions) {
     // eLog("[Blockchain] Transaction prove started: {}", tx);
     // TODO: temp, remove
     if (tx.amount() == 0) {
@@ -1394,7 +1416,7 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         return TransactionProveError::WrongHash;
     }
 
-    auto res = this->blockIndex.getLastTxByHash(tx_copy.hash(), tx.token());
+    auto res = this->blockIndex.search_duplicate(tx_copy.hash());
     if (res.second != BigNumber(-1)) {
         return TransactionProveError::Duplicate;
     }
@@ -1493,6 +1515,8 @@ TransactionProveError Blockchain::proveTransaction(const Transaction          &t
         }
     }
 
+    return TransactionProveError::NoError;
+
     BigNumberFloat transactionAmount = tx.amount();
     BigNumberFloat senderBalance     = calculate_actor_balance(targetSender, token);
 
@@ -1567,9 +1591,19 @@ BlockIndex &Blockchain::getBlockIndex() {
     return blockIndex;
 }
 
-void Blockchain::removeAll() {
+void Blockchain::removeAll(bool is_mega) {
+#ifndef IS_R
+    if (!is_mega) {
+        return;
+    }
+#endif
+    eLog("[Blockchain] Remove all...");
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
+    eLog("[Blockchain] Removed all");
+#ifdef IS_RC
+    qApp->exit();
+#endif
 }
 
 void Blockchain::timer_sync_tick() {

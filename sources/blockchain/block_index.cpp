@@ -151,6 +151,44 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByParam(const std::s
     return std::unexpected(BlockError::NotExists);
 }
 
+std::pair<Transaction, BigNumber> BlockIndex::search_duplicate(const std::string &hash) const {
+    BigNumber records     = getLastSavedId();
+    BigNumber lastBlockId = getLastSavedId();
+
+    if (records <= 0) {
+        eLog("[BlockIndex] There no tx's in block index");
+        return { Transaction(), BigNumber("-1") };
+    }
+
+    auto to_block = std::max(getFirstSavedId(), lastBlockId - 30);
+
+    while (lastBlockId >= to_block) {
+        auto lastBlock = getBlockById(lastBlockId);
+
+        if (!lastBlock.has_value()) {
+            --lastBlockId;
+            continue;
+        }
+
+        if (lastBlock->isGenesisBlock() || lastBlock->isEmpty()) {
+            --lastBlockId;
+            continue;
+        }
+
+        auto txs = lastBlock->transactions();
+
+        for (const Transaction &tx : txs) {
+            if (tx.hash() == hash) {
+                return { tx, lastBlockId };
+            }
+        }
+
+        --lastBlockId;
+    }
+
+    return { Transaction(), BigNumber("-1") };
+}
+
 std::pair<Transaction, BigNumber> BlockIndex::getLastTxByHash(const std::string &hash,
                                                               const TokenId     &token) const {
     return getLastTxByParam(hash, SearchEnum::TxParam::Hash, token);
@@ -555,20 +593,22 @@ void BlockIndex::removeAll() {
     std::string folderPath = this->getFolderPath();
     eLog("Clearing file index: {}", folderPath);
 
-    auto       folderPathQt = QString::fromStdString(folderPath);
-    QDir       folder(folderPathQt);
-    const auto folders =
-        folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
-    for (const QString &section : std::as_const(folders)) {
-        QDir dir(folderPathQt + QString("/") + section);
-        dir.removeRecursively();
-    }
+    auto res = QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    eLog("[BlockIndex] RemoveAll: {}", res);
+    // auto       folderPathQt = QString::fromStdString(folderPath);
+    // QDir       folder(folderPathQt);
+    // const auto folders =
+    //     folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
+    // for (const QString &section : std::as_const(folders)) {
+    //     QDir dir(folderPathQt + QString("/") + section);
+    //     dir.removeRecursively();
+    // }
 
     // update state
     // this->records           = 0;
     this->firstSavedId = -1;
     this->lastSavedId  = -1;
-    QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    // QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
     QFile::remove("tmp/cachedTxs.db");
     // this->countTransactions = 0;
 }

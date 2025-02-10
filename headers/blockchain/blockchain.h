@@ -64,10 +64,11 @@ enum class BlockchainSyncStatus {
 };
 
 struct BlockchainLastInfo {
-    BigNumber   last_block_id;
-    std::string last_hash;
+    BigNumber     last_block_id;
+    std::string   last_hash;
+    std::uint64_t zero_date;
 };
-BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash))
+BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_date))
 
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -256,7 +257,7 @@ public:
     /**
      * @brief remove all blocks
      */
-    void removeAll();
+    void removeAll(bool is_mega = false);
 
     /**
      * @brief Return's reference to blockIndex
@@ -331,7 +332,7 @@ public:
     /**
      * @brief finds needed transaction by sender or receiver
      */
-    TransactionProveError proveTransaction(const Transaction &tx, const std::set<Transaction> transactions);
+    TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
 
 public slots:
     std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
