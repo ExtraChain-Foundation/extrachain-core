@@ -66,7 +66,7 @@ void TransactionManager::makeBlock() {
         return;
     }
 
-    eLog("- makeBlock()");
+    eInfo("- makeBlock()");
 
     auto lastRealBlock = node->blockchain()->getLastRealBlock();
     auto lastBlock     = node->blockchain()->getLastBlock();
@@ -148,7 +148,7 @@ void TransactionManager::makeBlockAndProveTransactionsInThread() {
     return;
 #endif
 
-    eLog("[TransactionManager] Make block... {}", node->blockchain()->status());
+    eInfo("[TransactionManager] Make block... {}", node->blockchain()->status());
     makeBlock();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {
