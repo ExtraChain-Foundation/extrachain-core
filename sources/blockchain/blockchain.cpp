@@ -664,8 +664,6 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
             continue;
         }
 
-        auto temp_default_actor = TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
-
         // tx check
         auto transactions = block->transactions();
         eInfo("[MEGA] Block {} from {} ({} transactions)",
@@ -679,12 +677,12 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
             auto tokenId  = tx.token();
 
             if (tx.type() == TransactionType::Reward) {
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ tx.sender(), tokenId }].state += tx.amount();
                 continue;
             }
 
             if (tx.type() == TransactionType::InitContract) {
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ tx.sender(), tokenId }].state += tx.amount();
                 continue;
             }
 
