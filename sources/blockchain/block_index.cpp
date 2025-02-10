@@ -593,20 +593,22 @@ void BlockIndex::removeAll() {
     std::string folderPath = this->getFolderPath();
     eLog("Clearing file index: {}", folderPath);
 
-    auto       folderPathQt = QString::fromStdString(folderPath);
-    QDir       folder(folderPathQt);
-    const auto folders =
-        folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
-    for (const QString &section : std::as_const(folders)) {
-        QDir dir(folderPathQt + QString("/") + section);
-        dir.removeRecursively();
-    }
+    auto res = QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    eLog("[BlockIndex] RemoveAll: {}", res);
+    // auto       folderPathQt = QString::fromStdString(folderPath);
+    // QDir       folder(folderPathQt);
+    // const auto folders =
+    //     folder.entryList(QDir::Filter::AllEntries | QDir::Filter::NoDotAndDotDot, QDir::SortFlag::Name);
+    // for (const QString &section : std::as_const(folders)) {
+    //     QDir dir(folderPathQt + QString("/") + section);
+    //     dir.removeRecursively();
+    // }
 
     // update state
     // this->records           = 0;
     this->firstSavedId = -1;
     this->lastSavedId  = -1;
-    QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    // QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
     QFile::remove("tmp/cachedTxs.db");
     // this->countTransactions = 0;
 }
