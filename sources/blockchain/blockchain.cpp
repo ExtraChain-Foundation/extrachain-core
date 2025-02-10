@@ -674,6 +674,10 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
               transactions.size());
 
         for (auto &tx : transactions) {
+            auto sender   = tx.sender();
+            auto receiver = tx.receiver();
+            auto tokenId  = tx.token();
+
             if (tx.type() == TransactionType::Reward) {
                 map[{ tx.sender(), temp_default_actor }].state += tx.amount();
                 continue;
@@ -694,14 +698,13 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
                     continue;
                 }
 
-                map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
-                map[{ tx.sender(), temp_default_actor }].state += tx.amount();
+                map[{ sender, from_token.value() }].state -= tx.amount();
+                map[{ sender, tokenId }].state += tx.amount();
                 continue;
             }
 
-            auto receiver = GenesisDataActor { .actorId = tx.receiver(), .tokenId = temp_default_actor };
-            map[{ tx.sender(), temp_default_actor }].state -= tx.amount();
-            map[{ tx.receiver(), temp_default_actor }].state += tx.amount();
+            map[{ tx.sender(), tokenId }].state -= tx.amount();
+            map[{ tx.receiver(), tokenId }].state += tx.amount();
         }
     }
 
@@ -1584,6 +1587,10 @@ void Blockchain::removeAll() {
 #endif
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
+
+#ifdef IS_RC
+    qApp->exit();
+#endif
 }
 
 void Blockchain::timer_sync_tick() {

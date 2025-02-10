@@ -152,7 +152,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByParam(const std::s
 }
 
 std::pair<Transaction, BigNumber> BlockIndex::search_duplicate(const std::string &hash) const {
-    BigNumber records = getLastSavedId();
+    BigNumber records     = getLastSavedId();
     BigNumber lastBlockId = getLastSavedId();
 
     if (records <= 0) {
@@ -188,7 +188,6 @@ std::pair<Transaction, BigNumber> BlockIndex::search_duplicate(const std::string
 
     return { Transaction(), BigNumber("-1") };
 }
-
 
 std::pair<Transaction, BigNumber> BlockIndex::getLastTxByHash(const std::string &hash,
                                                               const TokenId     &token) const {

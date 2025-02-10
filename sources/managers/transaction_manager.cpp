@@ -64,7 +64,7 @@ void TransactionManager::make_block() {
 
     eInfo("- makeBlock()");
 
-    auto last_block     = node->blockchain()->getLastBlock();
+    auto last_block = node->blockchain()->getLastBlock();
 
     if (!last_block.has_value()) {
         eLog("[Blockchain] last or real last block is not exists");
@@ -112,7 +112,7 @@ void TransactionManager::make_block() {
     }
 
     if (proved_transactions_.empty()) {
-        eLog("[TransactionManager] Try to create block, but pending list is empty");
+        eLog("[TransactionManager] Try to create block, but proved txs list is empty");
         return;
     }
 
@@ -168,7 +168,10 @@ void TransactionManager::prove_transactions() {
 }
 
 void TransactionManager::process() {
-    connect(this, &TransactionManager::network_add_transaction_signal, this, &TransactionManager::network_add_transaction);
+    connect(this,
+            &TransactionManager::network_add_transaction_signal,
+            this,
+            &TransactionManager::network_add_transaction);
 
     timer_make_block = new QTimer(this);
     connect(timer_make_block, &QTimer::timeout, this, &TransactionManager::timer_block_tick);
