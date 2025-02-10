@@ -86,7 +86,8 @@ bool TokenManager::isValidTicker(const std::string &ticker) {
 }
 
 QMap<QString, QString> TokenManager::mapTokens() {
-    QMap<QString, QString> map = { { "ExC", ActorId().toQString() } };
+    QMap<QString, QString> map = { { "ExC", ActorId().toQString() },
+                                   { "ROCC", "468faf2f1be6504a9a26f7f027f7e43380b0d77d" } };
     DbConnector            db(Token::DB_TOKENS_PATH);
     bool                   isDbOpen = db.open();
     if (!isDbOpen) {

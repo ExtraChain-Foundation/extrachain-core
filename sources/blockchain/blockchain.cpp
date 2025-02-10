@@ -1365,6 +1365,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                     tx.setAmount(transaction.amount());
                     tx.setPrevBlock(block.getIndex());
                     tx.setToken(ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
+                    eLog("[Reward] Send conversion: {} coins", tx.amount());
                     node->sendTransaction(tx, node->accountController()->mainActor());
                 }
 #endif
