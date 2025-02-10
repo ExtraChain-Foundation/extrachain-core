@@ -19,4 +19,4 @@
 
 #pragma once
 
-static const std::string extrachain_version = "0.14.1";
+static const std::string extrachain_version = "0.14.2";
