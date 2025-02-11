@@ -99,7 +99,13 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &respond
     // create response message
     if (actorId.is_zero())
         eFatal("handleGetActor: empty actor");
-    Actor<KeyPublic> actor = getActor(actorId);
+
+    auto actor_result = this->get_actor(actorId, ActorGetType::NoRequest);
+    if (!actor_result.has_value()) {
+        return;
+    }
+
+    auto actor = actor_result.value();
     if (!actor.empty()) {
         responder.send_response(actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
     } else {
