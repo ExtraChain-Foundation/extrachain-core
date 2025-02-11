@@ -64,7 +64,7 @@ void TransactionManager::make_block() {
 
     eInfo("- makeBlock()");
 
-    auto last_block = node->blockchain()->getLastBlock();
+    auto last_block = node->blockchain()->read_last_block();
 
     if (!last_block.has_value()) {
         eLog("[Blockchain] last or real last block is not exists");
@@ -80,14 +80,14 @@ void TransactionManager::make_block() {
 
     if (node->blockchain()->status() == BlockchainStatus::Sync) {
         eLog("[Blockchain] Blockchain: try to sync... Last block: {}, type: {}, connections: {}",
-             last_block->getIndex(),
+             last_block->id(),
              last_block->getType(),
              node->network()->active_connections_count());
         return;
     }
 
     eLog("[Blockchain] Last block: {}, type: {}, status: {}",
-         last_block->getIndex(),
+         last_block->id(),
          last_block->getType(),
          node->blockchain()->status());
 
@@ -96,13 +96,13 @@ void TransactionManager::make_block() {
         return;
     }
 
-    auto maybeGenesisId = last_block->getIndex() + 1;
-    if (!last_block->isEmpty() && maybeGenesisId > 0 && Blockchain::isGenesisId(maybeGenesisId)) {
+    auto maybeGenesisId = last_block->id() + 1;
+    if (!last_block->isEmpty() && maybeGenesisId > 0 && Blockchain::is_genesis_id(maybeGenesisId)) {
         eLog("[Blockchain] Create genesis block {}, dec: {}",
              maybeGenesisId,
              maybeGenesisId.to_string(NumeralBase::Dec));
         const auto actor   = node->accountController()->mainActor();
-        const auto genesis = node->blockchain()->createGenesisBlock(actor);
+        const auto genesis = node->blockchain()->create_genesis_block(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
             node->network()->send_message(genesis.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
@@ -123,15 +123,15 @@ void TransactionManager::make_block() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
-    eLog("[TransactionManager] Send block: {}", blockVariant.getIndex());
+    eLog("[TransactionManager] Send block: {}", blockVariant.id());
 
     node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 
 void TransactionManager::timer_block_tick() {
 #ifdef IS_R
-    auto last_block = node->blockchain()->getLastBlock();
-    auto last_id    = last_block.has_value() ? last_block->getIndex() : BigNumber(-1);
+    auto last_block = node->blockchain()->read_last_block();
+    auto last_id    = last_block.has_value() ? last_block->id() : BigNumber(-1);
     eLog("[Blockchain] Last id: {}. Blockchain status: {}", last_id, node->blockchain()->status());
     unproved_transactions_.clear();
     return;

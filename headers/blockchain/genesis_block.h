@@ -117,6 +117,6 @@ public:
 };
 
 inline bool operator==(const GenesisBlock &l, const GenesisBlock &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+    return l.id() == r.id() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
            && l.dataRows() == r.dataRows() && l.signatures() == r.signatures();
 }

@@ -24,7 +24,7 @@
 
 Block::Block() {
     this->m_type     = BlockType::Data;
-    this->m_index    = BigNumber(-1);
+    this->id_        = BigNumber(-1);
     this->m_date     = QDateTime::currentDateTime().toMSecsSinceEpoch();
     this->m_prevHash = "";
     this->m_hash     = "";
@@ -32,7 +32,7 @@ Block::Block() {
 
 Block::Block(const Block &block) {
     this->m_type         = block.getType();
-    this->m_index        = block.getIndex();
+    this->id_            = block.id();
     this->m_date         = block.getDate();
     this->m_dataService  = block.dataService();
     this->m_prevHash     = block.getPrevHash();
@@ -49,7 +49,7 @@ Block::Block(std::string           &&type,
              std::string           &&hash,
              Signatures            &&signatures,
              std::set<Transaction> &&transactions)
-    : m_index(std::move(idx))
+    : id_(std::move(idx))
     , m_date(date)
     , m_prevHash(std::move(prevHash))
     , m_hash(std::move(hash))
@@ -66,7 +66,7 @@ Block::~Block() {
 Block Block::operator=(const Block &block) {
     m_type         = block.m_type;
     m_dataService  = block.m_dataService;
-    m_index        = block.m_index;
+    id_            = block.id_;
     m_date         = block.m_date;
     m_prevHash     = block.m_prevHash;
     m_hash         = block.m_hash;
@@ -79,7 +79,7 @@ void Block::calculate_hash() {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
 
-    std::string index = m_index.to_string(NumeralBase::Hex);
+    std::string index = id_.to_string(NumeralBase::Hex);
     blake3_hasher_update(&hasher, index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -117,11 +117,11 @@ void Block::setType(const std::string &value) {
 void Block::setPrev(const BlockVariant &prev) {
     if (prev.isEmpty()) {
         // eLog("[Block] Construction first block");
-        this->m_index    = BigNumber("0");
+        this->id_        = BigNumber("0");
         this->m_prevHash = Utils::calculate_hash("0 index");
     } else {
-        // eLog("[Block] Construction block. Previous block id: {}", prev->getIndex());
-        this->m_index    = prev.getIndex() + 1;
+        // eLog("[Block] Construction block. Previous block id: {}", prev->id());
+        this->id_        = prev.id() + 1;
         this->m_prevHash = prev.getHash();
     }
 }
@@ -205,8 +205,8 @@ Transaction Block::getTransactionByHash(std::string hash) const {
 }
 
 bool Block::isEmpty() const {
-    return m_index < 0 && this->getHash().empty() && this->m_signatures.empty()
-           && (m_index == 0 || this->getPrevHash().empty());
+    return id_ < 0 && this->getHash().empty() && this->m_signatures.empty()
+           && (id_ == 0 || this->getPrevHash().empty());
 }
 
 BlockType Block::getType() const {
@@ -247,16 +247,16 @@ void Block::clearSignatures() {
     m_signatures.clear();
 }
 
-void Block::setIndex(const BigNumber &index) {
-    m_index = index;
+void Block::set_id(const BigNumber &id) {
+    id_ = id;
 }
 
 void Block::setPrevHash(const std::string &value) {
     m_prevHash = value;
 }
 
-BigNumber Block::getIndex() const {
-    return m_index;
+BigNumber Block::id() const {
+    return id_;
 }
 
 const std::set<std::string> &Block::dataService() const {
@@ -276,7 +276,7 @@ std::string Block::getPrevHash() const {
 }
 
 bool Block::operator<(const Block &other) {
-    if (this->m_index < other.getIndex()) {
+    if (this->id_ < other.id()) {
         return true;
     } else if (this->m_dataService < other.dataService()) {
         return true;

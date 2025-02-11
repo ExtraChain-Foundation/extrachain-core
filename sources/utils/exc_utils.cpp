@@ -343,7 +343,7 @@ void Utils::wipeDataFiles() {
 
     QDir("blockchain").removeRecursively();
     QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
-    QDir("keystore").removeRecursively();
+    QDir("profiles").removeRecursively();
     QDir("tmp").removeRecursively();
     QDir("encrypt").removeRecursively();
     QDir("tokens").removeRecursively();

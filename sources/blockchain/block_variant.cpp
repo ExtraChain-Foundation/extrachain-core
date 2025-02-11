@@ -47,10 +47,10 @@ BlockType BlockVariant::getType() const {
         m_block);
 }
 
-BigNumber BlockVariant::getIndex() const {
+BigNumber BlockVariant::id() const {
     return std::visit(
         [](const auto& b) {
-            return b.getIndex();
+            return b.id();
         },
         m_block);
 }
@@ -104,7 +104,7 @@ Signatures BlockVariant::signatures() const {
 }
 
 std::set<Transaction> BlockVariant::transactions() const {
-    if (isGenesisBlock()) {
+    if (is_genesis()) {
         return {};
     }
 
@@ -168,7 +168,7 @@ bool BlockVariant::isBlock() const {
     return std::holds_alternative<Block>(m_block);
 }
 
-bool BlockVariant::isGenesisBlock() const {
+bool BlockVariant::is_genesis() const {
     return std::holds_alternative<GenesisBlock>(m_block);
 }
 

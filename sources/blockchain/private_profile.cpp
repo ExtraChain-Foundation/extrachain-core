@@ -173,7 +173,7 @@ void PrivateProfile::load() {
 }
 
 std::filesystem::path PrivateProfile::path() {
-    return KeyStore::folder + Utils::platformDelimeter() + system_.to_string() + KeyStore::format;
+    return Profiles::folder + Utils::platformDelimeter() + system_.to_string() + Profiles::format;
 }
 
 std::map<ActorId, std::string> PrivateProfile::wallet_names() const {

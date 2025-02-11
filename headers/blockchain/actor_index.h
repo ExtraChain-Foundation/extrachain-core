@@ -59,7 +59,7 @@ private:
     const std::string folderPath =
         fmt::format("{}/{}/", BlockchainConst::BLOCKCHAIN_INDEX, BlockchainConst::ACTOR_INDEX_FOLDER_NAME);
     int16_t SECTION_NAME_SIZE = 2;
-    ActorId m_firstId;
+    ActorId network_id_;
 
 public:
     /**
@@ -90,7 +90,7 @@ private:
     bool                                save_actor_index(const Actor<KeyPublic> &actor);
 
 public:
-    ActorId firstId();
+    ActorId network_id();
 
     /**
      * @brief Check actor with actorId exist
@@ -124,7 +124,7 @@ public:
     QByteArray getById(const ActorId &id) const;
 
     std::size_t getRecords() const;
-    void        setFirstId(const ActorId &value);
+    void        set_network_id(const ActorId &value);
     std::string getFolderPath() const;
 
     /**

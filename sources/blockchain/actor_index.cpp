@@ -20,8 +20,8 @@
 #include "blockchain/actor_index.h"
 #include "network/network_manager.h"
 
-ActorId ActorIndex::firstId() {
-    return m_firstId;
+ActorId ActorIndex::network_id() {
+    return network_id_;
 }
 
 ActorIndex::ActorIndex(ExtraChainNode *node)
@@ -83,7 +83,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
         Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            eWarning("Can not validate block {}. There no actor {} in local storage", block.getIndex(), actorId);
+            eWarning("Can not validate block {}. There no actor {} in local storage", block.id(), actorId);
             continue;
         }
 
@@ -185,16 +185,16 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
     return folderPath + idStd.substr(idStd.length() - SECTION_NAME_SIZE) + '/' + idStd;
 }
 
-void ActorIndex::setFirstId(const ActorId &value) {
-    if (!m_firstId.is_zero()) {
-        if (firstId() != value) {
-            eFatal("Another FirstId: {} != {}", firstId(), value);
+void ActorIndex::set_network_id(const ActorId &value) {
+    if (!network_id_.is_zero()) {
+        if (network_id() != value) {
+            eFatal("Another FirstId: {} != {}", network_id(), value);
         }
         return;
     }
 
     eLog("[ActorIndex] Save first id: {}", value);
-    m_firstId = value;
+    network_id_ = value;
 }
 
 std::size_t ActorIndex::getRecords() const {

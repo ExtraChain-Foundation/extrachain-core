@@ -195,7 +195,7 @@ void AccountController::clear() {
 }
 
 std::set<ActorId> AccountController::profilesList() {
-    QFile file(QString::fromStdString(KeyStore::folder + Utils::platformDelimeter() + KeyStore::profiles));
+    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
     if (!file.exists())
         return {};
 
@@ -221,7 +221,7 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     }
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
 
-    QFile file(QString::fromStdString(KeyStore::folder + Utils::platformDelimeter() + KeyStore::profiles));
+    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
     file.open(QFile::WriteOnly);
     file.write(json);
     file.close();

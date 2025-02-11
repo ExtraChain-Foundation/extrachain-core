@@ -84,7 +84,7 @@ void SocketService::set_vpn(bool isVPN) {
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
          handshake,
-         node->actorIndex()->firstId(),
+         node->actorIndex()->network_id(),
          ip_);
     identifier_  = QString::fromStdString(handshake.identifier);
     socket_type_ = handshake.socket_type;
@@ -106,12 +106,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 2. First id/network checks
     ActorId json_network_id       = ActorId(handshake.network_id);
-    ActorId our_network_id        = node->actorIndex()->firstId();
+    ActorId our_network_id        = node->actorIndex()->network_id();
     bool    is_first_ids_contains = our_network_id == json_network_id;
     bool    something_empty       = json_network_id.is_zero() || our_network_id.is_zero();
 
     if (our_network_id.is_zero() && !json_network_id.is_zero()) {
-        node->actorIndex()->setFirstId(json_network_id); // TODO: request block 0?
+        node->actorIndex()->set_network_id(json_network_id); // TODO: request block 0?
     }
 
     if (!(something_empty || is_first_ids_contains)) {
@@ -211,7 +211,7 @@ void SocketService::closeSocket() {
 }
 
 QByteArray SocketService::generate_first_message() {
-    HandshakeMessage msg { .network_id   = node->actorIndex()->firstId().to_string(),
+    HandshakeMessage msg { .network_id   = node->actorIndex()->network_id().to_string(),
                            .version      = extrachain_version,
                            .identifier   = Network::currentIdentifier().toStdString(),
                            .socket_type  = socket_type_,

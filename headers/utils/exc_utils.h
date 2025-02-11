@@ -831,13 +831,13 @@ namespace BlockchainConst {
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 
-namespace KeyStore {
+namespace Profiles {
     // To store user private/public keys
-    static const std::string folder   = "keystore";
+    static const std::string folder   = "profiles";
     static const std::string format   = ".profile";
     static const std::string profiles = "profiles";
-    static const std::string encrypt  = "encrypt";
-} // namespace KeyStore
+    // static const std::string encrypt  = "encrypt";
+} // namespace Profiles
 
 namespace SearchEnum {
     enum class BlockParam {
