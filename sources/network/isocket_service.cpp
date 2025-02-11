@@ -91,8 +91,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 1. Checking the version
     if (handshake.version != extrachain_version) {
+        auto version_error_variant = (handshake.version < extrachain_version)
+                                         ? Network::SocketServiceError::VersionTooNew
+                                         : Network::SocketServiceError::VersionTooOld;
+
         eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
-        emit error(Network::SocketServiceError::IncompatibleVersion,
+        emit error(version_error_variant,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
                    identifier_.toStdString());
@@ -111,9 +115,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     if (!(something_empty || is_first_ids_contains)) {
-        eLog("[Socket] Closing: network version mismatch (local: {}, remote: {})",
-             our_network_id,
-             json_network_id);
+        eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),

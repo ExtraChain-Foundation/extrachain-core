@@ -212,7 +212,8 @@ namespace Network {
 
     enum class SocketServiceError {
         Unknown,
-        IncompatibleVersion,
+        VersionTooOld,
+        VersionTooNew,
         IncompatibleNetwork,
         IncompatibleIdentifier,
         DuplicateIdentifier,

@@ -1472,7 +1472,8 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     eLog("[NetworkManager] Error socket: {} {} {}", error, ip, identifier);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
-        || error == Network::SocketServiceError::IncompatibleVersion) {
+        || error == Network::SocketServiceError::VersionTooOld
+        || error == Network::SocketServiceError::VersionTooNew) {
         failed_ips.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;

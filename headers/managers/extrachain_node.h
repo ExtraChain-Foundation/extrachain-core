@@ -158,8 +158,8 @@ public:
 
     std::string transactionErrorDescription(const TransactionError& error);
 
-    std::expected<std::string, ImportError> exportUser();
-    std::string importUser(const std::string& data, const std::string& login, const std::string& password);
+    std::expected<std::string, ImportError> export_profile();
+    std::string import_profile(const std::string& data, const std::string& login, const std::string& password);
     // TODO: prepareImportUser: get visual info about file
 
     void createNetworkIdentifier();

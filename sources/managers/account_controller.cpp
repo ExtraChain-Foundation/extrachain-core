@@ -43,7 +43,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node->actorIndex()->store_new_actor(actor.to_public());
-    addToProfileList(actor.id());
+    insert_to_profile_set(actor.id());
     autologinHash.save(hash); // TODO: add arg
 
     eLog("[Accounts] Created new profile: {}", actor.id());
@@ -84,13 +84,13 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
-        node->actorIndex()->store_new_actor(actor.to_public());
+        node->actorIndex()->save_actor(actor.to_public());
     }
     for (const auto &actor : profile.imports()) {
-        node->actorIndex()->store_new_actor(actor.to_public());
+        node->actorIndex()->save_actor(actor.to_public());
     }
 
-    addToProfileList(actor.id());
+    insert_to_profile_set(actor.id());
     eLog("[Accounts] Imported profile: {}", imported_profile);
 }
 
@@ -194,7 +194,7 @@ void AccountController::clear() {
     eLog("[AccountController] Cleared");
 }
 
-std::vector<ActorId> AccountController::profilesList() {
+std::set<ActorId> AccountController::profilesList() {
     QFile file(QString::fromStdString(KeyStore::folder + Utils::platformDelimeter() + KeyStore::profiles));
     if (!file.exists())
         return {};
@@ -203,18 +203,18 @@ std::vector<ActorId> AccountController::profilesList() {
     auto jsonBytes    = file.readAll();
     auto profilesJson = QJsonDocument::fromJson(jsonBytes).array();
 
-    std::vector<ActorId> profiles;
+    std::set<ActorId> profiles;
 
     for (auto actorId : profilesJson) {
-        profiles.push_back(ActorId(actorId.toString().toStdString()));
+        profiles.insert(ActorId(actorId.toString().toStdString()));
     }
 
     return profiles;
 }
 
-void AccountController::addToProfileList(const ActorId &actorId) {
+void AccountController::insert_to_profile_set(const ActorId &actorId) {
     auto profiles = profilesList();
-    profiles.push_back(actorId);
+    profiles.insert(actorId);
     QJsonArray array;
     for (auto &actorId : profiles) {
         array.push_back(actorId.toQString());

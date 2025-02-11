@@ -74,8 +74,8 @@ public:
     const Actor<KeyPrivate>              &currentWallet() const; // temp
     void                                  clear();
 
-    static std::vector<ActorId> profilesList();
-    void                        addToProfileList(const ActorId &actorId);
+    static std::set<ActorId> profilesList();
+    void                        insert_to_profile_set(const ActorId &actorId);
 
 private:
     ExtraChainNode *node;

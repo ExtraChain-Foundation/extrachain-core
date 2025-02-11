@@ -338,7 +338,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
     return this->createTransaction(tx);
 }
 
-std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
+std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
     const auto& current_profile = m_accountController->currentProfile();
     auto        network_id      = m_actorIndex->firstId();
     if (network_id.is_zero()) {
@@ -364,7 +364,7 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     return ByteArray(encrypted.value()).toString();
 }
 
-std::string ExtraChainNode::importUser(const std::string& data,
+std::string ExtraChainNode::import_profile(const std::string& data,
                                        const std::string& login,
                                        const std::string& password) {
     if (data.empty()) {
