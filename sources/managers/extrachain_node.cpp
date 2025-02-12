@@ -704,11 +704,11 @@ ConnectionsManager* ExtraChainNode::connectionsManager() const {
     return m_connectionsManager;
 }
 
-bool ExtraChainNode::login(const std::string& login, const std::string& password) {
+std::expected<void, LoadError> ExtraChainNode::login(const std::string& login, const std::string& password) {
     return m_accountController->load(Utils::calculate_hash(login + password));
 }
 
-bool ExtraChainNode::login(const std::string& hash) {
+std::expected<void, LoadError> ExtraChainNode::login(const std::string& hash) {
     return m_accountController->load(hash);
 }
 

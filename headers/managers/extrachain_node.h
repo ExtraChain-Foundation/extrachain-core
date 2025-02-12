@@ -28,6 +28,7 @@
 #include <QObject>
 #include <QTimer>
 
+#include "managers/account_controller.h"
 #include "blockchain/transaction.h"
 #include "blockchain/private_profile.h"
 #include "extrachain_global.h"
@@ -129,9 +130,9 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
 
-    bool login(const std::string& login, const std::string& password);
-    bool login(const std::string& hash);
-    void logout();
+    std::expected<void, LoadError> login(const std::string& login, const std::string& password);
+    std::expected<void, LoadError> login(const std::string& hash);
+    void                           logout();
 
     /**
      * @brief Create new transaction from current user

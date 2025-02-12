@@ -25,6 +25,14 @@
 
 class ExtraChainNode;
 
+enum class LoadError {
+    Unknown,
+    EmptyHash,
+    NoProfiles,
+    NoAuthProfiles,
+    Multiple
+};
+
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
@@ -53,7 +61,9 @@ public:
 
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
-    bool load(const std::string &hash);
+    std::expected<void, LoadError> load(const std::string &hash);
+    bool                           load_profile(const ActorId &actor_id, const std::string &hash);
+    std::set<ActorId>              multiple_profiles(const std::string &hash);
 
     const Actor<KeyPrivate> &mainActor();
 

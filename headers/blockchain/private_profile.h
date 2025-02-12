@@ -34,6 +34,12 @@ enum class ImportError {
     NoActor
 };
 
+enum class PrivateProfileReadError {
+    File,
+    Decrypt,
+    Json
+};
+
 struct ImportedUser {
     ActorId                        network;
     std::string                    version;
@@ -49,6 +55,8 @@ class EXTRACHAIN_EXPORT PrivateProfile {
 public:
     PrivateProfile() = default; // only for json
     static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static std::expected<PrivateProfile, PrivateProfileReadError> read(const ActorId     &actor_id,
+                                                                       const std::string &hash);
     static PrivateProfile load(const ActorId &actor_id, const std::string &hash);
     static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash);
 
@@ -71,9 +79,10 @@ public:
     void                                    add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
-    void                  save();
-    void                  load();
-    std::filesystem::path path();
+    void                                                   save();
+    std::expected<PrivateProfile, PrivateProfileReadError> read();
+    void                                                   load();
+    std::filesystem::path                                  path();
 
     ActorId                        system_;
     ActorId                        current_;
