@@ -1269,7 +1269,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
-        eLog("[Blockchain] Ignore add block, because blockhain sync");
+        eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());
         node->network()->sendBrodcastMessageFurther(package);
         return std::unexpected(BlockError::BlockchainBusy);
     }
