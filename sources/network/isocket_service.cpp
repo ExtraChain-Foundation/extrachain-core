@@ -83,7 +83,7 @@ void SocketService::set_vpn(bool isVPN) {
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] Current network id: {}", node->actorIndex()->firstId());
+    eLog("[Socket] Current network id: {}", node->actorIndex()->network_id());
     eLog("[Socket] IP: {}", ip_);
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",

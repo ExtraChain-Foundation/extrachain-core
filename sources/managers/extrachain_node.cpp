@@ -345,13 +345,15 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
         return std::unexpected(ImportError::NoNetworkId);
     }
 
-    auto imported_user = ImportedUser { .network      = network_id,
-                                        .version      = extrachain_version,
-                                        .date         = Utils::current_date_ms(),
-                                        .system       = current_profile.system().id(),
-                                        .actors       = current_profile.actors(),
-                                        .imports      = current_profile.imports(),
-                                        .wallet_names = current_profile.wallet_names() };
+    auto imported_user = ImportedUser { .network       = network_id,
+                                        .version       = extrachain_version,
+                                        .date          = Utils::current_date_ms(),
+                                        .system        = current_profile.system().id(),
+                                        .actors        = current_profile.actors(),
+                                        .imports       = current_profile.imports(),
+                                        .wallet_names  = current_profile.wallet_names(),
+                                        .creation_date = current_profile.creation_date(),
+                                        .modified_date = current_profile.modified_date() };
 
     auto json = Json::serialize(imported_user);
 
@@ -392,6 +394,10 @@ std::string ExtraChainNode::import_profile(const std::string& data,
     m_accountController->import_profile(imported_user.value(), hash);
 
     return hash;
+}
+
+ActorId ExtraChainNode::network_id() {
+    return m_actorIndex->network_id();
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
@@ -656,7 +662,7 @@ void ExtraChainNode::prepareFolders() {
     eLog("Preparing folders");
     eLog("Working directory: {}", QDir::currentPath());
 
-    // Version compatibility: 0.14.4
+    // Version compatibility: 0.15.0
     if (QDir("keystore").exists()) {
         QDir().rename("keystore", "profiles");
     }

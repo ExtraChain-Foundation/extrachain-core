@@ -75,8 +75,23 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::DirDuplicate);
     }
 
-    auto fpath         = FsPath::create(file_path).value();
+    auto fpath_result = FsPath::create(file_path);
+    if (!fpath_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotFile);
+    }
+
+    auto fpath         = fpath_result.value();
     auto new_file_path = fpath;
+
+    auto file_size_ = fpath.file_size();
+    if (!file_size_.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotFile);
+    }
+
+    constexpr uintmax_t MB_500 = 500ULL * 1024 * 1024; // 524'288'000
+    if (file_size_.value() > MB_500) {
+        return std::unexpected(Dfs::DfsError::MaxFileSize);
+    }
 
     // TODO: check path, check :***
     auto name_res = NameValidator::validate(visual_name);
@@ -1156,7 +1171,71 @@ void DfsController::exportFile(const std::string &pathTo,
     }
 }
 
-Dfs::DfsSize DfsController::calculate_size() const {
+std::expected<void, ExportFileError> DfsController::export_file(const ActorId     &owner_id,
+                                                                const std::string &file_id,
+                                                                const FsPath      &output_folder) {
+    if (!output_folder.exists()) {
+        return std::unexpected(ExportFileError::OutupDirNotExits);
+    }
+
+    auto is_dir = output_folder.is_directory();
+    if (!is_dir.has_value()) {
+        return std::unexpected(ExportFileError::OutupDirNotExits);
+    }
+    if (!is_dir.value()) {
+        return std::unexpected(ExportFileError::OutupDirNotExits);
+    }
+
+    auto has_write_perm = output_folder.has_write_permission();
+    if (!has_write_perm.has_value()) {
+        return std::unexpected(ExportFileError::NoWritePermissions);
+    }
+    if (!has_write_perm.value()) {
+        return std::unexpected(ExportFileError::NoWritePermissions);
+    }
+
+    auto dir_row_result = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+
+    if (!dir_row_result.has_value()) {
+        return std::unexpected(ExportFileError::DirRowNotExists);
+    }
+
+    if (dir_row_result->state != Dfs::FileState::Ready) {
+        return std::unexpected(ExportFileError::FileNotReadyState);
+    }
+
+    auto dfs_path_result = Dfs::Path::file_path(owner_id, file_id);
+    if (!dfs_path_result.has_value()) {
+        return std::unexpected(ExportFileError::IncorrectDfsPath);
+    }
+
+    auto dfs_path = dfs_path_result.value();
+    if (!dfs_path.exists()) {
+        return std::unexpected(ExportFileError::LocalFileNotExists);
+    }
+
+    bool is_downloaded = node->dfs()->is_file_already_downloaded(owner_id, file_id, dir_row_result->hash);
+    if (!is_downloaded) {
+        return std::unexpected(ExportFileError::LocalFileNotValid);
+    }
+
+    auto output_path = output_folder;
+    output_path.append(dir_row_result->name);
+
+    if (output_path.exists()) {
+        return std::unexpected(ExportFileError::OutputFileExists);
+    }
+
+    try {
+        std::filesystem::copy(dfs_path.native(), output_path.native());
+    } catch (const std::filesystem::filesystem_error &e) {
+        return std::unexpected(ExportFileError::CopyError);
+    }
+
+    return {};
+}
+
+Dfs::DfsSize DfsController::calculate_size() {
     Dfs::DfsSize dfs_size;
 
     auto all_actors = node->actorIndex()->allActors();
@@ -1174,6 +1253,9 @@ Dfs::DfsSize DfsController::calculate_size() const {
             }
         }
     }
+
+    m_totalDfsSize = dfs_size.all;
+    m_sizeTaken    = dfs_size.local;
 
     return dfs_size;
 }
@@ -1213,7 +1295,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
     node->network()->send_message(msg, MessageType::RequestDfsSize, SendMode::Neighbours, MessageStatus::Request);
 }
 
-void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) const {
+void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) {
     const auto            dfsSize = calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);

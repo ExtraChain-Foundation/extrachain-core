@@ -570,6 +570,8 @@ namespace Utils {
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 
+    std::optional<uint64_t> read_file_creation_time_ms(const std::filesystem::path &filepath);
+
     boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
     EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
