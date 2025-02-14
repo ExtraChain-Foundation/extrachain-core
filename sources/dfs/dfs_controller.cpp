@@ -83,8 +83,20 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     auto fpath         = fpath_result.value();
     auto new_file_path = fpath;
 
+    auto has_read_perm = fpath.has_read_permission();
+    if (!has_read_perm.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotReadable);
+    }
+    if (!has_read_perm.value()) {
+        return std::unexpected(Dfs::DfsError::NotReadable);
+    }
+
+    if (fpath.is_directory()) {
+
+    }
+
     auto file_size_ = fpath.file_size();
-    if (!file_size_.has_value()) {
+    if (!file_size_.has_value())  {
         return std::unexpected(Dfs::DfsError::NotFile);
     }
 

@@ -71,7 +71,7 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const Act
             sendGetActorMessage(id);
         }
 
-        eWarning("[ActorIndex] There no actor with id: {}", id);
+        // eWarning("[ActorIndex] There no actor with id: {}", id);
         return std::unexpected(ActorIndexError::NoActor);
     }
 }
