@@ -94,7 +94,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
     return true;
 }
 
-void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &responder) {
+void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &responder) {
     // receive id
     // create response message
     if (actorId.is_zero())
@@ -113,7 +113,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &respond
     }
 }
 
-void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const Responder &responder) {
+void ActorIndex::network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder) {
     if (node->accountController()->empty())
         return;
 
@@ -137,9 +137,48 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     }
 }
 
-void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
-    for (const auto &actor : actors)
-        getActor(actor);
+void ActorIndex::network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder) {
+    std::set<ActorId> needed_actors;
+
+    for (const auto &actor_id : actors) {
+        auto actor_result = this->get_actor(actor_id, ActorGetType::NoRequest);
+        if (actor_result.has_value()) {
+            continue;
+        }
+
+        needed_actors.insert(actor_id);
+    }
+
+    if (needed_actors.empty()) {
+        return;
+    }
+
+    responder.send_response(needed_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Request);
+}
+
+void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const Responder &responder) {
+    std::vector<Actor<KeyPublic>> req_actors;
+
+    for (const auto &actor_id : actors) {
+        auto actor_result = this->get_actor(actor_id, ActorGetType::NoRequest);
+        if (!actor_result.has_value()) {
+            continue;
+        }
+
+        req_actors.push_back(actor_result.value());
+    }
+
+    if (req_actors.empty()) {
+        return;
+    }
+
+    responder.send_response(req_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Response);
+}
+
+void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
+    for (const auto &actor : actors) {
+        this->save_actor(actor);
+    }
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {

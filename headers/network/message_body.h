@@ -32,6 +32,7 @@ enum class MessageType {
     Actor      = 2,
     ActorCount = 3,
     ActorAll   = 4,
+    Actors     = 15,
 
     BlockchainNewBlock     = 30,
     BlockchainSyncBlock    = 31,
