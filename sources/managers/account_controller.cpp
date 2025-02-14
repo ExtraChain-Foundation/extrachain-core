@@ -101,28 +101,79 @@ void AccountController::renameWallet(const ActorId     &profileActor,
     profile.rename_wallet(actorId, walletName);
 }
 
-bool AccountController::load(const std::string &hash) { // if (hash.empty()) { eFatal("Incorrect profile loading");
+std::expected<void, LoadError> AccountController::load(const std::string &hash) {
+    if (hash.empty()) {
+        return std::unexpected(LoadError::EmptyHash);
+    }
+
     auto profiles = profilesList();
 
-    for (auto &actorId : profiles) {
-        auto profile = PrivateProfile::load(actorId, hash);
-        if (profile.loaded()) {
-            const auto &actors = profile.actors();
-            for (auto &actor : actors) {
-                if (node->actorIndex()->getById(actor.id()).isEmpty()) {
-                    node->actorIndex()->save_actor(actor.to_public());
-                }
-            }
+    if (profiles.empty()) {
+        return std::unexpected(LoadError::NoProfiles);
+    }
 
-            m_profiles.push_back(profile);
-            m_currentProfile = profile.system().id();
-            node->start();            // TODO: remove
-            autologinHash.save(hash); // TODO: add arg
-            return true;
+    int count = 0;
+    for (auto &actor_id : profiles) {
+        auto profile = PrivateProfile::read(actor_id, hash);
+        if (profile.has_value()) {
+            count++;
+            if (count > 1) {
+                break;
+            }
         }
     }
 
+    if (count > 1) {
+        eLog("[Accounts] Multiple profiles found for this login and password combination");
+        return std::unexpected(LoadError::Multiple);
+    }
+
+    if (count == 0) {
+        return std::unexpected(LoadError::NoAuthProfiles);
+    }
+
+    for (auto &actor_id : profiles) {
+        auto res = load_profile(actor_id, hash);
+        if (res) {
+            return {};
+        }
+    }
+
+    return std::unexpected(LoadError::Unknown);
+}
+
+bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
+    auto profile = PrivateProfile::load(actor_id, hash);
+    if (profile.loaded()) {
+        const auto &actors = profile.actors();
+        for (auto &actor : actors) {
+            if (node->actorIndex()->getById(actor.id()).isEmpty()) {
+                node->actorIndex()->save_actor(actor.to_public());
+            }
+        }
+
+        m_profiles.push_back(profile);
+        m_currentProfile = profile.system().id();
+        node->start();            // TODO: remove
+        autologinHash.save(hash); // TODO: add arg
+        return true;
+    }
+
     return false;
+}
+
+std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) {
+    auto              profiles = profilesList();
+    std::set<ActorId> multiple_profiles;
+
+    for (auto &actor_id : profiles) {
+        auto profile = PrivateProfile::read(actor_id, hash);
+        if (profile.has_value()) {
+            multiple_profiles.insert(actor_id);
+        }
+    }
+
+    return multiple_profiles;
 }
 
 const Actor<KeyPrivate> &AccountController::mainActor() {

@@ -82,10 +82,15 @@ void SocketService::set_vpn(bool isVPN) {
 }
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
-    eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
-         handshake,
-         node->actorIndex()->network_id(),
-         ip_);
+    // eLog("[Socket] First message: {}", handshake);
+    eLog("[Socket] Current network id: {}", node->actorIndex()->firstId());
+    eLog("[Socket] IP: {}", ip_);
+
+    // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
+    //      handshake,
+    //      node->actorIndex()->firstId(),
+    //      ip_);
+
     identifier_  = QString::fromStdString(handshake.identifier);
     socket_type_ = handshake.socket_type;
 

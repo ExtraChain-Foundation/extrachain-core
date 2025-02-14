@@ -31,6 +31,14 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std:
     return user;
 }
 
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
+                                                                            const std::string &hash) {
+    PrivateProfile user;
+    user.system_ = actor_id;
+    user.hash_   = hash;
+    return user.read();
+}
+
 PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash) {
     PrivateProfile user;
     user.system_ = actor_id;
@@ -148,27 +156,38 @@ void PrivateProfile::save() {
     file.close();
 }
 
-void PrivateProfile::load() {
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read() {
     std::ifstream file(path(), std::ios::binary);
     if (!file) {
-        eFatal("Can't open file");
+        return std::unexpected(PrivateProfileReadError::File);
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
     auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), hash_);
     if (!json_bytes.has_value()) {
-        eFatal("Incorrect private profile load");
+        // eWarning("Incorrect private profile load");
+        return std::unexpected(PrivateProfileReadError::Decrypt);
     }
 
     auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
     if (!profile.has_value()) {
-        eFatal("Incorrect private profile load: incorrect json");
+        // eWarning("Incorrect private profile load: incorrect json");
+        return std::unexpected(PrivateProfileReadError::Json);
     }
 
-    this->system_  = profile->system_;
-    this->current_ = profile->system_;
-    this->actors_  = profile->actors_;
-    this->imports_ = profile->imports_;
+    return profile.value();
+}
+
+void PrivateProfile::load() {
+    auto profile = this->read();
+    if (!profile.has_value()) {
+        return;
+    }
+
+    this->system_       = profile->system_;
+    this->current_      = profile->system_;
+    this->actors_       = profile->actors_;
+    this->imports_      = profile->imports_;
     this->wallet_names_ = profile->wallet_names_;
 }
 
