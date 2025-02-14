@@ -20,8 +20,8 @@
 #include "blockchain/actor_index.h"
 #include "network/network_manager.h"
 
-ActorId ActorIndex::firstId() {
-    return m_firstId;
+ActorId ActorIndex::network_id() {
+    return network_id_;
 }
 
 ActorIndex::ActorIndex(ExtraChainNode *node)
@@ -71,7 +71,7 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const Act
             sendGetActorMessage(id);
         }
 
-        eWarning("[ActorIndex] There no actor with id: {}", id);
+        // eWarning("[ActorIndex] There no actor with id: {}", id);
         return std::unexpected(ActorIndexError::NoActor);
     }
 }
@@ -83,7 +83,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
         Actor<KeyPublic> actor = this->getActor(actorId);
 
         if (actor.empty()) {
-            eWarning("Can not validate block {}. There no actor {} in local storage", block.getIndex(), actorId);
+            eWarning("Can not validate block {}. There no actor {} in local storage", block.id(), actorId);
             continue;
         }
 
@@ -94,7 +94,7 @@ bool ActorIndex::validateBlock(const BlockVariant &block) {
     return true;
 }
 
-void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &responder) {
+void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &responder) {
     // receive id
     // create response message
     if (actorId.is_zero())
@@ -113,7 +113,7 @@ void ActorIndex::handleGetActor(const ActorId &actorId, const Responder &respond
     }
 }
 
-void ActorIndex::handleGetAllActor(const ActorId &ignoredActorId, const Responder &responder) {
+void ActorIndex::network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder) {
     if (node->accountController()->empty())
         return;
 
@@ -137,9 +137,48 @@ void ActorIndex::getAllActors(ActorId id, bool isUser) {
     }
 }
 
-void ActorIndex::handleNewAllActors(const std::vector<ActorId> &actors) {
-    for (const auto &actor : actors)
-        getActor(actor);
+void ActorIndex::network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder) {
+    std::set<ActorId> needed_actors;
+
+    for (const auto &actor_id : actors) {
+        auto actor_result = this->get_actor(actor_id, ActorGetType::NoRequest);
+        if (actor_result.has_value()) {
+            continue;
+        }
+
+        needed_actors.insert(actor_id);
+    }
+
+    if (needed_actors.empty()) {
+        return;
+    }
+
+    responder.send_response(needed_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Request);
+}
+
+void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const Responder &responder) {
+    std::vector<Actor<KeyPublic>> req_actors;
+
+    for (const auto &actor_id : actors) {
+        auto actor_result = this->get_actor(actor_id, ActorGetType::NoRequest);
+        if (!actor_result.has_value()) {
+            continue;
+        }
+
+        req_actors.push_back(actor_result.value());
+    }
+
+    if (req_actors.empty()) {
+        return;
+    }
+
+    responder.send_response(req_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Response);
+}
+
+void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
+    for (const auto &actor : actors) {
+        this->save_actor(actor);
+    }
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
@@ -185,16 +224,16 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
     return folderPath + idStd.substr(idStd.length() - SECTION_NAME_SIZE) + '/' + idStd;
 }
 
-void ActorIndex::setFirstId(const ActorId &value) {
-    if (!m_firstId.is_zero()) {
-        if (firstId() != value) {
-            eFatal("Another FirstId: {} != {}", firstId(), value);
+void ActorIndex::set_network_id(const ActorId &value) {
+    if (!network_id_.is_zero()) {
+        if (network_id() != value) {
+            eFatal("Another FirstId: {} != {}", network_id(), value);
         }
         return;
     }
 
     eLog("[ActorIndex] Save first id: {}", value);
-    m_firstId = value;
+    network_id_ = value;
 }
 
 std::size_t ActorIndex::getRecords() const {

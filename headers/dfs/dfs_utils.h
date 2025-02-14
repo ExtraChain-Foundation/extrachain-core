@@ -167,7 +167,8 @@ namespace Dfs {
         IncorrectSecurityData,
         IncorrectEncryption,
         NoOwnerActor,
-        NoAuthorActor
+        NoAuthorActor,
+        MaxFileSize
     };
 
     enum class FileType {

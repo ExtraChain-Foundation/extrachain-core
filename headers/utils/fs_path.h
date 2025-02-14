@@ -128,9 +128,13 @@ public:
     using TimePoint = boost::chrono::system_clock::time_point;
 
     explicit FsPath() = default;
-    [[nodiscard]] static std::expected<FsPath, FsError>     create(std::string_view utf8_path);
-    static std::expected<FsPath, FsError>                   create(const std::string& path);
-    static std::expected<FsPath, FsError>                   create(const std::filesystem::path& path);
+
+    [[nodiscard]] static std::expected<FsPath, FsError> create(std::string_view utf8_path);
+    static std::expected<FsPath, FsError>               create(const std::string& path);
+    static std::expected<FsPath, FsError>               create(const std::filesystem::path& path);
+
+    std::expected<void, FsError> append(std::string_view component);
+
     [[nodiscard]] std::expected<std::string, FsError>       string() const;
     [[nodiscard]] std::expected<FsPath, FsError>            absolute() const;
     [[nodiscard]] bool                                      exists() const;
@@ -144,6 +148,7 @@ public:
     [[nodiscard]] std::expected<std::uintmax_t, FsError>    directory_size() const;
     [[nodiscard]] std::expected<TimePoint, FsError>         last_write_time() const;
     [[nodiscard]] std::expected<bool, FsError>              has_read_permission() const;
+    [[nodiscard]] std::expected<bool, FsError>              has_write_permission() const;
     [[nodiscard]] std::expected<DirectoryIterator, FsError> begin() const;
     [[nodiscard]] std::expected<DirectoryIterator, FsError> end() const;
     [[nodiscard]] bool                                      exists_and_size_not_zero() const;
@@ -156,9 +161,9 @@ public:
 
 private:
     explicit FsPath(const std::filesystem::path& path);
+    static std::expected<std::string, FsError> validate_path_component(std::string_view component);
 
     std::filesystem::path m_path;
-
     friend class DirectoryIterator;
 };
 

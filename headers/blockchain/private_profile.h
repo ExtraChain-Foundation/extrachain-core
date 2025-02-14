@@ -43,11 +43,13 @@ enum class PrivateProfileReadError {
 struct ImportedUser {
     ActorId                        network;
     std::string                    version;
-    uint64_t                       date;
+    uint64_t                       date = 0;
     ActorId                        system;
     std::vector<Actor<KeyPrivate>> actors;
     std::vector<Actor<KeyPrivate>> imports;
     std::map<ActorId, std::string> wallet_names;
+    uint64_t                       creation_date = 0;
+    uint64_t                       modified_date = 0;
 };
 BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
 
@@ -75,11 +77,18 @@ public:
 
     std::map<ActorId, std::string> wallet_names() const;
 
+    std::uint64_t creation_date() const {
+        return creation_date_;
+    }
+    std::uint64_t modified_date() const {
+        return modified_date_;
+    }
+
     std::expected<std::string, ImportError> export_actor(const ActorId &actor_id);
     void                                    add_imported_actor(const Actor<KeyPrivate> &imported_actor);
 
 private:
-    void                                                   save();
+    void                                                   save(std::uint64_t modified_date = 0);
     std::expected<PrivateProfile, PrivateProfileReadError> read();
     void                                                   load();
     std::filesystem::path                                  path();
@@ -90,6 +99,12 @@ private:
     std::vector<Actor<KeyPrivate>> actors_;
     std::vector<Actor<KeyPrivate>> imports_;
     std::map<ActorId, std::string> wallet_names_;
+    std::uint64_t                  creation_date_ = 0;
+    std::uint64_t                  modified_date_ = 0;
 
-    BOOST_DESCRIBE_CLASS(PrivateProfile, (), (), (), (system_, actors_, imports_, wallet_names_))
+    BOOST_DESCRIBE_CLASS(PrivateProfile,
+                         (),
+                         (),
+                         (),
+                         (system_, actors_, imports_, wallet_names_, creation_date_, modified_date_))
 };

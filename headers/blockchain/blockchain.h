@@ -95,15 +95,14 @@ private:
 
 public:
     explicit Blockchain(ExtraChainNode *node);
-    std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash);
+    std::expected<BlockVariant, BlockError> search_block_by_hash(const std::string &hash);
     ~Blockchain();
 
-    std::expected<BlockVariant, BlockError> getBlockByIndex(const BigNumber &index,
-                                                            const bool       makeRequestBlock = false);
-    std::pair<Transaction, BigNumber>       getTxByHash(const std::string &hash, const TokenId &token = TokenId());
+    std::expected<BlockVariant, BlockError> read_block_by_id(const BigNumber &id,
+                                                             const bool       makeRequestBlock = false);
+    std::pair<Transaction, BigNumber> search_tx_by_hash(const std::string &hash, const TokenId &token = TokenId());
 
     void sync(const BigNumber &from = BigNumber(), std::optional<Responder> responder = std::nullopt);
-    void lastSavedRequest();
 
     BlockchainStatus status();
 
@@ -116,11 +115,11 @@ public:
     void send_request_blocks();
 
     void remove_last_block() {
-        auto block = this->getLastRealBlock();
+        auto block = this->read_last_block();
 
-        if (block.has_value() && block->getIndex() != BigNumber(0)) {
-            blockIndex.removeById(block->getIndex());
-            eLog("[Blockchain] Remove last block: {}", block->getIndex());
+        if (block.has_value() && block->id() != BigNumber(0)) {
+            blockIndex.removeById(block->id());
+            eLog("[Blockchain] Remove last block: {}", block->id());
         }
     }
 
@@ -135,18 +134,15 @@ private:
     std::pair<Transaction, BigNumber> getTxByUser(const ActorId &id, const TokenId &token = TokenId());
 
     // genesis blocks //
-    QByteArray findRecordsInBlock(const BlockVariant &block);
-    bool       signCheckAdd(BlockVariant &block);
 
 public:
-    static BigNumber lastGenesisIdFor(const BigNumber &id);
-    static bool      isGenesisId(const BigNumber &id);
+    static BigNumber calculate_genesis_id_for_block(const BigNumber &id);
+    static bool      is_genesis_id(const BigNumber &id);
 
-    std::expected<BlockVariant, BlockError> createGenesisBlock(const Actor<KeyPrivate> &actor);
-
+    std::expected<BlockVariant, BlockError> create_genesis_block(const Actor<KeyPrivate> &actor);
     std::expected<BlockVariant, BlockError> create_mega_genesis_block(const Actor<KeyPrivate> &actor);
 
-    std::expected<BlockVariant, BlockError> createFirstBlock(
+    std::expected<BlockVariant, BlockError> create_zero_genesis_block(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
     std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
@@ -176,24 +172,19 @@ private:
     BlockVariant validateAndReturnBlock(const BlockVariant &block) const;
 
 public:
-    void updateFirstId(const BlockVariant &block);
+    void update_network_id(const BlockVariant &block);
 
     // - BLOCKS - //
 
     /**
      * @return last blockchain block
      */
-    std::expected<BlockVariant, BlockError> getLastBlock() const;
+    std::expected<BlockVariant, BlockError> read_last_block() const;
 
     /**
      * @return Amount of blockchain blocks
      */
     BigNumber getBlocksStored() const;
-
-    /**
-     * @return last real blockchain block
-     */
-    std::expected<BlockVariant, BlockError> getLastRealBlock() const;
 
     /**
      * Gets the block from blockchain by *value* of a certain *type*

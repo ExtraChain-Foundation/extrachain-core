@@ -52,26 +52,22 @@ void BlockIndex::setBlockCompress(bool newBlockCompress) {
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::addBlock(const BlockVariant &block) {
-    auto result = this->add(block.getIndex(), block);
+    auto result = this->add(block.id(), block);
     return result;
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastBlock() const {
-    return this->getBlockById(lastSavedId);
-}
-
-std::expected<BlockVariant, BlockError> BlockIndex::getLastRealBlock() const {
-    return getLastBlock();
+    return this->read_block_by_id(lastSavedId);
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const BigNumber &from) const {
-    BigNumber id = Blockchain::lastGenesisIdFor(from >= 0 ? from : this->lastSavedId);
+    BigNumber id = Blockchain::calculate_genesis_id_for_block(from >= 0 ? from : this->lastSavedId);
 
     while (id >= getFirstSavedId()) {
         auto block = this->getGenesisBlockById(id);
 
         if (block.has_value() && !block->isEmpty()) {
-            // eLog("[BlockIndex] {} block found", block->getIndex());
+            // eLog("[BlockIndex] {} block found", block->id());
             return block.value();
         }
 
@@ -85,14 +81,14 @@ std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const Bi
 std::expected<BlockVariant, BlockError> BlockIndex::getGenesisBlockById(const BigNumber &id) const {
     auto block = this->getById(id);
 
-    if (block.has_value() && !block->isEmpty() && block->isGenesisBlock()) {
+    if (block.has_value() && !block->isEmpty() && block->is_genesis()) {
         return block;
     }
 
     return std::unexpected(BlockError::NoGenesis);
 }
 
-std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber &id) const {
+std::expected<BlockVariant, BlockError> BlockIndex::read_block_by_id(const BigNumber &id) const {
     if (id < 0) {
         return std::unexpected(BlockError::NotExists);
         // eFatal("getBlockById < 0");
@@ -107,7 +103,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockById(const BigNumber
     return std::unexpected(BlockError::NotExists);
 }
 
-std::expected<BlockVariant, BlockError> BlockIndex::getBlockByHash(const std::string &hash) const {
+std::expected<BlockVariant, BlockError> BlockIndex::search_block_by_hash(const std::string &hash) const {
     return getBlockByParam(hash, SearchEnum::BlockParam::Hash);
 }
 
@@ -118,14 +114,14 @@ std::expected<BlockVariant, BlockError> BlockIndex::getBlockByData(const std::st
 std::expected<BlockVariant, BlockError> BlockIndex::getBlockByParam(const std::string     &id,
                                                                     SearchEnum::BlockParam param) const {
     if (param == SearchEnum::BlockParam::Id) {
-        return getBlockById(BigNumber(id));
+        return read_block_by_id(BigNumber(id));
     }
 
     BigNumber lastBlockId = getLastSavedId();
 
     // iteration from the last to the first Block
     while (lastBlockId >= getFirstSavedId()) {
-        auto lastBlock = getBlockById(lastBlockId);
+        auto lastBlock = read_block_by_id(lastBlockId);
 
         if (!lastBlock.has_value())
             return std::unexpected(BlockError::NotExists);
@@ -163,14 +159,14 @@ std::pair<Transaction, BigNumber> BlockIndex::search_duplicate(const std::string
     auto to_block = std::max(getFirstSavedId(), lastBlockId - 30);
 
     while (lastBlockId >= to_block) {
-        auto lastBlock = getBlockById(lastBlockId);
+        auto lastBlock = read_block_by_id(lastBlockId);
 
         if (!lastBlock.has_value()) {
             --lastBlockId;
             continue;
         }
 
-        if (lastBlock->isGenesisBlock() || lastBlock->isEmpty()) {
+        if (lastBlock->is_genesis() || lastBlock->isEmpty()) {
             --lastBlockId;
             continue;
         }
@@ -238,12 +234,12 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string
 
     // iterating from last to first block
     while (lastBlockId >= getFirstSavedId()) {
-        auto lastBlock = getBlockById(lastBlockId);
+        auto lastBlock = read_block_by_id(lastBlockId);
         if (!lastBlock.has_value()) {
             --lastBlockId;
             continue;
         }
-        if (lastBlock->isGenesisBlock() || lastBlock->isEmpty()) {
+        if (lastBlock->is_genesis() || lastBlock->isEmpty()) {
             --lastBlockId;
             continue;
         }
@@ -317,9 +313,9 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
         if (count < currentCount)
             break;
 
-        auto lastBlock = getBlockById(lastBlockId);
+        auto lastBlock = read_block_by_id(lastBlockId);
 
-        if (!lastBlock.has_value() || (lastBlock.has_value() && lastBlock->isGenesisBlock())) {
+        if (!lastBlock.has_value() || (lastBlock.has_value() && lastBlock->is_genesis())) {
             --lastBlockId;
             continue;
         }
@@ -401,7 +397,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
     QFile file(path);
     if (file.exists()) {
-        auto block = getBlockById(id);
+        auto block = read_block_by_id(id);
 
         if (block.has_value() && !block->isEmpty()) {
             // if sign -> add only signs
@@ -430,7 +426,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         return std::unexpected(BlockError::DbNotOpen);
     }
 
-    if (newBlock.isGenesisBlock()) {
+    if (newBlock.is_genesis()) {
         GenesisBlock block = bl.getGenesisBlock()->get();
 
         db.create_table(Config::DataStorage::GenesisBlockTableCreate);
@@ -439,7 +435,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
 
         DbRow row;
         row.insert({ "type", block.getTypeStr() });
-        row.insert({ "id", block.getIndex().to_string() });
+        row.insert({ "id", block.id().to_string() });
         row.insert({ "date", QByteArray::number(block.getDate()).toStdString() });
         row.insert({ "data", block.getDataMessagePack() });
         row.insert({ "prevHash", block.getPrevHash() });
@@ -486,7 +482,7 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
         DbRow row;
 
         row.insert({ "type", block.getTypeStr() });
-        row.insert({ "id", block.getIndex().to_string() });
+        row.insert({ "id", block.id().to_string() });
         row.insert({ "date", std::to_string(block.getDate()) });
         row.insert({ "data", block.getDataMessagePack() });
         row.insert({ "prevHash", block.getPrevHash() });
@@ -542,7 +538,7 @@ bool BlockIndex::hasRecordLimit() const {
 // }
 
 int BlockIndex::removeById(const BigNumber &id) {
-    auto block = getBlockById(id);
+    auto block = read_block_by_id(id);
 
     if (!block.has_value())
         return -1;
@@ -551,8 +547,8 @@ int BlockIndex::removeById(const BigNumber &id) {
 }
 
 int BlockIndex::removeById(const BlockVariant &block) {
-    //    block.getIndex(), block.getType()
-    BigNumber id = block.getIndex();
+    //    block.id(), block.getType()
+    BigNumber id = block.id();
     // BlockType typeBlock      = block.getType();
     // auto      countTxInBlock = block.transactions().size();
 

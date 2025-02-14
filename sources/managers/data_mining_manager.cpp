@@ -89,13 +89,13 @@ void DataMiningManager::requestCoinReward() {
     transaction.setAmount(amount);
     transaction.setType(TransactionType::Reward);
 
-    auto lastRealBlock = node->blockchain()->getLastRealBlock();
+    auto lastRealBlock = node->blockchain()->read_last_block();
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
         eLog("[Reward] No blocks");
         return;
     }
 
-    BigNumber lastBlockId = lastRealBlock->getIndex();
+    BigNumber lastBlockId = lastRealBlock->id();
     transaction.setPrevBlock(lastBlockId);
     transaction.sign(actor);
 
@@ -126,12 +126,12 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
         return BigNumberFloat(0);
     }
 
-    auto lastBlock = node->blockchain()->getLastBlock();
+    auto lastBlock = node->blockchain()->read_last_block();
     if (!lastBlock.has_value())
         return BigNumberFloat(0);
     if (lastBlock->isEmpty())
         return BigNumberFloat(0);
-    auto lastIndex = lastBlock->getIndex();
+    auto lastIndex = lastBlock->id();
     if (lastIndex == BigNumber(0)) {
         lastIndex = BigNumber(1);
         // return BigNumberFloat(0);
@@ -163,12 +163,12 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
         return BigNumberFloat(0);
     }
 
-    auto lastBlock = node->blockchain()->getLastBlock();
+    auto lastBlock = node->blockchain()->read_last_block();
     if (!lastBlock.has_value())
         return BigNumberFloat(0);
     if (lastBlock->isEmpty())
         return BigNumberFloat(0);
-    auto lastIndex = lastBlock->getIndex();
+    auto lastIndex = lastBlock->id();
     if (lastIndex == 0) { // a u jk
         lastIndex = BigNumber(1);
         // return BigNumberFloat(0);
@@ -185,6 +185,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto calc   = calculateRewardAmount(requestReward);
     auto amount = requestReward.transaction.amount();
 
+    // * KoefReward
     if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;

@@ -545,7 +545,9 @@ std::expected<bool, FsError> Cryptography::validate_encryption_paths(const FsPat
         return parent_exists;
 
     auto parent_is_dir = out_parent->is_directory();
-    if (!parent_is_dir)
+    if (!parent_is_dir.has_value())
+        return std::unexpected(FsError::ParentNotDirectory);
+    if (!parent_is_dir.value())
         return std::unexpected(FsError::ParentNotDirectory);
 
     if (output_path == input_path)

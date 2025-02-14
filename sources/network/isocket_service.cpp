@@ -83,7 +83,7 @@ void SocketService::set_vpn(bool isVPN) {
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] Current network id: {}", node->actorIndex()->firstId());
+    eLog("[Socket] Current network id: {}", node->actorIndex()->network_id());
     eLog("[Socket] IP: {}", ip_);
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
@@ -96,8 +96,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 1. Checking the version
     if (handshake.version != extrachain_version) {
+        auto version_error_variant = (handshake.version < extrachain_version)
+                                         ? Network::SocketServiceError::VersionTooNew
+                                         : Network::SocketServiceError::VersionTooOld;
+
         eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
-        emit error(Network::SocketServiceError::IncompatibleVersion,
+        emit error(version_error_variant,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
                    identifier_.toStdString());
@@ -107,18 +111,16 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 2. First id/network checks
     ActorId json_network_id       = ActorId(handshake.network_id);
-    ActorId our_network_id        = node->actorIndex()->firstId();
+    ActorId our_network_id        = node->actorIndex()->network_id();
     bool    is_first_ids_contains = our_network_id == json_network_id;
     bool    something_empty       = json_network_id.is_zero() || our_network_id.is_zero();
 
     if (our_network_id.is_zero() && !json_network_id.is_zero()) {
-        node->actorIndex()->setFirstId(json_network_id); // TODO: request block 0?
+        node->actorIndex()->set_network_id(json_network_id); // TODO: request block 0?
     }
 
     if (!(something_empty || is_first_ids_contains)) {
-        eLog("[Socket] Closing: network version mismatch (local: {}, remote: {})",
-             our_network_id,
-             json_network_id);
+        eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
@@ -214,7 +216,7 @@ void SocketService::closeSocket() {
 }
 
 QByteArray SocketService::generate_first_message() {
-    HandshakeMessage msg { .network_id   = node->actorIndex()->firstId().to_string(),
+    HandshakeMessage msg { .network_id   = node->actorIndex()->network_id().to_string(),
                            .version      = extrachain_version,
                            .identifier   = Network::currentIdentifier().toStdString(),
                            .socket_type  = socket_type_,

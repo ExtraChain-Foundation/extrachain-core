@@ -212,7 +212,8 @@ namespace Network {
 
     enum class SocketServiceError {
         Unknown,
-        IncompatibleVersion,
+        VersionTooOld,
+        VersionTooNew,
         IncompatibleNetwork,
         IncompatibleIdentifier,
         DuplicateIdentifier,
@@ -569,6 +570,8 @@ namespace Utils {
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 
+    std::optional<uint64_t> read_file_creation_time_ms(const std::filesystem::path &filepath);
+
     boost::json::value stringToJsonValue(const std::string &value, const std::type_info &target_type);
 
     EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
@@ -830,13 +833,13 @@ namespace BlockchainConst {
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 
-namespace KeyStore {
+namespace Profiles {
     // To store user private/public keys
-    static const std::string folder   = "keystore";
+    static const std::string folder   = "profiles";
     static const std::string format   = ".profile";
     static const std::string profiles = "profiles";
-    static const std::string encrypt  = "encrypt";
-} // namespace KeyStore
+    // static const std::string encrypt  = "encrypt";
+} // namespace Profiles
 
 namespace SearchEnum {
     enum class BlockParam {

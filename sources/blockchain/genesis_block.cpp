@@ -74,7 +74,7 @@ void GenesisBlock::calculate_hash() {
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
 
-    auto index = m_index.to_string(NumeralBase::Hex);
+    auto index = id_.to_string(NumeralBase::Hex);
     blake3_hasher_update(&hasher, index.c_str(), index.size());
 
     for (const auto &data : m_dataService) {
@@ -100,7 +100,7 @@ const GenesisDataRows &GenesisBlock::dataRows() const {
 
 void GenesisBlock::setPrevGen(const BlockVariant &block) {
     m_prevGenHash = block.getHash();
-    m_index       = block.getIndex() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
+    id_       = block.id() + Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 void GenesisBlock::setType(BlockType value) {

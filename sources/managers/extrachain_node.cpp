@@ -125,7 +125,7 @@ void ExtraChainNode::process() {
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
     m_dmm                = new DataMiningManager(this);
-    auto key             = actorIndex()->firstId().toQByteArray();
+    auto key             = actorIndex()->network_id().toQByteArray();
     auto address         = "12.12.12.12";
     auto port            = "1212";
     m_connectionsManager = new ConnectionsManager(address, port, key, this);
@@ -169,7 +169,7 @@ void ExtraChainNode::cleanUp() {
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
-    if (!QDir("keystore/profile").isEmpty()) {
+    if (!QDir("profiles/profile").isEmpty()) {
         eInfo("Cannot create a new network: existing profile data found");
         return false;
     }
@@ -177,12 +177,12 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calculate_hash(login + password);
     auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
-    m_actorIndex->setFirstId(first.id());
+    m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
     if (m_blockchain->getRecords() <= 0) {
         auto& first      = m_accountController->mainActor();
-        auto  firstBlock = m_blockchain->createFirstBlock(first);
+        auto  firstBlock = m_blockchain->create_zero_genesis_block(first);
         if (!firstBlock.has_value())
             return false;
 
@@ -202,7 +202,7 @@ void ExtraChainNode::create_new_network_dfs() {
     // temp while no cached local new store file
     create_network_need_dfs_creation = false;
 
-    auto first_id        = m_actorIndex->firstId();
+    auto first_id        = m_actorIndex->network_id();
     auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
         { Dfs::Field::ActorId("token_id").not_null().unique(),
           Dfs::Field::String("name").not_null().unique().length(3, 20),
@@ -293,12 +293,12 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
     eWarning("Attempting to create {} from user {}", tx, actor.id().to_string());
 
     // 1) set prev block id
-    auto lastRealBlock = m_blockchain->getLastRealBlock();
+    auto lastRealBlock = m_blockchain->read_last_block();
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
         eWarning("Can not create: {}. There is no last block in blockchain", tx);
         return std::unexpected(TransactionError::NoLastBlock);
     }
-    tx.setPrevBlock(lastRealBlock->getIndex());
+    tx.setPrevBlock(lastRealBlock->id());
 
     // 2) check coin availability
     if (blockchain()->calculate_actor_balance(actor.id(), tx.token()) < tx.amount()) {
@@ -338,20 +338,22 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
     return this->createTransaction(tx);
 }
 
-std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
+std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
     const auto& current_profile = m_accountController->currentProfile();
-    auto        network_id      = m_actorIndex->firstId();
+    auto        network_id      = m_actorIndex->network_id();
     if (network_id.is_zero()) {
         return std::unexpected(ImportError::NoNetworkId);
     }
 
-    auto imported_user = ImportedUser { .network      = network_id,
-                                        .version      = extrachain_version,
-                                        .date         = Utils::current_date_ms(),
-                                        .system       = current_profile.system().id(),
-                                        .actors       = current_profile.actors(),
-                                        .imports      = current_profile.imports(),
-                                        .wallet_names = current_profile.wallet_names() };
+    auto imported_user = ImportedUser { .network       = network_id,
+                                        .version       = extrachain_version,
+                                        .date          = Utils::current_date_ms(),
+                                        .system        = current_profile.system().id(),
+                                        .actors        = current_profile.actors(),
+                                        .imports       = current_profile.imports(),
+                                        .wallet_names  = current_profile.wallet_names(),
+                                        .creation_date = current_profile.creation_date(),
+                                        .modified_date = current_profile.modified_date() };
 
     auto json = Json::serialize(imported_user);
 
@@ -364,9 +366,9 @@ std::expected<std::string, ImportError> ExtraChainNode::exportUser() {
     return ByteArray(encrypted.value()).toString();
 }
 
-std::string ExtraChainNode::importUser(const std::string& data,
-                                       const std::string& login,
-                                       const std::string& password) {
+std::string ExtraChainNode::import_profile(const std::string& data,
+                                           const std::string& login,
+                                           const std::string& password) {
     if (data.empty()) {
         return std::string(); // unexpected
     }
@@ -392,6 +394,10 @@ std::string ExtraChainNode::importUser(const std::string& data,
     m_accountController->import_profile(imported_user.value(), hash);
 
     return hash;
+}
+
+ActorId ExtraChainNode::network_id() {
+    return m_actorIndex->network_id();
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
@@ -447,13 +453,13 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 
 std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction              transaction,
                                                                              const Actor<KeyPrivate>& signer) {
-    auto lastRealBlock = m_blockchain->getLastRealBlock();
+    auto lastRealBlock = m_blockchain->read_last_block();
 
     if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
         return std::unexpected(TransactionError::NoLastBlock);
     }
 
-    BigNumber lastBlockId = lastRealBlock->getIndex();
+    BigNumber lastBlockId = lastRealBlock->id();
     transaction.setPrevBlock(lastBlockId);
     transaction.sign(signer);
     // !sign -> the конец
@@ -511,7 +517,7 @@ void ExtraChainNode::createNetworkIdentifier() {
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto firstId = m_actorIndex->firstId();
+    auto firstId = m_actorIndex->network_id();
     if (firstId.is_zero())
         return;
     auto first = m_actorIndex->getActor(firstId);
@@ -656,13 +662,17 @@ void ExtraChainNode::prepareFolders() {
     eLog("Preparing folders");
     eLog("Working directory: {}", QDir::currentPath());
 
-    QDir().mkpath(QString::fromStdString(KeyStore::folder));
+    // Version compatibility: 0.15.0
+    if (QDir("keystore").exists()) {
+        QDir().rename("keystore", "profiles");
+    }
+
+    QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
                                          + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
                                          + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
-    // QDir().mkpath(QString::fromStdString(KeyStore::encrypt));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     QFile(".settings").remove();
