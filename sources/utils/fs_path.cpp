@@ -56,15 +56,21 @@ std::expected<std::string, FsError> FsPath::validate_path_component(std::string_
 }
 
 std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
-    auto validated = validate_path_component(utf8_path);
-    if (!validated.has_value()) {
-        return std::unexpected(validated.error());
-    }
+    auto normalized        = Utils::normalize_separators(utf8_path);
+    auto validation_result = PathValidator::validate(normalized);
+    if (!validation_result)
+        return std::unexpected(FsError::ValidationError);
 
     try {
-        auto fs_path = std::filesystem::path(validated.value()).lexically_normal();
+#ifdef _WIN32
+        auto wide_path = Utils::utf8_to_utf16(normalized);
+        if (!wide_path)
+            return std::unexpected(FsError::ConversionFailed);
+        auto fs_path = std::filesystem::path(*wide_path).lexically_normal();
+#else
+        auto fs_path = std::filesystem::path(normalized).lexically_normal();
+#endif
 
-        /*
         auto current = fs_path;
         while (true) {
             if (std::filesystem::is_symlink(current)) {
@@ -85,7 +91,6 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
                 return std::unexpected(FsError::ParentNotDirectory);
             }
         }
-        */
 
         return FsPath(std::filesystem::weakly_canonical(fs_path));
     } catch (const std::exception& e) {
