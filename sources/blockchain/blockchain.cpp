@@ -1384,7 +1384,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     //                      Notification::NotifyType::TxToMe,
     //                      tmp.getSender().toByteArray() });
     // }
-    TIMER_END(addBlockNetwork)
+    //TIMER_END(addBlockNetwork)
 }
 
 // Actors //
