@@ -366,27 +366,27 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
     return ByteArray(encrypted.value()).toString();
 }
 
-std::string ExtraChainNode::import_profile(const std::string& data,
+std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(const std::string& data,
                                            const std::string& login,
                                            const std::string& password) {
     if (data.empty()) {
-        return std::string(); // unexpected
+        return std::unexpected(ImportProfileError::DataEmpty);
     }
 
     auto login_password = login + password;
     if (login_password.empty()) {
-        return std::string(); // unexpected
+        return std::unexpected(ImportProfileError::LoginPasswordEmpty);
     }
 
     auto hash = Utils::calculate_hash(login_password);
     auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash);
     if (!json.has_value()) {
-        return std::string(); // unexpected
+        return std::unexpected(ImportProfileError::DecryptError);
     }
 
     auto imported_user = Json::deserialize<ImportedUser>(json.value());
     if (!imported_user.has_value()) {
-        return std::string();
+        return std::unexpected(ImportProfileError::IncorrectJson);
     }
 
     // TODO: network id check

@@ -60,6 +60,13 @@ class WebSocketService;
 class ChatManager;
 // class RestApiServerManager;
 
+enum class ImportProfileError {
+    DataEmpty,
+    LoginPasswordEmpty,
+    DecryptError,
+    IncorrectJson
+};
+
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
@@ -161,7 +168,7 @@ public:
     std::string transactionErrorDescription(const TransactionError& error);
 
     std::expected<std::string, ImportError> export_profile();
-    std::string import_profile(const std::string& data, const std::string& login, const std::string& password);
+    std::expected<std::string, ImportProfileError>  import_profile(const std::string& data, const std::string& login, const std::string& password);
 
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
