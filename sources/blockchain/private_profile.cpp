@@ -25,10 +25,20 @@
 PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
     PrivateProfile user;
     user.actors_.push_back(actor);
-    user.system_ = actor.id();
-    user.hash_   = hash;
+    user.system_        = actor.id();
+    user.hash_          = hash;
+    user.creation_date_ = Utils::current_date_ms();
+    user.modified_date_ = user.creation_date_;
     user.save();
     return user;
+}
+
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
+                                                                            const std::string &hash) {
+    PrivateProfile user;
+    user.system_ = actor_id;
+    user.hash_   = hash;
+    return user.read();
 }
 
 PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash) {
@@ -45,6 +55,15 @@ PrivateProfile PrivateProfile::import(const ImportedUser &imported_user, const s
     private_profile.actors_       = imported_user.actors;
     private_profile.imports_      = imported_user.imports;
     private_profile.wallet_names_ = imported_user.wallet_names;
+
+    if (imported_user.creation_date == 0) {
+        // Version compatibility: 0.15.0
+        private_profile.creation_date_ = Utils::current_date_ms();
+        private_profile.modified_date_ = private_profile.creation_date_;
+    } else {
+        private_profile.creation_date_ = imported_user.creation_date;
+        private_profile.modified_date_ = imported_user.modified_date;
+    }
 
     private_profile.system_  = imported_user.system;
     private_profile.current_ = imported_user.system;
@@ -130,7 +149,12 @@ const std::string &PrivateProfile::hash() const {
     return hash_;
 }
 
-void PrivateProfile::save() {
+void PrivateProfile::save(uint64_t modified_date) {
+    if (modified_date == 0) {
+        modified_date = Utils::current_date_ms();
+    }
+    this->modified_date_ = modified_date;
+
     auto json_bytes = Json::serialize(*this);
     auto encrypted  = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()), hash_);
     if (!encrypted.has_value()) {
@@ -148,32 +172,56 @@ void PrivateProfile::save() {
     file.close();
 }
 
-void PrivateProfile::load() {
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read() {
     std::ifstream file(path(), std::ios::binary);
     if (!file) {
-        eFatal("Can't open file");
+        return std::unexpected(PrivateProfileReadError::File);
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
     auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), hash_);
     if (!json_bytes.has_value()) {
-        eFatal("Incorrect private profile load");
+        // eWarning("Incorrect private profile load");
+        return std::unexpected(PrivateProfileReadError::Decrypt);
     }
 
     auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
     if (!profile.has_value()) {
-        eFatal("Incorrect private profile load: incorrect json");
+        // eWarning("Incorrect private profile load: incorrect json");
+        return std::unexpected(PrivateProfileReadError::Json);
     }
 
-    this->system_  = profile->system_;
-    this->current_ = profile->system_;
-    this->actors_  = profile->actors_;
-    this->imports_ = profile->imports_;
+    return profile.value();
+}
+
+void PrivateProfile::load() {
+    auto profile = this->read();
+    if (!profile.has_value()) {
+        return;
+    }
+
+    this->system_       = profile->system_;
+    this->current_      = profile->system_;
+    this->actors_       = profile->actors_;
+    this->imports_      = profile->imports_;
     this->wallet_names_ = profile->wallet_names_;
+
+    if (profile->creation_date_ == 0) {
+        // Version compatibility: 0.15.0
+        auto file_creation_time = Utils::read_file_creation_time_ms(path());
+
+        this->creation_date_ =
+            file_creation_time.has_value() ? file_creation_time.value() : Utils::current_date_ms();
+        this->modified_date_ = this->creation_date_;
+        this->save();
+    } else {
+        this->creation_date_ = profile->creation_date_;
+        this->modified_date_ = profile->modified_date_;
+    }
 }
 
 std::filesystem::path PrivateProfile::path() {
-    return KeyStore::folder + Utils::platformDelimeter() + system_.to_string() + KeyStore::format;
+    return Profiles::folder + Utils::platformDelimeter() + system_.to_string() + Profiles::format;
 }
 
 std::map<ActorId, std::string> PrivateProfile::wallet_names() const {

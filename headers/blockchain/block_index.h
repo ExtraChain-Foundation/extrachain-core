@@ -59,11 +59,6 @@ public:
     std::expected<BlockVariant, BlockError> getLastBlock() const;
 
     /**
-     * @brief Get last real (not dummy) block
-     * @return last real block
-     */
-    std::expected<BlockVariant, BlockError> getLastRealBlock() const;
-    /**
      * @brief Get last genesis block
      * @return last genesis block
      */
@@ -75,19 +70,19 @@ public:
      * @param id
      * @return block, if is found, otherwise - empty block
      */
-    std::expected<BlockVariant, BlockError> getBlockById(const BigNumber &id) const;
+    std::expected<BlockVariant, BlockError> read_block_by_id(const BigNumber &id) const;
 
     // todo: if genesis block is found -> return empty block, or skip in search logic
-    std::expected<BlockVariant, BlockError> getBlockByHash(const std::string &hash) const;
+    std::expected<BlockVariant, BlockError> search_block_by_hash(const std::string &hash) const;
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data) const;
 
     std::expected<BlockVariant, BlockError> getBlockByParam(const std::string     &id,
                                                             SearchEnum::BlockParam param) const;
-    std::pair<Transaction, BigNumber> search_duplicate(const std::string  &hash) const;
-    std::pair<Transaction, BigNumber> getLastTxByHash(const std::string &hash, const TokenId &token) const;
-    std::pair<Transaction, BigNumber> getLastTxByData(const std::string &data, const TokenId &token) const;
-    std::pair<Transaction, BigNumber> getLastTxBySender(const ActorId &id, const TokenId &token) const;
-    std::pair<Transaction, BigNumber> getLastTxByReceiver(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>       search_duplicate(const std::string &hash) const;
+    std::pair<Transaction, BigNumber>       getLastTxByHash(const std::string &hash, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>       getLastTxByData(const std::string &data, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>       getLastTxBySender(const ActorId &id, const TokenId &token) const;
+    std::pair<Transaction, BigNumber>       getLastTxByReceiver(const ActorId &id, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiver(const ActorId &id, const TokenId &token) const;
     std::pair<Transaction, BigNumber> getLastTxBySenderOrReceiverAndToken(const ActorId &id,
                                                                           const TokenId &token) const;

@@ -36,6 +36,25 @@ FsPath::FsPath(const std::filesystem::path& path)
     : m_path(path) {
 }
 
+std::expected<std::string, FsError> FsPath::validate_path_component(std::string_view component) {
+    auto normalized        = Utils::normalize_separators(component);
+    auto validation_result = PathValidator::validate(normalized);
+    if (!validation_result)
+        return std::unexpected(FsError::ValidationError);
+
+#ifdef _WIN32
+    auto wide_path = Utils::utf8_to_utf16(normalized);
+    if (!wide_path)
+        return std::unexpected(FsError::ConversionFailed);
+    auto utf8_result = Utils::utf16_to_utf8(wide_path->c_str());
+    if (!utf8_result)
+        return std::unexpected(FsError::ConversionFailed);
+    return *utf8_result;
+#else
+    return std::string(normalized);
+#endif
+}
+
 std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
     auto normalized        = Utils::normalize_separators(utf8_path);
     auto validation_result = PathValidator::validate(normalized);
@@ -51,6 +70,7 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
 #else
         auto fs_path = std::filesystem::path(normalized).lexically_normal();
 #endif
+
         auto current = fs_path;
         while (true) {
             if (std::filesystem::is_symlink(current)) {
@@ -89,6 +109,20 @@ std::expected<FsPath, FsError> FsPath::create(const std::filesystem::path& path)
 #else
     return create(std::string_view(path.string()));
 #endif
+}
+
+std::expected<void, FsError> FsPath::append(std::string_view component) {
+    auto validated = validate_path_component(component);
+    if (!validated)
+        return std::unexpected(validated.error());
+
+    try {
+        m_path = (m_path / validated.value()).lexically_normal();
+        return {};
+    } catch (const std::exception& e) {
+        eCritical("Failed to append path component: {}", e.what());
+        return std::unexpected(FsError::InvalidPath);
+    }
 }
 
 std::expected<std::string, FsError> FsPath::string() const {
@@ -268,14 +302,24 @@ std::expected<bool, FsError> FsPath::has_read_permission() const {
     }
 }
 
-FsPath& FsPath::operator/=(const FsPath& other) {
-    m_path /= other.m_path;
-    return *this;
+std::expected<bool, FsError> FsPath::has_write_permission() const {
+    try {
+        const auto perms = std::filesystem::status(m_path).permissions();
+        return (perms & std::filesystem::perms::owner_write) != std::filesystem::perms::none;
+    } catch (const std::exception& e) {
+        eCritical("Failed to check write permissions: {}", e.what());
+        return std::unexpected(FsError::AccessDenied);
+    }
 }
 
-FsPath operator/(const FsPath& lhs, const FsPath& rhs) {
-    return FsPath(lhs) /= rhs;
-}
+// FsPath& FsPath::operator/=(const FsPath& other) {
+//     m_path /= other.m_path;
+//     return *this;
+// }
+
+// FsPath operator/(const FsPath& lhs, const FsPath& rhs) {
+//     return FsPath(lhs) /= rhs;
+// }
 
 bool FsPath::operator==(const FsPath& other) const {
     return m_path == other.m_path;

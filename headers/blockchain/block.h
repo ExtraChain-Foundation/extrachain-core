@@ -99,9 +99,9 @@ using Transactions = std::set<Transaction>;
 
 class EXTRACHAIN_EXPORT Block {
 protected:
-    BlockType             m_type;                  // simple block, or genesis block (or other)
-    std::set<std::string> m_dataService;           // payload (serialized transaction's, or other)
-    BigNumber             m_index = BigNumber(-1); // block id
+    BlockType             m_type;        // simple block, or genesis block (or other)
+    std::set<std::string> m_dataService; // payload (serialized transaction's, or other)
+    BigNumber             id_ = BigNumber(-1);
     std::uint64_t         m_date;
     std::string           m_prevHash;     // previous block hash
     std::string           m_hash;         // this block hash (from all previous fields)
@@ -165,7 +165,7 @@ public:
     void                         setPrevHash(const std::string &value);
     BlockType                    getType() const;
     std::string                  getTypeStr() const;
-    BigNumber                    getIndex() const;
+    BigNumber                    id() const;
     std::uint64_t                getDate() const;
     const std::set<std::string> &dataService() const;
     std::string                  getDataMessagePack() const;
@@ -178,7 +178,7 @@ public:
     void addSignatures(const Signatures &approvers);
     void clearSignatures();
 
-    void         setIndex(const BigNumber &index);
+    void         set_id(const BigNumber &id);
     void         setDate(std::uint64_t value);
     void         setDataServiceFromMessagePack(const std::string &value);
     Block        operator=(const Block &block);
@@ -191,20 +191,19 @@ public:
     void addTransactions(const std::set<Transaction> &transactions);
     void addTransactions(const std::vector<Transaction> &transactions);
 
-    BOOST_DESCRIBE_CLASS(
-        Block,
-        (),
-        (),
-        (),
-        (m_index, m_type, m_date, m_dataService, m_hash, m_prevHash, m_signatures, m_transactions))
+    BOOST_DESCRIBE_CLASS(Block,
+                         (),
+                         (),
+                         (),
+                         (id_, m_type, m_date, m_dataService, m_hash, m_prevHash, m_signatures, m_transactions))
 };
 
 inline bool operator<(const Block &l, const Block &r) {
     eFatal("Block: incorrect operator<");
-    return l.getIndex() < r.getIndex() || l.dataService() < r.dataService();
+    return l.id() < r.id() || l.dataService() < r.dataService();
 }
 
 inline bool operator==(const Block &l, const Block &r) {
-    return l.getIndex() == r.getIndex() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
+    return l.id() == r.id() && l.getPrevHash() == r.getPrevHash() && l.dataService() == r.dataService()
            && l.transactions() == r.transactions() && l.signatures() == r.signatures();
 }

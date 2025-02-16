@@ -69,6 +69,19 @@ namespace Dfs {
 
 class ThreadAddFiles;
 
+enum class ExportFileError {
+    Unknown,
+    DirRowNotExists,
+    FileNotReadyState,
+    IncorrectDfsPath,
+    LocalFileNotExists,
+    LocalFileNotValid,
+    OutupDirNotExits,
+    NoWritePermissions,
+    OutputFileExists,
+    CopyError
+};
+
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -235,6 +248,9 @@ public:
     std::uint64_t totalDfsSize() const;
     void          increaseSizeTaken(uintmax_t value);
     void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
+    std::expected<void, ExportFileError> export_file(const ActorId     &owner_id,
+                                                     const std::string &file_id,
+                                                     const FsPath      &output_folder);
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::fsActrRoot) const;
 
     DirsManager &dirs_manager();
@@ -255,13 +271,13 @@ private:
                                                       CollectionOperation          type,
                                                       const Dfs::DataSecurityData &security_data);
 
-    Dfs::DfsSize calculate_size() const;
+    Dfs::DfsSize calculate_size();
 
     void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
-    void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder) const;
+    void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
     void  sendCountRequestMsg(const ActorId &actorId) const;
     void  sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
                               BigNumber                              dfsCount,

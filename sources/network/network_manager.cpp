@@ -984,7 +984,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
                 break;
             }
-            node->actorIndex()->handleGetActor(actor_id_result.value(), responder);
+            node->actorIndex()->network_actor_request(actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             if (!actor_result.has_value()) {
@@ -1006,7 +1006,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->handleGetAllActor(ignored_actor_id_result.value(), responder);
+            node->actorIndex()->network_actors_all_request(ignored_actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
             if (!actors_list_result.has_value()) {
@@ -1014,7 +1014,30 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->handleNewAllActors(actors_list_result.value());
+            node->actorIndex()->network_actors_all_response(actors_list_result.value(), responder);
+        }
+        break;
+    }
+
+    case MessageType::Actors: {
+        if (status == MessageStatus::Request) {
+            auto ignored_actor_id_result = MessagePack::deserialize<std::set<ActorId>>(serialized);
+            if (!ignored_actor_id_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for ignored ActorId in {} state",
+                         type,
+                         status);
+                break;
+            }
+
+            node->actorIndex()->network_actors_request(ignored_actor_id_result.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
+            if (!actors_list_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
+                break;
+            }
+
+            node->actorIndex()->network_actors_response(actors_list_result.value());
         }
         break;
     }
@@ -1472,7 +1495,8 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     eLog("[NetworkManager] Error socket: {} {} {}", error, ip, identifier);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
-        || error == Network::SocketServiceError::IncompatibleVersion) {
+        || error == Network::SocketServiceError::VersionTooOld
+        || error == Network::SocketServiceError::VersionTooNew) {
         failed_ips.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;

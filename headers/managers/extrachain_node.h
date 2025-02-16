@@ -28,6 +28,8 @@
 #include <QObject>
 #include <QTimer>
 
+#include "blockchain/actor_index.h"
+#include "managers/account_controller.h"
 #include "blockchain/transaction.h"
 #include "blockchain/private_profile.h"
 #include "extrachain_global.h"
@@ -57,6 +59,13 @@ enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 // class RestApiServerManager;
+
+enum class ImportProfileError {
+    DataEmpty,
+    LoginPasswordEmpty,
+    DecryptError,
+    IncorrectJson
+};
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
@@ -129,9 +138,9 @@ public:
     DataMiningManager*  dataMiningManager() const;
     ConnectionsManager* connectionsManager() const;
 
-    bool login(const std::string& login, const std::string& password);
-    bool login(const std::string& hash);
-    void logout();
+    std::expected<void, LoadError> login(const std::string& login, const std::string& password);
+    std::expected<void, LoadError> login(const std::string& hash);
+    void                           logout();
 
     /**
      * @brief Create new transaction from current user
@@ -158,8 +167,10 @@ public:
 
     std::string transactionErrorDescription(const TransactionError& error);
 
-    std::expected<std::string, ImportError> exportUser();
-    std::string importUser(const std::string& data, const std::string& login, const std::string& password);
+    std::expected<std::string, ImportError> export_profile();
+    std::expected<std::string, ImportProfileError>  import_profile(const std::string& data, const std::string& login, const std::string& password);
+
+    ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
 
     void createNetworkIdentifier();

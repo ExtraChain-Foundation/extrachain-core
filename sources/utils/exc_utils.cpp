@@ -343,7 +343,7 @@ void Utils::wipeDataFiles() {
 
     QDir("blockchain").removeRecursively();
     QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
-    QDir("keystore").removeRecursively();
+    QDir("profiles").removeRecursively();
     QDir("tmp").removeRecursively();
     QDir("encrypt").removeRecursively();
     QDir("tokens").removeRecursively();
@@ -883,4 +883,30 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
     }
 
     return {};
+}
+
+std::optional<uint64_t> Utils::read_file_creation_time_ms(const std::filesystem::path &filepath) {
+#ifdef Q_OS_MAC
+    try {
+        auto file_time = std::filesystem::last_write_time(filepath);
+        auto sys_time  = std::chrono::file_clock::to_sys(file_time);
+        auto unix_ms = std::chrono::duration_cast<std::chrono::milliseconds>(sys_time.time_since_epoch()).count();
+        return static_cast<uint64_t>(unix_ms);
+    } catch (const std::filesystem::filesystem_error &e) {
+        std::cerr << "Error read_file_creation_time_ms: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+#else
+    try {
+        auto file_time = std::filesystem::last_write_time(filepath);
+        auto sys_time  = std::chrono::clock_cast<std::chrono::system_clock>(file_time);
+
+        auto unix_ms = std::chrono::duration_cast<std::chrono::milliseconds>(sys_time.time_since_epoch()).count();
+
+        return static_cast<uint64_t>(unix_ms);
+    } catch (const std::filesystem::filesystem_error &e) {
+        std::cerr << "Error read_file_creation_time_ms: " << e.what() << std::endl;
+        return std::nullopt;
+    }
+#endif
 }

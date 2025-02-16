@@ -99,7 +99,7 @@ void WebSocketService::closeSocket() {
     }
 
     if (m_ws != nullptr) {
-        eLog("[WS] Delete socket");
+        eLog("[WS] Delete socket pointer");
         m_ws->deleteLater();
         m_ws = nullptr;
     }

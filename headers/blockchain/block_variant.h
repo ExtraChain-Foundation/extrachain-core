@@ -34,7 +34,7 @@ public:
     bool isEmpty() const;
 
     BlockType              getType() const;
-    BigNumber              getIndex() const;
+    BigNumber              id() const;
     std::uint64_t          getDate() const;
     std::set<std::string>  dataService() const;
     std::string            getPrevHash() const;
@@ -52,7 +52,7 @@ public:
     bool verify(const Actor<KeyPublic>& actor) const;
 
     bool isBlock() const;
-    bool isGenesisBlock() const;
+    bool is_genesis() const;
 
     std::optional<std::reference_wrapper<const Block>>        getBlockConst() const;
     std::optional<std::reference_wrapper<const GenesisBlock>> getGenesisBlockConst() const;
@@ -60,7 +60,7 @@ public:
     std::optional<std::reference_wrapper<GenesisBlock>>       getGenesisBlock();
 
     bool operator==(const BlockVariant& other) const {
-        if (isGenesisBlock()) {
+        if (is_genesis()) {
             return getGenesisBlockConst() == other.getGenesisBlockConst();
         }
         return getBlockConst() == other.getBlockConst();
