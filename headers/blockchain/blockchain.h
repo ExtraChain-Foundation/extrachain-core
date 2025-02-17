@@ -281,6 +281,9 @@ public:
     BigNumberFloat calculate_actor_balance(const ActorId &actor_id,
                                            const TokenId &token_id,
                                            bool           ignore_genesis = false) const;
+    std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance(const std::vector<ActorId> &actor_ids,
+                                                                                     const TokenId &token_id,
+                                                                                     bool           ignore_genesis = false) const;
 
     /**
      * @brief Show blockchain

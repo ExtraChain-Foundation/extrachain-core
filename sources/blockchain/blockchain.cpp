@@ -1237,6 +1237,107 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
     return balance;
 }
 
+
+std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
+                                                                                 const TokenId &token_id,
+                                                                                 bool           ignore_genesis) const {
+    std::unordered_map<ActorId, BigNumberFloat> balances;
+
+    for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
+        auto currentBlock = blockIndex.read_block_by_id(i);
+
+        if (!currentBlock.has_value()) {
+            continue;
+        }
+        if (!currentBlock->isBlock() && !currentBlock->is_genesis()) {
+            continue;
+        }
+        if (currentBlock->getType() == BlockType::Dummy) {
+            continue;
+        }
+
+        if (ignore_genesis && currentBlock->is_genesis() && currentBlock->id() != BigNumber(0)) {
+            continue;
+        }
+
+        if (currentBlock->is_genesis()) {
+            if (ignore_genesis && currentBlock->id() != BigNumber(0)) {
+                // if not mega
+                continue;
+            }
+
+            eLog("{} BAALANCE Genesis", i);
+            auto       genesis = blockIndex.getGenesisBlockById(i);
+            const auto rows    = genesis->dataRows();
+
+            for (const auto &[key, row] : rows) {
+                for (const auto& actor_id : actor_ids) {
+                    if (key.actorId == actor_id && key.tokenId == token_id)
+                        balances[actor_id] += row.state;
+                }
+            }
+
+            return balances;
+        }
+
+        if (currentBlock->isEmpty()) {
+            break;
+        }
+
+               // tx check
+        auto txs = currentBlock->transactions();
+        for (auto &tx : txs) {
+            for (const auto& actor_id : actor_ids) {
+                if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
+                    balances[actor_id] += tx.amount();
+                    eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    continue;
+                }
+
+                if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && tx.token() == token_id) {
+                    balances[actor_id] += tx.amount();
+                    eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    continue;
+                }
+
+                if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
+                    auto from_token = ActorId::create(tx.data());
+                    if (!from_token.has_value()) {
+                        continue;
+                    }
+
+                    if (from_token.value() == tx.token()) {
+                        continue;
+                    }
+
+                    if (from_token.value() == token_id) {
+                        balances[actor_id] -= tx.amount();
+                        eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                    }
+
+                    if (tx.token() == token_id) {
+                        balances[actor_id] += tx.amount();
+                        eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    }
+                    continue;
+                }
+
+                if (tx.receiver() == actor_id && tx.token() == token_id) {
+                    balances[actor_id] += tx.amount();
+                    eLog("{} BAALANCE += {}, = {}", i, tx.amount(), balances[actor_id]);
+                }
+
+                if (tx.sender() == actor_id && tx.token() == token_id) {
+                    balances[actor_id] -= tx.amount();
+                    eLog("{} BAALANCE -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                }
+            }
+        }
+    }
+
+    return balances;
+}
+
 void Blockchain::showBlockchain() const {
     eLog("[Blockchain] Show blockchain:");
 
