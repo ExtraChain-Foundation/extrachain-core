@@ -72,12 +72,12 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
-        eInfo("[WS] Current Identifier print: {}", a);
+        eLog("[WS] Current Identifier print: {}", a);
 
         auto connectionsLocked = *m_connections;
         for (const auto &service : *connectionsLocked) {
             std::string b = service->identifier().toStdString();
-            eInfo("[WS] Service ident: {}", b);
+            eLog("[WS] Service ident: {}", b);
         }
     });
 }
@@ -866,7 +866,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
-            eInfo("Achieved ShareConnections(Request) {}", messageId);
+            eLog("Achieved ShareConnections(Request) {}", messageId);
             std::vector<std::string> available_ips;
 
             {
@@ -888,7 +888,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                               responder);
             }
         } else if (status == MessageStatus::Response) {
-            eInfo("Achieved ShareConnections(Response) {}", messageId);
+            eLog("Achieved ShareConnections(Response) {}", messageId);
             auto serialized_ips_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
             if (!serialized_ips_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for ips vector in {} state", type, status);
@@ -1579,7 +1579,7 @@ QString NetworkManager::localIp() {
 }
 
 void NetworkManager::onNewWsConnection() {
-    eInfo("NetworkManager::onNewWsConnection()");
+    eLog("NetworkManager::onNewWsConnection()");
     auto ws = wsServer->nextPendingConnection();
     if (ws == nullptr)
         eFatal("[WS] Error: ws == nulltpr");

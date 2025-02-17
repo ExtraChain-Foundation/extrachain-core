@@ -44,7 +44,7 @@ DfsController::DfsController(ExtraChainNode *node)
 }
 
 DfsController::~DfsController() {
-    eInfo("DfsController::~DfsController()");
+    eLog("DfsController::~DfsController()");
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorId               &owner_id,
@@ -124,18 +124,18 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 #endif
 
     if (!new_file_path.exists()) {
-        eInfo("[Dfs] Can't load file: file doesn't exist");
+        eLog("[Dfs] Can't load file: file doesn't exist");
         return std::unexpected(Dfs::DfsError::NotExists);
     }
 
     if (!new_file_path.is_regular_file()) {
-        eInfo("[Dfs] This is not a file");
+        eLog("[Dfs] This is not a file");
         return std::unexpected(Dfs::DfsError::NotFile);
     }
 
     std::ifstream my_file(new_file_path.native());
     if (!my_file) {
-        eWarning("[Dfs] Can't read file");
+        eLog("[Dfs] Can't read file");
         return std::unexpected(Dfs::DfsError::NotReadable);
     }
     my_file.close();

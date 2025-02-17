@@ -62,7 +62,7 @@ void TransactionManager::make_block() {
         return;
     }
 
-    eInfo("- makeBlock()");
+    eLog("- makeBlock()");
 
     auto last_block = node->blockchain()->read_last_block();
 
@@ -137,7 +137,7 @@ void TransactionManager::timer_block_tick() {
     return;
 #endif
 
-    eInfo("[TransactionManager] Make block... {}", node->blockchain()->status());
+    eLog("[TransactionManager] Make block... {}", node->blockchain()->status());
     make_block();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {

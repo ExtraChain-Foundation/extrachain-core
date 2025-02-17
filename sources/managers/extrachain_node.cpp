@@ -70,7 +70,7 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
-    eInfo("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
+    eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
 
     if (m_thread) {
         m_thread->quit();
@@ -97,7 +97,9 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
+#ifndef RACCOON_CLIENT_CONSOLE
     Logger::instance().set_debug(true);
+#endif
 
 #ifdef Q_OS_LINUX
     signal(SIGPIPE, SIG_DFL);
@@ -154,7 +156,7 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    eInfo("ExtraChainNode::~ExtraChainNode");
+    eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
     }
@@ -170,7 +172,7 @@ void ExtraChainNode::cleanUp() {
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
     if (!QDir("profiles/profile").isEmpty()) {
-        eInfo("Cannot create a new network: existing profile data found");
+        eLog("Cannot create a new network: existing profile data found");
         return false;
     }
 
@@ -581,7 +583,7 @@ void ExtraChainNode::dfsConnection() {
 
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, []() {
-        eInfo("Node: started");
+        eInfo("Node successfully started");
     });
     connectTransactionManager();
     connectContractManager();

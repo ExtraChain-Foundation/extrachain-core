@@ -271,7 +271,9 @@ void LogsManager::offQml() {
 
 void LogsManager::etHandler() {
     std::ios_base::sync_with_stdio(false);
+#ifndef RACCOON_CLIENT_CONSOLE
     Logger::instance().set_debug(true);
+#endif
     qInstallMessageHandler(LogsManager::anotherMessageHandler);
 
 #ifdef Q_OS_WIN
