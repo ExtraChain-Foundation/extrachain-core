@@ -39,11 +39,11 @@ std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
 }
 
 DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &owner_id) {
-    auto path = actorDbPath(owner_id);
+    auto path        = actorDbPath(owner_id);
     bool need_create = false;
     try {
         need_create = std::filesystem::file_size(path) == 0;
-    } catch (std::exception& e) {
+    } catch (std::exception &e) {
         need_create = true;
     }
 
@@ -519,16 +519,15 @@ void Dfs::initialize_actor_folder(const ActorId &actor_id) {
         return;
     }
     auto exists = folder->exists();
-    auto size = folder->file_size();
+    auto size   = folder->file_size();
     if (size.has_value() && size.value() != 0) {
-        eLog("size {}", size.value());
         return;
     }
 
     std::filesystem::create_directories(actor_folder);
 
     // create dir file
-    auto path = Dfs::Tables::ActorDirFile::actorDbPath(actor_id);
+    auto        path     = Dfs::Tables::ActorDirFile::actorDbPath(actor_id);
     DbConnector dir_file = DbConnector(path);
     dir_file.open();
     dir_file.query(DfsT::ActorDirFile::CreateTableQuery);
