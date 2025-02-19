@@ -667,6 +667,14 @@ void ExtraChainNode::prepareFolders() {
         QDir().rename("keystore", "profiles");
     }
 
+    // Version compatibility: 0.15.2
+    if (QDir("blockchain/index").exists()) {
+        QDir().rename("blockchain", "blockchain_old");
+        QDir().rename("blockchain_old/index/blocks", "blocks");
+        QDir().rename("blockchain_old/index/actors", "actors");
+        QDir("blockchain_old").removeRecursively();
+    }
+
     QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));

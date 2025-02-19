@@ -822,7 +822,7 @@ namespace BlockchainConst {
     static const std::string ACTORS_FOLDER = "actors";
 
     // Folder with blocks
-    static const std::string BLOCKCHAIN_FOLDER     = "blockchain";
+    static const std::string BLOCKCHAIN_FOLDER     = "blocks";
     static const std::string BLOCKCHAIN_RANGE      = "range";
     static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
 

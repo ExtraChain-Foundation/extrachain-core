@@ -162,7 +162,7 @@ void FileDataManager::setActorId(const ActorId &actorId) {
 }
 
 void FileDataManager::updateAllTree() {
-    for (const auto &entry : std::filesystem::directory_iterator(DfsB::fsActrRoot)) {
+    for (const auto &entry : std::filesystem::directory_iterator(DfsB::DFS_FOLDER)) {
         if (entry.is_directory()) {
             const auto actorId = ActorId(entry.path().filename().string());
             updateFileList(actorId);
