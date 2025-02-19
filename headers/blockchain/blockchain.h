@@ -335,6 +335,9 @@ public:
      */
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
 
+    BlockchainMode getMode() const;
+    void setMode(BlockchainMode newMode);
+
 public slots:
     std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
                                                             const Responder    &responder,

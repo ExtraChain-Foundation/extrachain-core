@@ -239,6 +239,9 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         if (mode == BlockchainMode::Light && block.first != BigNumber(0)) {
             blockIndex.update_last_id(block.first);
         }
+        if (mode == BlockchainMode::Full) {
+            blockIndex.update_last_id(block.first);
+        }
     }
 
     // TODO: check all blocks
@@ -1169,6 +1172,11 @@ int Blockchain::getCountTransactionsInBlocks() const {
 BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
                                                    const TokenId &token_id,
                                                    bool           ignore_genesis) const {
+    eLog("calculate_actor_balance: {} for token {}", actor_id, token_id);
+    if (blockIndex.getFirstSavedId() == -1 || blockIndex.getLastSavedId() == -1) {
+        return BigNumberFloat(0);
+    }
+
     BigNumberFloat balance;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -1266,6 +1274,14 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
     const TokenId              &token_id,
     bool                        ignore_genesis) const {
     std::unordered_map<ActorId, BigNumberFloat> balances;
+
+    eLog("calculate_actorS_balance: {} for token {}", actor_ids, token_id);
+    if (blockIndex.getFirstSavedId() == -1 || blockIndex.getLastSavedId() == -1) {
+        for (const auto &actor_id : actor_ids) {
+            balances[actor_id] = BigNumberFloat(0);
+        }
+        return balances;
+    }
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
         auto currentBlock = blockIndex.read_block_by_id(i);
@@ -1729,5 +1745,10 @@ void Blockchain::timer_sync_tick() {
     start_sync();
 }
 
-// calc balance: zero block ?????????????????
-// send zero block
+BlockchainMode Blockchain::getMode() const {
+    return mode;
+}
+
+void Blockchain::setMode(BlockchainMode newMode) {
+    mode = newMode;
+}

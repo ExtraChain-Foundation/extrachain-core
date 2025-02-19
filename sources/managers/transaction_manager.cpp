@@ -76,17 +76,21 @@ void TransactionManager::make_block() {
     }
 
     if (node->blockchain()->status() == BlockchainStatus::Sync) {
-        eLog("[Blockchain] Blockchain: try to sync... First: {}, last: {}, type: {}, connections: {}",
-             first_saved_id,
-             last_saved_id,
-             last_block->getType(),
-             node->network()->active_connections_count());
+        eLog(
+            "[Blockchain] Blockchain: try to sync... Last: {}, first: {}, count: {}, last type: {}, connections: "
+            "{}",
+            last_saved_id,
+            first_saved_id,
+            last_saved_id.to_string(NumeralBase::Dec),
+            last_block->getType(),
+            node->network()->active_connections_count());
         return;
     }
 
-    eLog("[Blockchain] First: {}, last: {}, type: {}, status: {}",
-         first_saved_id,
+    eLog("[Blockchain] Last: {}, first: {}, count: {}, last type: {}, status: {}",
          last_saved_id,
+         first_saved_id,
+         last_saved_id.to_string(NumeralBase::Dec),
          last_block->getType(),
          node->blockchain()->status());
 
@@ -131,9 +135,10 @@ void TransactionManager::timer_block_tick() {
 #ifdef IS_R
     auto first_saved_id = node->blockchain()->getBlockIndex().first_saved_id;
     auto last_saved_id  = node->blockchain()->getBlockIndex().last_saved_id;
-    eLog("[Blockchain] First: {}, last: {}. Blockchain status: {}",
-         first_saved_id,
+    eLog("[Blockchain] Last: {}, first: {}, count: {}. Blockchain status: {}",
          last_saved_id,
+         first_saved_id,
+         last_saved_id.to_string(NumeralBase::Dec),
          node->blockchain()->status());
     unproved_transactions_.clear();
     return;
