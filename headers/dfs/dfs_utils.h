@@ -77,7 +77,7 @@ namespace Utils {
 
 namespace Dfs {
     namespace Basic {
-        static const std::string   fsActrRoot                 = "dfs";
+        static const std::string   DFS_FOLDER                 = "dfs";
         static const std::wstring  fsActrRootW                = L"dfs";
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";

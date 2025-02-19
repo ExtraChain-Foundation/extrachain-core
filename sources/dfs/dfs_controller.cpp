@@ -949,7 +949,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
                                               const Dfs::DirRow    &dir_row,
                                               Dfs::NetworkStoreFile network_stote) {
     std::string actorFolderPath =
-        DfsB::fsActrRoot + Utils::platformDelimeter() + owner_id.to_string() + Utils::platformDelimeter();
+        DfsB::DFS_FOLDER + Utils::platformDelimeter() + owner_id.to_string() + Utils::platformDelimeter();
     // std::string actrDirFilePath = actorFolderPath + DfsB::fsMapName;
 
     if (is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
@@ -1058,7 +1058,7 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
         // eFatal("Can't get actor: {}", owner_id);
     }
     std::string           pathDelim       = Utils::platformDelimeter();
-    const std::string     ownerPath       = DfsB::fsActrRoot + pathDelim + owner_id.to_string() + pathDelim;
+    const std::string     ownerPath       = DfsB::DFS_FOLDER + pathDelim + owner_id.to_string() + pathDelim;
     std::filesystem::path realFilePath    = fmt::format("{}{}", ownerPath, file_name);
     std::string           actrDirFilePath = fmt::format("{}{}", ownerPath, DfsB::fsMapName);
     DbConnector           actrDirFile(actrDirFilePath);
@@ -1124,7 +1124,7 @@ void DfsController::exportFile(const std::string &pathTo,
         actorId    = pathFrom.substr(pos + 1, pathFrom.size());
     } else {
         actorId                               = pathFrom;
-        std::filesystem::path actorFolderPath = DfsB::fsActrRoot + "/" + actorId.to_string();
+        std::filesystem::path actorFolderPath = DfsB::DFS_FOLDER + "/" + actorId.to_string();
         exportFile(pathTo, actorFolderPath.string(), nameFile);
     }
 

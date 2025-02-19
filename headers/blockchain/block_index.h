@@ -26,6 +26,12 @@
 #include "blockchain/block_variant.h"
 #include "utils/db_connector.h"
 
+struct BlockRange {
+    std::string first;
+    std::string last;
+};
+BOOST_DESCRIBE_STRUCT(BlockRange, (), (first, last))
+
 class EXTRACHAIN_EXPORT BlockIndex {
 public:
     BlockIndex();
@@ -36,8 +42,8 @@ public:
 
     // current state //
     // BigNumber records           = BigNumber(0);
-    BigNumber firstSavedId = BigNumber(-1);
-    BigNumber lastSavedId  = BigNumber(-1);
+    BigNumber first_saved_id = BigNumber(-1);
+    BigNumber last_saved_id  = BigNumber(-1);
     // int       countTransactions = 0;
 
     bool m_blockCompress = false;
