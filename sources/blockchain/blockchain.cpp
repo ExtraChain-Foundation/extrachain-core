@@ -1290,7 +1290,7 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
                 continue;
             }
 
-            eLog("{} BAALANCE Genesis", i);
+            // eLog("{} BAALANCE Genesis", i);
             auto       genesis = blockIndex.getGenesisBlockById(i);
             const auto rows    = genesis->dataRows();
 
@@ -1314,14 +1314,14 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
             for (const auto &actor_id : actor_ids) {
                 if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balances[actor_id]);
                     continue;
                 }
 
                 if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
                     && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balances[actor_id]);
                     continue;
                 }
 
@@ -1337,24 +1337,24 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
 
                     if (from_token.value() == token_id) {
                         balances[actor_id] -= tx.amount();
-                        eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                        // eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balances[actor_id]);
                     }
 
                     if (tx.token() == token_id) {
                         balances[actor_id] += tx.amount();
-                        eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balances[actor_id]);
+                        // eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balances[actor_id]);
                     }
                     continue;
                 }
 
                 if (tx.receiver() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    eLog("{} BAALANCE += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE += {}, = {}", i, tx.amount(), balances[actor_id]);
                 }
 
                 if (tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] -= tx.amount();
-                    eLog("{} BAALANCE -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE -= {}, = {}", i, tx.amount(), balances[actor_id]);
                 }
             }
         }

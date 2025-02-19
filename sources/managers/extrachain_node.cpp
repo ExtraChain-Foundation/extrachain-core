@@ -669,10 +669,24 @@ void ExtraChainNode::prepareFolders() {
 
     // Version compatibility: 0.15.2
     if (QDir("blockchain/index").exists()) {
-        QDir().rename("blockchain", "blockchain_old");
-        QDir().rename("blockchain_old/index/blocks", "blocks");
-        QDir().rename("blockchain_old/index/actors", "actors");
-        QDir("blockchain_old").removeRecursively();
+        QDir().rename("blockchain/index/blocks", "blocks");
+        QDir().rename("blockchain/index/actors", "actors");
+        QDir("blockchain").removeRecursively();
+
+        QFile file("blocks/last_id");
+        if (file.open(QFile::ReadOnly)) {
+            auto data = file.readAll();
+            auto last = BigNumber::create(data.toStdString());
+            if (last.has_value()) {
+                auto  range = BlockRange { .first = "0", .last = last.value().to_string() };
+                auto  json  = Json::serialize(range);
+                QFile range_file("blocks/range");
+                range_file.open(QFile::WriteOnly);
+                range_file.write(json.c_str());
+                range_file.close();
+            }
+            file.remove();
+        }
     }
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));
