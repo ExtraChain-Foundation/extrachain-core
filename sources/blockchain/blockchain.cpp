@@ -36,6 +36,11 @@ Blockchain::Blockchain(ExtraChainNode *node)
     if (genesis.has_value()) {
         update_network_id(genesis.value());
     }
+
+#ifdef IS_RC
+    // TODO: move as set
+    mode = BlockchainMode::Light;
+#endif
 }
 
 Blockchain::~Blockchain() {
@@ -105,7 +110,7 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     }
 }
 
-void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &responder) {
+void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &responder) {
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
         return;
@@ -127,15 +132,26 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
     std::vector<std::pair<BigNumber, std::string>> blocks;
     blocks.reserve(1000);
 
+    if (fromBlock != 0) {
+        auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
+        if (!zero_block.has_value()) {
+            return;
+        }
+        auto  block_path = blockIndex.buildFilePath(zero_block->id());
+        QFile file(block_path.c_str());
+        auto  is_open = file.open(QFile::ReadOnly);
+        if (!is_open) {
+            return;
+        }
+        auto content = file.readAll().toStdString();
+        blocks.push_back({ zero_block->id(), content });
+    }
+
     for (; from <= lastIndex; from++) {
         // eLog("[Blockchain] Send sync {}", from);
         auto block = blockIndex.read_block_by_id(from);
 
         if (!block.has_value()) {
-            continue;
-        }
-
-        if (block->isEmpty()) {
             continue;
         }
 
@@ -177,6 +193,8 @@ void Blockchain::syncResponse(const BigNumber fromBlock, const Responder &respon
         // }
     }
 
+    // mode == BlockchainMode::Light ???????????????
+
     if (blocks.empty()) {
         return;
     }
@@ -217,8 +235,13 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.open(QFile::WriteOnly);
         file.write(QByteArray::fromStdString(block.second));
         file.close();
-        blockIndex.update_last_id(blocks.back().first);
+
+        if (mode == BlockchainMode::Light && block.first != BigNumber(0)) {
+            blockIndex.update_last_id(block.first);
+        }
     }
+
+    // TODO: check all blocks
 
 #ifdef IS_RC
     std::thread rc_thread([this, blocks]() {
@@ -411,7 +434,6 @@ void Blockchain::send_request_blocks() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        // Добавляем только ноды с непустым блокчейном
         if (info.last_block_id >= 0 && !info.last_hash.empty()) {
             nodes_by_block.emplace_back(id, info.last_block_id);
         }
@@ -457,7 +479,9 @@ void Blockchain::send_request_blocks() {
     }
 
     auto last_block = this->read_last_block();
-    auto sync_index = last_block.has_value() ? last_block->id() + 1 : BigNumber(0);
+    auto sync_index = mode == BlockchainMode::Light
+                          ? calculate_genesis_id_for_block(nodes_by_block.front().second)
+                          : (last_block.has_value() ? last_block->id() + 1 : BigNumber(0));
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
 }
@@ -1237,10 +1261,10 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
     return balance;
 }
 
-
-std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                                 const TokenId &token_id,
-                                                                                 bool           ignore_genesis) const {
+std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance(
+    const std::vector<ActorId> &actor_ids,
+    const TokenId              &token_id,
+    bool                        ignore_genesis) const {
     std::unordered_map<ActorId, BigNumberFloat> balances;
 
     for (BigNumber i = this->blockIndex.getLastSavedId(); i >= blockIndex.getFirstSavedId(); i--) {
@@ -1271,7 +1295,7 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
             const auto rows    = genesis->dataRows();
 
             for (const auto &[key, row] : rows) {
-                for (const auto& actor_id : actor_ids) {
+                for (const auto &actor_id : actor_ids) {
                     if (key.actorId == actor_id && key.tokenId == token_id)
                         balances[actor_id] += row.state;
                 }
@@ -1284,17 +1308,18 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
             break;
         }
 
-               // tx check
+        // tx check
         auto txs = currentBlock->transactions();
         for (auto &tx : txs) {
-            for (const auto& actor_id : actor_ids) {
+            for (const auto &actor_id : actor_ids) {
                 if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
                     eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balances[actor_id]);
                     continue;
                 }
 
-                if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && tx.token() == token_id) {
+                if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
+                    && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
                     eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balances[actor_id]);
                     continue;
@@ -1703,3 +1728,6 @@ void Blockchain::timer_sync_tick() {
     status_ = BlockchainStatus::Timered;
     start_sync();
 }
+
+// calc balance: zero block ?????????????????
+// send zero block

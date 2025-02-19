@@ -63,6 +63,11 @@ enum class BlockchainSyncStatus {
     Blocks
 };
 
+enum BlockchainMode {
+    Full,
+    Light
+};
+
 struct BlockchainLastInfo {
     BigNumber     last_block_id;
     std::string   last_hash;
@@ -90,6 +95,8 @@ private:
     BlockchainSyncStatus                                check_status_  = BlockchainSyncStatus::None;
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
+
+    BlockchainMode mode = BlockchainMode::Full;
 
     QTimer *timer_sync;
 
@@ -278,12 +285,12 @@ public:
      */
     int getCountTransactionsInBlocks() const;
 
-    BigNumberFloat calculate_actor_balance(const ActorId &actor_id,
-                                           const TokenId &token_id,
-                                           bool           ignore_genesis = false) const;
+    BigNumberFloat                              calculate_actor_balance(const ActorId &actor_id,
+                                                                        const TokenId &token_id,
+                                                                        bool           ignore_genesis = false) const;
     std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                                     const TokenId &token_id,
-                                                                                     bool           ignore_genesis = false) const;
+                                                                         const TokenId              &token_id,
+                                                                         bool ignore_genesis = false) const;
 
     /**
      * @brief Show blockchain
@@ -334,7 +341,7 @@ public slots:
                                                             const NetworkPackageStorage,
                                                             bool resend);
 
-    void syncResponse(const BigNumber fromBlock, const Responder &responder);
+    void syncResponse(const BigNumber &fromBlock, bool is_full, const Responder &responder);
     void syncResponseVector(const std::string           &blocks,
                             const Responder             &responder,
                             const NetworkPackageStorage &package_storage);

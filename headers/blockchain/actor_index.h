@@ -55,11 +55,10 @@ class EXTRACHAIN_EXPORT ActorIndex : public QObject {
 private:
     ExtraChainNode *node;
 
-    std::uint64_t     records = 0;
-    const std::string folderPath =
-        fmt::format("{}/{}/", BlockchainConst::BLOCKCHAIN_INDEX, BlockchainConst::ACTOR_INDEX_FOLDER_NAME);
-    int16_t SECTION_NAME_SIZE = 2;
-    ActorId network_id_;
+    std::uint64_t     records           = 0;
+    const std::string folderPath        = fmt::format("{}/", BlockchainConst::ACTORS_FOLDER);
+    int16_t           SECTION_NAME_SIZE = 2;
+    ActorId           network_id_;
 
 public:
     /**

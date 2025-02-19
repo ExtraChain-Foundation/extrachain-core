@@ -367,8 +367,8 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
 }
 
 std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(const std::string& data,
-                                           const std::string& login,
-                                           const std::string& password) {
+                                                                              const std::string& login,
+                                                                              const std::string& password) {
     if (data.empty()) {
         return std::unexpected(ImportProfileError::DataEmpty);
     }
@@ -669,10 +669,8 @@ void ExtraChainNode::prepareFolders() {
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
-                                         + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
-                                         + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     QFile(".settings").remove();
