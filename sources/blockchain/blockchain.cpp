@@ -39,7 +39,9 @@ Blockchain::Blockchain(ExtraChainNode *node)
 
 #ifdef IS_RC
     // TODO: move as set
-    mode = BlockchainMode::Light;
+    if (blockIndex.first_saved_id != BigNumber(0)) {
+        mode = BlockchainMode::Light;
+    }
 #endif
 }
 
@@ -361,7 +363,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
     auto zero_block = read_block_by_id(BigNumber(0));
     if (zero_block.has_value() && last_info.last_hash != "" && last_info.last_block_id != BigNumber(-1)
         && zero_block->getDate() < last_info.zero_date) {
-        removeAll();
+        removeAll(false, true);
     }
 
     int count = std::min(requests_count, 5);
@@ -1723,18 +1725,22 @@ BlockIndex &Blockchain::getBlockIndex() {
     return blockIndex;
 }
 
-void Blockchain::removeAll(bool is_mega) {
+void Blockchain::removeAll(bool is_mega, bool is_exit) {
 #ifndef IS_R
     if (!is_mega) {
         return;
     }
 #endif
+
     eLog("[Blockchain] Remove all...");
     this->blockIndex.removeAll();
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
     eLog("[Blockchain] Removed all");
+
 #ifdef IS_RC
-    qApp->exit();
+    if (is_exit) {
+        qApp->exit();
+    }
 #endif
 }
 

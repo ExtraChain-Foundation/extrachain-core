@@ -31,8 +31,6 @@ BlockIndex::BlockIndex() {
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
 
-        // TODO: if BigNumber(last) && block exists -> make (0, last)
-
         auto block_range = Json::deserialize<BlockRange>(last_id_content.toStdString());
         if (block_range.has_value()) {
             auto first_id_result = BigNumber::create(block_range->first);
@@ -623,6 +621,7 @@ void BlockIndex::removeAll() {
     this->last_saved_id  = -1;
     // QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     QFile::remove("tmp/cachedTxs.db");
+    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     // this->countTransactions = 0;
 }
 

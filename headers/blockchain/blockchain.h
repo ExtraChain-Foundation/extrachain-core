@@ -255,7 +255,7 @@ public:
     /**
      * @brief remove all blocks
      */
-    void removeAll(bool is_mega = false);
+    void removeAll(bool is_mega = false, bool is_exit = false);
 
     /**
      * @brief Return's reference to blockIndex
@@ -336,7 +336,7 @@ public:
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
 
     BlockchainMode getMode() const;
-    void setMode(BlockchainMode newMode);
+    void           setMode(BlockchainMode newMode);
 
 public slots:
     std::expected<BlockVariant, BlockError> addBlockNetwork(const BlockVariant &block,
