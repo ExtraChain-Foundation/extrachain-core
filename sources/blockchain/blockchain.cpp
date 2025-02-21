@@ -528,10 +528,11 @@ BigNumber Blockchain::calculate_genesis_id_for_block(const BigNumber &id) {
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
-std::set<Transaction> Blockchain::getTxsBySenderOrReceiverInRow(const BigNumber &id,
-                                                                BigNumber        from,
-                                                                int              count,
-                                                                ActorId          token) {
+std::unordered_map<ActorId, std::vector<Transaction>> Blockchain::getTxsBySenderOrReceiverInRow(
+    const std::vector<ActorId> &id,
+    BigNumber                   from,
+    int                         count,
+    ActorId                     token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
 

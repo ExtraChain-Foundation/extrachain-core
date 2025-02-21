@@ -94,10 +94,11 @@ public:
                                                                           const TokenId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
-                                                        BigNumber        from  = BigNumber(-1),
-                                                        int              count = 10,
-                                                        const ActorId   &token = ActorId()) const;
+    std::unordered_map<ActorId, std::vector<Transaction>> getTxsBySenderOrReceiverInRow(
+        const std::vector<ActorId> &actor_ids,
+        BigNumber                   from  = BigNumber(-1),
+        int                         count = 10,
+        const ActorId              &token = ActorId()) const;
 
     void        removeAll();
     BigNumber   getLastSavedId() const;
@@ -113,11 +114,12 @@ private:
     std::pair<Transaction, BigNumber> getLastTxByParam(const std::string  &data,
                                                        SearchEnum::TxParam param,
                                                        const TokenId      &tokenId) const;
-    std::set<Transaction>             getTxsByParamInRow(const BigNumber    &id,
-                                                         SearchEnum::TxParam param,
-                                                         BigNumber           from  = BigNumber(-1),
-                                                         int                 count = 10,
-                                                         ActorId             token = ActorId()) const;
+
+    std::unordered_map<ActorId, std::vector<Transaction>> getTxsByParamInRow(const std::vector<ActorId> &actor_ids,
+                                                                             SearchEnum::TxParam         param,
+                                                                             BigNumber from  = BigNumber(-1),
+                                                                             int       count = 10,
+                                                                             ActorId   token = ActorId()) const;
 
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
     bool                                    hasRecordLimit() const;
