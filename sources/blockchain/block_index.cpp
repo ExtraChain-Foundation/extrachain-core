@@ -311,6 +311,8 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamI
     BigNumber                   from,
     int                         count,
     ActorId                     token) const {
+    int i = 0;
+
     std::unordered_map<ActorId, std::vector<Transaction>> currentTxs;
 
     if (first_saved_id == -1 || last_saved_id == -1) {
@@ -322,6 +324,10 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamI
     int       currentCount = 0;
 
     while (lastBlockId >= getFirstSavedId()) {
+        i += 1;
+        if (i > 500) {
+            break;
+        }
         // eLog("{} {}", count, currentCount);
 
         if (count < currentCount)

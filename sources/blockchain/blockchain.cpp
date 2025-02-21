@@ -225,13 +225,25 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
+
+    auto lastBlock = read_last_block();
+    if (lastBlock.has_value()) {
+        BigNumber lastIndex = lastBlock->id();
+
+        if (blocks.size() > 2) {
+            eLog("-> _____ {} {}",
+                 lastIndex.to_string(NumeralBase::Dec),
+                 blocks[1].first.to_string(NumeralBase::Dec));
+            if (lastIndex > blocks[1].first) {
+                return;
+            }
+        }
+    }
+
     eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
          blocks.size(),
          blocks.front().first,
          blocks.back().first);
-
-    status_ = BlockchainStatus::Maybe;
-    emit statusChanged(status_);
 
     for (const auto &block : blocks) {
         auto  block_path = blockIndex.buildFilePath(block.first);
@@ -284,14 +296,20 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
             emit updateSelf(index);
         }
 
-        emit need_check();
+        // if (blockIndex.last_saved_id >= sync_last_index - 1) {
+        //     emit need_check();
+        // }
     });
 
     rc_thread.detach();
 #endif
 
     emit syncProgress(blockIndex.last_saved_id);
-    if (blockIndex.last_saved_id >= sync_last_index) {
+    eLog("-> {} {}", blockIndex.last_saved_id, sync_last_index - 1);
+    if (blockIndex.last_saved_id >= sync_last_index - 1) {
+        eLog("-> START CHECK");
+        status_ = BlockchainStatus::Maybe;
+        emit statusChanged(status_);
         start_check();
     }
 }
@@ -413,14 +431,14 @@ void Blockchain::send_request_blocks() {
         for (const auto &[_, info] : last_info_) {
             if (info.last_block_id > my_index) {
                 need_sync = true;
-                remove_last_block();
+                // remove_last_block();
                 // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
-                remove_last_block();
+                // remove_last_block();
                 // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
@@ -497,6 +515,13 @@ void Blockchain::send_request_blocks() {
                           ? calculate_genesis_id_for_block(nodes_by_block.front().second)
                           : (last_block.has_value() ? last_block->id() + 1 : BigNumber(0));
     sync_last_index = nodes_by_block.front().second;
+
+    if (blockIndex.last_saved_id > sync_last_index) {
+        eLog("Not need sync");
+        start_check();
+        return;
+    }
+
     eLog("{}", sync_last_index);
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
