@@ -542,7 +542,6 @@ void Blockchain::getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId
                                                        int                         count,
                                                        ActorId                     token) {
     auto result = QtConcurrent::run([=, this] {
-        qDebug() << "Runned";
         return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
     });
 
@@ -553,7 +552,7 @@ void Blockchain::getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId
             this,
             [=, this]() {
                 auto map = watcher->result();
-                qDebug() << "Async task completed with result:" << map.size();
+                eLog("Async task completed with result: {}", map.size());
                 emit this->resultTransactions(result.result());
                 watcher->deleteLater();
                 emit testSignal();
