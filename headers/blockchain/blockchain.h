@@ -90,9 +90,10 @@ private:
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
 
-    BlockchainStatus                                    status_        = BlockchainStatus::Started;
-    BlockchainSyncStatus                                sync_status_   = BlockchainSyncStatus::None;
-    BlockchainSyncStatus                                check_status_  = BlockchainSyncStatus::None;
+    BlockchainStatus                                    status_       = BlockchainStatus::Started;
+    BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
+    BlockchainSyncStatus                                check_status_ = BlockchainSyncStatus::None;
+    BigNumber                                           sync_last_index;
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
 
@@ -131,6 +132,11 @@ public:
     }
 
 private:
+    void set_sync_status(BlockchainSyncStatus status) {
+        sync_status_ = status;
+        syncStatusChanged(status);
+    }
+
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
 
     std::pair<Transaction, BigNumber> getTxBySender(const ActorId &id, const TokenId &token = TokenId());
@@ -253,11 +259,6 @@ public:
 
     // - ACTORS - //
     /**
-     * @brief remove all blocks
-     */
-    void removeAll(bool is_mega = false, bool is_exit = false);
-
-    /**
      * @brief Return's reference to blockIndex
      * @return ref to blockIndex field
      */
@@ -314,9 +315,10 @@ signals:
     void syncResponseVectorFromNetwork(const std::string &blocks,
                                        const Responder   &responder,
                                        const NetworkPackageStorage);
-    void statusChanged(BlockchainStatus status);
 
     void zeroBlock();
+
+    void removeAll(bool is_mega = false, bool is_exit = false);
 
     /**
      * @brief possibleMiningChange
@@ -326,6 +328,12 @@ signals:
 
     void network_status_sync_request_signal(const Responder &responder);
     void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
+
+    void syncStart(BigNumber, BigNumber);
+    void syncEnd();
+    void syncProgress(BigNumber);
+    void statusChanged(BlockchainStatus status);
+    void syncStatusChanged(BlockchainSyncStatus);
 
 public:
     BigNumber getBlockCount();
@@ -350,4 +358,9 @@ public slots:
                             const NetworkPackageStorage &package_storage);
     void timer_sync_tick();
     void process();
+
+    /**
+     * @brief remove all blocks
+     */
+    void removeAllSlot(bool is_mega = false, bool is_exit = false);
 };

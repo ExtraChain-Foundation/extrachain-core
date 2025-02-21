@@ -282,13 +282,16 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
             emit updateSelf(index);
         }
 
-        start_check();
+        emit need_check();
     });
 
     rc_thread.detach();
 #endif
 
-    start_check();
+    emit syncProgress(blockIndex.last_saved_id);
+    if (blockIndex.last_saved_id >= sync_last_index) {
+        start_check();
+    }
 }
 
 BlockchainStatus Blockchain::status() {
@@ -298,7 +301,7 @@ BlockchainStatus Blockchain::status() {
 void Blockchain::start_sync() {
     // start timer, after end -> again request
     if (status_ == BlockchainStatus::Sync) {
-        eLog("BC 11 start_sync return");
+        // eLog("BC 11 start_sync return");
         return;
     }
 
@@ -311,7 +314,7 @@ void Blockchain::start_sync() {
     }
 
     last_info_.clear();
-    sync_status_   = BlockchainSyncStatus::LastInfo;
+    set_sync_status(BlockchainSyncStatus::LastInfo);
     requests_count = node->network()->active_connections_count();
     node->network()->send_message(true,
                                   MessageType::BlockchainSyncLastInfo,
@@ -324,7 +327,7 @@ void Blockchain::start_sync() {
 void Blockchain::start_check() {
     if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
         start_sync();
-        eLog("BC 12 start_check return");
+        // eLog("BC 12 start_check return");
         return;
     }
 
@@ -371,7 +374,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
     if (sync_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
-        sync_status_  = BlockchainSyncStatus::Blocks;
+        set_sync_status(BlockchainSyncStatus::Blocks);
         check_status_ = BlockchainSyncStatus::None;
         eLog("BC 6 sync status");
         send_request_blocks();
@@ -424,11 +427,13 @@ void Blockchain::send_request_blocks() {
     }
 
     if (!need_sync) {
-        sync_status_  = BlockchainSyncStatus::None;
+        set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
         status_       = BlockchainStatus::Ready;
         emit statusChanged(status_);
         timer_sync->stop();
+
+        emit syncEnd();
 
         eLog("BC 4");
         return; // end sync
@@ -447,11 +452,13 @@ void Blockchain::send_request_blocks() {
     // TODO: recheck
     if (nodes_by_block.empty()) {
         eLog("BC 3");
-        sync_status_  = BlockchainSyncStatus::None;
+        set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
         status_       = BlockchainStatus::Ready;
         emit statusChanged(status_);
         timer_sync->stop();
+
+        emit syncEnd();
 
         return;
     }
@@ -487,8 +494,12 @@ void Blockchain::send_request_blocks() {
     auto sync_index = mode == BlockchainMode::Light
                           ? calculate_genesis_id_for_block(nodes_by_block.front().second)
                           : (last_block.has_value() ? last_block->id() + 1 : BigNumber(0));
+    sync_last_index = nodes_by_block.front().second;
+    eLog("{}", sync_last_index);
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
+    emit syncStart(sync_index, sync_last_index);
+    eLog("syncStart");
 }
 
 std::pair<Transaction, BigNumber> Blockchain::getTxBySender(const ActorId &id, const TokenId &token) {
@@ -1717,6 +1728,7 @@ void Blockchain::process() {
 
     timer_sync = new QTimer(this);
     connect(timer_sync, &QTimer::timeout, this, &Blockchain::timer_sync_tick);
+    connect(this, &Blockchain::removeAll, this, &Blockchain::removeAllSlot);
 }
 
 // Other //
@@ -1725,7 +1737,7 @@ BlockIndex &Blockchain::getBlockIndex() {
     return blockIndex;
 }
 
-void Blockchain::removeAll(bool is_mega, bool is_exit) {
+void Blockchain::removeAllSlot(bool is_mega, bool is_exit) {
 #ifndef IS_R
     if (!is_mega) {
         return;

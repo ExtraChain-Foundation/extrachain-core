@@ -99,16 +99,16 @@ void WebSocketService::closeSocket() {
     }
 
     if (m_ws != nullptr) {
-        eLog("[WS] Delete socket pointer");
+        // eLog("[WS] Delete socket pointer");
         m_ws->deleteLater();
         m_ws = nullptr;
     }
 
     if (!is_disconnected_) {
-        eLog("[WS] Disconnect socket");
+        // eLog("[WS] Disconnect socket");
         is_disconnected_ = true;
         emit disconnected();
-        m_ws->disconnect();
+        // m_ws->disconnect();
     }
 }
 

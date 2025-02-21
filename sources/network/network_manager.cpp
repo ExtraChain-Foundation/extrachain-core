@@ -70,6 +70,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
 
+    /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
         eInfo("[WS] Current Identifier print: {}", a);
@@ -80,6 +81,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
             eInfo("[WS] Service ident: {}", b);
         }
     });
+    */
 }
 
 void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
@@ -597,6 +599,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
 void NetworkManager::saveToCache(const std::string &serialized_message,
                                  SendMode           send_mode,
                                  const std::string &receiver_identifier) {
+    return;
     if (send_mode != SendMode::Broadcast) {
         // return;
     }
@@ -639,6 +642,11 @@ void NetworkManager::saveToCache(const std::string &serialized_message,
 }
 
 void NetworkManager::sendFromCache() {
+    QFile filet(QString::fromStdString(NetworkCacheFile));
+    if (filet.exists()) {
+        filet.remove();
+    }
+    return;
     eLog("[NetworkManager] Load from cache");
 
     QFile file(QString::fromStdString(NetworkCacheFile));
