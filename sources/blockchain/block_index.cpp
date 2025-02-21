@@ -230,6 +230,7 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsBySender
     BigNumber                   from,
     int                         count,
     const ActorId              &token) const {
+    qDebug() << "getLastTxByParam2";
     return getTxsByParamInRow(actor_ids, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
 
@@ -322,6 +323,7 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamI
     int       currentCount = 0;
 
     while (lastBlockId >= getFirstSavedId()) {
+        // qDebug() << "getTxsBySenderOrReceiverInRow3";
         // eLog("{} {}", count, currentCount);
 
         if (count < currentCount)
