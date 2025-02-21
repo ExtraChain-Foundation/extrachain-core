@@ -230,6 +230,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
          blocks.back().first);
 
     status_ = BlockchainStatus::Maybe;
+    emit statusChanged(status_);
 
     for (const auto &block : blocks) {
         auto  block_path = blockIndex.buildFilePath(block.first);
@@ -1425,7 +1426,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
-        eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());
+        // eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());
         node->network()->sendBrodcastMessageFurther(package);
         return std::unexpected(BlockError::BlockchainBusy);
     }
@@ -1761,6 +1762,7 @@ void Blockchain::timer_sync_tick() {
     eLog("[Blockchain] Timer sync tick");
     timer_sync->stop();
     status_ = BlockchainStatus::Timered;
+    emit statusChanged(status_);
     start_sync();
 }
 
