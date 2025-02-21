@@ -18,6 +18,7 @@
  */
 
 #include <QJsonObject>
+#include <QtConcurrent/qtconcurrentrun.h>
 
 #include "blockchain/blockchain.h"
 // #include "dfs/dfs_controller.h"
@@ -224,13 +225,25 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
     if (blocks.empty()) {
         eLog("[Blockchain] Sync: incoming empty blocks... Why?");
     }
+
+    auto lastBlock = read_last_block();
+    if (lastBlock.has_value()) {
+        BigNumber lastIndex = lastBlock->id();
+
+        if (blocks.size() > 2) {
+            eLog("-> _____ {} {}",
+                 lastIndex.to_string(NumeralBase::Dec),
+                 blocks[1].first.to_string(NumeralBase::Dec));
+            if (lastIndex > blocks[1].first) {
+                return;
+            }
+        }
+    }
+
     eLog("[Blockchain] Sync: incomining {} blocks... First: {}, last: {}",
          blocks.size(),
          blocks.front().first,
          blocks.back().first);
-
-    status_ = BlockchainStatus::Maybe;
-    emit statusChanged(status_);
 
     for (const auto &block : blocks) {
         auto  block_path = blockIndex.buildFilePath(block.first);
@@ -283,14 +296,20 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
             emit updateSelf(index);
         }
 
-        emit need_check();
+        // if (blockIndex.last_saved_id >= sync_last_index - 1) {
+        //     emit need_check();
+        // }
     });
 
     rc_thread.detach();
 #endif
 
     emit syncProgress(blockIndex.last_saved_id);
-    if (blockIndex.last_saved_id >= sync_last_index) {
+    eLog("-> {} {}", blockIndex.last_saved_id, sync_last_index - 1);
+    if (blockIndex.last_saved_id >= sync_last_index - 1) {
+        eLog("-> START CHECK");
+        status_ = BlockchainStatus::Maybe;
+        emit statusChanged(status_);
         start_check();
     }
 }
@@ -412,14 +431,14 @@ void Blockchain::send_request_blocks() {
         for (const auto &[_, info] : last_info_) {
             if (info.last_block_id > my_index) {
                 need_sync = true;
-                remove_last_block();
+                // remove_last_block();
                 // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
-                remove_last_block();
+                // remove_last_block();
                 // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
@@ -496,6 +515,13 @@ void Blockchain::send_request_blocks() {
                           ? calculate_genesis_id_for_block(nodes_by_block.front().second)
                           : (last_block.has_value() ? last_block->id() + 1 : BigNumber(0));
     sync_last_index = nodes_by_block.front().second;
+
+    if (blockIndex.last_saved_id > sync_last_index) {
+        eLog("Not need sync");
+        start_check();
+        return;
+    }
+
     eLog("{}", sync_last_index);
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
@@ -536,6 +562,29 @@ std::unordered_map<ActorId, std::vector<Transaction>> Blockchain::getTxsBySender
     ActorId                     token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
+void Blockchain::getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
+                                                       BigNumber                   from,
+                                                       int                         count,
+                                                       ActorId                     token) {
+    auto result = QtConcurrent::run([=, this] {
+        return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
+    });
+
+    auto *watcher = new QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>(this);
+
+    connect(watcher,
+            &QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>::finished,
+            this,
+            [=, this]() {
+                auto map = watcher->result();
+                eLog("Async task completed with result: {}", map.size());
+                emit this->resultTransactions(result.result());
+                watcher->deleteLater();
+                emit testSignal();
+            });
+
+    watcher->setFuture(result);
+}
 
 bool Blockchain::sendBlock(const BlockVariant &block) const {
     eFatal("NO sendBlock");
@@ -545,11 +594,14 @@ bool Blockchain::sendBlock(const BlockVariant &block) const {
 
     // if (block.isGenesisBlock()) {
     //     auto genesisBlock = block.getGenesisBlockConst();
-    //     node->network()->send_message(*genesisBlock, MessageType::BlockchainGenesisBlock,
+    //     node->network()->send_message(*genesisBlock,
+    //     MessageType::BlockchainGenesisBlock,
     //     SendMode::Neighbours);
     // } else {
     //     auto dataBlock = block.getBlockConst();
-    //     node->network()->send_message(*dataBlock, MessageType::BlockchainNewBlock, SendMode::Neighbours);
+    //     node->network()->send_message(*dataBlock,
+    //     MessageType::BlockchainNewBlock,
+    //     SendMode::Neighbours);
     // }
 
     // eLog("Send {}", block);
@@ -796,7 +848,8 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (!canMergeBlocks(received, existed.value())) {
-        // eLog("[Blockchain] Blocks with id {} can't be merged", receivedBlockIndex);
+        // eLog("[Blockchain] Blocks with id {} can't be
+        // merged", receivedBlockIndex);
         return std::unexpected(BlockError::CantMerge);
     }
 
@@ -805,7 +858,8 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeBlockWithLocal(const Bl
     }
 
     if (received == existed && received.signatures() == existed->signatures()) {
-        // eLog("[Blockchain] Blocks {} are equal", received.id());
+        // eLog("[Blockchain] Blocks {} are equal",
+        // received.id());
         return std::unexpected(BlockError::MergeEqual);
     }
 
@@ -857,7 +911,10 @@ std::pair<Transaction, BigNumber> Blockchain::getTransaction(SearchEnum::TxParam
     case SearchEnum::TxParam::UserSenderOrReceiver:
         return getTxBySenderOrReceiver(ActorId(value), token);
     default:
-        eWarning("Can't get tx: incorrect SearchEnum::TxParam. Value: {}", value);
+        eWarning(
+            "Can't get tx: incorrect SearchEnum::TxParam. "
+            "Value: {}",
+            value);
         return { Transaction(), BigNumber("-1") };
     }
 }
@@ -867,7 +924,8 @@ bool Blockchain::validateBlock(const BlockVariant &block) {
 }
 
 BlockVariant Blockchain::validateAndReturnBlock(const BlockVariant &block) const {
-    // Get prev block hash and check if it exists in current one :)
+    // Get prev block hash and check if it exists in current
+    // one :)
     return block;
 }
 
@@ -929,7 +987,9 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         }
 
         if (!block.is_genesis() && blockId > prevBlock->id() + 1) {
-            eLog("[Blockchain] New block id is greater than last id, sync request");
+            eLog(
+                "[Blockchain] New block id is greater than "
+                "last id, sync request");
             remove_last_block();
             start_sync();
             return std::unexpected(BlockError::GreaterLast);
@@ -956,28 +1016,33 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
             // TODO: hashs incoming, not sync, remove block
             // TODO: package for removing last block?
             start_sync();
-            // sync(blockId - 1); // TODO: request only chel who sended block?
+            // sync(blockId - 1); // TODO: request only chel
+            // who sended block?
             return std::unexpected(BlockError::InvalidHash);
         }
     }
 
     if (block.getType() == BlockType::Genesis) {
-        // eLog("[Blockchain] Adding a genesis block {} to storage", block.id());
+        // eLog("[Blockchain] Adding a genesis block {} to
+        // storage", block.id());
     } else {
-        // eLog("[Blockchain] Adding a block {} to storage {}", block.id(), block.getType());
+        // eLog("[Blockchain] Adding a block {} to storage
+        // {}", block.id(), block.getType());
     }
 
     this->update_network_id(block);
 
     // check hash...
 
-    // const auto           &transactions = block.transactions();
-    // std::set<Transaction> transactions_approved;
+    // const auto           &transactions =
+    // block.transactions(); std::set<Transaction>
+    // transactions_approved;
     // // TODO: if remove tx -> ignore in prove
     // for (const auto &tx : block.transactions()) {
     //     auto res = proveTransaction(tx, transactions);
 
-    //     if (res == TransactionProveError::NoError || res == TransactionProveError::SelfPleasure) {
+    //     if (res == TransactionProveError::NoError || res
+    //     == TransactionProveError::SelfPleasure) {
     //         transactions_approved.insert(tx);
     //     }
     // }
@@ -1054,7 +1119,8 @@ bool Blockchain::canMergeBlocks(const BlockVariant &receivedBlock, const BlockVa
 }
 
 std::expected<BlockVariant, BlockError> Blockchain::mergeBlocks(const Block &blockA, const Block &blockB) {
-    // eLog("[Blockchain] Attempting to merge {} and {}", blockA, blockB);
+    // eLog("[Blockchain] Attempting to merge {} and {}",
+    // blockA, blockB);
 
     if (blockA.id() == 0) {
         return std::unexpected(BlockError::CantMerge);
@@ -1259,12 +1325,22 @@ BigNumberFloat Blockchain::calculate_actor_balance(const ActorId &actor_id,
 
                 if (from_token.value() == token_id) {
                     balance -= tx.amount();
-                    eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balance);
+                    eLog(
+                        "{} BAALANCE Conversion -= {}, = "
+                        "{}",
+                        i,
+                        tx.amount(),
+                        balance);
                 }
 
                 if (tx.token() == token_id) {
                     balance += tx.amount();
-                    eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balance);
+                    eLog(
+                        "{} BAALANCE Conversion += {}, = "
+                        "{}",
+                        i,
+                        tx.amount(),
+                        balance);
                 }
                 continue;
             }
@@ -1345,14 +1421,18 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
             for (const auto &actor_id : actor_ids) {
                 if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE Reward += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE Reward += {}, =
+                    // {}", i, tx.amount(),
+                    // balances[actor_id]);
                     continue;
                 }
 
                 if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
                     && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE InitContract += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE InitContract += {},
+                    // = {}", i, tx.amount(),
+                    // balances[actor_id]);
                     continue;
                 }
 
@@ -1368,24 +1448,30 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
 
                     if (from_token.value() == token_id) {
                         balances[actor_id] -= tx.amount();
-                        // eLog("{} BAALANCE Conversion -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                        // eLog("{} BAALANCE Conversion -=
+                        // {}, = {}", i, tx.amount(),
+                        // balances[actor_id]);
                     }
 
                     if (tx.token() == token_id) {
                         balances[actor_id] += tx.amount();
-                        // eLog("{} BAALANCE Conversion += {}, = {}", i, tx.amount(), balances[actor_id]);
+                        // eLog("{} BAALANCE Conversion +=
+                        // {}, = {}", i, tx.amount(),
+                        // balances[actor_id]);
                     }
                     continue;
                 }
 
                 if (tx.receiver() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE += {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE += {}, = {}", i,
+                    // tx.amount(), balances[actor_id]);
                 }
 
                 if (tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] -= tx.amount();
-                    // eLog("{} BAALANCE -= {}, = {}", i, tx.amount(), balances[actor_id]);
+                    // eLog("{} BAALANCE -= {}, = {}", i,
+                    // tx.amount(), balances[actor_id]);
                 }
             }
         }
@@ -1406,7 +1492,8 @@ void Blockchain::showBlockchain() const {
     //     auto currentBlock = blockIndex.getBlockById(i);
 
     //     if (currentBlock->isGenesisBlock())
-    //         eLog("{}", currentBlock->getGenesisBlockConst());
+    //         eLog("{}",
+    //         currentBlock->getGenesisBlockConst());
     //     else
     //         eLog("{}", currentBlock->getBlock());
 
@@ -1415,7 +1502,8 @@ void Blockchain::showBlockchain() const {
 }
 
 BigNumber Blockchain::getBlockCount() {
-    // eLog("[Blockchain] Count: {}", this->blockIndex.getLastSavedId());
+    // eLog("[Blockchain] Count: {}",
+    // this->blockIndex.getLastSavedId());
     return this->blockIndex.getLastSavedId();
 }
 
@@ -1448,7 +1536,9 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     if (!res.has_value()) {
         switch (res.error()) {
         case BlockError::AlreadyChained: {
-            // if (blockIndex.lastSavedId - 100 <= block.id() && !responder.identifiers().empty()) {
+            // if (blockIndex.lastSavedId - 100 <=
+            // block.id() &&
+            // !responder.identifiers().empty()) {
             //     // syncResponse(block.id(), responder);
             //  } // else {
             //      node->network()->send_message("",
@@ -1510,8 +1600,13 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                     tx.setData(ActorId().to_string());
                     tx.setAmount(transaction.amount());
                     tx.setPrevBlock(block.id());
-                    tx.setToken(ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
-                    eLog("[Reward] Send conversion: {} coins", tx.amount());
+                    tx.setToken(
+                        ActorId("468faf2f1be6504a9a26f7f027"
+                                "f7e43380b0d77d"));
+                    eLog(
+                        "[Reward] Send conversion: {} "
+                        "coins",
+                        tx.amount());
                     node->sendTransaction(tx, node->accountController()->mainActor());
                 }
 #endif
@@ -1522,13 +1617,17 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     return res;
 
     // if (list.contains(tmp.getSender())) {
-    //     emit newNotify({ QDateTime::currentMSecsSinceEpoch(),
+    //     emit newNotify({
+    //     QDateTime::currentMSecsSinceEpoch(),
     //                      Notification::NotifyType::TxToUser,
-    //                      tmp.getReceiver().toByteArray() });
+    //                      tmp.getReceiver().toByteArray()
+    //                      });
     // } else if (list.contains(tmp.getReceiver())) {
-    //     emit newNotify({ QDateTime::currentMSecsSinceEpoch(),
+    //     emit newNotify({
+    //     QDateTime::currentMSecsSinceEpoch(),
     //                      Notification::NotifyType::TxToMe,
-    //                      tmp.getSender().toByteArray() });
+    //                      tmp.getSender().toByteArray()
+    //                      });
     // }
     TIMER_END(addBlockNetwork)
 }
@@ -1536,7 +1635,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 // Actors //
 TransactionProveError Blockchain::prove_transaction(const Transaction          &tx,
                                                     const std::set<Transaction> transactions) {
-    // eLog("[Blockchain] Transaction prove started: {}", tx);
+    // eLog("[Blockchain] Transaction prove started: {}",
+    // tx);
     // TODO: temp, remove
     if (tx.amount() == 0) {
         return TransactionProveError::AmountZero;
@@ -1633,7 +1733,8 @@ TransactionProveError Blockchain::prove_transaction(const Transaction          &
         return TransactionProveError::NoError;
     }
 
-    // special conditions: receiver is null - coins burning, contract creation
+    // special conditions: receiver is null - coins burning,
+    // contract creation
     // TODO: InitContract: check duplicate
     if (tx.type() == TransactionType::InitContract) {
         auto count = tx.amount();

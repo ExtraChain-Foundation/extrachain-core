@@ -164,6 +164,11 @@ public:
         int                         count = 10,
         ActorId                     token = ActorId());
 
+    void getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
+                                               BigNumber                   from  = BigNumber(-1),
+                                               int                         count = 10,
+                                               ActorId                     token = ActorId());
+
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
     void sendLastGenesisBlock() const;
@@ -335,6 +340,8 @@ signals:
     void syncProgress(BigNumber);
     void statusChanged(BlockchainStatus status);
     void syncStatusChanged(BlockchainSyncStatus);
+    void resultTransactions(const std::unordered_map<ActorId, std::vector<Transaction>> &);
+    void testSignal();
 
 public:
     BigNumber getBlockCount();
