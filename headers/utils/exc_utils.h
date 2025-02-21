@@ -818,11 +818,13 @@ namespace BlockchainConst {
     static const std::string TMP_FOLDER        = "tmp";
     static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
 
+    // Actors
+    static const std::string ACTORS_FOLDER = "actors";
+
     // Folder with blocks
-    static const std::string BLOCKCHAIN_INDEX        = "blockchain/index";
-    static const std::string ACTOR_INDEX_FOLDER_NAME = "actors";
-    static const std::string BLOCK_INDEX_FOLDER_NAME = "blocks";
-    static const std::string BLOCKCHAIN_FOLDER       = "blockchain/index/" + BLOCK_INDEX_FOLDER_NAME;
+    static const std::string BLOCKCHAIN_FOLDER     = "blocks";
+    static const std::string BLOCKCHAIN_RANGE      = "range";
+    static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
 
     // Dfs
     static const int DATA_OFFSET = 512;

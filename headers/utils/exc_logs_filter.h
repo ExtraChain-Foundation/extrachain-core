@@ -66,15 +66,9 @@ public:
         m_modules["Dfs"] = { "dfs_controller",     "fragment_storage", "historical_chain", "historical_sql",
                              "permission_manager", "dfs_utils",        "name_validator" };
 
-        m_modules["Blockchain"] = { "actor",
-                                    "block",
-                                    "blockchain",
-                                    "genesis_block",
-                                    "block_variant",
-                                    "index/actorindex",
-                                    "index/blockindex",
-                                    "transaction",
-                                    "private_profile" };
+        m_modules["Blockchain"] = { "actor",         "block",          "actors",           "blockchain",
+                                    "genesis_block", "block_variant",  "index/actorindex", "index/blockindex",
+                                    "transaction",   "private_profile" };
 
         m_modules["Encryption"] = { "encryption_tools", "key_private", "key_public" };
 

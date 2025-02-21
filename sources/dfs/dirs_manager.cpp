@@ -30,7 +30,7 @@
 DirsManager::DirsManager(ExtraChainNode* node)
     : node(node) {
     // create dfs folder
-    std::filesystem::create_directories(DfsB::fsActrRoot);
+    std::filesystem::create_directories(DfsB::DFS_FOLDER);
 
     // basic creation of dirs file
     bool dirs_result = Dfs::DirsFile::create_file();

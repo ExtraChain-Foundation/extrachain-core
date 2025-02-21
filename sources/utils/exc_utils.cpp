@@ -341,8 +341,9 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
 void Utils::wipeDataFiles() {
     // QString current = QDir::currentPath();
 
-    QDir("blockchain").removeRecursively();
-    QDir(QString::fromStdString(DfsB::fsActrRoot)).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::ACTORS_FOLDER)).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    QDir(QString::fromStdString(DfsB::DFS_FOLDER)).removeRecursively();
     QDir("profiles").removeRecursively();
     QDir("tmp").removeRecursively();
     QDir("encrypt").removeRecursively();

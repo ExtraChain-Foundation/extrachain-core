@@ -369,8 +369,8 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
 }
 
 std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(const std::string& data,
-                                           const std::string& login,
-                                           const std::string& password) {
+                                                                              const std::string& login,
+                                                                              const std::string& password) {
     if (data.empty()) {
         return std::unexpected(ImportProfileError::DataEmpty);
     }
@@ -669,12 +669,32 @@ void ExtraChainNode::prepareFolders() {
         QDir().rename("keystore", "profiles");
     }
 
+    // Version compatibility: 0.15.2
+    if (QDir("blockchain/index").exists()) {
+        QDir().rename("blockchain/index/blocks", "blocks");
+        QDir().rename("blockchain/index/actors", "actors");
+        QDir("blockchain").removeRecursively();
+
+        QFile file("blocks/last_id");
+        if (file.open(QFile::ReadOnly)) {
+            auto data = file.readAll();
+            auto last = BigNumber::create(data.toStdString());
+            if (last.has_value()) {
+                auto  range = BlockRange { .first = "0", .last = last.value().to_string() };
+                auto  json  = Json::serialize(range);
+                QFile range_file("blocks/range");
+                range_file.open(QFile::WriteOnly);
+                range_file.write(json.c_str());
+                range_file.close();
+            }
+            file.remove();
+        }
+    }
+
     QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
-                                         + BlockchainConst::ACTOR_INDEX_FOLDER_NAME));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_INDEX + "/"
-                                         + BlockchainConst::BLOCK_INDEX_FOLDER_NAME));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     QFile(".settings").remove();

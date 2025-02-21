@@ -83,3 +83,12 @@ private:
 MAKE_CUSTOM_MAGICAL(ActorId)
 
 using TokenId = ActorId;
+
+namespace std {
+    template<>
+    struct hash<ActorId> {
+        size_t operator()(const ActorId& id) const {
+            return std::hash<std::string>{}(id.value());
+        }
+    };
+}

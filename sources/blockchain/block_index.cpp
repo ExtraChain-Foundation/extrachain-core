@@ -27,13 +27,23 @@
 BlockIndex::BlockIndex() {
     this->sectionSize = Config::DataStorage::SECTION_SIZE;
 
-    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
-        auto last_id_result  = BigNumber::create(last_id_content.toStdString());
-        if (last_id_result.has_value()) {
-            lastSavedId  = last_id_result.value();
-            firstSavedId = 0;
+
+        auto block_range = Json::deserialize<BlockRange>(last_id_content.toStdString());
+        if (block_range.has_value()) {
+            auto first_id_result = BigNumber::create(block_range->first);
+            auto last_id_result  = BigNumber::create(block_range->last);
+
+            if (!first_id_result.has_value() || !last_id_result.has_value()) {
+                return;
+            }
+
+            last_saved_id  = last_id_result.value();
+            first_saved_id = first_id_result.value();
+
+            return;
         }
     } else {
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
@@ -45,6 +55,8 @@ BlockIndex::BlockIndex() {
     if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
         QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     }
+
+    QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
 }
 
 void BlockIndex::setBlockCompress(bool newBlockCompress) {
@@ -57,11 +69,11 @@ std::expected<BlockVariant, BlockError> BlockIndex::addBlock(const BlockVariant 
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastBlock() const {
-    return this->read_block_by_id(lastSavedId);
+    return this->read_block_by_id(last_saved_id);
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getLastGenesisBlock(const BigNumber &from) const {
-    BigNumber id = Blockchain::calculate_genesis_id_for_block(from >= 0 ? from : this->lastSavedId);
+    BigNumber id = Blockchain::calculate_genesis_id_for_block(from >= 0 ? from : this->last_saved_id);
 
     while (id >= getFirstSavedId()) {
         auto block = this->getGenesisBlockById(id);
@@ -299,7 +311,7 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
                                                      ActorId             token) const {
     std::set<Transaction> currentTxs;
 
-    if (firstSavedId == -1 || lastSavedId == -1) {
+    if (first_saved_id == -1 || last_saved_id == -1) {
         eLog("[BlockIndex] There no tx's in block index");
         return currentTxs;
     }
@@ -384,11 +396,14 @@ std::string BlockIndex::buildFilePath(const BigNumber &id) const {
 }
 
 void BlockIndex::update_last_id(const BigNumber &id) {
-    this->lastSavedId  = id;
-    this->firstSavedId = 0;
-    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    this->last_saved_id  = id;
+    this->first_saved_id = first_saved_id == -1 ? id : std::min(id, this->first_saved_id);
+
+    std::string json =
+        Json::serialize(BlockRange { .first = first_saved_id.to_string(), .last = last_saved_id.to_string() });
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     file.open(QFile::WriteOnly);
-    file.write(this->lastSavedId.to_string().data());
+    file.write(json.data());
     file.close();
 }
 
@@ -463,13 +478,13 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
-        if (id > this->lastSavedId) {
+        if (id > this->last_saved_id) {
             update_last_id(id);
         }
 
-        if (id < this->firstSavedId || firstSavedId == -1) {
-            eLog("[BlockIndex] First saved id is updated from {} to {}", firstSavedId, id);
-            this->firstSavedId = id;
+        if (id < this->first_saved_id || first_saved_id == -1) {
+            eLog("[BlockIndex] First saved id is updated from {} to {}", first_saved_id, id);
+            this->first_saved_id = id;
         }
 
         return BlockVariant(block);
@@ -516,13 +531,13 @@ std::expected<BlockVariant, BlockError> BlockIndex::add(const BigNumber &id, con
             db.insert(Config::DataStorage::SignTable, rowRow);
         }
 
-        if (id > this->lastSavedId) {
+        if (id > this->last_saved_id) {
             update_last_id(id);
         }
 
-        if (id < this->firstSavedId || firstSavedId == -1) {
-            eLog("[BlockIndex] First saved id is updated from {} to {}", firstSavedId, id);
-            this->firstSavedId = id;
+        if (id < this->first_saved_id || first_saved_id == -1) {
+            eLog("[BlockIndex] First saved id is updated from {} to {}", first_saved_id, id);
+            this->first_saved_id = id;
         }
 
         return BlockVariant(block);
@@ -568,7 +583,7 @@ int BlockIndex::removeById(const BlockVariant &block) {
 
     if (file.exists() && !file.isOpen()) {
         bool isRemoved = file.remove();
-        update_last_id(this->lastSavedId - 1);
+        update_last_id(this->last_saved_id - 1);
         // if (isRemoved) {
         //     this->records--;
         // }
@@ -602,10 +617,11 @@ void BlockIndex::removeAll() {
 
     // update state
     // this->records           = 0;
-    this->firstSavedId = -1;
-    this->lastSavedId  = -1;
-    // QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER) + '/' + "last_id");
+    this->first_saved_id = -1;
+    this->last_saved_id  = -1;
+    // QFile::remove(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     QFile::remove("tmp/cachedTxs.db");
+    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     // this->countTransactions = 0;
 }
 
@@ -614,7 +630,7 @@ std::string BlockIndex::getFolderPath() const {
 }
 
 BigNumber BlockIndex::getFirstSavedId() const {
-    return this->firstSavedId;
+    return this->first_saved_id;
 }
 
 BigNumber BlockIndex::calcSection(BigNumber id) const {
@@ -622,7 +638,7 @@ BigNumber BlockIndex::calcSection(BigNumber id) const {
 }
 
 BigNumber BlockIndex::getLastSavedId() const {
-    return this->lastSavedId;
+    return this->last_saved_id;
 }
 
 std::expected<BlockVariant, BlockError> BlockIndex::getByIdUnsafe(const BigNumber &id) const {
