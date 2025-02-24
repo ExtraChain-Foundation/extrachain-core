@@ -288,8 +288,6 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
                 for (const auto &accountId : accounts) {
                     if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                         self_block_ids.insert(added_block->id());
-
-                        emit transaction_cache_.add(added_block->id(), added_block->getDate(), transaction);
                     }
                 }
             }
@@ -1592,6 +1590,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
         for (const auto &accountId : accounts) {
             if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                 emit updateSelf(block.id());
+
+                emit transaction_cache_.add(block.id(), block.getDate(), transaction);
 
 #ifdef IS_R
                 if (transaction.type() == TransactionType::Reward

@@ -27,7 +27,7 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
     : node(node) {
     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
 
-    DbConnector db("blockchain/cache/SelfTransactions.db");
+    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
     db.create_table(Config::DataStorage::TX_CACHE_CREATE);
     db.close();
@@ -47,7 +47,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     map["block"] = block_id.to_string();
     map["date"]  = block_date;
 
-    DbConnector db("blockchain/cache/SelfTransactions.db");
+    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
     bool res = db.insert(Config::DataStorage::TX_CACHE_TABLE, map);
     db.close();
@@ -60,7 +60,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
 void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
     eLog("[TransactionCache] Prepare for {} with offset {}", actor_id, offset);
 
-    DbConnector db("blockchain/cache/SelfTransactions.db");
+    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
     const auto query    = std::format("SELECT * FROM {}", Config::DataStorage::TX_CACHE_TABLE); // TODO: offset
     const auto selected = db.select(query, Config::DataStorage::TX_CACHE_TABLE);
