@@ -30,9 +30,10 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 
     connect(this, &TransactionCache::add, this, &TransactionCache::adding);
     connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
+    connect(this, &TransactionCache::make_cache, this, &TransactionCache::cache);
 
-    bool is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size();
-    if (is_exists != 0) {
+    is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size() != 0;
+    if (is_exists) {
         return;
     }
 
@@ -40,8 +41,15 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
     db.open();
     db.create_table(Config::DataStorage::TX_CACHE_CREATE);
     db.close();
+}
 
-    // temp
+void TransactionCache::cache() {
+    if (is_exists) {
+        return;
+    }
+
+    eLog("[TransactionCache] Start first cache");
+
     auto ids = node->accountController()->accountsIds();
     auto txs = node->blockchain()
                    ->getBlockIndex()
@@ -52,6 +60,7 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 
     for (const auto &[actor_id, tx_infos] : txs) {
         for (const auto &info : tx_infos) {
+            adding(info.block_id, info.block_date, info.transaction);
         }
     }
 

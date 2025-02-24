@@ -244,6 +244,8 @@ void ExtraChainNode::start() {
         QTimer::singleShot(500, this, &ExtraChainNode::ready);
         // emit startNetwork();
         started = true;
+
+        emit m_blockchain->transaction_cache().make_cache();
     }
 }
 

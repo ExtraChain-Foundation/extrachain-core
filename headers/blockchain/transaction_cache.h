@@ -35,11 +35,15 @@ signals:
     void add(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
     void request(ActorId actor_id, TokenId token, int offset);
     void response(ActorId actor_id, TokenId token, int offset, std::vector<TransactionInfo> txs);
+    void make_cache();
 
 private slots:
     void adding(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
     void prepare(ActorId actor_id, TokenId token, int offset);
+    void cache();
 
 private:
     ExtraChainNode *node;
+
+    bool is_exists;
 };
