@@ -331,14 +331,14 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
                                                                      file_link.file_id,
                                                                      active_download.dir_row.hash);
         if (!is_downloaded) {
-            eCritical("[Fragment] Ooops, something wrong. Need to implement Fragments checks");
+            eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
             return;
         }
         active_downloads.erase(file_link);
         Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
         node->dfs()->added(file_link.owner_id, active_download.dir_row);
         node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
-        eLog("[Fragment] Last fragment for {}", file_link);
+        eLog("[Fragment] Last fragment (downloaded) for {}", file_link);
     }
 
     // eTemp("[Fragment] {}: size: {}, offset: {}, {}",

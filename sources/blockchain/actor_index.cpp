@@ -276,7 +276,7 @@ QByteArray ActorIndex::getById(const ActorId &id) const {
     QString filePath = QString::fromStdString(actorPath(id));
     QFile   file(filePath);
     if (!file.exists()) {
-        eLog("[ActorIndex] File with path {} not found", filePath);
+        // eLog("[ActorIndex] File with path {} not found", filePath);
         return QByteArray();
     }
     file.open(QIODevice::ReadOnly);
