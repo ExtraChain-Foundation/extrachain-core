@@ -161,16 +161,11 @@ public:
     std::expected<BlockVariant, BlockError> create_zero_genesis_block(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
-    std::unordered_map<ActorId, std::vector<Transaction>> getTxsBySenderOrReceiverInRow(
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> getTxsBySenderOrReceiverInRow(
         const std::vector<ActorId> &id,
         BigNumber                   from  = BigNumber(-1),
         int                         count = 10,
         ActorId                     token = ActorId());
-
-    void getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
-                                               BigNumber                   from  = BigNumber(-1),
-                                               int                         count = 10,
-                                               ActorId                     token = ActorId());
 
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;

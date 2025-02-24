@@ -18,7 +18,6 @@
  */
 
 #include <QJsonObject>
-#include <QtConcurrent/qtconcurrentrun.h>
 
 #include "blockchain/blockchain.h"
 // #include "dfs/dfs_controller.h"
@@ -288,6 +287,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
                 for (const auto &accountId : accounts) {
                     if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                         self_block_ids.insert(added_block->id());
+                        emit transaction_cache_.add(added_block->id(), added_block->getDate(), transaction);
                     }
                 }
             }
@@ -556,35 +556,12 @@ BigNumber Blockchain::calculate_genesis_id_for_block(const BigNumber &id) {
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
-std::unordered_map<ActorId, std::vector<Transaction>> Blockchain::getTxsBySenderOrReceiverInRow(
+std::unordered_map<ActorId, std::vector<TransactionInfo>> Blockchain::getTxsBySenderOrReceiverInRow(
     const std::vector<ActorId> &id,
     BigNumber                   from,
     int                         count,
     ActorId                     token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
-}
-void Blockchain::getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
-                                                       BigNumber                   from,
-                                                       int                         count,
-                                                       ActorId                     token) {
-    auto result = QtConcurrent::run([=, this] {
-        return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
-    });
-
-    auto *watcher = new QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>(this);
-
-    connect(watcher,
-            &QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>::finished,
-            this,
-            [=, this]() {
-                auto map = watcher->result();
-                eLog("Async task completed with result: {}", map.size());
-                emit this->resultTransactions(result.result());
-                watcher->deleteLater();
-                emit testSignal();
-            });
-
-    watcher->setFuture(result);
 }
 
 bool Blockchain::sendBlock(const BlockVariant &block) const {

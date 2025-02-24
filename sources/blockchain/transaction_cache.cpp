@@ -25,18 +25,37 @@
 
 TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
     : node(node) {
+    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
+
+    connect(this, &TransactionCache::add, this, &TransactionCache::adding);
+    connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
+
+    bool is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size();
+    if (is_exists != 0) {
+        return;
+    }
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
     db.create_table(Config::DataStorage::TX_CACHE_CREATE);
     db.close();
 
-    connect(this, &TransactionCache::add, this, &TransactionCache::adding);
-    connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
-
     // temp
-    // node->blockchain()->getBlockIndex().getTxsBySenderOrReceiverInRow(id, from, count, token);
+    auto ids = node->accountController()->accountsIds();
+    auto txs = node->blockchain()
+                   ->getBlockIndex()
+                   .getTxsBySenderOrReceiverInRow(ids,
+                                                  BigNumber(-1),
+                                                  50,
+                                                  ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
+
+    for (const auto &[actor_id, tx_infos] : txs) {
+        for (const auto &info : tx_infos) {
+        }
+    }
+
+    eLog("[TransactionCache] Finish first cache");
 }
 
 void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction) {

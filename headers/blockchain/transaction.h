@@ -155,4 +155,10 @@ public:
         (m_sender, m_receiver, m_amount, m_data, m_token, m_prevBlock, m_hash, m_signature, m_type))
 };
 
-// clear db field tx
+struct TransactionInfo {
+    BigNumber                  block_id;
+    uint64_t                   block_date;
+    TransactionAmountOperation operation = TransactionAmountOperation::Plus;
+    Transaction                transaction;
+};
+BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (block_id, block_date, operation, transaction))

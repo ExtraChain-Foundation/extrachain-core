@@ -25,14 +25,6 @@
 class ExtraChainNode;
 class Transaction;
 
-struct TransactionInfo {
-    BigNumber                  block_id;
-    uint64_t                   block_date;
-    TransactionAmountOperation operation;
-    Transaction                transaction;
-};
-BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (block_id, block_date, operation, transaction))
-
 class TransactionCache : public QObject {
     Q_OBJECT
 
