@@ -316,7 +316,7 @@ namespace Config {
                                                       "amount       TEXT  NOT NULL, "
                                                       "data         TEXT          , "
                                                       "token        TEXT  NOT NULL, "
-                                                      "date         INTEGER  NOT NULL, "
+                                                      "date         TEXT  NOT NULL, "
                                                       "block        TEXT  NOT NULL, "
                                                       "hash         TEXT  NOT NULL UNIQUE, "
                                                       "signature    TEXT  NOT NULL "

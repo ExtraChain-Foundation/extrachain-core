@@ -1367,6 +1367,10 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
     bool                        ignore_genesis) const {
     std::unordered_map<ActorId, BigNumberFloat> balances;
 
+    for (const auto &actor_id : actor_ids) {
+        balances[actor_id] = BigNumberFloat(0);
+    }
+
     eLog("calculate_actorS_balance: {} for token {}", actor_ids, token_id);
     if (blockIndex.getFirstSavedId() == -1 || blockIndex.getLastSavedId() == -1) {
         for (const auto &actor_id : actor_ids) {

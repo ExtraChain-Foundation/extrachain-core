@@ -43,7 +43,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     }
 
     auto map = Utils::to_dbrow(transaction);
-    map.erase("prev_block");
+    map.erase("prevBlock");
     map["block"] = block_id.to_string();
     map["date"]  = block_date;
 
@@ -71,8 +71,8 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
         std::string block_id   = map.at("block");
         std::string block_date = map.at("date");
 
-        auto map2          = map;
-        map2["prev_block"] = map.at("block");
+        auto map2         = map;
+        map2["prevBlock"] = map.at("block");
         map2.erase("block");
         map2.erase("date");
 
