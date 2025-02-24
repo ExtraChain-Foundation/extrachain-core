@@ -23,14 +23,15 @@
 #include "blockchain/blockchain.h"
 // #include "dfs/dfs_controller.h"
 #include "blockchain/actor_index.h"
-#include "managers/data_mining_manager.h"
+// #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
 #include "network/network_manager.h"
 
 Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)
     , */
-    node(node) {
+    node(node)
+    , transaction_cache_(node, this) {
 
     // get first id on start
     auto genesis = blockIndex.getGenesisBlockById(BigNumber(0));
@@ -287,6 +288,8 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
                 for (const auto &accountId : accounts) {
                     if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                         self_block_ids.insert(added_block->id());
+
+                        emit transaction_cache_.add(added_block->id(), added_block->getDate(), transaction);
                     }
                 }
             }

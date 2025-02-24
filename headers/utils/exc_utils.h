@@ -307,6 +307,21 @@ namespace Config {
                                                "type INT              NOT NULL  "
                                                ");";
 
+        static const std::string TX_CACHE_TABLE = "Transactions";
+        static const std::string TX_CACHE_CREATE = "CREATE TABLE IF NOT EXISTS " + TX_CACHE_TABLE
+                                                      + " ("
+                                                      "type         INT   NOT NULL, "
+                                                      "sender       TEXT  NOT NULL, "
+                                                      "receiver     TEXT  NOT NULL, "
+                                                      "amount       TEXT  NOT NULL, "
+                                                      "data         TEXT          , "
+                                                      "token        TEXT  NOT NULL, "
+                                                      "date         INTEGER  NOT NULL, "
+                                                      "block        TEXT  NOT NULL, "
+                                                      "hash         TEXT  NOT NULL UNIQUE, "
+                                                      "signature    TEXT  NOT NULL "
+                                                      ");";
+
         // How many files one section folder will store
         static const int SECTION_SIZE = 100000;
 
@@ -825,6 +840,10 @@ namespace BlockchainConst {
     static const std::string BLOCKCHAIN_FOLDER     = "blocks";
     static const std::string BLOCKCHAIN_RANGE      = "range";
     static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
+
+    // Cache
+    static const std::string BLOCKCHAIN_CACHE_FOLDER = "blocks/cache";
+    static const std::string TRANSACTION_CACHE       = "blocks/cache/SelfTransactions.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;

@@ -26,6 +26,7 @@
 #include "blockchain/transaction.h"
 #include "network/network_manager.h"
 #include "utils/bignumber.h"
+#include "blockchain/transaction_cache.h"
 
 #include <QByteArray>
 #include <QMutex>
@@ -89,6 +90,8 @@ private:
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
+
+    TransactionCache transaction_cache_;
 
     BlockchainStatus                                    status_       = BlockchainStatus::Started;
     BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
@@ -270,6 +273,10 @@ public:
      */
     BlockIndex &getBlockIndex();
 
+    TransactionCache &transaction_cache() {
+        return transaction_cache_;
+    }
+
     /**
      * @brief Gets last block data field
      * @return data
@@ -313,6 +320,9 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
+
+    void selfTxAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
+
     void addBlockFromNetwork(const BlockVariant &block,
                              const Responder    &responder,
                              const NetworkPackageStorage,

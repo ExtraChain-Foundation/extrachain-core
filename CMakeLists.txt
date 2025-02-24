@@ -65,6 +65,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
@@ -126,6 +127,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
