@@ -26,6 +26,7 @@
 #include "blockchain/transaction.h"
 #include "network/network_manager.h"
 #include "utils/bignumber.h"
+#include "blockchain/transaction_cache.h"
 
 #include <QByteArray>
 #include <QMutex>
@@ -89,6 +90,8 @@ private:
     // storage //
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
+
+    TransactionCache transaction_cache_;
 
     BlockchainStatus                                    status_       = BlockchainStatus::Started;
     BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
@@ -158,16 +161,11 @@ public:
     std::expected<BlockVariant, BlockError> create_zero_genesis_block(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
-    std::unordered_map<ActorId, std::vector<Transaction>> getTxsBySenderOrReceiverInRow(
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> getTxsBySenderOrReceiverInRow(
         const std::vector<ActorId> &id,
         BigNumber                   from  = BigNumber(-1),
         int                         count = 10,
         ActorId                     token = ActorId());
-
-    void getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
-                                               BigNumber                   from  = BigNumber(-1),
-                                               int                         count = 10,
-                                               ActorId                     token = ActorId());
 
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
@@ -270,6 +268,10 @@ public:
      */
     BlockIndex &getBlockIndex();
 
+    TransactionCache &transaction_cache() {
+        return transaction_cache_;
+    }
+
     /**
      * @brief Gets last block data field
      * @return data
@@ -313,6 +315,9 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
+
+    void selfTxAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
+
     void addBlockFromNetwork(const BlockVariant &block,
                              const Responder    &responder,
                              const NetworkPackageStorage,

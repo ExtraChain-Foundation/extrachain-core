@@ -94,7 +94,7 @@ public:
                                                                           const TokenId &token) const;
     // std::vector<Transaction> getRecentTxList(const BigNumber &last, const BigNumber &first) const;
 
-    std::unordered_map<ActorId, std::vector<Transaction>> getTxsBySenderOrReceiverInRow(
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> getTxsBySenderOrReceiverInRow(
         const std::vector<ActorId> &actor_ids,
         BigNumber                   from  = BigNumber(-1),
         int                         count = 10,
@@ -115,11 +115,12 @@ private:
                                                        SearchEnum::TxParam param,
                                                        const TokenId      &tokenId) const;
 
-    std::unordered_map<ActorId, std::vector<Transaction>> getTxsByParamInRow(const std::vector<ActorId> &actor_ids,
-                                                                             SearchEnum::TxParam         param,
-                                                                             BigNumber from  = BigNumber(-1),
-                                                                             int       count = 10,
-                                                                             ActorId   token = ActorId()) const;
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> getTxsByParamInRow(
+        const std::vector<ActorId> &actor_ids,
+        SearchEnum::TxParam         param,
+        BigNumber                   from  = BigNumber(-1),
+        int                         count = 10,
+        ActorId                     token = ActorId()) const;
 
     std::expected<BlockVariant, BlockError> add(const BigNumber &id, const BlockVariant &newBlock);
     bool                                    hasRecordLimit() const;

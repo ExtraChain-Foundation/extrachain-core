@@ -18,19 +18,19 @@
  */
 
 #include <QJsonObject>
-#include <QtConcurrent/qtconcurrentrun.h>
 
 #include "blockchain/blockchain.h"
 // #include "dfs/dfs_controller.h"
 #include "blockchain/actor_index.h"
-#include "managers/data_mining_manager.h"
+// #include "managers/data_mining_manager.h"
 #include "managers/transaction_manager.h"
 #include "network/network_manager.h"
 
 Blockchain::Blockchain(ExtraChainNode *node)
     : /*QObject(node)
     , */
-    node(node) {
+    node(node)
+    , transaction_cache_(node, this) {
 
     // get first id on start
     auto genesis = blockIndex.getGenesisBlockById(BigNumber(0));
@@ -287,6 +287,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
                 for (const auto &accountId : accounts) {
                     if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                         self_block_ids.insert(added_block->id());
+                        emit transaction_cache_.add(added_block->id(), added_block->getDate(), transaction);
                     }
                 }
             }
@@ -555,35 +556,12 @@ BigNumber Blockchain::calculate_genesis_id_for_block(const BigNumber &id) {
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
-std::unordered_map<ActorId, std::vector<Transaction>> Blockchain::getTxsBySenderOrReceiverInRow(
+std::unordered_map<ActorId, std::vector<TransactionInfo>> Blockchain::getTxsBySenderOrReceiverInRow(
     const std::vector<ActorId> &id,
     BigNumber                   from,
     int                         count,
     ActorId                     token) {
     return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
-}
-void Blockchain::getTxsBySenderOrReceiverInRowInThread(const std::vector<ActorId> &id,
-                                                       BigNumber                   from,
-                                                       int                         count,
-                                                       ActorId                     token) {
-    auto result = QtConcurrent::run([=, this] {
-        return blockIndex.getTxsBySenderOrReceiverInRow(id, from, count, token);
-    });
-
-    auto *watcher = new QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>(this);
-
-    connect(watcher,
-            &QFutureWatcher<std::unordered_map<ActorId, std::vector<Transaction>>>::finished,
-            this,
-            [=, this]() {
-                auto map = watcher->result();
-                eLog("Async task completed with result: {}", map.size());
-                emit this->resultTransactions(result.result());
-                watcher->deleteLater();
-                emit testSignal();
-            });
-
-    watcher->setFuture(result);
 }
 
 bool Blockchain::sendBlock(const BlockVariant &block) const {
@@ -1366,6 +1344,10 @@ std::unordered_map<ActorId, BigNumberFloat> Blockchain::calculate_actors_balance
     bool                        ignore_genesis) const {
     std::unordered_map<ActorId, BigNumberFloat> balances;
 
+    for (const auto &actor_id : actor_ids) {
+        balances[actor_id] = BigNumberFloat(0);
+    }
+
     eLog("calculate_actorS_balance: {} for token {}", actor_ids, token_id);
     if (blockIndex.getFirstSavedId() == -1 || blockIndex.getLastSavedId() == -1) {
         for (const auto &actor_id : actor_ids) {
@@ -1589,6 +1571,8 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
         for (const auto &accountId : accounts) {
             if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                 emit updateSelf(block.id());
+
+                emit transaction_cache_.add(block.id(), block.getDate(), transaction);
 
 #ifdef IS_R
                 if (transaction.type() == TransactionType::Reward

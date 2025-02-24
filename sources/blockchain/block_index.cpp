@@ -225,7 +225,7 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySenderOrReceiverAndToke
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsBySenderOrReceiverInRow(
+std::unordered_map<ActorId, std::vector<TransactionInfo>> BlockIndex::getTxsBySenderOrReceiverInRow(
     const std::vector<ActorId> &actor_ids,
     BigNumber                   from,
     int                         count,
@@ -305,7 +305,7 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string
     return { Transaction(), BigNumber("-1") };
 }
 
-std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamInRow(
+std::unordered_map<ActorId, std::vector<TransactionInfo>> BlockIndex::getTxsByParamInRow(
     const std::vector<ActorId> &actor_ids,
     SearchEnum::TxParam         param,
     BigNumber                   from,
@@ -313,7 +313,7 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamI
     ActorId                     token) const {
     int i = 0;
 
-    std::unordered_map<ActorId, std::vector<Transaction>> currentTxs;
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> currentTxs;
 
     if (first_saved_id == -1 || last_saved_id == -1) {
         eLog("[BlockIndex] There no tx's in block index");
@@ -349,21 +349,27 @@ std::unordered_map<ActorId, std::vector<Transaction>> BlockIndex::getTxsByParamI
                 switch (param) {
                 case SearchEnum::TxParam::UserSender: {
                     if (tx.sender() == id && tx.token() == token) {
-                        currentTxs[id].push_back(tx);
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
                         ++currentCount;
                     }
                     break;
                 }
                 case SearchEnum::TxParam::UserReceiver: {
                     if (tx.receiver() == id && tx.token() == token) {
-                        currentTxs[id].push_back(tx);
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
                         ++currentCount;
                     }
                     break;
                 }
                 case SearchEnum::TxParam::UserSenderOrReceiver: {
                     if ((tx.sender() == id || tx.receiver() == id) && tx.token() == token) {
-                        currentTxs[id].push_back(tx);
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
                         ++currentCount;
                     }
                     break;
