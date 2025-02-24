@@ -43,6 +43,11 @@ enum class TransactionError {
     ZeroAmount
 };
 
+enum class TransactionAmountOperation {
+    Plus,
+    Minus
+};
+
 enum class TransactionProveError {
     NoError,
     Unknown,

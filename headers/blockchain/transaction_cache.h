@@ -21,15 +21,9 @@
 
 #include "blockchain/actor_id.h"
 #include "blockchain/transaction.h"
-#include "utils/db_connector.h"
 
 class ExtraChainNode;
 class Transaction;
-
-enum class TransactionAmountOperation {
-    Plus,
-    Minus
-};
 
 struct TransactionInfo {
     BigNumber                  block_id;
@@ -37,6 +31,7 @@ struct TransactionInfo {
     TransactionAmountOperation operation;
     Transaction                transaction;
 };
+BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (block_id, block_date, operation, transaction))
 
 class TransactionCache : public QObject {
     Q_OBJECT

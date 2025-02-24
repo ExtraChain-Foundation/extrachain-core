@@ -34,6 +34,9 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 
     connect(this, &TransactionCache::add, this, &TransactionCache::adding);
     connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
+
+    // temp
+    // node->blockchain()->getBlockIndex().getTxsBySenderOrReceiverInRow(id, from, count, token);
 }
 
 void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction) {
@@ -45,7 +48,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     auto map = Utils::to_dbrow(transaction);
     map.erase("prevBlock");
     map["block"] = block_id.to_string();
-    map["date"]  = block_date;
+    map["date"]  = std::to_string(block_date);
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
@@ -62,7 +65,13 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
-    const auto query    = std::format("SELECT * FROM {}", Config::DataStorage::TX_CACHE_TABLE); // TODO: offset
+    const auto query = std::format(
+        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' ORDER by date DESC LIMIT 50;",
+        Config::DataStorage::TX_CACHE_TABLE,
+        actor_id.to_string(),
+        actor_id.to_string(),
+        token.to_string());
+    // TODO: offset
     const auto selected = db.select(query, Config::DataStorage::TX_CACHE_TABLE);
     db.close();
 
@@ -82,15 +91,16 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
         }
 
         TransactionAmountOperation operation = TransactionAmountOperation::Plus;
-
-        if (actor_id == tx->receiver() && tx->type() == TransactionType::Regular) {
+        if (actor_id == tx->sender() && tx->type() == TransactionType::Regular) {
             operation = TransactionAmountOperation::Minus;
         }
 
         auto transaction_info = TransactionInfo { .block_id    = BigNumber(block_id),
-                                                  .block_date  = 1111,
-                                                  .operation   = TransactionAmountOperation::Plus,
+                                                  .block_date  = std::stoull(map.at("date")),
+                                                  .operation   = operation,
                                                   .transaction = tx.value() };
+
+        transactions.push_back(transaction_info);
     }
 
     emit this->response(actor_id, token, 0, transactions);
