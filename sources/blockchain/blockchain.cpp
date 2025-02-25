@@ -786,6 +786,50 @@ std::expected<BlockVariant, BlockError> Blockchain::create_mega_genesis_block(co
     return BlockVariant(genesis);
 }
 
+int Blockchain::active_users() {
+    std::set<ActorId> active_users;
+
+    int64_t current_time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    const int64_t WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000;
+
+    for (auto i = BigNumber(0); i <= blockIndex.getLastSavedId(); i++) {
+        auto block = read_block_by_id(i);
+
+        if (!block.has_value()) {
+            eLog("Ignore block {}, no file", i);
+            continue;
+        }
+
+        if (block->is_genesis()) {
+            eLog("Ignore block {}, genesis", block->id());
+            continue;
+        }
+
+        time_t block_time = block->getDate() / 1000;
+        char   time_str[100];
+        std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&block_time));
+
+        if (current_time - block->getDate() > WEEK_IN_MS) {
+            eLog("Ignore block {} (date: {})", block->id(), time_str);
+            continue;
+        }
+
+        auto transactions = block->transactions();
+
+        for (auto &tx : transactions) {
+            if (tx.type() == TransactionType::Reward) {
+                active_users.insert(tx.sender());
+            }
+        }
+
+        eLog("Use block {} (date: {}), users: {}", block->id(), time_str, active_users.size());
+    }
+
+    return active_users.size();
+}
+
 std::expected<BlockVariant, BlockError> Blockchain::create_zero_genesis_block(const Actor<KeyPrivate> &actor) {
     if (blockIndex.getFirstSavedId() != -1 || blockIndex.getLastSavedId() != -1) {
         return std::unexpected(BlockError::CantCreateFirst);
