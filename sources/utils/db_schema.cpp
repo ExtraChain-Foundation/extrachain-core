@@ -218,6 +218,10 @@ std::string DbSchema::table_name() {
     return m_table_name;
 }
 
+void DbSchema::set_table_name(std::string table_name) {
+    this->m_table_name = table_name;
+}
+
 std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
     if (m_validation_error) {
         return std::unexpected(*m_validation_error);

@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include "dfs/dfs_utils.h"
 #include "blockchain/actor_id.h"
+#include "network/network_manager.h"
 
 class ExtraChainNode;
 
@@ -82,9 +83,11 @@ public:
 
     void broadcast_stored_file(const ActorId&     owner_id,
                                const std::string& file_id,
-                               const std::string& identifier = "");
+                               const Responder&   responder = Responder());
 
     void network_fragment(const Dfs::Packets::FragmentData& fragment_data);
+
+    void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
 private:
     ExtraChainNode* node;

@@ -127,11 +127,8 @@ struct DBColumn {
     // bool notNull = false;
     // std::string defaultValue;
     // int primaryKey = -1;
-
-    operator QString() const {
-        return "DBColumn(name: " + QString::fromStdString(name) + ", type: " + QString::fromStdString(type) + ")";
-    }
 };
+BOOST_DESCRIBE_STRUCT(DBColumn, (), (name, type));
 
 enum class DbConnectorType {
     Regular,
@@ -170,14 +167,15 @@ public:
     bool update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data);
     bool create_table(const std::string &query);
     std::expected<std::string, SqlCreateError> create_table(const DbSchema &query);
-    bool                                       delete_row(const std::string &tableName, const DbRow &data);
-    bool                                       table_exists(const std::string &table);
-    bool                                       drop_table(const std::string &table);
-    std::uint64_t                              count(const std::string &table, const std::string &where = "");
-    std::string                                file() const;
-    bool                                       is_open() const;
-    std::vector<std::string>                   table_names();
-    std::vector<DBColumn>                      table_columns(const std::string &table);
+    bool                     create_table(const std::string &table_name, const std::vector<DBColumn> &columns);
+    bool                     delete_row(const std::string &tableName, const DbRow &data);
+    bool                     table_exists(const std::string &table);
+    bool                     drop_table(const std::string &table);
+    std::uint64_t            count(const std::string &table, const std::string &where = "");
+    std::string              file() const;
+    bool                     is_open() const;
+    std::vector<std::string> table_names();
+    std::vector<DBColumn>    table_columns(const std::string &table);
 
     std::pair<std::string, uint64_t> hash_size(const std::string &order_by = "rowid");
 

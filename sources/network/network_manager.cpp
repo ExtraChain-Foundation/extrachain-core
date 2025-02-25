@@ -1203,7 +1203,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
                                                               link_result->file_id,
-                                                              identifier);
+                                                              responder);
         break;
     }
 

@@ -39,6 +39,7 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
 #include "dfs/historical_collection.h"
+#include "dfs/dfs_vector.h"
 
 class ExtraChainNode;
 class DirsManager;
@@ -224,6 +225,18 @@ public:
     void network_remove_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
+
+    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
+                                                                                 const std::string &file_id);
+    void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
+    void network_response_content_vector(const ActorId                               &owner_id,
+                                         const std::string                           &file_id,
+                                         const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
+
+    void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    void network_vector_remove(const ActorId     &owner_id,
+                               const std::string &file_id,
+                               int id);
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,

@@ -220,6 +220,7 @@ public:
     }
 
     std::string table_name();
+    void        set_table_name(std::string table_name);
 
     std::expected<std::string, SqlCreateError> to_sql() const;
     const std::optional<SqlCreateError>&       validation_error() const;

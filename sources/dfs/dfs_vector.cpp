@@ -42,14 +42,15 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
                                                            Dfs::DataSecurity              data_security,
                                                            const Dfs::DataSecurityData   &security_data) {
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data);
-    auto      dfs_path = Dfs::Path::file_path(main_actor.id(), file_id).value();
 
     auto schema = collection_template.to_db_schema();
     if (!schema.has_value()) {
         return std::unexpected(DfsVectorError::StructuralCreation);
     }
 
-    DbConnector db(dfs_path.native());
+    schema->set_table_name("Vector");
+
+    DbConnector db(dfs_vector.file_path_);
     db.open();
     auto res_create = db.create_table(schema.value());
     db.close();
@@ -72,4 +73,54 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
     // checks
 
     return dfs_vector;
+}
+
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_rows(
+    const std::string &where_statement) {
+    DbConnector db(file_path_);
+    db.open();
+    if (!db.is_open()) {
+        return std::unexpected(DfsVectorError::CollectionNotFound);
+    }
+
+    std::vector<DbRow> db_rows =
+        db.select(fmt::format("SELECT * FROM {} {} ORDER by id", "Vector", where_statement));
+
+    if (db_rows.empty()) {
+        return std::unexpected(DfsVectorError::CollectionEmpty);
+    }
+
+    auto fields = db.table_columns("Vector");
+    db.close();
+
+    return Dfs::Packets::DfsVectorContentPackage { .fields = fields, .content = db_rows };
+}
+
+void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+    DbConnector db(file_path_);
+    db.open();
+    db.create_table("Vector", dfs_vector_content.fields);
+
+    for (const auto &db_row : dfs_vector_content.content) {
+        db.insert("Vector", db_row);
+    }
+
+    db.close();
+}
+
+bool DfsVector::add(const DbRow &row) {
+    DbConnector db(file_path_);
+    db.open();
+    // check exists id
+    bool res = db.insert("Vector", row);
+    db.close();
+    return res;
+}
+
+bool DfsVector::remove(int id) {
+    DbConnector db(file_path_);
+    db.open();
+    bool res = db.delete_row("Vector", { { "id", std::to_string(id) } });
+    db.close();
+    return res;
 }

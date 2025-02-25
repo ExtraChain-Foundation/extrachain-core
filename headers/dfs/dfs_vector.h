@@ -41,7 +41,6 @@ private:
     Actor<KeyPrivate>     actor_;
     ActorId               file_actor_id_;
     std::string           file_id_;
-    std::string           table_name_;
     Dfs::DataSecurity     data_security_;
     Dfs::DataSecurityData security_data_;
 
@@ -79,4 +78,12 @@ public:
         const std::string&           file_id,
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_rows(
+        const std::string& where_statement = "");
+
+    void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
+
+    bool add(const DbRow& row);
+    bool remove(int id);
 };

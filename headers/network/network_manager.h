@@ -135,7 +135,7 @@ static const std::string NetworkCacheFile = "tmp/network.cache";
 
 class Responder {
 public:
-    Responder(NetworkManager* manager)
+    Responder(NetworkManager* manager = nullptr)
         : network_manager(manager) {
     }
 

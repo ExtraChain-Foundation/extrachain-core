@@ -324,6 +324,13 @@ namespace Dfs {
         };
         BOOST_DESCRIBE_STRUCT(RemoveFile, (), (owner_id, file_id, sign, last_modified))
 
+        struct DfsVectorContentPackage {
+            std::vector<DBColumn> fields;
+            std::vector<DbRow>    content;
+            // int offset = 0;
+        };
+        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (fields, content))
+
         struct ResponseDfsSize {
             ActorId     actorId;
             std::size_t size;

@@ -26,7 +26,6 @@
 #include "network/network_manager.h"
 #include "dfs/name_validator.h"
 #include "dfs/collection_template.h"
-#include "dfs/dfs_vector.h"
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
 
@@ -640,7 +639,7 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
             }
         }
 
-        if (dir_row->type == Dfs::FileType::Collection) {
+        if (dir_row->type == Dfs::FileType::Collection || dir_row->type == Dfs::FileType::Vector) {
             auto [collection_hash, collection_size] =
                 Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
             if (collection_hash == hash) {
@@ -856,9 +855,7 @@ void DfsController::network_response_content_collection(const ActorId           
     db.close();
 
     // check if history and file ok
-    emit downloaded(owner_id, dir_row.value());
-    emit collectionDownloaded();
-    // sendFile(owner_id, dir_row->file_id);
+    load_manager_.finish_him(owner_id, dir_row.value());
 }
 
 void DfsController::network_change_collection(const ActorId                 &owner_id,
@@ -895,6 +892,87 @@ void DfsController::network_change_collection(const ActorId                 &own
                             MessageStatus::NoStatus);
 
     emit collectionChanged(owner_id, dir_row.value(), row);
+}
+
+void DfsController::network_request_vector(const ActorId     &owner_id,
+                                           const std::string &file_id,
+                                           const Responder   &responder) {
+    auto dirRowExp = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dirRowExp.has_value()) {
+        return;
+    }
+    auto dirRow = dirRowExp.value();
+
+    auto main_actor = node->accountController()->mainActor();
+    auto chain      = DfsVector::load(node, main_actor, owner_id, file_id);
+
+    if (!chain.has_value()) {
+        return;
+    }
+
+    auto rows = chain->get_rows();
+    if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
+        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
+        return;
+    }
+
+    responder.send_response(rows.value(),
+                            MessageType::DfsCollectionContent,
+                            SendMode::Focused,
+                            MessageStatus::Response);
+}
+
+std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::make_vector(
+    const ActorId     &owner_id,
+    const std::string &file_id) {
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dir_row.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+    if (dir_row->state == Dfs::FileState::Ready) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    auto main_actor = node->accountController()->mainActor();
+    auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
+    if (!dfs_vector.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    return std::pair { dir_row.value(), dfs_vector.value() };
+}
+
+void DfsController::network_response_content_vector(
+    const ActorId                               &owner_id,
+    const std::string                           &file_id,
+    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return;
+    }
+    auto &[dir_row, dfs_vector] = res.value();
+    dfs_vector.create_insert(dfs_vector_content);
+    load_manager_.finish_him(owner_id, dir_row);
+}
+
+void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return;
+    }
+    auto &[dir_row, dfs_vector] = res.value();
+    dfs_vector.add(row);
+    load_manager_.finish_him(owner_id, dir_row);
+}
+
+void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, int id) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return;
+    }
+    auto &[dir_row, dfs_vector] = res.value();
+    dfs_vector.remove(id);
+    load_manager_.finish_him(owner_id, dir_row);
 }
 
 void DfsController::network_request_file_state(const ActorId     &owner_id,
