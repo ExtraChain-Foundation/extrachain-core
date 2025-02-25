@@ -194,6 +194,26 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     create_network_need_dfs_creation = true;
 
+    // temp start
+    auto first_id        = m_actorIndex->network_id();
+    auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
+        { Dfs::Field::ActorId("token_id").not_null().unique(),
+          Dfs::Field::String("name").not_null().unique().length(3, 20),
+          Dfs::Field::String("ticker").not_null().unique().length(2, 5),
+          Dfs::Field::String("count").not_null(),
+          Dfs::Field::ActorId("owner").not_null(),
+          Dfs::Field::String("color").not_null(),
+          Dfs::Field::String("smart") });
+
+    auto template_res = m_dfs->store_template(first_id, tokens_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", template_res.error());
+    }
+
+    auto vec_res =
+        m_dfs->store_vector(first_id, first_id, "Vectors", template_res->actor_id, template_res->file_id);
+    // temp end
+        
     eSuccess("[Node] New network created");
     return true;
 }
@@ -217,6 +237,7 @@ void ExtraChainNode::create_new_network_dfs() {
         eCritical("Can't create token cache database, because {}", template_res.error());
         return;
     }
+
     return;
 
     auto store_res =

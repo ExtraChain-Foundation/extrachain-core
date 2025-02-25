@@ -82,18 +82,21 @@ namespace Dfs {
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";
         static const std::string   COLLECTION_FILE            = ".collection";
+        static const std::string   VECTOR_FILE                = ".vector";
+        static const std::string   DICTIONARY_FILE            = ".dictionary";
         static const std::uint64_t FRAGMENT_SIZE              = /*2097152*/ 524228;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
         static const std::uint64_t historicalChainSectionSize = 209715200;
 
-        static const std::uint64_t encSectionSize   = 256;
-        static const std::wstring  separator        = std::wstring(1, std::filesystem::path::preferred_separator);
-        static const int           miningReward     = 1;
-        static const std::string   dsStoreExtention = ".DS_Store";
+        static const std::uint64_t encSectionSize = 256;
+        static const std::wstring  separator      = std::wstring(1, std::filesystem::path::preferred_separator);
+        static const int           miningReward   = 1;
 
         static const std::string TEMPLATE_COLLECTION          = ":Collection";
         static const std::string TEMPLATE_COLLECTION_TEMPLATE = ":CollectionTemplate";
+        static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
+        static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CHAT                = ":Chat";
     } // namespace Basic
 
@@ -175,7 +178,8 @@ namespace Dfs {
         Folder     = 0,
         File       = 10,
         Collection = 20,
-        Dictionary = 30
+        Vector     = 30,
+        Dictionary = 40
     };
 
     enum class FileState {

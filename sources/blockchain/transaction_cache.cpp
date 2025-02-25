@@ -25,12 +25,16 @@
 
 TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
     : node(node) {
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
-
     connect(this, &TransactionCache::add, this, &TransactionCache::adding);
     connect(this, &TransactionCache::request, this, &TransactionCache::prepare);
     connect(this, &TransactionCache::make_cache, this, &TransactionCache::cache);
+
+    make_files();
+}
+
+void TransactionCache::make_files() {
+    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
 
     is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size() != 0;
     if (is_exists) {
@@ -72,6 +76,8 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     if (transaction.token() != ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d")) {
         return;
     }
+
+    make_files();
 
     auto map = Utils::to_dbrow(transaction);
     map.erase("prevBlock");

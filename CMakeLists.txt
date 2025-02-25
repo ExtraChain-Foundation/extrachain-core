@@ -56,6 +56,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/collection_template.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_vector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_id.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
@@ -119,6 +120,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_id.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp

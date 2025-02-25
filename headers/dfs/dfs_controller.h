@@ -151,6 +151,22 @@ public:
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
+        const ActorId               &owner_id,
+        const ActorId               &author_id,
+        const std::string           &visual_name,
+        const ActorId               &template_actor_id,
+        const std::string           &template_file_id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
+        const ActorId                 &owner_id,
+        const ActorId                 &author_id,
+        const std::string             &visual_name,
+        const Dfs::CollectionTemplate &collection_template,
+        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
+
     // TODO: function: get collection size
 
     std::expected<DbRow, CollectionError> get_collection_row(

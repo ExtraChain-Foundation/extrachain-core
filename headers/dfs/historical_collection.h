@@ -54,13 +54,6 @@ struct HistoricalCollectionRow {
 };
 BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
 
-struct CollectionTemplateLink {
-    ActorId     actor_id;
-    std::string file_id;
-    std::string name;
-};
-BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
-
 class ExtraChainNode;
 
 class HistoricalCollection {

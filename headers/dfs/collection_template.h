@@ -250,3 +250,10 @@ namespace Dfs {
         friend class FieldBuilder;
     };
 } // namespace Dfs
+
+struct CollectionTemplateLink {
+    ActorId     actor_id;
+    std::string file_id;
+    std::string name;
+};
+BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
