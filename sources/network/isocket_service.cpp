@@ -110,16 +110,16 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 2. First id/network checks
-    ActorId json_network_id       = ActorId(handshake.network_id);
-    ActorId our_network_id        = node->actorIndex()->network_id();
-    bool    is_first_ids_contains = our_network_id == json_network_id;
-    bool    something_empty       = json_network_id.is_zero() || our_network_id.is_zero();
+    ActorId json_network_id         = ActorId(handshake.network_id);
+    ActorId our_network_id          = node->actorIndex()->network_id();
+    bool    is_network_ids_contains = our_network_id == json_network_id;
+    bool    something_empty         = json_network_id.is_zero() || our_network_id.is_zero();
 
     if (our_network_id.is_zero() && !json_network_id.is_zero()) {
         node->actorIndex()->set_network_id(json_network_id); // TODO: request block 0?
     }
 
-    if (!(something_empty || is_first_ids_contains)) {
+    if (!(something_empty || is_network_ids_contains)) {
         eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),

@@ -503,7 +503,59 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->get_rows(true);
+    if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
+        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    if (!rows.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    node->network()->send_broadcast(rows.value(), MessageType::DfsVectorContent);
+
     return dir_row;
+}
+
+bool DfsController::add_vector_row(const ActorId               &owner_id,
+                                   const std::string           &file_id,
+                                   DbRow                        row,
+                                   const Dfs::DataSecurityData &security_data) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return false;
+    }
+
+    auto &[dir_row, dfs_vector] = res.value();
+    auto operation_res          = dfs_vector.add(row);
+    if (!operation_res) {
+        return false;
+    }
+    // get id?
+    emit vectorRowAdded(owner_id, dir_row, row);
+
+    auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row };
+    node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
+
+    return operation_res;
+}
+
+bool DfsController::remove_vector_row(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
+    auto res = make_vector(owner_id, file_id);
+    if (!res.has_value()) {
+        return false;
+    }
+
+    auto &[dir_row, dfs_vector] = res.value();
+    auto operation_res          = dfs_vector.remove(row);
+    load_manager_.finish_him(owner_id, dir_row);
+
+    emit vectorRowRemoved(owner_id, dir_row, row);
+
+    auto package = Dfs::Packets::VectorRowRemove { .owner_id = owner_id, .file_id = file_id, .row = row };
+    node->network()->send_broadcast(package, MessageType::DfsVectorRemove);
+
+    return operation_res;
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const ActorId     &owner_id,
@@ -904,20 +956,23 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     auto dirRow = dirRowExp.value();
 
     auto main_actor = node->accountController()->mainActor();
-    auto chain      = DfsVector::load(node, main_actor, owner_id, file_id);
+    auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
 
-    if (!chain.has_value()) {
+    if (!dfs_vector.has_value()) {
         return;
     }
 
-    auto rows = chain->get_rows();
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = dfs_vector->get_rows();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return;
     }
+    if (!rows.has_value()) {
+        return;
+    }
 
     responder.send_response(rows.value(),
-                            MessageType::DfsCollectionContent,
+                            MessageType::DfsVectorContent,
                             SendMode::Focused,
                             MessageStatus::Response);
 }
@@ -929,9 +984,9 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     if (!dir_row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
-    if (dir_row->state == Dfs::FileState::Ready) {
-        return std::unexpected(DfsVectorError::Unknown);
-    }
+    // if (dir_row->state == Dfs::FileState::Ready) {
+    //     return std::unexpected(DfsVectorError::Unknown);
+    // }
 
     auto main_actor = node->accountController()->mainActor();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
@@ -943,16 +998,14 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 }
 
 void DfsController::network_response_content_vector(
-    const ActorId                               &owner_id,
-    const std::string                           &file_id,
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
-    auto res = make_vector(owner_id, file_id);
+    auto res = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id);
     if (!res.has_value()) {
         return;
     }
     auto &[dir_row, dfs_vector] = res.value();
     dfs_vector.create_insert(dfs_vector_content);
-    load_manager_.finish_him(owner_id, dir_row);
+    load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
 }
 
 void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
@@ -960,19 +1013,29 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     if (!res.has_value()) {
         return;
     }
+
     auto &[dir_row, dfs_vector] = res.value();
-    dfs_vector.add(row);
-    load_manager_.finish_him(owner_id, dir_row);
+    auto operation_res          = dfs_vector.add(row);
+    // load_manager_.finish_him(owner_id, dir_row);
+
+    if (operation_res) {
+        emit vectorRowAdded(owner_id, dir_row, row);
+    }
 }
 
-void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, int id) {
+void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
     auto res = make_vector(owner_id, file_id);
     if (!res.has_value()) {
         return;
     }
+
     auto &[dir_row, dfs_vector] = res.value();
-    dfs_vector.remove(id);
-    load_manager_.finish_him(owner_id, dir_row);
+    auto operation_res          = dfs_vector.remove(row);
+    // load_manager_.finish_him(owner_id, dir_row);
+
+    if (operation_res) {
+        emit vectorRowRemoved(owner_id, dir_row, row);
+    }
 }
 
 void DfsController::network_request_file_state(const ActorId     &owner_id,
@@ -1182,9 +1245,13 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     //                                   MessageStatus::Request);
     // }
 
+    // if (dir_row.type == Dfs::FileType::Vector) {
+    // return dir_row.file_id;
+    // }
+
     // insertToFiles(dir_row);
 
-    if (network_stote == Dfs::NetworkStoreFile::Broadcast) {
+    if (dir_row.type == Dfs::FileType::File && network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
 
         auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };

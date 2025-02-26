@@ -248,8 +248,11 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
     }
 
     if (dir_row->type != Dfs::FileType::File) {
-        if (dir_row->type == Dfs::FileType::Vector) {
+        if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(owner_id, file_id, responder);
+        }
+        if (dir_row->type == Dfs::FileType::Vector) {
+            node->dfs()->network_request_vector(owner_id, file_id, responder);
         }
         return;
     }

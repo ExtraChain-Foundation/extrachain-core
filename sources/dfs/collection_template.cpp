@@ -25,8 +25,8 @@ namespace Dfs {
         // TODO: CamelCase, A-Za-z
         auto tmpl = CollectionTemplate(std::move(name));
         tmpl.add_fields({
-            Field::Id("id").primary_key(),
-            Field::Integer("timestamp").not_null(),
+            // Field::Id("id").primary_key(),
+            // Field::Integer("timestamp").not_null(),
             /*
             Field::Text("actor_id").not_null().unique(),
             Field::Text("sign").not_null().unique()

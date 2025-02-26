@@ -325,11 +325,27 @@ namespace Dfs {
         BOOST_DESCRIBE_STRUCT(RemoveFile, (), (owner_id, file_id, sign, last_modified))
 
         struct DfsVectorContentPackage {
+            ActorId               owner_id;
+            std::string           file_id;
             std::vector<DBColumn> fields;
             std::vector<DbRow>    content;
             // int offset = 0;
         };
-        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (fields, content))
+        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (owner_id, file_id, fields, content))
+
+        struct VectorRowAdd {
+            ActorId     owner_id;
+            std::string file_id;
+            DbRow       row;
+        };
+        BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row))
+
+        struct VectorRowRemove {
+            ActorId     owner_id;
+            std::string file_id;
+            DbRow       row;
+        };
+        BOOST_DESCRIBE_STRUCT(VectorRowRemove, (), (owner_id, file_id, row))
 
         struct ResponseDfsSize {
             ActorId     actorId;

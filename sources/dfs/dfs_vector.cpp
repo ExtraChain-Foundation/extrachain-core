@@ -76,6 +76,7 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
 }
 
 std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_rows(
+    bool               allow_empty,
     const std::string &where_statement) {
     DbConnector db(file_path_);
     db.open();
@@ -83,17 +84,19 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows =
-        db.select(fmt::format("SELECT * FROM {} {} ORDER by id", "Vector", where_statement));
+    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} {}", "Vector", where_statement));
 
-    if (db_rows.empty()) {
+    if (!allow_empty && db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
     }
 
     auto fields = db.table_columns("Vector");
     db.close();
 
-    return Dfs::Packets::DfsVectorContentPackage { .fields = fields, .content = db_rows };
+    return Dfs::Packets::DfsVectorContentPackage { .owner_id = actor_.id(),
+                                                   .file_id  = file_id_,
+                                                   .fields   = fields,
+                                                   .content  = db_rows };
 }
 
 void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
@@ -117,10 +120,10 @@ bool DfsVector::add(const DbRow &row) {
     return res;
 }
 
-bool DfsVector::remove(int id) {
+bool DfsVector::remove(const DbRow &row) {
     DbConnector db(file_path_);
     db.open();
-    bool res = db.delete_row("Vector", { { "id", std::to_string(id) } });
+    bool res = db.delete_row("Vector", row);
     db.close();
     return res;
 }

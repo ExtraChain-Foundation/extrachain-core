@@ -479,7 +479,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
+        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, send_mode, receiver_identifier);
         return;
     }
@@ -1269,6 +1269,50 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
         node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
+        break;
+    }
+
+    case MessageType::DfsVectorContent: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector content", type);
+            break;
+        }
+
+        node->dfs()->network_response_content_vector(db_content_result.value());
+
+        // broadcast and not broadcast?
+        break;
+    }
+
+    case MessageType::DfsVectorAdd: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector add", type);
+            break;
+        }
+
+        node->dfs()->network_vector_add(db_content_result->owner_id,
+                                        db_content_result->file_id,
+                                        db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
+        break;
+    }
+    case MessageType::DfsVectorRemove: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowRemove>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector remove", type);
+            break;
+        }
+
+        node->dfs()->network_vector_remove(db_content_result->owner_id,
+                                           db_content_result->file_id,
+                                           db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
         break;
     }
 

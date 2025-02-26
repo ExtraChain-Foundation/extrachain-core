@@ -80,10 +80,11 @@ public:
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_rows(
+        bool               allow_empty     = false,
         const std::string& where_statement = "");
 
     void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool add(const DbRow& row);
-    bool remove(int id);
+    bool remove(const DbRow& row);
 };
