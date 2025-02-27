@@ -252,7 +252,9 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.write(QByteArray::fromStdString(block.second));
         file.close();
 
-        if (mode == BlockchainMode::Light && (block.first != BigNumber(0) || blocks.size() == 1)) {
+        if (mode == BlockchainMode::Light
+            && (block.first != BigNumber(0) || blocks.size() == 1
+                || (blocks.size() > 1 && blocks[1].first == BigNumber(1)))) {
             blockIndex.update_last_id(block.first);
         }
         if (mode == BlockchainMode::Full) {
