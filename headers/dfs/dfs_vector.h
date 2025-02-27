@@ -81,8 +81,10 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
+    std::expected<std::vector<DbRow>, DfsVectorError> get_rows(
+        const std::string& where_statement = "");
+
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_content_package(
-        bool               allow_empty     = false,
         const std::string& where_statement = "");
 
     void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);

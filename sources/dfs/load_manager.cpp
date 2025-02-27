@@ -123,12 +123,17 @@ void LoadManager::check_all_files(std::string identifier) {
                     continue;
                 }
 
-                if (file_path->exists()) {
+                if (row.type == Dfs::FileType::File && file_path->exists()) {
                     auto size = file_path->file_size();
                     if (size.has_value() && size == row.size) {
                         continue;
                     }
                 }
+
+                if (row.type != Dfs::FileType::File && file_path->exists()) {
+                    continue;
+                }
+                // TODO: add checks for vector and collection
             }
 
             if (row.state == Dfs::FileState::Removed) {

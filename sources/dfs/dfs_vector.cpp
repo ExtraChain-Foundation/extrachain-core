@@ -89,9 +89,7 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
     return dfs_vector;
 }
 
-std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_content_package(
-    bool               allow_empty,
-    const std::string &where_statement) {
+std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std::string &where_statement) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
@@ -100,12 +98,26 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
 
     std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} {}", "Vector", where_statement));
 
-    if (!allow_empty && db_rows.empty()) {
+    if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
     }
 
+    db.close();
+
+    return {};
+}
+
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_content_package(
+    const std::string &where_statement) {
+
+    auto rows = get_rows();
+
+    // temp: start
+    DbConnector db(file_path_);
+    db.open();
     auto fields = db.table_columns("Vector");
     db.close();
+    // temp: end
 
     auto res = Utils::read_file_content(vector_path_);
     if (!res.has_value()) {
@@ -114,11 +126,12 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
 
     auto vector_template = Json::deserialize<Dfs::CollectionTemplate>(res.value());
 
-    return Dfs::Packets::DfsVectorContentPackage { .owner_id        = actor_.id(),
+    return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
                                                    .file_id         = file_id_,
                                                    .fields          = fields,
                                                    .vector_template = vector_template.value(),
-                                                   .content         = db_rows };
+                                                   .content =
+                                                       rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
 void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {

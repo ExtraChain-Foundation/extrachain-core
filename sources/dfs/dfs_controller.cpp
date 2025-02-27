@@ -517,7 +517,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->get_content_package(true);
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->get_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
