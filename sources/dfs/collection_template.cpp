@@ -44,6 +44,11 @@ namespace Dfs {
         return *this;
     }
 
+    CollectionTemplate& CollectionTemplate::preadd_fields(const std::initializer_list<FieldBuilder>& fields) {
+        m_fields.insert(m_fields.begin(), fields);
+        return *this;
+    }
+
     std::expected<DbSchema, SqlCreateError> CollectionTemplate::to_db_schema() const {
         DbSchema schema(m_name);
 

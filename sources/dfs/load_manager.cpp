@@ -94,6 +94,10 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                std::string                     identifier) {
     for (const auto& dir_row : dir_rows) {
+        if (dir_row.state == Dfs::FileState::Removed) {
+            continue;
+        }
+
         add_to_queue(owner_id, dir_row, identifier);
     }
 }

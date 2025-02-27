@@ -667,6 +667,61 @@ std::expected<std::vector<std::uint8_t>, Utils::ContentError> Utils::read_file_c
     return content;
 }
 
+std::expected<void, Utils::ContentError> Utils::write_file_content(const FsPath                 &path,
+                                                                   std::span<const std::uint8_t> content) {
+    if (content.empty()) {
+        eLog("Content is empty for file: {}", path.string().value_or("invalid path"));
+        return std::unexpected(ContentError::EmptyContent);
+    }
+
+    constexpr std::uintmax_t MAX_FILE_SIZE = 4ULL * 1024 * 1024 * 1024;
+    if (content.size() > MAX_FILE_SIZE) {
+        eLog("Content too large: {} bytes", content.size());
+        return std::unexpected(ContentError::SizeTooLarge);
+    }
+
+    std::ofstream file(path.native(), std::ios::binary);
+    if (!file) {
+        eLog("Failed to open file for writing: {}", path.string().value_or("invalid path"));
+        return std::unexpected(ContentError::WriteError);
+    }
+
+    file.write(reinterpret_cast<const char *>(content.data()), content.size());
+
+    if (file.fail()) {
+        eLog("Failed to write file: {}", path.string().value_or("invalid path"));
+        return std::unexpected(ContentError::WriteError);
+    }
+
+    file.close();
+    if (file.fail()) {
+        eLog("Failed to close file: {}", path.string().value_or("invalid path"));
+        return std::unexpected(ContentError::WriteError);
+    }
+
+    return {};
+}
+
+std::expected<void, Utils::ContentError> Utils::write_file_content(const FsPath      &path,
+                                                                   const std::string &content) {
+    return write_file_content(path,
+                              std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(content.data()),
+                                                            content.size()));
+}
+
+std::expected<void, Utils::ContentError> Utils::write_file_content(const FsPath &path, std::string &&content) {
+    return write_file_content(path,
+                              std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(content.data()),
+                                                            content.size()));
+}
+
+template <std::size_t N>
+std::expected<void, Utils::ContentError> Utils::write_file_content(const FsPath &path, const char (&content)[N]) {
+    return write_file_content(path,
+                              std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(content),
+                                                            N - 1));
+}
+
 std::expected<std::string, Utils::FileError> Utils::read_file_chunk(const FsPath &file_path,
                                                                     uint64_t      offset,
                                                                     uint64_t      size) {
@@ -713,6 +768,7 @@ std::expected<std::string, Utils::FileError> Utils::read_file_chunk(const FsPath
         return std::unexpected(FileError::ReadError);
     }
 }
+
 std::expected<void, Utils::FileError> extend_file_size(const std::filesystem::path &path,
                                                        std::uint64_t                current_size,
                                                        std::uint64_t                required_size) {

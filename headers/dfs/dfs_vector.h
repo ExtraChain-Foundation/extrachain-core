@@ -38,11 +38,13 @@ class DfsVector {
 private:
     ExtraChainNode*       node;
     FsPath                file_path_;
+    FsPath                vector_path_;
     Actor<KeyPrivate>     actor_;
     ActorId               file_actor_id_;
     std::string           file_id_;
     Dfs::DataSecurity     data_security_;
     Dfs::DataSecurityData security_data_;
+    // CollectionTemplate    collection_template;
 
     DfsVector() = default;
     DfsVector(ExtraChainNode*              node,
@@ -67,7 +69,7 @@ public:
         const Actor<KeyPrivate>&       main_actor,
         const ActorId&                 file_actor_id,
         const std::string&             file_id,
-        const Dfs::CollectionTemplate& collection_template,
+        const Dfs::CollectionTemplate& vector_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData());
 
@@ -79,12 +81,13 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_rows(
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_content_package(
         bool               allow_empty     = false,
         const std::string& where_statement = "");
 
     void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
-    bool add(const DbRow& row);
-    bool remove(const DbRow& row);
+    bool store_add(DbRow& row);
+    bool local_add(const DbRow& row);
+    bool remove(/*const ActorId & actor_id,*/ const DbRow& row);
 };

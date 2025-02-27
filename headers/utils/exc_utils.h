@@ -707,7 +707,9 @@ namespace Utils {
         ReadError,
         SizeTooLarge,
         EmptyFile,
-        InvalidFile
+        InvalidFile,
+        EmptyContent,
+        WriteError
     };
 
     /**
@@ -716,6 +718,17 @@ namespace Utils {
      * @return Expected vector with file contents or FileError
      */
     EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, ContentError> read_file_content(const FsPath &path);
+
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(
+        const FsPath                 &path,
+        std::span<const std::uint8_t> content);
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath      &path,
+                                                                                  const std::string &content);
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
+                                                                                  std::string &&content);
+    template <std::size_t N>
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
+                                                                                  const char (&content)[N]);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);

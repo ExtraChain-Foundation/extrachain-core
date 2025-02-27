@@ -54,7 +54,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                                     const std::string           &visual_name,
                                                                     Dfs::DataSecurity            data_security,
                                                                     const Dfs::DataSecurityData &security_data) {
-
+    // TODO: move this checks to fn
     if (visual_folder.contains("'") || visual_name.contains("'")) {
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
@@ -375,6 +375,13 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const Dfs::CollectionTemplate &collection_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
+    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
+                                                                                   Dfs::Basic::TEMPLATE_COLLECTION,
+                                                                                   visual_name);
+    if (search_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirDuplicate);
+    }
+
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
@@ -453,9 +460,16 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     const ActorId                 &owner_id,
     const ActorId                 &author_id,
     const std::string             &visual_name,
-    const Dfs::CollectionTemplate &collection_template,
+    const Dfs::CollectionTemplate &vector_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
+    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
+                                                                                   Dfs::Basic::TEMPLATE_VECTOR,
+                                                                                   visual_name);
+    if (search_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirDuplicate);
+    }
+
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
     auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
@@ -467,7 +481,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                                  actor.value(),
                                  actor->get().id(),
                                  file_id,
-                                 collection_template,
+                                 vector_template,
                                  data_security,
                                  security_data);
 
@@ -503,7 +517,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->get_rows(true);
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->get_content_package(true);
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -527,7 +541,7 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.add(row);
+    auto operation_res          = dfs_vector.store_add(row);
     if (!operation_res) {
         return false;
     }
@@ -565,19 +579,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const Acto
                                                                       const std::string &template_file_id,
                                                                       Dfs::DataSecurity  data_security,
                                                                       const Dfs::DataSecurityData &security_data) {
-    auto collection_template =
+    auto vector_template =
         Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
 
-    if (!collection_template.has_value()) {
+    if (!vector_template.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    return store_vector(owner_id,
-                        author_id,
-                        visual_name,
-                        collection_template.value(),
-                        data_security,
-                        security_data);
+    return store_vector(owner_id, author_id, visual_name, vector_template.value(), data_security, security_data);
 }
 
 std::expected<DbRow, CollectionError> DfsController::get_collection_row(
@@ -962,7 +971,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
         return;
     }
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = dfs_vector->get_rows();
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = dfs_vector->get_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return;
@@ -1004,6 +1013,7 @@ void DfsController::network_response_content_vector(
         return;
     }
     auto &[dir_row, dfs_vector] = res.value();
+
     dfs_vector.create_insert(dfs_vector_content);
     load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
 }
@@ -1015,7 +1025,7 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.add(row);
+    auto operation_res          = dfs_vector.local_add(row);
     // load_manager_.finish_him(owner_id, dir_row);
 
     if (operation_res) {

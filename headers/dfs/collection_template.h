@@ -229,6 +229,7 @@ namespace Dfs {
         CollectionTemplate() = default;
         static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
         CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate&                     preadd_fields(const std::initializer_list<FieldBuilder>& fields);
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
         const std::string name() const;

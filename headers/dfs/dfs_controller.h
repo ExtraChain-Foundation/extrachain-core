@@ -164,7 +164,7 @@ public:
         const ActorId                 &owner_id,
         const ActorId                 &author_id,
         const std::string             &visual_name,
-        const Dfs::CollectionTemplate &collection_template,
+        const Dfs::CollectionTemplate &vector_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 

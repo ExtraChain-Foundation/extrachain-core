@@ -327,11 +327,12 @@ namespace Dfs {
         struct DfsVectorContentPackage {
             ActorId               owner_id;
             std::string           file_id;
-            std::vector<DBColumn> fields;
+            std::vector<DBColumn> fields; // TODO: remove
+            CollectionTemplate    vector_template;
             std::vector<DbRow>    content;
             // int offset = 0;
         };
-        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (owner_id, file_id, fields, content))
+        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (owner_id, file_id, vector_template, fields, content))
 
         struct VectorRowAdd {
             ActorId     owner_id;
