@@ -199,7 +199,6 @@ bool DfsVector::local_add(const DbRow &row) {
 bool DfsVector::remove(const DbRow &row) {
     DbConnector db(file_path_);
     db.open();
-
     bool res = db.delete_row("Vector", row);
     db.close();
     return res;
