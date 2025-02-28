@@ -49,7 +49,8 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     // TODO: if vector template has actor_id or sign -> error
 
     auto new_template = vector_template;
-    new_template.preadd_fields({ Dfs::Field::ActorId("actor").not_null(), Dfs::Field::Blob("sign").not_null() });
+    new_template.preadd_fields(
+        { Dfs::Field::ActorId("actor").unique().not_null(), Dfs::Field::Blob("sign").not_null() });
 
     auto schema = new_template.to_db_schema();
     if (!schema.has_value()) {
@@ -96,7 +97,8 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std:
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
 
-    std::vector<DbRow> db_rows = db.select(fmt::format("SELECT * FROM {} {}", "Vector", where_statement));
+    auto               query   = fmt::format("SELECT * FROM {} {}", "Vector", where_statement);
+    std::vector<DbRow> db_rows = db.select(query);
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
@@ -104,20 +106,13 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std:
 
     db.close();
 
-    return {};
+    return db_rows;
 }
 
 std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_content_package(
     const std::string &where_statement) {
 
     auto rows = get_rows();
-
-    // temp: start
-    DbConnector db(file_path_);
-    db.open();
-    auto fields = db.table_columns("Vector");
-    db.close();
-    // temp: end
 
     auto res = Utils::read_file_content(vector_path_);
     if (!res.has_value()) {
@@ -128,23 +123,34 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
 
     return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
                                                    .file_id         = file_id_,
-                                                   .fields          = fields,
                                                    .vector_template = vector_template.value(),
                                                    .content =
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
 void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
-
+    // TODO: move this to create?
     auto json     = Json::serialize(dfs_vector_content.vector_template);
     auto res_json = Utils::write_file_content(vector_path_, std::move(json));
     if (!res_json.has_value()) {
         return;
     }
 
+    auto new_template = dfs_vector_content.vector_template;
+    new_template.preadd_fields(
+        { Dfs::Field::ActorId("actor").unique().not_null(), Dfs::Field::Blob("sign").not_null() });
+
+    auto schema = new_template.to_db_schema();
+
+    if (!schema.has_value()) {
+        return;
+    }
+
+    schema->set_table_name("Vector");
+
     DbConnector db(file_path_);
     db.open();
-    db.create_table("Vector", dfs_vector_content.fields);
+    db.create_table(schema.value());
 
     for (const auto &db_row : dfs_vector_content.content) {
         db.insert("Vector", db_row);
@@ -185,7 +191,7 @@ bool DfsVector::local_add(const DbRow &row) {
     DbConnector db(file_path_);
     db.open();
     // check exists id
-    bool res = db.insert("Vector", row);
+    bool res = db.replace("Vector", row);
     db.close();
     return res;
 }
@@ -193,6 +199,7 @@ bool DfsVector::local_add(const DbRow &row) {
 bool DfsVector::remove(const DbRow &row) {
     DbConnector db(file_path_);
     db.open();
+
     bool res = db.delete_row("Vector", row);
     db.close();
     return res;
