@@ -149,6 +149,17 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     Dfs::initialize_actor_folder(owner_id);
 
+    auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
+    if (local_dir_rows.has_value()) {
+        for (const auto& network_row : dir_rows) {
+            auto it = local_dir_rows->find(network_row.file_id);
+
+            if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
+                eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id, network_row.last_modified);
+            }
+        }
+    }
+
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 

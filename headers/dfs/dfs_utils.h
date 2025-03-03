@@ -325,14 +325,13 @@ namespace Dfs {
         BOOST_DESCRIBE_STRUCT(RemoveFile, (), (owner_id, file_id, sign, last_modified))
 
         struct DfsVectorContentPackage {
-            ActorId               owner_id;
-            std::string           file_id;
-            std::vector<DBColumn> fields; // TODO: remove
-            CollectionTemplate    vector_template;
-            std::vector<DbRow>    content;
+            ActorId            owner_id;
+            std::string        file_id;
+            CollectionTemplate vector_template;
+            std::vector<DbRow> content;
             // int offset = 0;
         };
-        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (owner_id, file_id, vector_template, fields, content))
+        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage, (), (owner_id, file_id, vector_template, content))
 
         struct VectorRowAdd {
             ActorId     owner_id;
@@ -532,6 +531,10 @@ namespace Dfs {
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& owner_id,
                                                                                 std::uint64_t  last_modified = 0);
 
+            std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> get_dir_rows_map(
+                const ActorId& owner_id,
+                std::uint64_t  last_modified = 0);
+
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const ActorId&     owner_id,
                                                                                      const std::string& folder,
                                                                                      const std::string& name);
@@ -558,7 +561,7 @@ namespace Dfs {
 
             std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,
                                                                             const std::string& file_id);
-            bool                             update_file_metadata(const ActorId& ownerr_id, DirRow& dir_row);
+            bool                             update_file_metadata(const ActorId& owner_id, DirRow& dir_row);
         } // namespace ActorDirFile
 
         namespace DirsFile {

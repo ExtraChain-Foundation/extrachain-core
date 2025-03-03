@@ -194,6 +194,28 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     create_network_need_dfs_creation = true;
 
+    //
+    auto vector_template =
+        Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });
+
+    auto main_actor_id = accountController()->mainActor().id();
+    auto template_res  = dfs()->store_template(main_actor_id, vector_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create usernames, because {}", template_res.error());
+        return false;
+    }
+
+    auto first_id = actorIndex()->network_id();
+    auto vec_res  = dfs()->store_vector(main_actor_id,
+                                       main_actor_id,
+                                       "Usernames",
+                                       template_res->actor_id,
+                                       template_res->file_id);
+    if (!vec_res.has_value()) {
+        return false;
+    }
+    //
+
     eSuccess("[Node] New network created");
     return true;
 }

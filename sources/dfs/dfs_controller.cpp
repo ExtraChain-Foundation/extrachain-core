@@ -562,7 +562,9 @@ bool DfsController::remove_vector_row(const ActorId &owner_id, const std::string
 
     auto &[dir_row, dfs_vector] = res.value();
     auto operation_res          = dfs_vector.remove(row);
-    load_manager_.finish_him(owner_id, dir_row);
+    if (!operation_res) {
+        return false;
+    }
 
     emit vectorRowRemoved(owner_id, dir_row, row);
 
@@ -1029,6 +1031,7 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     // load_manager_.finish_him(owner_id, dir_row);
 
     if (operation_res) {
+        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         emit vectorRowAdded(owner_id, dir_row, row);
     }
 }

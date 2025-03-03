@@ -48,7 +48,21 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
     if (row.has_value()) {
         if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
-            return;
+            auto file_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
+            if (!file_path.has_value()) {
+                return;
+            }
+
+            if (row->type == Dfs::FileType::File && file_path->exists()) {
+                auto size = file_path->file_size();
+                if (size.has_value() && size == row->size) {
+                    return;
+                }
+            }
+
+            if (row->type != Dfs::FileType::File && file_path->exists()) {
+                return;
+            }
         }
     }
 
