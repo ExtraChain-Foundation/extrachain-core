@@ -182,7 +182,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
-    auto system_actor = node->accountController()->mainActor().to_public();
+    auto system_actor = node->accountController()->system_actor().to_public();
     responder.send_response(system_actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
 }
 

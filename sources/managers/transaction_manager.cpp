@@ -104,7 +104,7 @@ void TransactionManager::make_block() {
         eLog("[Blockchain] Create genesis block {}, dec: {}",
              maybeGenesisId,
              maybeGenesisId.to_string(NumeralBase::Dec));
-        const auto actor   = node->accountController()->mainActor();
+        const auto actor   = node->accountController()->system_actor();
         const auto genesis = node->blockchain()->create_genesis_block(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {

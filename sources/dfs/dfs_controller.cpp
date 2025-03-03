@@ -594,7 +594,7 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     const std::string           &file_id,
     uint32_t                     id,
     const Dfs::DataSecurityData &security_data) {
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     auto row        = chain->get_collection_rows("WHERE id=" + std::to_string(id));
     return row.value()[0];
@@ -605,7 +605,7 @@ std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection
     const std::string           &file_id,
     const Dfs::DataSecurityData &security_data,
     const std::string           &where_statement) {
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
@@ -767,7 +767,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
@@ -813,7 +813,7 @@ void DfsController::network_response_historical_collection(
     }
     // TODO: check state
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
     // collection
     auto first_row = historical_rows.begin(); // where id = 0
@@ -871,7 +871,7 @@ void DfsController::network_response_content_collection(const ActorId           
     }
     // TODO: check state
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
 
     auto chain_opt = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain_opt.has_value()) {
@@ -924,7 +924,7 @@ void DfsController::network_change_collection(const ActorId                 &own
                                               const HistoricalCollectionRow &row,
                                               const Responder               &responder) {
     // TODO: need verify
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto dir_row    = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
 
     if (!dir_row.has_value()) {
@@ -964,7 +964,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
 
     if (!dfs_vector.has_value()) {
@@ -997,7 +997,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);

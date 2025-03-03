@@ -181,7 +181,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
     if (m_blockchain->getRecords() <= 0) {
-        auto& first      = m_accountController->mainActor();
+        auto& first      = m_accountController->system_actor();
         auto  firstBlock = m_blockchain->create_zero_genesis_block(first);
         if (!firstBlock.has_value())
             return false;
@@ -494,7 +494,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
 
 void ExtraChainNode::getAllActorsTimerCall() {
     if (m_accountController->count() > 0 && m_networkManager->connections()->size() > 0) {
-        ActorId actorId = m_accountController->mainActor().id();
+        ActorId actorId = m_accountController->system_actor().id();
 
         if (!actorId.is_zero())
             m_actorIndex->getAllActors(actorId, true);
@@ -526,7 +526,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto first = m_actorIndex->getActor(firstId);
     if (first.empty())
         return;
-    auto& mainKey   = m_accountController->mainActor().key();
+    auto& mainKey   = m_accountController->system_actor().key();
     auto& publicKey = first.key().public_key();
 
     // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
@@ -621,10 +621,10 @@ void ExtraChainNode::connectSignals() {
             });
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        m_dfs->sendSizeRequestMsg(m_accountController->mainActor().id());
+        m_dfs->sendSizeRequestMsg(m_accountController->system_actor().id());
     });
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        m_dfs->sendCountRequestMsg(m_accountController->mainActor().id());
+        m_dfs->sendCountRequestMsg(m_accountController->system_actor().id());
     });
 
     // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
@@ -704,7 +704,7 @@ void ExtraChainNode::prepareFolders() {
 }
 
 void ExtraChainNode::calculateBlockCount() {
-    ActorId              actorId = m_accountController->mainActor().id();
+    ActorId              actorId = m_accountController->system_actor().id();
     DfsP::RequestDfsSize msg { .actorId = actorId };
 
     m_networkManager->send_message(msg,

@@ -411,7 +411,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->accountController()->mainActor();
+    auto       &mainActor = node->accountController()->system_actor();
     MessageBody message =
         make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
@@ -579,10 +579,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
         return;
     }
 
-    auto &mainActor = node->accountController()->mainActor();
+    auto &mainActor = node->accountController()->system_actor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->mainActor().id();
+    message_edited.sender_id   = node->accountController()->system_actor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     addAllServicesIdentifiersToMessage(message_edited);
 
@@ -794,7 +794,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
-            || message_body.init_sender_id == node->accountController()->mainActor().id()) {
+            || message_body.init_sender_id == node->accountController()->system_actor().id()) {
             // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
             // messageId,
             // identifier);
@@ -814,7 +814,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->mainActor().id();
+            message_edited.sender_id   = node->accountController()->system_actor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
@@ -1621,7 +1621,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->mainActor().id().to_string() + salt,
+                                  + node->accountController()->system_actor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }
