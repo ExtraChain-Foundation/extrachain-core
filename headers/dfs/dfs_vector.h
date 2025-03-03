@@ -81,6 +81,14 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
+    static std::expected<DfsVector, DfsVectorError> load_network(
+        ExtraChainNode*              node,
+        const Actor<KeyPrivate>&     actor,
+        const ActorId&               file_actor_id,
+        const std::string&           file_id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+
     std::expected<DbRow, DfsVectorError> read_row(const ActorId& actor_id);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
@@ -91,7 +99,7 @@ public:
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> generate_content_package(
         const std::string& where_statement = "");
 
-    void handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
+    bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);
     bool                 local_add(const DbRow& row);

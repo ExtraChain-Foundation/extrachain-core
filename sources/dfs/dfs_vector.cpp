@@ -157,6 +157,16 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
     return dfs_vector;
 }
 
+std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode              *node,
+                                                                 const Actor<KeyPrivate>     &actor,
+                                                                 const ActorId               &file_actor_id,
+                                                                 const std::string           &file_id,
+                                                                 Dfs::DataSecurity            data_security,
+                                                                 const Dfs::DataSecurityData &security_data) {
+    DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data);
+    return dfs_vector;
+}
+
 std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id) {
     DbConnector db(file_path_);
     db.open();
@@ -198,11 +208,17 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
+        eCritical("[DfsVector] Can't find {}", vector_path_.native());
         return std::unexpected(DfsVectorError::Unknown);
     }
 
     auto vector_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
-    if (!vector_template.has_value()) {
+
+    if (vector_template.has_value()) {
+        if (vector_template->fields().size() != 0) {
+            return vector_template.value();
+        }
+
         auto vector_template_link = Json::deserialize<Dfs::CollectionTemplateLink>(content.value());
         if (!vector_template_link.has_value()) {
             return std::unexpected(DfsVectorError::Unknown);
@@ -232,33 +248,40 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto vector_template = Json::deserialize<Dfs::CollectionTemplate>(res.value());
+    auto vector_template = read_template();
+    if (!vector_template.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
 
     return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
                                                    .file_id         = file_id_,
                                                    .vector_template = vector_template.value(),
+                                                   .vector_file     = ByteArray(res.value()).toString(),
                                                    .content =
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
-void DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     // TODO: move this to create?
-    auto json     = Json::serialize(dfs_vector_content.vector_template);
-    auto res_json = Utils::write_file_content(vector_path_, std::move(json));
+    // auto json     = Json::serialize(dfs_vector_content.vector_template);
+    auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
     if (!res_json.has_value()) {
-        return;
+        return false;
     }
 
-    auto new_template = dfs_vector_content.vector_template;
-    new_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                 Dfs::Field::Blob("sign").not_null(),
-                                 Dfs::Field::Timestamp("timestamp"),
-                                 Dfs::Field::Integer("status").not_null() });
+    auto vector_template = dfs_vector_content.vector_template;
+    if (vector_template.fields().size() == 0) {
+        return false;
+    }
 
-    auto schema = new_template.to_db_schema();
+    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                     Dfs::Field::Blob("sign").not_null(),
+                                     Dfs::Field::Timestamp("timestamp"),
+                                     Dfs::Field::Integer("status").not_null() });
 
+    auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
-        return;
+        return false;
     }
 
     schema->set_table_name("Vector");
@@ -272,6 +295,7 @@ void DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     }
 
     db.close();
+    return true;
 }
 
 bool DfsVector::store_add(DbRow &row) {
@@ -282,8 +306,9 @@ bool DfsVector::store_add(DbRow &row) {
         row["status"] = "1";
     }
 
-    const auto &fields = collection_template_.fields();
+    to_hash = row["status"] + row["timestamp"];
 
+    const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
         std::string value = row[field.name()];
         if (!value.empty()) {

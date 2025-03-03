@@ -691,8 +691,8 @@ void ExtraChainNode::connectSignals() {
                 QTimer* timer = new QTimer();
                 timer->setSingleShot(true);
 
-                connect(timer, &QTimer::timeout, this, [=]() {
-                    auto actor = m_accountController->currentProfile().get_actor(actorId);
+                connect(timer, &QTimer::timeout, this, [=, this]() {
+                    auto actor = this->m_accountController->currentProfile().get_actor(actorId);
                     if (!actor.has_value()) {
                         return;
                     }

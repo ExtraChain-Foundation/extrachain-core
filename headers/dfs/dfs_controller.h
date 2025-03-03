@@ -161,12 +161,12 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
-        const ActorId               &owner_id,
-        const ActorId               &author_id,
-        const std::string           &visual_name,
-        const Dfs::DfsTemplateVariant       &vector_template,
-        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+        const ActorId                 &owner_id,
+        const ActorId                 &author_id,
+        const std::string             &visual_name,
+        const Dfs::DfsTemplateVariant &vector_template,
+        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
     template <typename T>
     ExpectedDirHistoricalRow add_vector_row(const ActorId               &owner_id,
@@ -248,7 +248,8 @@ public:
                                    const HistoricalCollectionRow &row);
 
     std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
-                                                                                 const std::string &file_id);
+                                                                                 const std::string &file_id,
+                                                                                 bool is_network = false);
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
 
