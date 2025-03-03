@@ -554,24 +554,29 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     return operation_res;
 }
 
-bool DfsController::remove_vector_row(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
+bool DfsController::remove_vector_row(const ActorId     &owner_id,
+                                      const std::string &file_id,
+                                      const ActorId     &actor_id) {
     auto res = make_vector(owner_id, file_id);
     if (!res.has_value()) {
         return false;
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.remove(row);
-    if (!operation_res) {
+    auto row                    = dfs_vector.remove(actor_id);
+    if (!row.has_value()) {
         return false;
     }
 
-    emit vectorRowRemoved(owner_id, dir_row, row);
+    auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row.value() };
+    node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
 
-    auto package = Dfs::Packets::VectorRowRemove { .owner_id = owner_id, .file_id = file_id, .row = row };
-    node->network()->send_broadcast(package, MessageType::DfsVectorRemove);
+    // emit vectorRowRemoved(owner_id, dir_row, row);
 
-    return operation_res;
+    // auto package = Dfs::Packets::VectorRowRemove { .owner_id = owner_id, .file_id = file_id, .row = row };
+    // node->network()->send_broadcast(package, MessageType::DfsVectorRemove);
+
+    return true;
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const ActorId     &owner_id,
@@ -1032,7 +1037,11 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
 
     if (operation_res) {
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
-        emit vectorRowAdded(owner_id, dir_row, row);
+        if (row.at("status") == "1") {
+            emit vectorRowAdded(owner_id, dir_row, row);
+        } else {
+            emit vectorRowRemoved(owner_id, dir_row, row);
+        }
     }
 }
 
@@ -1043,7 +1052,8 @@ void DfsController::network_vector_remove(const ActorId &owner_id, const std::st
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.remove(row);
+    auto row2                   = row;
+    auto operation_res          = dfs_vector.local_add(row2);
     // load_manager_.finish_him(owner_id, dir_row);
 
     if (operation_res) {

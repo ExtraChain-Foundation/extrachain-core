@@ -49,8 +49,10 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     // TODO: if vector template has actor_id or sign -> error
 
     auto new_template = vector_template;
-    new_template.preadd_fields(
-        { Dfs::Field::ActorId("actor").unique().not_null(), Dfs::Field::Blob("sign").not_null() });
+    new_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                 Dfs::Field::Blob("sign").not_null(),
+                                 Dfs::Field::Timestamp("timestamp").not_null(),
+                                 Dfs::Field::Integer("status").not_null() });
 
     auto schema = new_template.to_db_schema();
     if (!schema.has_value()) {
@@ -90,6 +92,25 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
     return dfs_vector;
 }
 
+std::expected<DbRow, DfsVectorError> DfsVector::get_row(const ActorId &actor_id) {
+    DbConnector db(file_path_);
+    db.open();
+    if (!db.is_open()) {
+        return std::unexpected(DfsVectorError::CollectionNotFound);
+    }
+
+    auto query = fmt::format("SELECT * FROM {} WHERE actor = '{}' AND status = '1'", "Vector", actor_id);
+    std::vector<DbRow> db_rows = db.select(query);
+
+    if (db_rows.empty()) {
+        return std::unexpected(DfsVectorError::CollectionEmpty);
+    }
+
+    db.close();
+
+    return db_rows.front();
+}
+
 std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std::string &where_statement) {
     DbConnector db(file_path_);
     db.open();
@@ -112,7 +133,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std:
 std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_content_package(
     const std::string &where_statement) {
 
-    auto rows = get_rows();
+    auto rows = get_rows("");
 
     auto res = Utils::read_file_content(vector_path_);
     if (!res.has_value()) {
@@ -137,8 +158,10 @@ void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_v
     }
 
     auto new_template = dfs_vector_content.vector_template;
-    new_template.preadd_fields(
-        { Dfs::Field::ActorId("actor").unique().not_null(), Dfs::Field::Blob("sign").not_null() });
+    new_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                 Dfs::Field::Blob("sign").not_null(),
+                                 Dfs::Field::Timestamp("timestamp"),
+                                 Dfs::Field::Integer("status").not_null() });
 
     auto schema = new_template.to_db_schema();
 
@@ -153,7 +176,7 @@ void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_v
     db.create_table(schema.value());
 
     for (const auto &db_row : dfs_vector_content.content) {
-        db.insert("Vector", db_row);
+        db.replace("Vector", db_row);
     }
 
     db.close();
@@ -162,7 +185,12 @@ void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_v
 bool DfsVector::store_add(DbRow &row) {
     std::string temp;
     bool        all_empty = true;
-    // TODO: use collection for sort
+    row["timestamp"]      = std::to_string(Utils::current_date_ms());
+    if (row["status"] != "0") {
+        row["status"] = "1";
+    }
+
+    // TODO: use vector template for sort
     for (auto &[key, value] : row) {
         temp += value;
 
@@ -196,10 +224,24 @@ bool DfsVector::local_add(const DbRow &row) {
     return res;
 }
 
-bool DfsVector::remove(const DbRow &row) {
-    DbConnector db(file_path_);
-    db.open();
-    bool res = db.delete_row("Vector", row);
-    db.close();
-    return res;
+std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
+    auto row_result = get_row(actor_id);
+    if (!row_result.has_value()) {
+        return std::nullopt;
+    }
+
+    auto row = std::move(row_result.value());
+    for (const auto &[key, _] : row) {
+        row[key] = "-";
+    }
+
+    row["status"] = "0";
+
+    auto res = store_add(row);
+    // bool res = db.delete_row("Vector", row);
+    if (!res) {
+        return std::nullopt;
+    }
+
+    return row;
 }

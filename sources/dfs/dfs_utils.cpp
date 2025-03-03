@@ -302,7 +302,7 @@ std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id);
     DbConnector db(dfs_path->native());
     db.open();
-    auto res = db.hash_size("id");
+    auto res = db.hash_size("actor");
     db.close();
     return res;
 }

@@ -81,15 +81,17 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
+    std::expected<DbRow, DfsVectorError> get_row(const ActorId& actor_id);
+
     std::expected<std::vector<DbRow>, DfsVectorError> get_rows(
-        const std::string& where_statement = "");
+        const std::string& where_statement = "where status = '1'");
 
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_content_package(
         const std::string& where_statement = "");
 
     void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
-    bool store_add(DbRow& row);
-    bool local_add(const DbRow& row);
-    bool remove(/*const ActorId & actor_id,*/ const DbRow& row);
+    bool                 store_add(DbRow& row);
+    bool                 local_add(const DbRow& row);
+    std::optional<DbRow> remove(/*const ActorId & actor_id,*/ const ActorId& actor_id);
 };

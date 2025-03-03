@@ -183,7 +183,7 @@ public:
                         DbRow                        row,
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
 
     // TODO: function: get collection size
 
