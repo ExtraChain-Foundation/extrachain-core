@@ -41,6 +41,7 @@ enum class SqlAutoincrement {
     Yes,
     No
 };
+MSGPACK_ADD_ENUM(SqlAutoincrement)
 
 enum class SqlInclusiveness {
     Inclusive, // <= or >=
@@ -210,6 +211,7 @@ public:
     DbSchema(DbSchema&& other) noexcept            = default;
     DbSchema& operator=(DbSchema&& other) noexcept = default;
 
+    DbSchema& add_column(const DbColumn& column);
     DbSchema& add_column(DbColumn&& column);
 
     template <typename... Cols>
@@ -219,7 +221,32 @@ public:
         return *this;
     }
 
+    template <typename... Cols>
+    DbSchema& unique(Cols&&... column_names) {
+        std::vector<std::string> cols;
+        cols.reserve(sizeof...(Cols));
+        bool has_error = false;
+
+        auto process_column = [&](auto&& col_name) {
+            auto col_str = std::string(col_name);
+            if (auto validation = SqlValidator::validate_identifier(col_str); !validation) {
+                m_validation_error = validation.error();
+                has_error          = true;
+            } else {
+                cols.push_back(col_str);
+            }
+        };
+
+        (process_column(std::forward<Cols>(column_names)), ...);
+
+        if (!has_error) {
+            m_table_constraints.push_back(fmt::format("UNIQUE({})", boost::algorithm::join(cols, ", ")));
+        }
+        return *this;
+    }
+
     std::string table_name();
+    void        set_table_name(std::string table_name);
 
     std::expected<std::string, SqlCreateError> to_sql() const;
     const std::optional<SqlCreateError>&       validation_error() const;
@@ -229,9 +256,10 @@ public:
 private:
     std::string                            m_table_name;
     std::vector<std::unique_ptr<DbColumn>> m_columns;
+    std::vector<std::string>               m_table_constraints;
     std::optional<SqlCreateError>          m_validation_error;
 
-    BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns, m_validation_error))
+    BOOST_DESCRIBE_CLASS(DbSchema, (), (), (), (m_table_name, m_columns, m_table_constraints, m_validation_error))
 };
 
 namespace sqlite::literals {

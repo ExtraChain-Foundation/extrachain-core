@@ -43,7 +43,8 @@ private slots:
     void cache();
 
 private:
-    ExtraChainNode *node;
+    void make_files();
 
-    bool is_exists;
+    ExtraChainNode *node;
+    bool            is_exists = false;
 };

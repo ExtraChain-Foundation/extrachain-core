@@ -252,7 +252,9 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.write(QByteArray::fromStdString(block.second));
         file.close();
 
-        if (mode == BlockchainMode::Light && block.first != BigNumber(0)) {
+        if (mode == BlockchainMode::Light
+            && (block.first != BigNumber(0) || blocks.size() == 1
+                || (blocks.size() > 1 && blocks[1].first == BigNumber(1)))) {
             blockIndex.update_last_id(block.first);
         }
         if (mode == BlockchainMode::Full) {
@@ -523,7 +525,7 @@ void Blockchain::send_request_blocks() {
         return;
     }
 
-    eLog("{}", sync_last_index);
+    eLog("sync_last_index {}", sync_last_index);
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
     emit syncStart(sync_index, sync_last_index);
@@ -1257,7 +1259,7 @@ std::expected<BlockVariant, BlockError> Blockchain::mergeGenesisBlocks(const Gen
 }
 
 void Blockchain::signBlock(BlockVariant &block) const {
-    block.sign(node->accountController()->mainActor());
+    block.sign(node->accountController()->system_actor());
 }
 
 BigNumber Blockchain::getRecords() const {
@@ -1620,7 +1622,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 
 #ifdef IS_R
                 if (transaction.type() == TransactionType::Reward
-                    && accountId == node->accountController()->mainActor().id()) {
+                    && accountId == node->accountController()->system_actor().id()) {
                     Transaction tx;
                     tx.setSender(accountId);
                     tx.setReceiver(accountId);
@@ -1635,7 +1637,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                         "[Reward] Send conversion: {} "
                         "coins",
                         tx.amount());
-                    node->sendTransaction(tx, node->accountController()->mainActor());
+                    node->sendTransaction(tx, node->accountController()->system_actor());
                 }
 #endif
             }
@@ -1676,7 +1678,7 @@ TransactionProveError Blockchain::prove_transaction(const Transaction          &
 
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->accountController()->mainActor().id();
+    const ActorId &mainActorId    = node->accountController()->system_actor().id();
 
     const auto accounts = node->accountController()->accountsIds();
     for (const auto &accountId : accounts) {

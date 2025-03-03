@@ -25,8 +25,8 @@ namespace Dfs {
         // TODO: CamelCase, A-Za-z
         auto tmpl = CollectionTemplate(std::move(name));
         tmpl.add_fields({
-            Field::Id("id").primary_key(),
-            Field::Integer("timestamp").not_null(),
+            // Field::Id("id").primary_key(),
+            // Field::Integer("timestamp").not_null(),
             /*
             Field::Text("actor_id").not_null().unique(),
             Field::Text("sign").not_null().unique()
@@ -41,6 +41,11 @@ namespace Dfs {
 
     CollectionTemplate& CollectionTemplate::add_fields(const std::initializer_list<FieldBuilder>& fields) {
         m_fields.insert(m_fields.end(), fields);
+        return *this;
+    }
+
+    CollectionTemplate& CollectionTemplate::preadd_fields(const std::initializer_list<FieldBuilder>& fields) {
+        m_fields.insert(m_fields.begin(), fields);
         return *this;
     }
 

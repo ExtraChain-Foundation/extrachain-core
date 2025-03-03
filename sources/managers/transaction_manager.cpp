@@ -62,7 +62,7 @@ void TransactionManager::make_block() {
         return;
     }
 
-    eInfo("- makeBlock()");
+    // eInfo("- makeBlock()");
 
     auto last_block     = node->blockchain()->read_last_block();
     auto first_saved_id = node->blockchain()->getBlockIndex().first_saved_id;
@@ -104,7 +104,7 @@ void TransactionManager::make_block() {
         eLog("[Blockchain] Create genesis block {}, dec: {}",
              maybeGenesisId,
              maybeGenesisId.to_string(NumeralBase::Dec));
-        const auto actor   = node->accountController()->mainActor();
+        const auto actor   = node->accountController()->system_actor();
         const auto genesis = node->blockchain()->create_genesis_block(actor);
 
         if (genesis.has_value() && !genesis->isEmpty()) {
@@ -144,7 +144,7 @@ void TransactionManager::timer_block_tick() {
     return;
 #endif
 
-    eInfo("[TransactionManager] Make block... {}", node->blockchain()->status());
+    // eInfo("[TransactionManager] Make block... {}", node->blockchain()->status());
     make_block();
 
     if (node->blockchain()->status() == BlockchainStatus::Ready) {

@@ -65,6 +65,12 @@ enum class MessageType {
     DfsCollectionContent   = 71,
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
+    DfsVectorContent       = 74,
+    DfsVectorAdd           = 75,
+    DfsVectorRemove        = 76,
+    DfsDictionaryContent   = 77,
+    DfsDictionaryAdd       = 78,
+    DfsDictionaryRemove    = 79,
 
     DfsTempSyncAll = 89,
 

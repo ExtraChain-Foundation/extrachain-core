@@ -363,6 +363,27 @@ std::expected<std::string, SqlCreateError> DbConnector::create_table(const DbSch
     return sql;
 }
 
+bool DbConnector::create_table(const std::string &table_name, const std::vector<DBColumn> &columns) {
+    if (columns.empty() || table_name.empty()) {
+        return false;
+    }
+
+    std::stringstream query;
+    query << "CREATE TABLE " << table_name << " (";
+
+    for (size_t i = 0; i < columns.size(); ++i) {
+        const auto &column = columns[i];
+        query << column.name << " " << column.type;
+        if (i < columns.size() - 1) {
+            query << ", ";
+        }
+    }
+
+    query << ")";
+
+    return this->create_table(query.str());
+}
+
 bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");

@@ -411,7 +411,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->accountController()->mainActor();
+    auto       &mainActor = node->accountController()->system_actor();
     MessageBody message =
         make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
@@ -479,7 +479,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
+        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, send_mode, receiver_identifier);
         return;
     }
@@ -579,10 +579,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
         return;
     }
 
-    auto &mainActor = node->accountController()->mainActor();
+    auto &mainActor = node->accountController()->system_actor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->mainActor().id();
+    message_edited.sender_id   = node->accountController()->system_actor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     addAllServicesIdentifiersToMessage(message_edited);
 
@@ -794,7 +794,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
-            || message_body.init_sender_id == node->accountController()->mainActor().id()) {
+            || message_body.init_sender_id == node->accountController()->system_actor().id()) {
             // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
             // messageId,
             // identifier);
@@ -814,7 +814,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->mainActor().id();
+            message_edited.sender_id   = node->accountController()->system_actor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
@@ -1203,7 +1203,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
                                                               link_result->file_id,
-                                                              identifier);
+                                                              responder);
         break;
     }
 
@@ -1269,6 +1269,50 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
         node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
+        break;
+    }
+
+    case MessageType::DfsVectorContent: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector content", type);
+            break;
+        }
+
+        node->dfs()->network_response_content_vector(db_content_result.value());
+
+        // broadcast and not broadcast?
+        break;
+    }
+
+    case MessageType::DfsVectorAdd: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector add", type);
+            break;
+        }
+
+        node->dfs()->network_vector_add(db_content_result->owner_id,
+                                        db_content_result->file_id,
+                                        db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
+        break;
+    }
+    case MessageType::DfsVectorRemove: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowRemove>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector remove", type);
+            break;
+        }
+
+        node->dfs()->network_vector_remove(db_content_result->owner_id,
+                                           db_content_result->file_id,
+                                           db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
         break;
     }
 
@@ -1577,7 +1621,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->mainActor().id().to_string() + salt,
+                                  + node->accountController()->system_actor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }

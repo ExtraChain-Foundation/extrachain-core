@@ -39,6 +39,7 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
 #include "dfs/historical_collection.h"
+#include "dfs/dfs_vector.h"
 
 class ExtraChainNode;
 class DirsManager;
@@ -151,6 +152,39 @@ public:
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
+        const ActorId               &owner_id,
+        const ActorId               &author_id,
+        const std::string           &visual_name,
+        const ActorId               &template_actor_id,
+        const std::string           &template_file_id,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
+        const ActorId                 &owner_id,
+        const ActorId                 &author_id,
+        const std::string             &visual_name,
+        const Dfs::CollectionTemplate &vector_template,
+        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
+
+    template <typename T>
+    ExpectedDirHistoricalRow add_vector_row(const ActorId               &owner_id,
+                                            const std::string           &file_id,
+                                            T                            row,
+                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+        auto db_row  = Utils::to_dbrow(row);
+        auto dir_row = this->add_collection_row(owner_id, file_id, db_row, security_data);
+        return dir_row;
+    }
+
+    bool add_vector_row(const ActorId               &owner_id,
+                        const std::string           &file_id,
+                        DbRow                        row,
+                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+
     // TODO: function: get collection size
 
     std::expected<DbRow, CollectionError> get_collection_row(
@@ -208,6 +242,14 @@ public:
     void network_remove_collection(const ActorId                 &owner_id,
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
+
+    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
+                                                                                 const std::string &file_id);
+    void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
+    void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
+
+    void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    void network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
@@ -307,7 +349,9 @@ signals:
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
-    void collectionChanged(ActorId owner_id, Dfs::DirRow, HistoricalCollectionRow);
+    void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);
+    void vectorRowAdded(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
+    void vectorRowRemoved(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
 
     //
     void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);

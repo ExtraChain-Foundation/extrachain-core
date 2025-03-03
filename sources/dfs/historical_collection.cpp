@@ -34,13 +34,13 @@ HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->node               = node;
     this->file_path_         = Dfs::Path::file_path(file_actor_id, file_id).value();
-    auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), ".collection");
+    auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), Dfs::Basic::COLLECTION_FILE);
     this->historical_path_   = FsPath::create(historical_path_str).value();
     this->actor_             = actor;
     this->file_actor_id_     = file_actor_id;
     this->file_id_           = file_id;
-    data_security_           = data_security;
-    security_data_           = security_data;
+    this->data_security_     = data_security;
+    this->security_data_     = security_data;
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(

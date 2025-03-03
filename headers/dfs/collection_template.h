@@ -229,6 +229,7 @@ namespace Dfs {
         CollectionTemplate() = default;
         static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
         CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate&                     preadd_fields(const std::initializer_list<FieldBuilder>& fields);
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
         const std::string name() const;
@@ -250,3 +251,10 @@ namespace Dfs {
         friend class FieldBuilder;
     };
 } // namespace Dfs
+
+struct CollectionTemplateLink {
+    ActorId     actor_id;
+    std::string file_id;
+    std::string name;
+};
+BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
