@@ -147,7 +147,7 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
 
     std::visit(
         [&](const auto &value) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, CollectionTemplateLink>) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplateLink>) {
                 auto collection_template =
                     Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.actor_id, value.file_id);
                 if (collection_template.has_value()) {
@@ -181,9 +181,9 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     }
 
     this->table_name_        = collection_template->name();
-    auto collection_creation = CollectionTemplateLink { .actor_id = template_actor_id,
-                                                        .file_id  = template_file_id,
-                                                        .name     = collection_template->name() };
+    auto collection_creation = Dfs::CollectionTemplateLink { .actor_id = template_actor_id,
+                                                             .file_id  = template_file_id,
+                                                             .name     = collection_template->name() };
 
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Structural,
                                                     .data      = Json::serialize(collection_creation),
@@ -403,7 +403,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ge
     return hi_row.value();
 }
 
-std::expected<std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError>
+std::expected<std::variant<Dfs::CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError>
 HistoricalCollection::get_creation() {
     DbConnector db(historical_path_);
     db.open();
@@ -427,7 +427,7 @@ HistoricalCollection::get_creation() {
         }
         return collection_template.value();
     } else if (hi_row->operation == CollectionOperation::Structural) {
-        auto template_link = Json::deserialize<CollectionTemplateLink>(hi_row->data);
+        auto template_link = Json::deserialize<Dfs::CollectionTemplateLink>(hi_row->data);
         if (!template_link.has_value()) {
             return std::unexpected(CollectionError::Unknown);
         }

@@ -36,15 +36,15 @@ enum class DfsVectorError {
 
 class DfsVector {
 private:
-    ExtraChainNode*       node;
-    FsPath                file_path_;
-    FsPath                vector_path_;
-    Actor<KeyPrivate>     actor_;
-    ActorId               file_actor_id_;
-    std::string           file_id_;
-    Dfs::DataSecurity     data_security_;
-    Dfs::DataSecurityData security_data_;
-    // CollectionTemplate    collection_template;
+    ExtraChainNode*         node;
+    FsPath                  file_path_;
+    FsPath                  vector_path_;
+    Actor<KeyPrivate>       actor_;
+    ActorId                 file_actor_id_;
+    std::string             file_id_;
+    Dfs::DataSecurity       data_security_;
+    Dfs::DataSecurityData   security_data_;
+    Dfs::CollectionTemplate collection_template_;
 
     DfsVector() = default;
     DfsVector(ExtraChainNode*              node,
@@ -69,7 +69,7 @@ public:
         const Actor<KeyPrivate>&       main_actor,
         const ActorId&                 file_actor_id,
         const std::string&             file_id,
-        const Dfs::CollectionTemplate& vector_template,
+        const Dfs::DfsTemplateVariant& variant_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData());
 
@@ -81,15 +81,17 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
-    std::expected<DbRow, DfsVectorError> get_row(const ActorId& actor_id);
+    std::expected<DbRow, DfsVectorError> read_row(const ActorId& actor_id);
 
-    std::expected<std::vector<DbRow>, DfsVectorError> get_rows(
+    std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
         const std::string& where_statement = "where status = '1'");
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> get_content_package(
+    std::expected<Dfs::CollectionTemplate, DfsVectorError> read_template();
+
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> generate_content_package(
         const std::string& where_statement = "");
 
-    void create_insert(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
+    void handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);
     bool                 local_add(const DbRow& row);

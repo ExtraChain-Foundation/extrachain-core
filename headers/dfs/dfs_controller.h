@@ -161,12 +161,12 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     std::expected<Dfs::DirRow, Dfs::DfsError> store_vector(
-        const ActorId                 &owner_id,
-        const ActorId                 &author_id,
-        const std::string             &visual_name,
-        const Dfs::CollectionTemplate &vector_template,
-        Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
+        const ActorId               &owner_id,
+        const ActorId               &author_id,
+        const std::string           &visual_name,
+        const Dfs::DfsTemplateVariant       &vector_template,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     template <typename T>
     ExpectedDirHistoricalRow add_vector_row(const ActorId               &owner_id,
@@ -184,6 +184,10 @@ public:
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
+
+    std::expected<DbRow, DfsVectorError> get_vector_row(const ActorId     &owner_id,
+                                                        const std::string &file_id,
+                                                        const ActorId     &actor_id);
 
     // TODO: function: get collection size
 

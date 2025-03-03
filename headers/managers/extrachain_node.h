@@ -120,6 +120,7 @@ public:
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);
+    bool create_usernames_vector();
     void create_new_network_dfs();
     void start();
 
@@ -167,8 +168,10 @@ public:
 
     std::string transactionErrorDescription(const TransactionError& error);
 
-    std::expected<std::string, ImportError> export_profile();
-    std::expected<std::string, ImportProfileError>  import_profile(const std::string& data, const std::string& login, const std::string& password);
+    std::expected<std::string, ImportError>        export_profile();
+    std::expected<std::string, ImportProfileError> import_profile(const std::string& data,
+                                                                  const std::string& login,
+                                                                  const std::string& password);
 
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
@@ -184,6 +187,12 @@ public:
     ChatManager* chat_manager();
 
     VPNConfigStorage vpnConfigStorage;
+
+    bool add_subscription(int                type,
+                          uint64_t           date_start,
+                          bool               auto_renw,
+                          const BigNumber&   block_id,
+                          const std::string& tx_hash);
 
 private:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);

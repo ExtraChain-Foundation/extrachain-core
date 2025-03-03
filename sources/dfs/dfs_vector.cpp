@@ -37,34 +37,93 @@ DfsVector::DfsVector(ExtraChainNode              *node,
     this->security_data_ = security_data;
 }
 
+// std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode              *node,
+//                                                            const Actor<KeyPrivate>     &main_actor,
+//                                                            const ActorId               &file_actor_id,
+//                                                            const std::string           &file_id,
+//                                                            const ActorId               &template_actor_id,
+//                                                            const std::string           &template_file_id,
+//                                                            Dfs::DataSecurity            data_security,
+//                                                            const Dfs::DataSecurityData &security_data) {
+//     auto vector_template =
+//         Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_actor_id, template_file_id);
+//     if (!vector_template.has_value()) {
+//         return std::unexpected(DfsVectorError::Unknown);
+//     }
+
+//     auto dfs_vector = create(node,
+//                              main_actor,
+//                              file_actor_id,
+//                              file_id,
+//                              vector_template.value(),
+//                              data_security,
+//                              security_data,
+//                              false);
+
+//     if (!dfs_vector.has_value()) {
+//         return std::unexpected(DfsVectorError::Unknown);
+//     }
+
+//     auto link     = CollectionTemplateLink { .actor_id = template_actor_id,
+//                                              .file_id  = template_file_id,
+//                                              .name     = vector_template->name() };
+//     auto json     = Json::serialize(link);
+//     auto res_json = Utils::write_file_content(dfs_vector->vector_path_, std::move(json));
+//     if (!res_json.has_value()) {
+//         return std::unexpected(DfsVectorError::Unknown);
+//     }
+
+//     return std::unexpected(DfsVectorError::Unknown);
+// }
+
 std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode                *node,
                                                            const Actor<KeyPrivate>       &main_actor,
                                                            const ActorId                 &file_actor_id,
                                                            const std::string             &file_id,
-                                                           const Dfs::CollectionTemplate &vector_template,
+                                                           const Dfs::DfsTemplateVariant &variant_template,
                                                            Dfs::DataSecurity              data_security,
                                                            const Dfs::DataSecurityData   &security_data) {
     DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data);
 
-    // TODO: if vector template has actor_id or sign -> error
+    // TODO: if vector template has actor, status, timestamp or sign -> error
 
-    auto new_template = vector_template;
-    new_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                 Dfs::Field::Blob("sign").not_null(),
-                                 Dfs::Field::Timestamp("timestamp").not_null(),
-                                 Dfs::Field::Integer("status").not_null() });
+    auto from_template_result = read_template_from_variant(variant_template);
+    if (!from_template_result.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
 
-    auto schema = new_template.to_db_schema();
+    auto [vector_template, is_link] = from_template_result.value();
+    dfs_vector.collection_template_ = vector_template;
+
+    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                    Dfs::Field::Blob("sign").not_null(),
+                                    Dfs::Field::Timestamp("timestamp").not_null(),
+                                    Dfs::Field::Integer("status").not_null() });
+
+    auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
         return std::unexpected(DfsVectorError::StructuralCreation);
     }
 
     schema->set_table_name("Vector");
 
-    auto json     = Json::serialize(vector_template);
-    auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
-    if (!res_json.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
+    if (!is_link) {
+        auto json     = Json::serialize(vector_template);
+        auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
+        if (!res_json.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+    } else {
+        if (std::holds_alternative<Dfs::CollectionTemplateLink>(variant_template)) {
+            auto link = std::get<Dfs::CollectionTemplateLink>(variant_template);
+            link.name = vector_template.name();
+
+            auto json     = Json::serialize(link);
+            auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
+            if (!res_json.has_value()) {
+                return std::unexpected(DfsVectorError::Unknown);
+            }
+        }
     }
 
     DbConnector db(dfs_vector.file_path_);
@@ -87,12 +146,18 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
                                                          const Dfs::DataSecurityData &security_data) {
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data);
 
+    auto vector_template = dfs_vector.read_template();
+    if (!vector_template.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    dfs_vector.collection_template_ = vector_template.value();
     // checks
 
     return dfs_vector;
 }
 
-std::expected<DbRow, DfsVectorError> DfsVector::get_row(const ActorId &actor_id) {
+std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
@@ -111,7 +176,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::get_row(const ActorId &actor_id)
     return db_rows.front();
 }
 
-std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std::string &where_statement) {
+std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
@@ -130,10 +195,37 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::get_rows(const std:
     return db_rows;
 }
 
-std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::get_content_package(
+std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
+    auto content = Utils::read_file_content(vector_path_);
+    if (!content.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    auto vector_template = Json::deserialize<Dfs::CollectionTemplate>(content.value());
+    if (!vector_template.has_value()) {
+        auto vector_template_link = Json::deserialize<Dfs::CollectionTemplateLink>(content.value());
+        if (!vector_template_link.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+
+        auto vector_template =
+            Dfs::Tables::ActorDirFile::get_collection_template_file_id(vector_template_link->actor_id,
+                                                                       vector_template_link->file_id);
+
+        if (!vector_template.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+
+        return vector_template.value();
+    }
+
+    return vector_template.value();
+}
+
+std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::generate_content_package(
     const std::string &where_statement) {
 
-    auto rows = get_rows("");
+    auto rows = read_rows("");
 
     auto res = Utils::read_file_content(vector_path_);
     if (!res.has_value()) {
@@ -149,7 +241,7 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
-void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+void DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
     // TODO: move this to create?
     auto json     = Json::serialize(dfs_vector_content.vector_template);
     auto res_json = Utils::write_file_content(vector_path_, std::move(json));
@@ -183,27 +275,29 @@ void DfsVector::create_insert(const Dfs::Packets::DfsVectorContentPackage &dfs_v
 }
 
 bool DfsVector::store_add(DbRow &row) {
-    std::string temp;
+    std::string to_hash;
     bool        all_empty = true;
     row["timestamp"]      = std::to_string(Utils::current_date_ms());
     if (row["status"] != "0") {
         row["status"] = "1";
     }
 
-    // TODO: use vector template for sort
-    for (auto &[key, value] : row) {
-        temp += value;
+    const auto &fields = collection_template_.fields();
 
+    for (const auto &field : fields) {
+        std::string value = row[field.name()];
         if (!value.empty()) {
             all_empty = false;
         }
+
+        to_hash += value;
     }
 
-    if (all_empty) {
+    if (all_empty || to_hash.empty()) {
         return false;
     }
 
-    auto hash = Utils::calculate_hash(temp);
+    auto hash = Utils::calculate_hash(to_hash);
     auto sign = actor_.key().sign(hash);
     if (!sign.has_value()) {
         return false;
@@ -225,7 +319,7 @@ bool DfsVector::local_add(const DbRow &row) {
 }
 
 std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
-    auto row_result = get_row(actor_id);
+    auto row_result = read_row(actor_id);
     if (!row_result.has_value()) {
         return std::nullopt;
     }

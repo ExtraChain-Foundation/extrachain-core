@@ -368,7 +368,7 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
         return std::nullopt;
     }
 
-    eLog("[Dfs] Read {} from collection template bytes", content->size());
+    // eLog("[Dfs] Read {} from collection template bytes", content->size());
     auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(content.value());
     if (!collection_template_result.has_value()) {
         return std::nullopt;

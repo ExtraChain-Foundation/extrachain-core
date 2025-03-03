@@ -18,6 +18,7 @@
  */
 
 #include "dfs/collection_template.h"
+#include "dfs/dfs_utils.h"
 #include <boost/algorithm/string/join.hpp>
 
 namespace Dfs {
@@ -68,6 +69,7 @@ namespace Dfs {
             switch (type) {
             case FieldType::Id:
             case FieldType::Integer:
+            case FieldType::Bool:
             case FieldType::Timestamp:
                 return ColumnType::Integer;
             case FieldType::Real:
@@ -115,7 +117,8 @@ namespace Dfs {
         }
 
         // Range checks for numeric types
-        if ((m_min || m_max) && (m_type == FieldType::Integer || m_type == FieldType::Real)) {
+        if ((m_min || m_max)
+            && (m_type == FieldType::Integer || m_type == FieldType::Real || m_type == FieldType::Bool)) {
             if (m_min) {
                 checks.push_back(fmt::format("{} >= {}", m_name, *m_min));
             }
@@ -154,5 +157,24 @@ namespace Dfs {
     void CollectionTemplate::set_actor_file(const ActorId& actor_id, const std::string file_id) {
         this->actor_id = actor_id;
         this->file_id  = file_id;
+    }
+
+    std::optional<std::pair<Dfs::CollectionTemplate, bool>> read_template_from_variant(
+        const DfsTemplateVariant& var) {
+        return std::visit(
+            [](auto&& arg) -> std::optional<std::pair<Dfs::CollectionTemplate, bool>> {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, CollectionTemplateLink>) {
+                    auto vector_template =
+                        Dfs::Tables::ActorDirFile::get_collection_template_file_id(arg.actor_id, arg.file_id);
+                    if (!vector_template.has_value()) {
+                        return std::nullopt;
+                    }
+                    return std::pair<Dfs::CollectionTemplate, bool>(vector_template.value(), true);
+                } else if constexpr (std::is_same_v<T, Dfs::CollectionTemplate>) {
+                    return std::pair<Dfs::CollectionTemplate, bool>(arg, false);
+                }
+            },
+            var);
     }
 } // namespace Dfs
