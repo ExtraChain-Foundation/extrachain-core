@@ -198,7 +198,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     auto vector_template =
         Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });
 
-    auto main_actor_id = accountController()->mainActor().id();
+    auto main_actor_id = accountController()->system_actor().id();
     auto template_res  = dfs()->store_template(main_actor_id, vector_template);
     if (!template_res.has_value()) {
         eCritical("Can't create usernames, because {}", template_res.error());
