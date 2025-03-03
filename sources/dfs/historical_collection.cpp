@@ -149,7 +149,7 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
         [&](const auto &value) {
             if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplateLink>) {
                 auto collection_template =
-                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.actor_id, value.file_id);
+                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.owner_id, value.file_id);
                 if (collection_template.has_value()) {
                     chain.table_name_ = collection_template->name();
                 }
@@ -181,7 +181,7 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     }
 
     this->table_name_        = collection_template->name();
-    auto collection_creation = Dfs::CollectionTemplateLink { .actor_id = template_actor_id,
+    auto collection_creation = Dfs::CollectionTemplateLink { .owner_id = template_actor_id,
                                                              .file_id  = template_file_id,
                                                              .name     = collection_template->name() };
 

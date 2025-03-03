@@ -605,7 +605,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const Acto
     }
 
     auto link =
-        Dfs::CollectionTemplateLink { .actor_id = template_actor_id, .file_id = template_file_id, .name = "" };
+        Dfs::CollectionTemplateLink { .owner_id = template_actor_id, .file_id = template_file_id, .name = "" };
     return store_vector(owner_id, author_id, visual_name, link, data_security, security_data);
 }
 
@@ -852,7 +852,7 @@ void DfsController::network_response_historical_collection(
         }
 
         auto collection_template_result =
-            Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_link->actor_id,
+            Dfs::Tables::ActorDirFile::get_collection_template_file_id(template_link->owner_id,
                                                                        template_link->file_id);
         if (!collection_template_result.has_value()) {
             return;
@@ -911,7 +911,7 @@ void DfsController::network_response_content_collection(const ActorId           
         [&](const auto &value) {
             if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplateLink>) {
                 auto template_opt =
-                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.actor_id, value.file_id);
+                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.owner_id, value.file_id);
                 if (template_opt.has_value()) {
                     collection_template = template_opt.value();
                 }

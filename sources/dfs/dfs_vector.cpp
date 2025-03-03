@@ -225,7 +225,7 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
         }
 
         auto vector_template =
-            Dfs::Tables::ActorDirFile::get_collection_template_file_id(vector_template_link->actor_id,
+            Dfs::Tables::ActorDirFile::get_collection_template_file_id(vector_template_link->owner_id,
                                                                        vector_template_link->file_id);
 
         if (!vector_template.has_value()) {

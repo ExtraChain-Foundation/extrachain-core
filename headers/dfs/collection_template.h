@@ -264,11 +264,11 @@ namespace Dfs {
     };
 
     struct CollectionTemplateLink {
-        ActorId     actor_id;
+        ActorId     owner_id;
         std::string file_id;
         std::string name;
     };
-    BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
+    BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (owner_id, file_id, name))
 
     using DfsTemplateVariant = std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>;
 
