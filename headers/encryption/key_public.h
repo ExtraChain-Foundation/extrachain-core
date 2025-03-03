@@ -41,7 +41,7 @@ public:
     KeyPublic &operator=(const KeyPublic &other) = default;
 
     std::expected<bool, Cryptography::CryptoError> verify(const Bytes &data, const Signature &signature) const;
-    [[deprecated("Use verify version with Bytes")]]
+    // [[deprecated("Use verify version with Bytes")]]
     std::expected<bool, Cryptography::CryptoError> verify(const std::string &data,
                                                           const Signature   &signature) const;
 

@@ -149,6 +149,7 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     Dfs::initialize_actor_folder(owner_id);
 
+    /*
     auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
     if (local_dir_rows.has_value()) {
         for (const auto& network_row : dir_rows) {
@@ -159,6 +160,7 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
             }
         }
     }
+    */
 
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);

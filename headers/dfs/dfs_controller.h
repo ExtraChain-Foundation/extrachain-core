@@ -164,7 +164,7 @@ public:
         const ActorId                 &owner_id,
         const ActorId                 &author_id,
         const std::string             &visual_name,
-        const Dfs::CollectionTemplate &vector_template,
+        const Dfs::DfsTemplateVariant &vector_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
@@ -183,7 +183,11 @@ public:
                         DbRow                        row,
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
+
+    std::expected<DbRow, DfsVectorError> get_vector_row(const ActorId     &owner_id,
+                                                        const std::string &file_id,
+                                                        const ActorId     &actor_id);
 
     // TODO: function: get collection size
 
@@ -244,7 +248,8 @@ public:
                                    const HistoricalCollectionRow &row);
 
     std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
-                                                                                 const std::string &file_id);
+                                                                                 const std::string &file_id,
+                                                                                 bool is_network = false);
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
 

@@ -194,7 +194,11 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     create_network_need_dfs_creation = true;
 
-    //
+    eSuccess("[Node] New network created");
+    return true;
+}
+
+bool ExtraChainNode::create_usernames_vector() {
     auto vector_template =
         Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });
 
@@ -214,9 +218,30 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     if (!vec_res.has_value()) {
         return false;
     }
-    //
 
-    eSuccess("[Node] New network created");
+    auto subscription_template = Dfs::CollectionTemplate::create("subscription")
+                                     .value()
+                                     .add_fields({ Dfs::Field::Integer("type").not_null(),
+                                                   Dfs::Field::Integer("date_start").not_null(),
+                                                   Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
+                                                   Dfs::Field::String("block_id").not_null(),
+                                                   Dfs::Field::String("transaction_hash").not_null() });
+    auto template2_res = dfs()->store_template(main_actor_id, subscription_template);
+    if (!template2_res.has_value()) {
+        eCritical("Can't create subscription template, because {}", template_res.error());
+        return false;
+    }
+
+    // temp
+    auto sub_res = dfs()->store_vector(main_actor_id,
+                                       main_actor_id,
+                                       "Subscription",
+                                       template2_res->actor_id,
+                                       template2_res->file_id);
+    if (!sub_res.has_value()) {
+        return false;
+    }
+
     return true;
 }
 
@@ -344,6 +369,14 @@ TokenManager* ExtraChainNode::tokenManager() const {
 
 ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
+}
+
+bool ExtraChainNode::add_subscription(int                type,
+                                      uint64_t           date_start,
+                                      bool               auto_renw,
+                                      const BigNumber&   block_id,
+                                      const std::string& tx_hash) {
+    return false;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(ActorId        receiver,
@@ -658,8 +691,8 @@ void ExtraChainNode::connectSignals() {
                 QTimer* timer = new QTimer();
                 timer->setSingleShot(true);
 
-                connect(timer, &QTimer::timeout, this, [=]() {
-                    auto actor = m_accountController->currentProfile().get_actor(actorId);
+                connect(timer, &QTimer::timeout, this, [=, this]() {
+                    auto actor = this->m_accountController->currentProfile().get_actor(actorId);
                     if (!actor.has_value()) {
                         return;
                     }

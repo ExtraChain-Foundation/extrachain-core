@@ -41,7 +41,8 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    if (dir_row.state != Dfs::FileState::Ready) {
+    // TODO: vectorupdate
+    if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
         return;
     }
 
@@ -61,7 +62,7 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
             }
 
             if (row->type != Dfs::FileType::File && file_path->exists()) {
-                return;
+                // return; // TODO: vectorupdate
             }
         }
     }
@@ -145,7 +146,8 @@ void LoadManager::check_all_files(std::string identifier) {
                 }
 
                 if (row.type != Dfs::FileType::File && file_path->exists()) {
-                    continue;
+                    // TODO: vectorupdate
+                    // continue;
                 }
                 // TODO: add checks for vector and collection
             }
