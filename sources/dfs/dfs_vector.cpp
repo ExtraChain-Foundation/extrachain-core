@@ -144,6 +144,10 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
                                                          const std::string           &file_id,
                                                          Dfs::DataSecurity            data_security,
                                                          const Dfs::DataSecurityData &security_data) {
+    if (file_actor_id.is_zero() || file_id.empty()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data);
 
     auto vector_template = dfs_vector.read_template();
@@ -275,9 +279,9 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     }
 
     vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                     Dfs::Field::Blob("sign").not_null(),
-                                     Dfs::Field::Timestamp("timestamp"),
-                                     Dfs::Field::Integer("status").not_null() });
+                                    Dfs::Field::Blob("sign").not_null(),
+                                    Dfs::Field::Timestamp("timestamp"),
+                                    Dfs::Field::Integer("status").not_null() });
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
