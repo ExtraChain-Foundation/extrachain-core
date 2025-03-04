@@ -20,6 +20,7 @@
 #include "utils/db_iterator.h"
 
 #include "sqlite3.h"
+#include "utils/exc_logs.h"
 
 DbIterator::DbIterator(sqlite3_stmt *stmt)
     : m_stmt(stmt)
@@ -95,7 +96,7 @@ std::string DbIterator::getValue(int column) {
         break;
     }
     case DbColumnType::Null:
-        qFatal("TODO: test");
+        eFatal("TODO: test");
         break;
     }
 

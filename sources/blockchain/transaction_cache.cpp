@@ -19,6 +19,8 @@
 
 #include "blockchain/transaction_cache.h"
 
+#include <QDir>
+
 #include "managers/extrachain_node.h"
 #include "blockchain/blockchain.h"
 #include "utils/db_connector.h"
@@ -125,7 +127,8 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
         }
 
         TransactionAmountOperation operation = TransactionAmountOperation::Plus;
-        if (actor_id == tx->sender() && tx->type() == TransactionType::Regular) {
+        if (actor_id == tx->sender()
+            && (tx->type() == TransactionType::Regular || tx->type() == TransactionType::Repeatable)) {
             operation = TransactionAmountOperation::Minus;
         }
 

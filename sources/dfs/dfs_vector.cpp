@@ -303,30 +303,16 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
-    std::string to_hash;
-    bool        all_empty = true;
-    row["timestamp"]      = std::to_string(Utils::current_date_ms());
+    row["timestamp"] = std::to_string(Utils::current_date_ms());
     if (row["status"] != "0") {
         row["status"] = "1";
     }
 
-    to_hash = row["status"] + row["timestamp"];
-
-    const auto &fields = collection_template_.fields();
-    for (const auto &field : fields) {
-        std::string value = row[field.name()];
-        if (!value.empty()) {
-            all_empty = false;
-        }
-
-        to_hash += value;
-    }
-
-    if (all_empty || to_hash.empty()) {
+    auto [hash, all_empty] = calculate_hash(row);
+    if (hash.empty() || all_empty) {
         return false;
     }
 
-    auto hash = Utils::calculate_hash(to_hash);
     auto sign = actor_.key().sign(hash);
     if (!sign.has_value()) {
         return false;
@@ -339,6 +325,11 @@ bool DfsVector::store_add(DbRow &row) {
 }
 
 bool DfsVector::local_add(const DbRow &row) {
+    bool verify = this->verify(row);
+    if (!verify) {
+        return false;
+    }
+
     DbConnector db(file_path_);
     db.open();
     // check exists id
@@ -367,4 +358,49 @@ std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
     }
 
     return row;
+}
+
+std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
+    // TODO: try..catch
+    std::string to_hash   = row.at("status") + row.at("timestamp");
+    bool        all_empty = true;
+
+    if (to_hash.size() != 14) { // 1 + 13
+        return { "", true };
+    }
+
+    const auto &fields = collection_template_.fields();
+    for (const auto &field : fields) {
+        std::string value = row.at(field.name());
+        if (!value.empty()) {
+            all_empty = false;
+        }
+
+        to_hash += value;
+    }
+
+    if (all_empty || to_hash.empty()) {
+        return { "", true };
+    }
+
+    auto hash = Utils::calculate_hash(to_hash);
+    return { hash, false };
+}
+
+bool DfsVector::verify(const DbRow &row) {
+    auto      actor_id = ActorId(row.at("actor"));
+    auto      actor    = node->actorIndex()->getActor(actor_id);
+    Signature sign     = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
+
+    auto [hash, all_empty] = calculate_hash(row);
+    if (hash.empty() || all_empty) {
+        return false;
+    }
+
+    auto verify = actor.key().verify(hash, sign);
+    if (!verify.has_value()) {
+        return false;
+    }
+
+    return verify.value();
 }

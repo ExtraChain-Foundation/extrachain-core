@@ -19,4 +19,6 @@
 
 #pragma once
 
+#include <string>
+
 static const std::string extrachain_version = "0.15.2";

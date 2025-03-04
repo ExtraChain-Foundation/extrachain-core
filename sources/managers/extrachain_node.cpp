@@ -202,16 +202,16 @@ bool ExtraChainNode::create_usernames_vector() {
     auto vector_template =
         Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });
 
-    auto main_actor_id = accountController()->system_actor().id();
-    auto template_res  = dfs()->store_template(main_actor_id, vector_template);
+    auto system_actor_id = accountController()->system_actor().id();
+    auto template_res    = dfs()->store_template(system_actor_id, vector_template);
     if (!template_res.has_value()) {
         eCritical("Can't create usernames, because {}", template_res.error());
         return false;
     }
 
     auto first_id = actorIndex()->network_id();
-    auto vec_res  = dfs()->store_vector(main_actor_id,
-                                       main_actor_id,
+    auto vec_res  = dfs()->store_vector(system_actor_id,
+                                       system_actor_id,
                                        "Usernames",
                                        template_res->actor_id,
                                        template_res->file_id);
@@ -219,25 +219,48 @@ bool ExtraChainNode::create_usernames_vector() {
         return false;
     }
 
-    auto subscription_template = Dfs::CollectionTemplate::create("subscription")
+    return true;
+}
+
+bool ExtraChainNode::create_subscription_template() {
+    auto system_actor_id       = accountController()->system_actor().id();
+    auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
                                      .value()
                                      .add_fields({ Dfs::Field::Integer("type").not_null(),
                                                    Dfs::Field::Integer("date_start").not_null(),
                                                    Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
                                                    Dfs::Field::String("block_id").not_null(),
                                                    Dfs::Field::String("transaction_hash").not_null() });
-    auto template2_res = dfs()->store_template(main_actor_id, subscription_template);
-    if (!template2_res.has_value()) {
+
+    auto template_res = dfs()->store_template(system_actor_id, subscription_template);
+    if (!template_res.has_value()) {
         eCritical("Can't create subscription template, because {}", template_res.error());
         return false;
     }
 
-    // temp
-    auto sub_res = dfs()->store_vector(main_actor_id,
-                                       main_actor_id,
-                                       "Subscription",
-                                       template2_res->actor_id,
-                                       template2_res->file_id);
+    return true;
+}
+
+bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
+    auto network_id = actorIndex()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "Subscription");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto system_actor_id = accountController()->system_actor().id();
+    auto sub_res         = dfs()->store_vector(system_actor_id,
+                                       system_actor_id,
+                                       file_name,
+                                       search_result->actor_id,
+                                       search_result->file_id);
     if (!sub_res.has_value()) {
         return false;
     }
@@ -371,12 +394,57 @@ ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
 }
 
-bool ExtraChainNode::add_subscription(int                type,
-                                      uint64_t           date_start,
-                                      bool               auto_renw,
-                                      const BigNumber&   block_id,
-                                      const std::string& tx_hash) {
-    return false;
+bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
+                                      const std::string& file_id,
+                                      int                type,
+                                      bool               auto_renew,
+                                      const TokenId&     token_id) {
+    if (subscription_row.has_value()) {
+        return false;
+    }
+
+    ActorId system_id = m_accountController->system_actor().id();
+
+    Transaction transaction;
+    transaction.setSender(system_id);
+    transaction.setReceiver(owner_id);
+    transaction.setAmount(BigNumberFloat(10));
+    transaction.setToken(token_id); // TODO: get token_id from json
+    transaction.setData(std::to_string(type));
+    transaction.setType(TransactionType::Repeatable);
+    this->sendTransaction(transaction, m_accountController->system_actor());
+    // transaction.setHash()
+
+    auto row =
+        SubscriptionRow { .owner_id = owner_id, .file_id = file_id, .type = type, .auto_renew = auto_renew };
+    subscription_row = row;
+    return true;
+}
+
+void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
+                                           uint64_t           block_date,
+                                           const Transaction& transaction) {
+    if (!subscription_row.has_value()) {
+        return;
+    }
+
+    ActorId system_id = m_accountController->system_actor().id();
+    if (transaction.sender() != system_id) {
+        return;
+    }
+
+    auto row = subscription_row.value();
+
+    row.block_id         = block_id;
+    row.date_start       = block_date;
+    row.transaction_hash = transaction.hash();
+
+    auto row_map = Utils::to_dbrow(row);
+    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map);
+
+    if (res) {
+        emit subscriptionAdded(row.owner_id, row.file_id);
+    }
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(ActorId        receiver,
@@ -714,6 +782,8 @@ void ExtraChainNode::connectSignals() {
                                   "token-description.json",
                                   Dfs::DataSecurity::Public);
             });
+
+    connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
 }
 
 void ExtraChainNode::prepareFolders() {

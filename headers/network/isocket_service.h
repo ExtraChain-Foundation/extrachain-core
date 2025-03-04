@@ -25,6 +25,7 @@
 #include "utils/exc_utils.h"
 
 #include <QQueue>
+#include <QMutex>
 
 class ExtraChainNode;
 

@@ -1618,6 +1618,10 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
             if (transaction.sender() == accountId || transaction.receiver() == accountId) {
                 emit updateSelf(block.id());
 
+                if (transaction.type() == TransactionType::Repeatable) {
+                    emit selfTxRepeatableAdded(block.id(), block.getDate(), transaction);
+                }
+
                 emit transaction_cache_.add(block.id(), block.getDate(), transaction);
 
 #ifdef IS_R
@@ -1665,6 +1669,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
 // Actors //
 TransactionProveError Blockchain::prove_transaction(const Transaction          &tx,
                                                     const std::set<Transaction> transactions) {
+    // temp
+    if (tx.type() == TransactionType::Repeatable) {
+        return TransactionProveError::NoError;
+    }
+
     // eLog("[Blockchain] Transaction prove started: {}",
     // tx);
     // TODO: temp, remove

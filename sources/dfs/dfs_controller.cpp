@@ -588,6 +588,9 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
     }
 
     auto row = v->read_row(actor_id);
+    if (row->empty()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
     return row;
 }
 

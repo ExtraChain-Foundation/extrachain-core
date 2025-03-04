@@ -34,6 +34,8 @@
 #include <fstream>
 #include <vector>
 
+#include <QJsonObject>
+
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
 SafePtr<std::set<SocketService *>> NetworkManager::connections() const {

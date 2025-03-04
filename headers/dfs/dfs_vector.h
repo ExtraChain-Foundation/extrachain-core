@@ -104,4 +104,8 @@ public:
     bool                 store_add(DbRow& row);
     bool                 local_add(const DbRow& row);
     std::optional<DbRow> remove(/*const ActorId & actor_id,*/ const ActorId& actor_id);
+
+    std::pair<std::string, bool> calculate_hash(const DbRow &row);
+
+    bool verify(const DbRow &row);
 };
