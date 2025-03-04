@@ -20,6 +20,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <msgpack/adaptor/define_decl.hpp>
 #include <regex>
 #include <string>
 #include <string_view>
@@ -27,6 +28,7 @@
 #include <expected>
 #include <memory>
 #include <boost/algorithm/string/join.hpp>
+#include <boost/describe.hpp>
 
 enum class SqlCreateError {
     EmptyIdentifier,

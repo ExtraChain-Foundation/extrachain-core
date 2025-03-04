@@ -18,6 +18,9 @@
  */
 
 #include "blockchain/actor_index.h"
+
+#include <QDir>
+
 #include "network/network_manager.h"
 
 ActorId ActorIndex::network_id() {

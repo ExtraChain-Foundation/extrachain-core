@@ -319,6 +319,7 @@ signals:
     void updateSelf(BigNumber blockId);
 
     void selfTxAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
+    void selfTxRepeatableAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
 
     void addBlockFromNetwork(const BlockVariant &block,
                              const Responder    &responder,
