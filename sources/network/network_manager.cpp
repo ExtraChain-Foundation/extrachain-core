@@ -1734,10 +1734,16 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip) {
     try {
+        QString query = "http://ip-api.com/json";
+        if (!ip.isEmpty()) {
+            query += "/" + ip;
+        }
+
+        QUrl                  url(query);
         QNetworkAccessManager manager;
-        QNetworkRequest       request(QUrl("http://ip-api.com/json"));
+        QNetworkRequest       request(url);
         request.setTransferTimeout(5000);
         QNetworkReply *reply = manager.get(request);
 

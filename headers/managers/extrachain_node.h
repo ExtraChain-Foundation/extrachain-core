@@ -223,7 +223,7 @@ signals:
     void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void readyInitLocalizationFiles();
-    void vpnConnected(std::pair<QString, QString> publicIPAndCountry);
+    void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
     void vpnDisconnect();
 
 private slots:
