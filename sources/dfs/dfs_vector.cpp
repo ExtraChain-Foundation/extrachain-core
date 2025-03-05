@@ -362,10 +362,10 @@ std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
 
 std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
     // TODO: try..catch
-    std::string to_hash   = row.at("status") + row.at("timestamp");
+    std::string to_hash   = row.at("status") + row.at("timestamp") + file_actor_id_.to_string() + file_id_;
     bool        all_empty = true;
 
-    if (to_hash.size() != 14) { // 1 + 13
+    if (to_hash.size() != 14 + 40 + 64) { // 1 + 13 + 40 + 64
         return { "", true };
     }
 
