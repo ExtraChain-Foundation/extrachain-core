@@ -335,6 +335,7 @@ public:
                              const Responder& responder = Responder(nullptr)) {
         bool check = send_message_checker(type, send_mode, status, responder);
         if (!check) {
+            eWarning("Send message: ignore 1");
             return "";
         }
 
