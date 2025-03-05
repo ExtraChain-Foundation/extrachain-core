@@ -563,7 +563,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
 
-            eWarning("SENDED to {}: {}", receiver_identifier, serialized_message);
+            // eWarning("SENDED to {}: {}", receiver_identifier, serialized_message);
 
             if (send_mode == SendMode::Focused) {
                 break;

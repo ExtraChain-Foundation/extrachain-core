@@ -31,7 +31,7 @@ struct VPNConfigStorage {
     struct VPNHandhakeCache {
         std::string              uuid;
         // std::string              requesterIP;
-        // std::string              requesterNetworkIdentifier;
+        std::string              requesterNetworkIdentifier;
         std::string              requesterMessageID;
         std::string              requesterNodeID;
         std::string              nextNodeIP;
