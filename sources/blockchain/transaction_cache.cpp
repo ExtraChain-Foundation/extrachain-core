@@ -96,17 +96,24 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     }
 }
 
-void TransactionCache::prepare(ActorId actor_id, ActorId token, int offset) {
+void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidden, int offset) {
     eLog("[TransactionCache] Prepare for {} with offset {}", actor_id, offset);
+
+    std::string adding_query;
+    if (reward_hidden) {
+        adding_query = fmt::format("AND type != '{}'", int(TransactionType::Conversion));
+    }
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
     const auto query = std::format(
-        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' ORDER by date DESC LIMIT 50;",
+        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' {} ORDER by date DESC LIMIT "
+        "50;",
         Config::DataStorage::TX_CACHE_TABLE,
         actor_id.to_string(),
         actor_id.to_string(),
-        token.to_string());
+        token.to_string(),
+        adding_query);
     // TODO: offset
     const auto selected = db.select(query, Config::DataStorage::TX_CACHE_TABLE);
     db.close();
