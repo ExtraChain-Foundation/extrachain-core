@@ -21,4 +21,4 @@
 
 #include <string>
 
-static const std::string extrachain_version = "0.15.2";
+static const std::string extrachain_version = "0.16.0";

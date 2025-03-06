@@ -228,15 +228,15 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
             return std::unexpected(DfsVectorError::Unknown);
         }
 
-        auto vector_template =
+        auto vector_template_file_id =
             Dfs::Tables::ActorDirFile::get_collection_template_file_id(vector_template_link->owner_id,
                                                                        vector_template_link->file_id);
 
-        if (!vector_template.has_value()) {
+        if (!vector_template_file_id.has_value()) {
             return std::unexpected(DfsVectorError::Unknown);
         }
 
-        return vector_template.value();
+        return vector_template_file_id.value();
     }
 
     return vector_template.value();

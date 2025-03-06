@@ -43,7 +43,7 @@ DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &owner_i
     bool need_create = false;
     try {
         need_create = std::filesystem::file_size(path) == 0;
-    } catch (std::exception &e) {
+    } catch (std::exception &) {
         need_create = true;
     }
 

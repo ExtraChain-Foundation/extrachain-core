@@ -408,7 +408,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat(10));
+    transaction.setAmount(BigNumberFloat(1000));
     transaction.setToken(token_id); // TODO: get token_id from json
     transaction.setData(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
