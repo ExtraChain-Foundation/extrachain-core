@@ -519,7 +519,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                             .encryption    = data_security,
                             .state         = Dfs::FileState::Ready };
 
+#ifdef IS_R
+    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, actor);
+#else
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, actor.value());
+#endif
     if (!add_dir_row_result) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
