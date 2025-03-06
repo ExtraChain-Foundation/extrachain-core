@@ -425,7 +425,6 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
     auto serialized_hash = message.calculate_hash();
     auto sign_result     = mainActor.key().sign(ByteArray(serialized_hash).toBytes());
     if (!sign_result.has_value()) {
-        eWarning("Send message: ignore sign");
         return "";
     }
 
@@ -464,7 +463,6 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
     }
 #endif
 
-    eWarning("Send message: {} {} to {}", to_message_id, message.message_id, receiver_identifier);
     this->send_message_connections(serialized + sign,
                                    message,
                                    send_mode,
@@ -483,7 +481,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] NOT save message to cache {} {}", message_type, status_info);
+        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, send_mode, receiver_identifier);
         return;
     }
@@ -562,9 +560,6 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         if (send_checked) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
-
-            // eWarning("SENDED to {}: {}", receiver_identifier, serialized_message);
-
             if (send_mode == SendMode::Focused) {
                 break;
             }
@@ -801,16 +796,16 @@ void NetworkManager::messageReceived(const std::string &message,
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
             || message_body.init_sender_id == node->accountController()->system_actor().id()) {
-            eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
-                     messageId,
-                     identifier);
+            // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
+            // messageId,
+            // identifier);
             return;
         }
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
-            eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
-                     messageId,
-                     identifier);
+            // eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
+            // messageId,
+            // identifier);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -856,11 +851,11 @@ void NetworkManager::messageReceived(const std::string &message,
     // try {
     switch (type) {
     case MessageType::Custom: {
-        eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
-                 messageId,
-                 message_body.sender_id,
-                 magic_enum::enum_name(status),
-                 identifier);
+        // eSuccess("Achieved Custom package. MessageID: {} | SenderId: {} | Status: {} | Identifier: {}",
+        //          messageId,
+        //          message_body.sender_id,
+        //          magic_enum::enum_name(status),
+        //          identifier);
 
         const auto custom_deserialize_result = MessagePack::deserialize<CustomMessage>(serialized);
 
