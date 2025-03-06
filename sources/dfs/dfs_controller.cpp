@@ -501,10 +501,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     auto [collection_hash, collection_size] =
         Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
-    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
-    if (!author_actor.has_value()) {
-        return std::unexpected(Dfs::DfsError::NoAuthorActor);
-    }
+    // auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    // if (!author_actor.has_value()) {
+    //     return std::unexpected(Dfs::DfsError::NoAuthorActor);
+    // }
 
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
@@ -519,7 +519,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                             .encryption    = data_security,
                             .state         = Dfs::FileState::Ready };
 
-    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
+    bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, actor.value());
     if (!add_dir_row_result) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
