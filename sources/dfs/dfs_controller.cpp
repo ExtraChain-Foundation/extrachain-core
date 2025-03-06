@@ -472,7 +472,19 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
 
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
-    auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
+
+#ifdef IS_R
+    const std::string predefine_raccoon_id =
+        "[\"46710a2d823c23db9fc2ac01e0f84212a8128373\",1,\"lwiqDsEnbrfmYWDqshZDVCGpHs6ahbEHYykzCkrSutE\","
+        "\"MU3JIBdQ7MA1ncYfLsXTL95a0Mxq3Fs_oNO_Ot1IPQyXCKoOwSdut-ZhYOqyFkNUIakezpqFsQdjKTMKStK60Q\"]";
+
+    Actor<KeyPrivate> actor;
+    actor = actor.fromJson(QByteArray::fromStdString(predefine_raccoon_id));
+
+    auto res = DfsVector::create(node, actor, actor.id(), file_id, vector_template, data_security, security_data);
+#else
+    auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -484,6 +496,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                                  vector_template,
                                  data_security,
                                  security_data);
+#endif
 
     auto [collection_hash, collection_size] =
         Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);

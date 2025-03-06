@@ -255,13 +255,14 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
         return false;
     }
 
-    auto system_actor_id = accountController()->system_actor().id();
+    auto system_actor_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
     auto sub_res         = dfs()->store_vector(system_actor_id,
                                        system_actor_id,
                                        file_name,
                                        search_result->actor_id,
                                        search_result->file_id);
     if (!sub_res.has_value()) {
+        eCritical("create_subscription_vector: {} for actor {}", sub_res.error(), system_actor_id);
         return false;
     }
 
