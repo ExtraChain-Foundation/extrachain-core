@@ -560,7 +560,6 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         if (send_checked) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
-
             if (send_mode == SendMode::Focused) {
                 break;
             }

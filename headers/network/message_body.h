@@ -214,6 +214,7 @@ inline MessageBody make_init_message(const std::string& data,
 
 struct VPNMessage {
     std::string              initialSender;
+    std::string              initialSenderNetworkIdentifier;
     int                      vpnCommand;
     int                      vpnType;
     int                      resultChainIndex;
@@ -230,6 +231,7 @@ struct VPNMessage {
     std::string              senderID;
 
     MSGPACK_DEFINE(initialSender,
+                   initialSenderNetworkIdentifier,
                    vpnCommand,
                    vpnType,
                    resultChainIndex,
