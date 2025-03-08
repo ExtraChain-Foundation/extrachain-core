@@ -1735,9 +1735,14 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip) {
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip, bool alt) {
+    static QMap<QString, QString> cache;
+    if (!ip.isEmpty() && cache.contains(ip)) {
+        return { ip, cache[ip] };
+    }
+
     try {
-        QString query = "http://ip-api.com/json";
+        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-apiі.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
@@ -1776,10 +1781,15 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
 
         QJsonObject jsonObj = jsonDoc.object();
 
-        ip      = jsonObj.value("query").toString();
-        country = jsonObj.value("country").toString();
+        ip      = jsonObj.value(alt ? "ipAddress" : "query").toString();
+        country = jsonObj.value(alt ? "countryName" : "country").toString();
+
+        if (country.contains("United Kingdom")) {
+            country = "United Kingdom";
+        }
 
         eLog("Country: {}", country);
+        cache.insert(ip, country);
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());

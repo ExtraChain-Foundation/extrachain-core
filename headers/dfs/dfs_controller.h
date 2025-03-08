@@ -98,6 +98,10 @@ public:
     explicit DfsController(ExtraChainNode *node);
     ~DfsController();
 
+    // auto: + network id + local actors
+    std::set<ActorId> priority_actors = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    bool              light_mode      = false;
+
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,

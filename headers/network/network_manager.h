@@ -228,8 +228,9 @@ public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void                        localInizialization();
-    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "");
-    bool                        removeOneConnection();
+    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "", bool alt = true);
+
+    bool removeOneConnection();
 
     std::string getNetworkVPNHash() noexcept;
     void        setNetworkVPNHash() noexcept;
