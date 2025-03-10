@@ -214,6 +214,7 @@ private:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
 
     friend class ExtraChainNodeWrapper;
+    friend class NetworkManager;
 
     /**
      * @brief Connect signals between NetworkManager and Blockchain
