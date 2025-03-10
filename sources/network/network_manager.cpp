@@ -1759,7 +1759,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
     }
 
     try {
-        QString query = alt ? "https://freeipapii.com/api/json" : "http://ip-apiі.com/json";
+        QString query = alt ? "https://freeipapi.com/api/json" : "https://ip-api.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
