@@ -61,6 +61,31 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
+std::string NetworkManager::public_ip() const {
+    return public_ip_;
+}
+
+void NetworkManager::set_public_ip(const std::string &new_public_ip) {
+    if (new_public_ip.empty()) {
+        return;
+    }
+
+    QHostAddress address(QString::fromStdString(new_public_ip));
+    if (address.isNull() || address.isSiteLocal() || address.isLoopback()) {
+        return;
+    }
+
+    public_ip_ = new_public_ip;
+
+#ifdef Q_OS_LINUX
+    return;
+#endif
+
+    if (node->getInitPublicIPAndCountry().first.isEmpty()) {
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
+    }
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -71,6 +96,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
+
+    process();
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -111,6 +138,35 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
+#ifdef IS_R
+    if (node->accountController()->empty()) {
+        return;
+    }
+
+    {
+        // eLog("_ Reconnection");
+        auto connectionsLocked = *m_connections;
+        bool is_first_node     = false;
+        for (const auto &el : *connectionsLocked) {
+            if (el->ip() == "51.68.181.52") {
+                is_first_node = el->is_active();
+
+                // if (!is_first_node) {
+                //     el->close();
+                // }
+                break;
+            }
+        }
+
+        if (!is_first_node) {
+            eLog("_ Reconnection!");
+            connectToNode("51.68.181.52", Network::Protocol::WebSocket); // 51.68.181.52 57.128.191.73
+        }
+    }
+#endif
+
+    return;
+
     eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
     auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
@@ -247,7 +303,7 @@ NetworkManager::~NetworkManager() {
 
 void NetworkManager::checkConnectionsStatus() {
     std::unordered_set<std::string> ind_temp;
-    m_reconnectTimer->stop();
+    // m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
     {
@@ -1735,9 +1791,14 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip) {
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip, bool alt) {
+    static QMap<QString, QString> cache;
+    if (!ip.isEmpty() && cache.contains(ip)) {
+        return { ip, cache[ip] };
+    }
+
     try {
-        QString query = "http://ip-api.com/json";
+        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-api.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
@@ -1776,17 +1837,40 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
 
         QJsonObject jsonObj = jsonDoc.object();
 
-        ip      = jsonObj.value("query").toString();
-        country = jsonObj.value("country").toString();
+        ip      = jsonObj.value(alt ? "ipAddress" : "query").toString();
+        country = jsonObj.value(alt ? "countryName" : "country").toString();
+
+        if (country.contains("United Kingdom")) {
+            country = "United Kingdom";
+        }
 
         eLog("Country: {}", country);
+        cache.insert(ip, country);
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
+#ifdef Q_OS_LINUX
         return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     } catch (...) {
         eCritical("Get public ip error unknown");
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
+#ifdef Q_OS_LINUX
         return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     }
 }
 
