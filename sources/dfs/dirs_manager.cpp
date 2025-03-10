@@ -149,6 +149,19 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
 
     Dfs::initialize_actor_folder(owner_id);
 
+    /*
+    auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
+    if (local_dir_rows.has_value()) {
+        for (const auto& network_row : dir_rows) {
+            auto it = local_dir_rows->find(network_row.file_id);
+
+            if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
+                eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id, network_row.last_modified);
+            }
+        }
+    }
+    */
+
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
@@ -175,6 +188,15 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     auto actors = node->actorIndex()->allActors();
+
+    auto network_id = node->actorIndex()->network_id();
+    auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
+    std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+        return actor == network_id || actor == raccoon_id;
+    });
+
+    actors.insert(actors.begin(), network_id);
+    actors.insert(actors.begin(), raccoon_id);
 
     for (const auto& actor : actors) {
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);

@@ -54,13 +54,6 @@ struct HistoricalCollectionRow {
 };
 BOOST_DESCRIBE_STRUCT(HistoricalCollectionRow, (), (id, prev_id, operation, data, timestamp, actor_id, sign))
 
-struct CollectionTemplateLink {
-    ActorId     actor_id;
-    std::string file_id;
-    std::string name;
-};
-BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (actor_id, file_id, name))
-
 class ExtraChainNode;
 
 class HistoricalCollection {
@@ -153,8 +146,9 @@ public:
     std::expected<HistoricalCollectionRow, CollectionError> get_row(const std::string& search_value,
                                                                     const std::string& field = "id");
 
-    std::expected<HistoricalCollectionRow, CollectionError>                                       get_last_row();
-    std::expected<std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError> get_creation();
+    std::expected<HistoricalCollectionRow, CollectionError> get_last_row();
+    std::expected<std::variant<Dfs::CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError>
+    get_creation();
 
     FsPath get_historical_path() const;
     FsPath get_file_path() const;

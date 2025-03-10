@@ -135,7 +135,7 @@ static const std::string NetworkCacheFile = "tmp/network.cache";
 
 class Responder {
 public:
-    Responder(NetworkManager* manager)
+    Responder(NetworkManager* manager = nullptr)
         : network_manager(manager) {
     }
 
@@ -228,7 +228,7 @@ public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void                        localInizialization();
-    std::pair<QString, QString> getPublicIPAndCountry();
+    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "");
     bool                        removeOneConnection();
 
     std::string getNetworkVPNHash() noexcept;

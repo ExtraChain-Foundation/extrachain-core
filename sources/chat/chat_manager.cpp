@@ -46,7 +46,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
             }
             from_id = from_id.substr(prefix.length());
 
-            const auto& main_actor = this->node->accountController()->mainActor();
+            const auto& main_actor = this->node->accountController()->system_actor();
             auto        from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
 
             auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
@@ -84,7 +84,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
     KeyBytes    key        = Cryptography::keygen();
-    const auto& main_actor = node->accountController()->mainActor();
+    const auto& main_actor = node->accountController()->system_actor();
     chat_actor_            = main_actor.id();
 
     // TODO: my actor = use actor for chats
@@ -146,7 +146,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
 
 std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat) {
     // check if with this person chat exists
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
 
     if (!chat.another.has_value()) {
         return chat;
@@ -171,7 +171,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
 }
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto my_chats   = get_my_chats();
 
     if (!my_chats.has_value()) {
@@ -258,7 +258,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return my_chats_result.value();
     }
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     auto store_chats_res =
         node->dfs()->store_collection(main_actor.id(), main_actor.id(), chats_template().name(), chats_template());
     if (!store_chats_res.has_value()) {
@@ -274,7 +274,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
         return my_chats;
     }
 
-    auto main_actor = node->accountController()->mainActor();
+    auto main_actor = node->accountController()->system_actor();
     chat_actor_     = main_actor.id();
     auto rows       = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor.id());
     if (!rows.has_value()) {

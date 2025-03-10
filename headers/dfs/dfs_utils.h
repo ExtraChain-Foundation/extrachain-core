@@ -82,18 +82,21 @@ namespace Dfs {
         static const std::string   fsMapName                  = ".dir";
         static const std::string   dirsPath                   = "dfs/.dirs";
         static const std::string   COLLECTION_FILE            = ".collection";
+        static const std::string   VECTOR_FILE                = ".vector";
+        static const std::string   DICTIONARY_FILE            = ".dictionary";
         static const std::uint64_t FRAGMENT_SIZE              = /*2097152*/ 524228;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
         static const std::uint64_t historicalChainSectionSize = 209715200;
 
-        static const std::uint64_t encSectionSize   = 256;
-        static const std::wstring  separator        = std::wstring(1, std::filesystem::path::preferred_separator);
-        static const int           miningReward     = 1;
-        static const std::string   dsStoreExtention = ".DS_Store";
+        static const std::uint64_t encSectionSize = 256;
+        static const std::wstring  separator      = std::wstring(1, std::filesystem::path::preferred_separator);
+        static const int           miningReward   = 1;
 
         static const std::string TEMPLATE_COLLECTION          = ":Collection";
         static const std::string TEMPLATE_COLLECTION_TEMPLATE = ":CollectionTemplate";
+        static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
+        static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CHAT                = ":Chat";
     } // namespace Basic
 
@@ -175,7 +178,8 @@ namespace Dfs {
         Folder     = 0,
         File       = 10,
         Collection = 20,
-        Dictionary = 30
+        Vector     = 30,
+        Dictionary = 40
     };
 
     enum class FileState {
@@ -319,6 +323,32 @@ namespace Dfs {
             std::uint64_t last_modified;
         };
         BOOST_DESCRIBE_STRUCT(RemoveFile, (), (owner_id, file_id, sign, last_modified))
+
+        struct DfsVectorContentPackage {
+            ActorId            owner_id;
+            std::string        file_id;
+            CollectionTemplate vector_template;
+            std::string        vector_file;
+            std::vector<DbRow> content;
+            // int offset = 0;
+        };
+        BOOST_DESCRIBE_STRUCT(DfsVectorContentPackage,
+                              (),
+                              (owner_id, file_id, vector_template, vector_file, content))
+
+        struct VectorRowAdd {
+            ActorId     owner_id;
+            std::string file_id;
+            DbRow       row;
+        };
+        BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row))
+
+        struct VectorRowRemove {
+            ActorId     owner_id;
+            std::string file_id;
+            DbRow       row;
+        };
+        BOOST_DESCRIBE_STRUCT(VectorRowRemove, (), (owner_id, file_id, row))
 
         struct ResponseDfsSize {
             ActorId     actorId;
@@ -504,6 +534,10 @@ namespace Dfs {
             std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const ActorId& owner_id,
                                                                                 std::uint64_t  last_modified = 0);
 
+            std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> get_dir_rows_map(
+                const ActorId& owner_id,
+                std::uint64_t  last_modified = 0);
+
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const ActorId&     owner_id,
                                                                                      const std::string& folder,
                                                                                      const std::string& name);
@@ -530,7 +564,7 @@ namespace Dfs {
 
             std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,
                                                                             const std::string& file_id);
-            bool                             update_file_metadata(const ActorId& ownerr_id, DirRow& dir_row);
+            bool                             update_file_metadata(const ActorId& owner_id, DirRow& dir_row);
         } // namespace ActorDirFile
 
         namespace DirsFile {

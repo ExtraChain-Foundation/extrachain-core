@@ -43,7 +43,7 @@ DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &owner_i
     bool need_create = false;
     try {
         need_create = std::filesystem::file_size(path) == 0;
-    } catch (std::exception &e) {
+    } catch (std::exception &) {
         need_create = true;
     }
 
@@ -77,18 +77,37 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
-    std::vector<Dfs::DirRow> dirRows;
-    auto                     actrDirData =
-        db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
+    std::vector<Dfs::DirRow> dir_rows;
+    auto db_rows = db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
 
-    for (auto &row : actrDirData) {
-        auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
-        if (dirRow.has_value()) {
-            dirRows.push_back(dirRow.value());
+    for (auto &row : db_rows) {
+        auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dir_row.has_value()) {
+            dir_rows.push_back(dir_row.value());
         }
     }
 
-    return dirRows;
+    return dir_rows;
+}
+
+std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::
+    get_dir_rows_map(const ActorId &owner_id, std::uint64_t last_modified) {
+    auto db = get_actor_dir_file(owner_id);
+    if (!db.is_open()) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
+
+    std::unordered_map<std::string, Dfs::DirRow> dir_rows;
+    auto db_rows = db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
+
+    for (auto &row : db_rows) {
+        auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dir_row.has_value()) {
+            dir_rows[dir_row->file_id] = dir_row.value();
+        }
+    }
+
+    return dir_rows;
 }
 
 std::expected<std::string, Dfs::DfsError> Dfs::Tables::ActorDirFile::last_file_id(const ActorId     &owner_id,
@@ -211,7 +230,10 @@ bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std:
 
         auto dir_row_db = Utils::to_dbrow(dir_row);
         // TODO: temp, because this function used only for loads
-        dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
+        if (dir_row.state != Dfs::FileState::Removed) {
+            dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
+        }
+
         dir_file.insert(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
     }
 
@@ -280,13 +302,13 @@ std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id);
     DbConnector db(dfs_path->native());
     db.open();
-    auto res = db.hash_size("id");
+    auto res = db.hash_size("actor");
     db.close();
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &ownerr_id, DirRow &dir_row) {
-    auto db = get_actor_dir_file(ownerr_id);
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row) {
+    auto db = get_actor_dir_file(owner_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
@@ -346,7 +368,7 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
         return std::nullopt;
     }
 
-    eLog("[Dfs] Read {} from collection template bytes", content->size());
+    // eLog("[Dfs] Read {} from collection template bytes", content->size());
     auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(content.value());
     if (!collection_template_result.has_value()) {
         return std::nullopt;

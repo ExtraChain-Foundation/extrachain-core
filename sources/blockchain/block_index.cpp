@@ -225,11 +225,12 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxBySenderOrReceiverAndToke
     return getLastTxByParam(id.to_string(), SearchEnum::TxParam::UserSenderOrReceiverOrToken, token);
 }
 
-std::set<Transaction> BlockIndex::getTxsBySenderOrReceiverInRow(const BigNumber &id,
-                                                                BigNumber        from,
-                                                                int              count,
-                                                                const ActorId   &token) const {
-    return getTxsByParamInRow(id, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
+std::unordered_map<ActorId, std::vector<TransactionInfo>> BlockIndex::getTxsBySenderOrReceiverInRow(
+    const std::vector<ActorId> &actor_ids,
+    BigNumber                   from,
+    int                         count,
+    const ActorId              &token) const {
+    return getTxsByParamInRow(actor_ids, SearchEnum::TxParam::UserSenderOrReceiver, from, count, token);
 }
 
 std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string  &data,
@@ -304,12 +305,15 @@ std::pair<Transaction, BigNumber> BlockIndex::getLastTxByParam(const std::string
     return { Transaction(), BigNumber("-1") };
 }
 
-std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
-                                                     SearchEnum::TxParam param,
-                                                     BigNumber           from,
-                                                     int                 count,
-                                                     ActorId             token) const {
-    std::set<Transaction> currentTxs;
+std::unordered_map<ActorId, std::vector<TransactionInfo>> BlockIndex::getTxsByParamInRow(
+    const std::vector<ActorId> &actor_ids,
+    SearchEnum::TxParam         param,
+    BigNumber                   from,
+    int                         count,
+    ActorId                     token) const {
+    int i = 0;
+
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> currentTxs;
 
     if (first_saved_id == -1 || last_saved_id == -1) {
         eLog("[BlockIndex] There no tx's in block index");
@@ -320,6 +324,10 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
     int       currentCount = 0;
 
     while (lastBlockId >= getFirstSavedId()) {
+        i += 1;
+        if (i > 500) {
+            break;
+        }
         // eLog("{} {}", count, currentCount);
 
         if (count < currentCount)
@@ -335,40 +343,47 @@ std::set<Transaction> BlockIndex::getTxsByParamInRow(const BigNumber    &id,
         auto txs = lastBlock->transactions();
 
         for (const Transaction &tx : txs) {
-            if (tx.token() != token)
-                continue;
-            switch (param) {
-            case SearchEnum::TxParam::UserSender: {
-                if (BigNumber(tx.sender().to_string()) == id && tx.token() == token) {
-                    currentTxs.insert(tx);
-                    ++currentCount;
+            for (const auto &id : actor_ids) {
+                if (tx.token() != token)
+                    continue;
+                switch (param) {
+                case SearchEnum::TxParam::UserSender: {
+                    if (tx.sender() == id && tx.token() == token) {
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
+                        ++currentCount;
+                    }
+                    break;
                 }
-                break;
-            }
-            case SearchEnum::TxParam::UserReceiver: {
-                if (BigNumber(tx.receiver().to_string()) == id && tx.token() == token) {
-                    currentTxs.insert(tx);
-                    ++currentCount;
+                case SearchEnum::TxParam::UserReceiver: {
+                    if (tx.receiver() == id && tx.token() == token) {
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
+                        ++currentCount;
+                    }
+                    break;
                 }
-                break;
-            }
-            case SearchEnum::TxParam::UserSenderOrReceiver: {
-                if ((BigNumber(tx.sender().to_string()) == id || BigNumber(tx.receiver().to_string()) == id)
-                    && tx.token() == token) {
-                    currentTxs.insert(tx);
-                    ++currentCount;
+                case SearchEnum::TxParam::UserSenderOrReceiver: {
+                    if ((tx.sender() == id || tx.receiver() == id) && tx.token() == token) {
+                        currentTxs[id].push_back(TransactionInfo { .block_id    = lastBlock->id(),
+                                                                   .block_date  = lastBlock->getDate(),
+                                                                   .transaction = tx });
+                        ++currentCount;
+                    }
+                    break;
                 }
-                break;
-            }
-            case SearchEnum::TxParam::Hash: {
-                if (BigNumber(tx.hash()) == id && tx.token() == token) {
-                    currentTxs.insert(tx);
-                    ++currentCount;
+                case SearchEnum::TxParam::Hash: {
+                    //     if (BigNumber(tx.hash()) == id && tx.token() == token) {
+                    //         currentTxs.insert(tx);
+                    //         ++currentCount;
+                    //     }
+                    break;
                 }
-                break;
-            }
-            default: {
-            }
+                default: {
+                }
+                }
             }
         }
 

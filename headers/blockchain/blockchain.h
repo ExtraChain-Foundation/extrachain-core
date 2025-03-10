@@ -26,6 +26,7 @@
 #include "blockchain/transaction.h"
 #include "network/network_manager.h"
 #include "utils/bignumber.h"
+#include "blockchain/transaction_cache.h"
 
 #include <QByteArray>
 #include <QMutex>
@@ -90,9 +91,12 @@ private:
     BlockIndex blockIndex; // blocks (if fileMode is true)
     // service //
 
-    BlockchainStatus                                    status_        = BlockchainStatus::Started;
-    BlockchainSyncStatus                                sync_status_   = BlockchainSyncStatus::None;
-    BlockchainSyncStatus                                check_status_  = BlockchainSyncStatus::None;
+    TransactionCache transaction_cache_;
+
+    BlockchainStatus                                    status_       = BlockchainStatus::Started;
+    BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
+    BlockchainSyncStatus                                check_status_ = BlockchainSyncStatus::None;
+    BigNumber                                           sync_last_index;
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
 
@@ -131,6 +135,11 @@ public:
     }
 
 private:
+    void set_sync_status(BlockchainSyncStatus status) {
+        sync_status_ = status;
+        syncStatusChanged(status);
+    }
+
     std::expected<BlockVariant, BlockError> getBlockByData(const std::string &data);
 
     std::pair<Transaction, BigNumber> getTxBySender(const ActorId &id, const TokenId &token = TokenId());
@@ -149,13 +158,16 @@ public:
     std::expected<BlockVariant, BlockError> create_genesis_block(const Actor<KeyPrivate> &actor);
     std::expected<BlockVariant, BlockError> create_mega_genesis_block(const Actor<KeyPrivate> &actor);
 
+    int active_users();
+
     std::expected<BlockVariant, BlockError> create_zero_genesis_block(
         const Actor<KeyPrivate> &actor /*, std::map<std::pair<ActorId, TokenId>, GenesisDataRow> dataRows = {}*/);
 
-    std::set<Transaction> getTxsBySenderOrReceiverInRow(const BigNumber &id,
-                                                        BigNumber        from  = BigNumber(-1),
-                                                        int              count = 10,
-                                                        ActorId          token = ActorId());
+    std::unordered_map<ActorId, std::vector<TransactionInfo>> getTxsBySenderOrReceiverInRow(
+        const std::vector<ActorId> &id,
+        BigNumber                   from  = BigNumber(-1),
+        int                         count = 10,
+        ActorId                     token = ActorId());
 
     bool sendBlock(const BlockVariant &block) const;
     void sendBlockByNumber(const BigNumber &index) const;
@@ -253,15 +265,14 @@ public:
 
     // - ACTORS - //
     /**
-     * @brief remove all blocks
-     */
-    void removeAll(bool is_mega = false, bool is_exit = false);
-
-    /**
      * @brief Return's reference to blockIndex
      * @return ref to blockIndex field
      */
     BlockIndex &getBlockIndex();
+
+    TransactionCache &transaction_cache() {
+        return transaction_cache_;
+    }
 
     /**
      * @brief Gets last block data field
@@ -306,6 +317,10 @@ signals:
     void updateLastTransactionList();
     void blockAdded(const BlockVariant block);
     void updateSelf(BigNumber blockId);
+
+    void selfTxAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
+    void selfTxRepeatableAdded(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
+
     void addBlockFromNetwork(const BlockVariant &block,
                              const Responder    &responder,
                              const NetworkPackageStorage,
@@ -314,9 +329,10 @@ signals:
     void syncResponseVectorFromNetwork(const std::string &blocks,
                                        const Responder   &responder,
                                        const NetworkPackageStorage);
-    void statusChanged(BlockchainStatus status);
 
     void zeroBlock();
+
+    void removeAll(bool is_mega = false, bool is_exit = false);
 
     /**
      * @brief possibleMiningChange
@@ -326,6 +342,14 @@ signals:
 
     void network_status_sync_request_signal(const Responder &responder);
     void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
+
+    void syncStart(BigNumber, BigNumber);
+    void syncEnd();
+    void syncProgress(BigNumber);
+    void statusChanged(BlockchainStatus status);
+    void syncStatusChanged(BlockchainSyncStatus);
+    void resultTransactions(const std::unordered_map<ActorId, std::vector<Transaction>> &);
+    void testSignal();
 
 public:
     BigNumber getBlockCount();
@@ -350,4 +374,9 @@ public slots:
                             const NetworkPackageStorage &package_storage);
     void timer_sync_tick();
     void process();
+
+    /**
+     * @brief remove all blocks
+     */
+    void removeAllSlot(bool is_mega = false, bool is_exit = false);
 };

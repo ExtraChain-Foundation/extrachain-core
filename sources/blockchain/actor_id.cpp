@@ -96,7 +96,7 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
 
 void ActorId::normalize() {
     if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
-        eFatal("[ActorId] Not correct size: %zu", m_id.size());
+        eFatal("[ActorId] Not correct size: {} / '{}'", m_id.size(), m_id);
     }
 
     m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;

@@ -65,6 +65,12 @@ enum class MessageType {
     DfsCollectionContent   = 71,
     DfsCollectionHistory   = 72,
     DfsCollectionRowChange = 73,
+    DfsVectorContent       = 74,
+    DfsVectorAdd           = 75,
+    DfsVectorRemove        = 76,
+    DfsDictionaryContent   = 77,
+    DfsDictionaryAdd       = 78,
+    DfsDictionaryRemove    = 79,
 
     DfsTempSyncAll = 89,
 
@@ -208,6 +214,7 @@ inline MessageBody make_init_message(const std::string& data,
 
 struct VPNMessage {
     std::string              initialSender;
+    std::string              initialSenderNetworkIdentifier;
     int                      vpnCommand;
     int                      vpnType;
     int                      resultChainIndex;
@@ -224,6 +231,7 @@ struct VPNMessage {
     std::string              senderID;
 
     MSGPACK_DEFINE(initialSender,
+                   initialSenderNetworkIdentifier,
                    vpnCommand,
                    vpnType,
                    resultChainIndex,

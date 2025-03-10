@@ -34,13 +34,13 @@ HistoricalCollection::HistoricalCollection(ExtraChainNode              *node,
                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
     this->node               = node;
     this->file_path_         = Dfs::Path::file_path(file_actor_id, file_id).value();
-    auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), ".collection");
+    auto historical_path_str = fmt::format("{}{}", this->file_path_.native(), Dfs::Basic::COLLECTION_FILE);
     this->historical_path_   = FsPath::create(historical_path_str).value();
     this->actor_             = actor;
     this->file_actor_id_     = file_actor_id;
     this->file_id_           = file_id;
-    data_security_           = data_security;
-    security_data_           = security_data;
+    this->data_security_     = data_security;
+    this->security_data_     = security_data;
 }
 
 std::expected<HistoricalCollection, CollectionError> HistoricalCollection::create(
@@ -147,9 +147,9 @@ std::expected<HistoricalCollection, CollectionError> HistoricalCollection::load(
 
     std::visit(
         [&](const auto &value) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, CollectionTemplateLink>) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(value)>, Dfs::CollectionTemplateLink>) {
                 auto collection_template =
-                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.actor_id, value.file_id);
+                    Dfs::Tables::ActorDirFile::get_collection_template_file_id(value.owner_id, value.file_id);
                 if (collection_template.has_value()) {
                     chain.table_name_ = collection_template->name();
                 }
@@ -181,9 +181,9 @@ std::expected<std::string, CollectionError> HistoricalCollection::create_table(
     }
 
     this->table_name_        = collection_template->name();
-    auto collection_creation = CollectionTemplateLink { .actor_id = template_actor_id,
-                                                        .file_id  = template_file_id,
-                                                        .name     = collection_template->name() };
+    auto collection_creation = Dfs::CollectionTemplateLink { .owner_id = template_actor_id,
+                                                             .file_id  = template_file_id,
+                                                             .name     = collection_template->name() };
 
     auto historical_row = HistoricalCollectionRow { .operation = CollectionOperation::Structural,
                                                     .data      = Json::serialize(collection_creation),
@@ -403,7 +403,7 @@ std::expected<HistoricalCollectionRow, CollectionError> HistoricalCollection::ge
     return hi_row.value();
 }
 
-std::expected<std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError>
+std::expected<std::variant<Dfs::CollectionTemplateLink, Dfs::CollectionTemplate>, CollectionError>
 HistoricalCollection::get_creation() {
     DbConnector db(historical_path_);
     db.open();
@@ -427,7 +427,7 @@ HistoricalCollection::get_creation() {
         }
         return collection_template.value();
     } else if (hi_row->operation == CollectionOperation::Structural) {
-        auto template_link = Json::deserialize<CollectionTemplateLink>(hi_row->data);
+        auto template_link = Json::deserialize<Dfs::CollectionTemplateLink>(hi_row->data);
         if (!template_link.has_value()) {
             return std::unexpected(CollectionError::Unknown);
         }

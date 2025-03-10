@@ -69,9 +69,9 @@ public:
     std::expected<Signature, Cryptography::CryptoError> sign(const Bytes &data) const;
     std::expected<bool, Cryptography::CryptoError> verify(const Bytes &data, const Signature &signature) const;
 
-    [[deprecated("Use sign version with Bytes")]]
+    // [[deprecated("Use sign version with Bytes")]]
     std::expected<Signature, Cryptography::CryptoError> sign(const std::string &data) const;
-    [[deprecated("Use verify version with Bytes")]]
+    // [[deprecated("Use verify version with Bytes")]]
     std::expected<bool, Cryptography::CryptoError> verify(const std::string &data,
                                                           const Signature   &signature) const;
 

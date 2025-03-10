@@ -67,6 +67,18 @@ enum class ImportProfileError {
     IncorrectJson
 };
 
+struct SubscriptionRow {
+    ActorId     owner_id;
+    std::string file_id;
+
+    int           type       = 0;
+    std::uint64_t date_start = 0; // block date
+    bool          auto_renew = false;
+    BigNumber     block_id;
+    std::string   transaction_hash;
+};
+BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, block_id, transaction_hash))
+
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
@@ -116,10 +128,15 @@ private:
     VpnFunctionClearType        m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
 
+    std::optional<SubscriptionRow> subscription_row;
+
 public:
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);
+    bool create_usernames_vector();
+    bool create_subscription_template();
+    bool create_subscription_vector(const std::string& file_name);
     void create_new_network_dfs();
     void start();
 
@@ -167,8 +184,10 @@ public:
 
     std::string transactionErrorDescription(const TransactionError& error);
 
-    std::expected<std::string, ImportError> export_profile();
-    std::expected<std::string, ImportProfileError>  import_profile(const std::string& data, const std::string& login, const std::string& password);
+    std::expected<std::string, ImportError>        export_profile();
+    std::expected<std::string, ImportProfileError> import_profile(const std::string& data,
+                                                                  const std::string& login,
+                                                                  const std::string& password);
 
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
@@ -184,6 +203,12 @@ public:
     ChatManager* chat_manager();
 
     VPNConfigStorage vpnConfigStorage;
+
+    bool add_subscription(const ActorId&     owner_id,
+                          const std::string& file_id,
+                          int                type,
+                          bool               auto_renew,
+                          const TokenId&     token_id);
 
 private:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
@@ -214,12 +239,17 @@ signals:
     void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void readyInitLocalizationFiles();
-    void vpnConnected(std::pair<QString, QString> publicIPAndCountry);
+    void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
     void vpnDisconnect();
+
+    void subscriptionAdded(ActorId owner_id, std::string file_id);
+    // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
 private slots:
     void getAllActorsTimerCall();
     void timer_reward_request();
+
+    void selfTxRepeatableAdded(const BigNumber& block_id, uint64_t block_date, const Transaction& transaction);
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);

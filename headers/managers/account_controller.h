@@ -65,7 +65,8 @@ public:
     bool                           load_profile(const ActorId &actor_id, const std::string &hash);
     std::set<ActorId>              multiple_profiles(const std::string &hash);
 
-    const Actor<KeyPrivate> &mainActor();
+    // TODO: expected?
+    const Actor<KeyPrivate> &system_actor();
 
     PrivateProfile &getProfile(const ActorId &actorId);
     /**
@@ -85,7 +86,7 @@ public:
     void                                  clear();
 
     static std::set<ActorId> profilesList();
-    void                        insert_to_profile_set(const ActorId &actorId);
+    void                     insert_to_profile_set(const ActorId &actorId);
 
 private:
     ExtraChainNode *node;

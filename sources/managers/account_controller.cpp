@@ -176,9 +176,9 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
     return multiple_profiles;
 }
 
-const Actor<KeyPrivate> &AccountController::mainActor() {
+const Actor<KeyPrivate> &AccountController::system_actor() {
     if (m_profiles.empty()) {
-        eFatal("[AccountController] No main actor");
+        eFatal("[AccountController] No system actor");
     }
     return currentProfile().system();
 }

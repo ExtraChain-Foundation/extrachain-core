@@ -33,6 +33,7 @@ namespace Dfs {
         ActorId,
         // FileId
         // TransactionLink
+        Bool,
         Integer,
         Real,
         String,
@@ -135,6 +136,10 @@ namespace Dfs {
 
         auto operator<=>(const FieldBuilder&) const = default;
 
+        const std::string& name() const {
+            return m_name;
+        }
+
     private:
         friend struct Field;
 
@@ -188,6 +193,9 @@ namespace Dfs {
         static FieldBuilder Integer(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Integer);
         }
+        static FieldBuilder Bool(std::string name) {
+            return FieldBuilder(std::move(name), FieldType::Bool).between(0, 1);
+        }
         static FieldBuilder Real(std::string name) {
             return FieldBuilder(std::move(name), FieldType::Real);
         }
@@ -229,10 +237,15 @@ namespace Dfs {
         CollectionTemplate() = default;
         static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
         CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate&                     preadd_fields(const std::initializer_list<FieldBuilder>& fields);
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
-        const std::string name() const;
-        void              set_actor_file(const ActorId& actor_id, const std::string file_id);
+        const std::string                name() const;
+        const std::vector<FieldBuilder>& fields() const {
+            return m_fields;
+        }
+
+        void set_actor_file(const ActorId& actor_id, const std::string file_id);
 
         auto operator<=>(const CollectionTemplate&) const = default;
 
@@ -249,4 +262,16 @@ namespace Dfs {
 
         friend class FieldBuilder;
     };
+
+    struct CollectionTemplateLink {
+        ActorId     owner_id;
+        std::string file_id;
+        std::string name;
+    };
+    BOOST_DESCRIBE_STRUCT(CollectionTemplateLink, (), (owner_id, file_id, name))
+
+    using DfsTemplateVariant = std::variant<CollectionTemplateLink, Dfs::CollectionTemplate>;
+
+    std::optional<std::pair<Dfs::CollectionTemplate, bool>> read_template_from_variant(
+        const DfsTemplateVariant& var);
 } // namespace Dfs

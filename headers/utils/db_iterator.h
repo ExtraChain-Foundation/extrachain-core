@@ -20,12 +20,15 @@
 #ifndef DB_ITERATOR_H
 #define DB_ITERATOR_H
 
+#include <string>
+#include <unordered_map>
+
 enum class DbColumnType {
     Integer = 1,
-    Float = 2,
-    Text = 3,
-    Blob = 4,
-    Null = 5
+    Float   = 2,
+    Text    = 3,
+    Blob    = 4,
+    Null    = 5
 };
 
 struct sqlite3_stmt;
@@ -38,19 +41,19 @@ public:
     bool next();
 
     std::string getString(int column);
-    int64_t getInt64(int column);
-    double getDouble(int column);
+    int64_t     getInt64(int column);
+    double      getDouble(int column);
     std::string getBlob(int column);
 
-    int columnCount();
-    std::string columnName(int column);
+    int          columnCount();
+    std::string  columnName(int column);
     DbColumnType columnType(int column);
 
-    std::string getValue(int column);
+    std::string                                  getValue(int column);
     std::unordered_map<std::string, std::string> dbRow();
 
 private:
     sqlite3_stmt* m_stmt;
-    bool m_done;
+    bool          m_done;
 };
 #endif // DB_ITERATOR_H

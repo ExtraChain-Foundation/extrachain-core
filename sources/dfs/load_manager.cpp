@@ -41,18 +41,29 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    if (dir_row.state != Dfs::FileState::Ready) {
-        return;
-    }
-
-    if (dir_row.type != Dfs::FileType::File) {
+    // TODO: vectorupdate
+    if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
         return;
     }
 
     auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
     if (row.has_value()) {
         if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
-            return;
+            auto file_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
+            if (!file_path.has_value()) {
+                return;
+            }
+
+            if (row->type == Dfs::FileType::File && file_path->exists()) {
+                auto size = file_path->file_size();
+                if (size.has_value() && size == row->size) {
+                    return;
+                }
+            }
+
+            if (row->type != Dfs::FileType::File && file_path->exists()) {
+                // return; // TODO: vectorupdate
+            }
         }
     }
 
@@ -98,6 +109,10 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                std::string                     identifier) {
     for (const auto& dir_row : dir_rows) {
+        if (dir_row.state == Dfs::FileState::Removed) {
+            continue;
+        }
+
         add_to_queue(owner_id, dir_row, identifier);
     }
 }
@@ -123,12 +138,18 @@ void LoadManager::check_all_files(std::string identifier) {
                     continue;
                 }
 
-                if (file_path->exists()) {
+                if (row.type == Dfs::FileType::File && file_path->exists()) {
                     auto size = file_path->file_size();
                     if (size.has_value() && size == row.size) {
                         continue;
                     }
                 }
+
+                if (row.type != Dfs::FileType::File && file_path->exists()) {
+                    // TODO: vectorupdate
+                    // continue;
+                }
+                // TODO: add checks for vector and collection
             }
 
             if (row.state == Dfs::FileState::Removed) {
@@ -236,7 +257,7 @@ void LoadManager::move_to_queue_end(const Dfs::FileLink& file_link) {
 
 void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
                                         const std::string& file_id,
-                                        const std::string& identifier) {
+                                        const Responder&   responder) {
     auto path = Dfs::Path::file_path(owner_id, file_id);
     if (!path.has_value()) {
         return;
@@ -246,10 +267,26 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
         return;
     }
 
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    if (!dir_row.has_value()) {
+        return;
+    }
+
+    if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Collection) {
+            node->dfs()->network_request_collection(owner_id, file_id, responder);
+        }
+        if (dir_row->type == Dfs::FileType::Vector) {
+            node->dfs()->network_request_vector(owner_id, file_id, responder);
+        }
+        return;
+    }
+
     const uint64_t total_size = size.value();
     uint64_t       offset     = 0;
 
-    std::thread sender([this, owner_id, file_id, path = *path, total_size = *size, identifier]() {
+    std::string identifier = responder.identifiers().empty() ? "" : *responder.identifiers().begin();
+    std::thread sender([this, owner_id, file_id, dir_row, path = *path, total_size = *size, identifier]() {
         uint64_t offset = 0;
 
         while (offset < total_size) {
@@ -284,10 +321,10 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
             std::this_thread::sleep_for(std::chrono::milliseconds(15));
         }
 
-        auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
-        if (!dir_row.has_value()) {
-            return;
-        }
+        // auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+        // if (!dir_row.has_value()) {
+        //     return;
+        // }
         // use list for first uploaded
         node->dfs()->uploaded(owner_id, dir_row.value());
     });
@@ -331,14 +368,13 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
                                                                      file_link.file_id,
                                                                      active_download.dir_row.hash);
         if (!is_downloaded) {
-            eCritical("[Fragment] Ooops, something wrong. Need to implement Fragments checks");
+            eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
             return;
         }
         active_downloads.erase(file_link);
-        Dfs::Tables::ActorDirFile::update_file_state(file_link.owner_id, file_link.file_id, Dfs::FileState::Ready);
-        node->dfs()->added(file_link.owner_id, active_download.dir_row);
-        node->dfs()->downloaded(file_link.owner_id, active_download.dir_row);
-        eLog("[Fragment] Last fragment for {}", file_link);
+        eLog("[Fragment] Last fragment (downloaded) for {}", file_link);
+
+        finish_him(file_link.owner_id, active_download.dir_row);
     }
 
     // eTemp("[Fragment] {}: size: {}, offset: {}, {}",
@@ -346,4 +382,10 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
     //       active_download.dir_row.size,
     //       fragment_data.offset,
     //       is_last_fragment);
+}
+
+void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+    Dfs::Tables::ActorDirFile::update_file_state(owner_id, dir_row.file_id, Dfs::FileState::Ready);
+    node->dfs()->added(owner_id, dir_row);
+    node->dfs()->downloaded(owner_id, dir_row);
 }

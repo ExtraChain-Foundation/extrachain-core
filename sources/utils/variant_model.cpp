@@ -35,7 +35,7 @@ int VariantModel::count() const {
 }
 
 void VariantModel::setCount(int count) {
-    if (m_count == count)
+    if (m_count == count || count < 0)
         return;
 
     m_count = count;
@@ -76,19 +76,32 @@ void VariantModel::insert(int i, const QVariantMap &variant) {
 }
 
 void VariantModel::inserts(int i, const QVariantList &variants) {
+    if (variants.empty()) {
+        return;
+    }
+
     beginInsertRows(QModelIndex(), i, i + variants.length() - 1);
 
+    if (m_datas.size() + variants.size() > m_datas.capacity()) {
+        m_datas.reserve(m_datas.size() + variants.size());
+    }
+
     int tempI = i;
-    for (auto &&variant : variants)
+    for (const auto &variant : variants) {
         m_datas.insert(tempI++, variant.toMap());
+    }
 
     setCount(m_datas.length());
-
     endInsertRows();
-    emit dataChanged(index(i), index(i + variants.length() - 1));
+
+    // emit dataChanged(index(i), index(i + variants.length() - 1));
 }
 
-void VariantModel::remove(int index, int count = 0) {
+void VariantModel::remove(int index, int count) {
+    if (count <= 0 || index < 0 || index >= m_datas.count()) {
+        return;
+    }
+
     beginRemoveRows(QModelIndex(), index, index + count - 1);
     while (count--)
         m_datas.removeAt(index);
@@ -109,15 +122,23 @@ void VariantModel::set(int indx, const QByteArray &role, const QVariant &value) 
 }
 
 void VariantModel::move(int from, int to, int n) {
-    if (from >= m_count || from < 0 || to < 0 || to >= m_count
-        || !beginMoveRows(QModelIndex(), from, from + n - 1, QModelIndex(), to > from ? to + 1 : to))
+    if (from < 0 || from >= m_count || to < 0 || to >= m_count || n <= 0 || from + n > m_count)
         return;
-    if (n > 1 && from + n < to && to + n < m_count) {
-        eLog("[VariantModel] n > 1");
-        for (int i = 0; i < n; i++)
+
+    if (!beginMoveRows(QModelIndex(), from, from + n - 1, QModelIndex(), to > from ? to + 1 : to)) {
+        return;
+    }
+
+    if (to > from) {
+        for (int i = 0; i < n; i++) {
+            m_datas.move(from, to - n + 1 + i);
+        }
+    } else if (to < from) {
+        for (int i = 0; i < n; i++) {
             m_datas.move(from + i, to + i);
-    } else
-        m_datas.move(from, to);
+        }
+    }
+
     endMoveRows();
 }
 
@@ -140,14 +161,12 @@ void VariantModel::appendFromJson(const QString &fileName) {
         return;
 
     if (file.open(QFile::ReadOnly)) {
-        QString json    = file.readAll();
-        auto    doc     = QJsonDocument::fromJson(json.toUtf8());
-        auto    var     = doc.toVariant().toMap();
-        var["alphabet"] = "";
+        QString json = file.readAll();
+        auto    doc  = QJsonDocument::fromJson(json.toUtf8());
+        auto    var  = doc.toVariant().toMap();
         append(var);
+        file.close();
     }
-
-    file.close();
 }
 
 void VariantModel::insertFromJson(int index, const QString &fileName) {
@@ -157,19 +176,21 @@ void VariantModel::insertFromJson(int index, const QString &fileName) {
         return;
 
     if (file.open(QFile::ReadOnly)) {
-        QString json    = file.readAll();
-        auto    doc     = QJsonDocument::fromJson(json.toUtf8());
-        auto    var     = doc.toVariant().toMap();
-        var["alphabet"] = "";
+        QString json = file.readAll();
+        auto    doc  = QJsonDocument::fromJson(json.toUtf8());
+        auto    var  = doc.toVariant().toMap();
         insert(index, var);
+        file.close();
     }
-
-    file.close();
 }
 
 QVariantMap VariantModel::loadJson(const QString &fileName) {
     QFile       file(fileName);
     QVariantMap map;
+
+    if (!file.exists()) {
+        return map;
+    }
 
     if (file.open(QFile::ReadOnly)) {
         QString json = file.readAll();

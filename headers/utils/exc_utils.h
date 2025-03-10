@@ -307,6 +307,21 @@ namespace Config {
                                                "type INT              NOT NULL  "
                                                ");";
 
+        static const std::string TX_CACHE_TABLE = "Transactions";
+        static const std::string TX_CACHE_CREATE = "CREATE TABLE IF NOT EXISTS " + TX_CACHE_TABLE
+                                                      + " ("
+                                                      "type         INT   NOT NULL, "
+                                                      "sender       TEXT  NOT NULL, "
+                                                      "receiver     TEXT  NOT NULL, "
+                                                      "amount       TEXT  NOT NULL, "
+                                                      "data         TEXT          , "
+                                                      "token        TEXT  NOT NULL, "
+                                                      "date         TEXT  NOT NULL, "
+                                                      "block        TEXT  NOT NULL, "
+                                                      "hash         TEXT  NOT NULL UNIQUE, "
+                                                      "signature    TEXT  NOT NULL "
+                                                      ");";
+
         // How many files one section folder will store
         static const int SECTION_SIZE = 100000;
 
@@ -692,7 +707,9 @@ namespace Utils {
         ReadError,
         SizeTooLarge,
         EmptyFile,
-        InvalidFile
+        InvalidFile,
+        EmptyContent,
+        WriteError
     };
 
     /**
@@ -701,6 +718,17 @@ namespace Utils {
      * @return Expected vector with file contents or FileError
      */
     EXTRACHAIN_EXPORT std::expected<std::vector<std::uint8_t>, ContentError> read_file_content(const FsPath &path);
+
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(
+        const FsPath                 &path,
+        std::span<const std::uint8_t> content);
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath      &path,
+                                                                                  const std::string &content);
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
+                                                                                  std::string &&content);
+    template <std::size_t N>
+    EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
+                                                                                  const char (&content)[N]);
 
     std::string to_hex(std::vector<unsigned char> &data);
     std::string to_hex(const std::string &data);
@@ -825,6 +853,10 @@ namespace BlockchainConst {
     static const std::string BLOCKCHAIN_FOLDER     = "blocks";
     static const std::string BLOCKCHAIN_RANGE      = "range";
     static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
+
+    // Cache
+    static const std::string BLOCKCHAIN_CACHE_FOLDER = "blocks/cache";
+    static const std::string TRANSACTION_CACHE       = "blocks/cache/SelfTransactions.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;

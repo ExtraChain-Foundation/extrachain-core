@@ -34,6 +34,8 @@
 #include <fstream>
 #include <vector>
 
+#include <QJsonObject>
+
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
 SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
@@ -70,6 +72,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
 
+    /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
         eLog("[WS] Current Identifier print: {}", a);
@@ -80,6 +83,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
             eLog("[WS] Service ident: {}", b);
         }
     });
+    */
 }
 
 void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
@@ -409,7 +413,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->accountController()->mainActor();
+    auto       &mainActor = node->accountController()->system_actor();
     MessageBody message =
         make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
@@ -477,7 +481,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!isActiveConnectionExists()) {
-        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
+        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         saveToCache(serialized_message, send_mode, receiver_identifier);
         return;
     }
@@ -556,7 +560,6 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         if (send_checked) {
             calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
-
             if (send_mode == SendMode::Focused) {
                 break;
             }
@@ -577,10 +580,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
         return;
     }
 
-    auto &mainActor = node->accountController()->mainActor();
+    auto &mainActor = node->accountController()->system_actor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->mainActor().id();
+    message_edited.sender_id   = node->accountController()->system_actor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     addAllServicesIdentifiersToMessage(message_edited);
 
@@ -597,6 +600,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
 void NetworkManager::saveToCache(const std::string &serialized_message,
                                  SendMode           send_mode,
                                  const std::string &receiver_identifier) {
+    return;
     if (send_mode != SendMode::Broadcast) {
         // return;
     }
@@ -639,6 +643,11 @@ void NetworkManager::saveToCache(const std::string &serialized_message,
 }
 
 void NetworkManager::sendFromCache() {
+    QFile filet(QString::fromStdString(NetworkCacheFile));
+    if (filet.exists()) {
+        filet.remove();
+    }
+    return;
     eLog("[NetworkManager] Load from cache");
 
     QFile file(QString::fromStdString(NetworkCacheFile));
@@ -786,7 +795,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
-            || message_body.init_sender_id == node->accountController()->mainActor().id()) {
+            || message_body.init_sender_id == node->accountController()->system_actor().id()) {
             // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
             // messageId,
             // identifier);
@@ -806,7 +815,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto searchRes                         = network_forwarded_messages_locked->find(messageId);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->mainActor().id();
+            message_edited.sender_id   = node->accountController()->system_actor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
 
             auto serialized = message_edited.serialize();
@@ -1195,7 +1204,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
                                                               link_result->file_id,
-                                                              identifier);
+                                                              responder);
         break;
     }
 
@@ -1261,6 +1270,50 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
         node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
+        break;
+    }
+
+    case MessageType::DfsVectorContent: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector content", type);
+            break;
+        }
+
+        node->dfs()->network_response_content_vector(db_content_result.value());
+
+        // broadcast and not broadcast?
+        break;
+    }
+
+    case MessageType::DfsVectorAdd: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector add", type);
+            break;
+        }
+
+        node->dfs()->network_vector_add(db_content_result->owner_id,
+                                        db_content_result->file_id,
+                                        db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
+        break;
+    }
+    case MessageType::DfsVectorRemove: {
+        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowRemove>(serialized);
+        if (!db_content_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for vector remove", type);
+            break;
+        }
+
+        node->dfs()->network_vector_remove(db_content_result->owner_id,
+                                           db_content_result->file_id,
+                                           db_content_result->row);
+
+        sendBrodcastMessageFurther(package_data);
+
         break;
     }
 
@@ -1569,7 +1622,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->mainActor().id().to_string() + salt,
+                                  + node->accountController()->system_actor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }
@@ -1682,10 +1735,16 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry() {
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip) {
     try {
+        QString query = "http://ip-api.com/json";
+        if (!ip.isEmpty()) {
+            query += "/" + ip;
+        }
+
+        QUrl                  url(query);
         QNetworkAccessManager manager;
-        QNetworkRequest       request(QUrl("http://ip-api.com/json"));
+        QNetworkRequest       request(url);
         request.setTransferTimeout(5000);
         QNetworkReply *reply = manager.get(request);
 

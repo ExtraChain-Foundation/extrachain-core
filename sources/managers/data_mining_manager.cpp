@@ -66,7 +66,7 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-    const auto actor      = node->accountController()->mainActor();
+    const auto actor      = node->accountController()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
     auto       amount     = calculateRewardAmount();
 

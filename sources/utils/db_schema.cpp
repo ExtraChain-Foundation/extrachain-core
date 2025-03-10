@@ -196,7 +196,8 @@ DbSchema::DbSchema(std::string_view table_name) {
 
 DbSchema::DbSchema(const DbSchema& other)
     : m_table_name(other.m_table_name)
-    , m_validation_error(other.m_validation_error) {
+    , m_validation_error(other.m_validation_error)
+    , m_table_constraints(other.m_table_constraints) {
     m_columns.reserve(other.m_columns.size());
 
     for (const auto& column : other.m_columns) {
@@ -204,6 +205,14 @@ DbSchema::DbSchema(const DbSchema& other)
             m_columns.push_back(std::make_unique<DbColumn>(*column));
         }
     }
+}
+
+DbSchema& DbSchema::add_column(const DbColumn& column) {
+    if (column.validation_error()) {
+        m_validation_error = column.validation_error();
+    }
+    m_columns.push_back(std::make_unique<DbColumn>(column));
+    return *this;
 }
 
 DbSchema& DbSchema::add_column(DbColumn&& column) {
@@ -216,6 +225,10 @@ DbSchema& DbSchema::add_column(DbColumn&& column) {
 
 std::string DbSchema::table_name() {
     return m_table_name;
+}
+
+void DbSchema::set_table_name(std::string table_name) {
+    this->m_table_name = table_name;
 }
 
 std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
@@ -232,7 +245,15 @@ std::expected<std::string, SqlCreateError> DbSchema::to_sql() const {
         }
 
         sql += "    " + *column_sql;
-        if (i < m_columns.size() - 1) {
+        if (i < m_columns.size() - 1 || !m_table_constraints.empty()) {
+            sql += ",";
+        }
+        sql += "\n";
+    }
+
+    for (size_t i = 0; i < m_table_constraints.size(); ++i) {
+        sql += "    " + m_table_constraints[i];
+        if (i < m_table_constraints.size() - 1) {
             sql += ",";
         }
         sql += "\n";
@@ -248,8 +269,9 @@ const std::optional<SqlCreateError>& DbSchema::validation_error() const {
 
 DbSchema& DbSchema::operator=(const DbSchema& other) {
     if (this != &other) {
-        m_table_name       = other.m_table_name;
-        m_validation_error = other.m_validation_error;
+        m_table_name        = other.m_table_name;
+        m_validation_error  = other.m_validation_error;
+        m_table_constraints = other.m_table_constraints;
 
         m_columns.clear();
         m_columns.reserve(other.m_columns.size());
