@@ -61,6 +61,23 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
+std::string NetworkManager::public_ip() const {
+    return public_ip_;
+}
+
+void NetworkManager::set_public_ip(const std::string &new_public_ip) {
+    if (new_public_ip.empty()) {
+        return;
+    }
+
+    QHostAddress address(QString::fromStdString(new_public_ip));
+    if (address.isNull() || address.isSiteLocal() || address.isLoopback()) {
+        return;
+    }
+
+    public_ip_ = new_public_ip;
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -1742,7 +1759,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
     }
 
     try {
-        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-apiі.com/json";
+        QString query = alt ? "https://freeipapii.com/api/json" : "http://ip-apiі.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
@@ -1793,10 +1810,10 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
-        return {};
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "" };
     } catch (...) {
         eCritical("Get public ip error unknown");
-        return {};
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "" };
     }
 }
 

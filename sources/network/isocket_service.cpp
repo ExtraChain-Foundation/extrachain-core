@@ -208,6 +208,8 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     emit activated();
     emit shareConnections(handshake.connections);
 
+    node->network()->set_public_ip(handshake.your_ip);
+
     return true;
 }
 
@@ -220,6 +222,7 @@ QByteArray SocketService::generate_first_message() {
                            .version      = extrachain_version,
                            .identifier   = Network::currentIdentifier().toStdString(),
                            .socket_type  = socket_type_,
+                           .your_ip      = ip_.toStdString(),
                            .connections  = {},
                            .is_available = true,
                            .is_constant  = is_constant_.load() };

@@ -881,5 +881,9 @@ void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
 }
 
 std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
+    if (m_initPublicIPAndCountry.first.isEmpty()) {
+        return { QString::fromStdString(m_networkManager->public_ip()), "" };
+    }
+
     return m_initPublicIPAndCountry;
 }

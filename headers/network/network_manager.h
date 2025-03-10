@@ -224,6 +224,8 @@ private:
 
     std::string m_networkHashForVPN;
 
+    std::string public_ip_;
+
 public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
@@ -353,6 +355,9 @@ public:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
+
+    std::string public_ip() const;
+    void        set_public_ip(const std::string& newPublic_ip);
 
 signals:
     void newSocketActivated();

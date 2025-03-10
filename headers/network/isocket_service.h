@@ -52,6 +52,7 @@ public:
         std::string          version;
         std::string          identifier;
         SocketType           socket_type = SocketType::Full;
+        std::string          your_ip;
         std::set<SocketPair> connections;
         bool                 is_available = false;
         bool                 is_constant  = false;
@@ -130,7 +131,7 @@ protected:
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                       (),
-                      (network_id, version, identifier, socket_type, connections, is_available))
+                      (network_id, version, identifier, socket_type, your_ip, connections, is_available))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 
