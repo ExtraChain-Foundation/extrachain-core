@@ -78,7 +78,7 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     public_ip_ = new_public_ip;
 
     if (node->getInitPublicIPAndCountry().first.isEmpty()) {
-        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Securiry" };
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
     }
 }
 
@@ -1763,7 +1763,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
     }
 
     try {
-        QString query = alt ? "https://freeipapi.com/api/json" : "https://ip-api.com/json";
+        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-api.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
@@ -1814,9 +1814,19 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
         return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     } catch (...) {
         eCritical("Get public ip error unknown");
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
         return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     }
 }
