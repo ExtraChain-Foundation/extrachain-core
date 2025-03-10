@@ -1810,10 +1810,10 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "" };
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     } catch (...) {
         eCritical("Get public ip error unknown");
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "" };
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     }
 }
 
