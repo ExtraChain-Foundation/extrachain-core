@@ -77,8 +77,12 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 
     public_ip_ = new_public_ip;
 
+#ifdef Q_OS_LINUX
+    return;
+#endif
+
     if (node->getInitPublicIPAndCountry().first.isEmpty()) {
-        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security 3" };
     }
 }
 
@@ -1819,7 +1823,11 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
             return getPublicIPAndCountry(ip, true);
         }
 
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
+#ifdef Q_OS_LINUX
+        return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security 1" };
     } catch (...) {
         eCritical("Get public ip error unknown");
 
@@ -1827,7 +1835,11 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
             return getPublicIPAndCountry(ip, true);
         }
 
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
+#ifdef Q_OS_LINUX
+        return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security 2" };
     }
 }
 
