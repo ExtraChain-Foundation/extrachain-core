@@ -82,7 +82,7 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 #endif
 
     if (node->getInitPublicIPAndCountry().first.isEmpty()) {
-        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security 3" };
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
     }
 }
 
@@ -96,6 +96,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
+
+    process();
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -136,6 +138,35 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
+#ifdef IS_R
+    if (node->accountController()->empty()) {
+        return;
+    }
+
+    {
+        // eLog("_ Reconnection");
+        auto connectionsLocked = *m_connections;
+        bool is_first_node     = false;
+        for (const auto &el : *connectionsLocked) {
+            if (el->ip() == "51.68.181.52") {
+                is_first_node = el->is_active();
+
+                // if (!is_first_node) {
+                //     el->close();
+                // }
+                break;
+            }
+        }
+
+        if (!is_first_node) {
+            eLog("_ Reconnection!");
+            connectToNode("51.68.181.52", Network::Protocol::WebSocket); // 51.68.181.52 57.128.191.73
+        }
+    }
+#endif
+
+    return;
+
     eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
     auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
@@ -272,7 +303,7 @@ NetworkManager::~NetworkManager() {
 
 void NetworkManager::checkConnectionsStatus() {
     std::unordered_set<std::string> ind_temp;
-    m_reconnectTimer->stop();
+    // m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
     {
@@ -1827,7 +1858,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         return {};
 #endif
 
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security 1" };
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     } catch (...) {
         eCritical("Get public ip error unknown");
 
@@ -1839,7 +1870,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         return {};
 #endif
 
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security 2" };
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     }
 }
 
