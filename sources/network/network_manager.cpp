@@ -76,6 +76,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     }
 
     public_ip_ = new_public_ip;
+
+    if (node->getInitPublicIPAndCountry().first.isEmpty()) {
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Securiry" };
+    }
 }
 
 NetworkManager::NetworkManager(ExtraChainNode *node)
