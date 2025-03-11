@@ -161,7 +161,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         }
     }
 
-    if (!duplicate) {
+    if (duplicate) {
         emit error(Network::SocketServiceError::DuplicateIdentifier,
                    "",
                    ip_.toStdString(),
