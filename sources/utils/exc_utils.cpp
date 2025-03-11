@@ -339,6 +339,7 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
 }
 
 void Utils::wipeDataFiles() {
+#ifdef QT_DEBUG
     // QString current = QDir::currentPath();
 
     QDir(QString::fromStdString(BlockchainConst::ACTORS_FOLDER)).removeRecursively();
@@ -362,6 +363,7 @@ void Utils::wipeDataFiles() {
     // "/Share"; QDir(shareFolder).removeRecursively();
 
     // QDir::setCurrent(current);
+#endif
 }
 
 qint64 Utils::diskFreeMemory() {

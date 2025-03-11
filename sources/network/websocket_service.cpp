@@ -46,6 +46,29 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
             this,
             &WebSocketService::tryDequeueMessage,
             Qt::QueuedConnection);
+
+    connect(this,
+            &WebSocketService::error,
+            [this](Network::SocketServiceError code,
+                   const QString              &errorData,
+                   std::string                 ip,
+                   std::string                 identifier) {
+                if (m_ws == nullptr) {
+                    return;
+                }
+
+                if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+                    closeSocket();
+                    return;
+                }
+
+                auto code_string = QByteArray::number(std::to_underlying(code));
+                auto encrypted   = prepareSendMessage("Error " + code_string);
+                auto encoded     = Utils::to_base64(encrypted.toStdString());
+                auto written     = m_ws->sendTextMessage(QString::fromStdString(encoded));
+                m_ws->flush();
+                this->closeSocket();
+            });
 }
 
 WebSocketService::~WebSocketService() {
@@ -156,6 +179,13 @@ void WebSocketService::onTextMessage(const QString &message) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
+        closeSocket();
+        return;
+    }
+
+    if (decoded.contains("Error ")) {
+        auto error = Network::SocketServiceError(decoded.mid(6).toInt());
+        eLog("[WS] Error received (ip: {}, id: {}), error: {}", ip_, identifier_, error);
         closeSocket();
         return;
     }

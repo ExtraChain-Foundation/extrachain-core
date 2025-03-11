@@ -20,7 +20,6 @@
 #include "blockchain/blockchain.h"
 #include "blockchain/actor_index.h"
 #include "dfs/dfs_controller.h"
-#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/transaction_manager.h"
@@ -931,6 +930,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::ShareConnections: {
+#ifdef IS_R
         if (status == MessageStatus::Request) {
             eInfo("Achieved ShareConnections(Request) {}", messageId);
             std::vector<std::string> available_ips;
@@ -983,6 +983,7 @@ void NetworkManager::messageReceived(const std::string &message,
             }
         }
         break;
+#endif
     }
 
     case MessageType::ResponseDfsSize: {
@@ -1531,36 +1532,6 @@ void NetworkManager::messageReceived(const std::string &message,
         default:
             break;
         }
-        break;
-    }
-
-    case MessageType::NewListConnections: {
-        auto new_connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
-        if (!new_connection_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new connection", type);
-            break;
-        }
-        node->connectionsManager()->addNewConnection(new_connection_result.value());
-        node->connectionsManager()->addActivity(new_connection_result.value());
-        break;
-    }
-
-    case MessageType::GetListConnections: {
-        auto connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
-        if (!connection_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for get connections", type);
-            break;
-        }
-        node->connectionsManager()->addConnection(connection_result.value());
-        for (const auto &active_connection : node->connectionsManager()->getActiveConnection()) {
-            this->send_message(active_connection, MessageType::NewListConnections, SendMode::Neighbours);
-        }
-        this->send_message("", MessageType::ProcessNewConnections, SendMode::Neighbours);
-        break;
-    }
-
-    case MessageType::ProcessNewConnections: {
-        node->connectionsManager()->tryToNewConnect();
         break;
     }
 

@@ -72,7 +72,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/account_controller.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/connections_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/extrachain_node.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
@@ -135,7 +134,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/account_controller.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/connections_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/file_data_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp

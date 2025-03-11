@@ -219,7 +219,8 @@ namespace Network {
         DuplicateIdentifier,
         IncorrectPublicKey,
         IncorrectFirstMessage,
-        MaxConnections
+        MaxConnections,
+        PeerUnavailable
     };
     Q_ENUM_NS(SocketServiceError)
 
