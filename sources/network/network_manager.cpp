@@ -982,8 +982,8 @@ void NetworkManager::messageReceived(const std::string &message,
                     connectToNode(QString::fromStdString(ip_address), Network::Protocol::WebSocket);
             }
         }
-        break;
 #endif
+        break;
     }
 
     case MessageType::ResponseDfsSize: {
