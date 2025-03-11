@@ -139,6 +139,7 @@ void NetworkManager::process() {
 
 void NetworkManager::reconnection() {
 #ifdef IS_R
+    return;
     if (node->accountController()->empty()) {
         return;
     }
