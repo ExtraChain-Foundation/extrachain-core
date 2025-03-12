@@ -937,7 +937,6 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::ShareConnections: {
-#ifdef IS_R
         if (status == MessageStatus::Request) {
             eInfo("Achieved ShareConnections(Request) {}", messageId);
             std::vector<std::string> available_ips;
@@ -989,7 +988,6 @@ void NetworkManager::messageReceived(const std::string &message,
                     connectToNode(QString::fromStdString(ip_address), Network::Protocol::WebSocket);
             }
         }
-#endif
         break;
     }
 
