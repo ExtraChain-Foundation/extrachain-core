@@ -105,7 +105,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -125,7 +124,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -135,7 +133,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -170,7 +167,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    ip_.toStdString(),
                    identifier_.toStdString());
         eLog("[Socket] Closing: duplicate identifier");
-        closeSocket();
         return false;
     }
 
@@ -187,14 +183,13 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     if (node->network()->active_connections_count() >= Network::maxConnections) {
         emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
         eLog("[Socket] Closing: maximum connections reached");
-        closeSocket();
         return false;
     }
 
     // 7. Checking slots availability
     if (!handshake.is_available) {
         eLog("[Socket] Closing: peer unavailable");
-        closeSocket();
+        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString());
         emit shareConnections(handshake.connections);
         return false;
     }

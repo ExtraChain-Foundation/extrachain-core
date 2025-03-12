@@ -113,7 +113,6 @@ private:
     TransactionManager* m_transactionManager = nullptr;
     AccountController*  m_accountController  = nullptr;
     DataMiningManager*  m_dmm                = nullptr;
-    ConnectionsManager* m_connectionsManager = nullptr;
     TokenManager*       m_tokenManager       = nullptr;
     ChatManager*        chat_manager_        = nullptr;
     QTimer*             timer                = nullptr;
@@ -153,7 +152,6 @@ public:
     DfsController*      dfs() const;
     TransactionManager* transactionManager() const;
     DataMiningManager*  dataMiningManager() const;
-    ConnectionsManager* connectionsManager() const;
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
@@ -254,7 +252,6 @@ private slots:
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);
-    void handleCountMessageReceived(BigNumber count);
 
     void calculateBlockCount();
     void cleanUp();

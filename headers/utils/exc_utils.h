@@ -219,7 +219,8 @@ namespace Network {
         DuplicateIdentifier,
         IncorrectPublicKey,
         IncorrectFirstMessage,
-        MaxConnections
+        MaxConnections,
+        PeerUnavailable
     };
     Q_ENUM_NS(SocketServiceError)
 
@@ -814,7 +815,11 @@ namespace Utils {
     EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
     EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
-    EXTRACHAIN_EXPORT void    benchmark(std::function<void(void)> func, int count = 1000);
+
+    EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
+    EXTRACHAIN_EXPORT bool is_valid_ip(const std::string_view ip);
+
+    EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
 
     enum class FileError {
         InvalidInput,
