@@ -969,3 +969,19 @@ std::optional<uint64_t> Utils::read_file_creation_time_ms(const std::filesystem:
     }
 #endif
 }
+
+bool Utils::is_valid_domain(const std::string_view domain) {
+    static const std::regex domain_regex("^([a-zA-Z0-9]([a-zA-Z0-9\\-]{0,61}[a-zA-Z0-9])?\\.)+[a-zA-Z]{2,}$");
+
+    return std::regex_match(domain.begin(), domain.end(), domain_regex);
+}
+
+bool Utils::is_valid_ip(const std::string_view ip) {
+    static const std::regex ip_regex(
+        "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+        "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+        "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
+        "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
+
+    return std::regex_match(ip.begin(), ip.end(), ip_regex);
+}

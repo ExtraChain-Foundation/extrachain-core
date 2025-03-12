@@ -225,6 +225,12 @@ private:
     std::string m_networkHashForVPN;
 
     std::string public_ip_;
+    std::string first_node_ =
+#ifdef QT_DEBUG
+        "57.128.191.73"; // test node
+#else
+        "51.68.181.52"; // exc node
+#endif
 
 public:
     explicit NetworkManager(ExtraChainNode* node);
@@ -306,6 +312,10 @@ private slots:
 
 public:
     QString localIp(); // TODO: remove
+
+    void        initialize_first_node();
+    std::string first_node();
+    bool        save_first_node(const std::string_view first_node);
 
     void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
 
