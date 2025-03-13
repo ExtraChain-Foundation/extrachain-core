@@ -35,7 +35,6 @@
 #include "blockchain/transaction.h"
 #include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"
-#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/transaction_manager.h"
@@ -130,7 +129,6 @@ void ExtraChainNode::process() {
     auto key             = actorIndex()->network_id().toQByteArray();
     auto address         = "12.12.12.12";
     auto port            = "1212";
-    m_connectionsManager = new ConnectionsManager(address, port, key, this);
     m_tokenManager       = new TokenManager(this);
     chat_manager_        = new ChatManager(this);
 
@@ -663,30 +661,6 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
-void ExtraChainNode::handleCountMessageReceived(BigNumber count) {
-    size_t connection = m_connectionsManager->getActiveConnection().size();
-    resiveCounts.push_back(count);
-    if (m_connectionsManager->getActiveConnection().size() == resiveCounts.size()) {
-        BigNumber sum = BigNumber(0);
-        for (const BigNumber& number : resiveCounts) {
-            sum += number;
-        }
-        BigNumber middleCount = sum / resiveCounts.size();
-
-        // Ef = Tc / Tu
-        // Tc - current coefficient
-        // Tu - total network uptime. Blocks are formed every 2 seconds. Therefore, by taking the total number
-        //      of blocks in the network and multiplying them by 2, it is possible to determine how many
-        //      seconds the network has been online.
-        // Ef - efficiency coefficient
-
-        std::string ip   = m_networkManager->localIp().toStdString();
-        std::string port = QString::number(m_networkManager->wsPort).toStdString();
-        blockCount       = m_connectionsManager->getActivityScore(Connection { ip, port, true })
-                     / (std::stoi(middleCount.to_string()) * 2);
-    }
-}
-
 void ExtraChainNode::connectContractManager() {
 }
 
@@ -858,10 +832,6 @@ TransactionManager* ExtraChainNode::transactionManager() const {
 
 DataMiningManager* ExtraChainNode::dataMiningManager() const {
     return m_dmm;
-}
-
-ConnectionsManager* ExtraChainNode::connectionsManager() const {
-    return m_connectionsManager;
 }
 
 std::expected<void, LoadError> ExtraChainNode::login(const std::string& login, const std::string& password) {

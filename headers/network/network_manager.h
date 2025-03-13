@@ -224,12 +224,21 @@ private:
 
     std::string m_networkHashForVPN;
 
+    std::string public_ip_;
+    std::string first_node_ =
+#ifdef QT_DEBUG
+        "57.128.191.73"; // test node
+#else
+        "51.68.181.52"; // exc node
+#endif
+
 public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
     void                        localInizialization();
-    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "");
-    bool                        removeOneConnection();
+    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "", bool alt = false);
+
+    bool removeOneConnection();
 
     std::string getNetworkVPNHash() noexcept;
     void        setNetworkVPNHash() noexcept;
@@ -304,6 +313,10 @@ private slots:
 public:
     QString localIp(); // TODO: remove
 
+    void        initialize_first_node();
+    std::string first_node();
+    bool        save_first_node(const std::string_view first_node);
+
     void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
 
     void saveToCache(const std::string& serialized_message,
@@ -352,6 +365,9 @@ public:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
     CalculateTraffic* getCalculateTraffic() const;
+
+    std::string public_ip() const;
+    void        set_public_ip(const std::string& newPublic_ip);
 
 signals:
     void newSocketActivated();

@@ -20,7 +20,6 @@
 #include "blockchain/blockchain.h"
 #include "blockchain/actor_index.h"
 #include "dfs/dfs_controller.h"
-#include "managers/connections_manager.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/transaction_manager.h"
@@ -61,16 +60,45 @@ CalculateTraffic *NetworkManager::getCalculateTraffic() const {
     return calculateTraffic;
 }
 
+std::string NetworkManager::public_ip() const {
+    return public_ip_;
+}
+
+void NetworkManager::set_public_ip(const std::string &new_public_ip) {
+    if (new_public_ip.empty()) {
+        return;
+    }
+
+    QHostAddress address(QString::fromStdString(new_public_ip));
+    if (address.isNull() || address.isSiteLocal() || address.isLoopback()) {
+        return;
+    }
+
+    public_ip_ = new_public_ip;
+
+#ifdef Q_OS_LINUX
+    return;
+#endif
+
+    if (node->getInitPublicIPAndCountry().first.isEmpty()) {
+        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
+    }
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
     localInizialization();
+    initialize_first_node();
+
     m_reconnectTimer             = new QTimer(this);
     m_clear_network_caches_timer = new QTimer(this);
     calculateTraffic             = CalculateTraffic::GetInstance();
 
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);
+
+    process();
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -106,11 +134,45 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
 void NetworkManager::process() {
     if (!node->isClientApp())
         return;
+
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
     m_reconnectTimer->start(Utils::RECONNECT_INTERVAL);
 }
 
 void NetworkManager::reconnection() {
+    if (node->accountController()->empty()) {
+        return;
+    }
+
+    if (first_node_ == localIp().toStdString()) {
+        m_reconnectTimer->stop();
+        return;
+    }
+
+    bool is_first_node = false;
+
+    {
+        auto connectionsLocked = *m_connections;
+        for (const auto &el : *connectionsLocked) {
+            if (el->ip() == first_node_) {
+                is_first_node = el->is_active();
+
+                if (!is_first_node) {
+                    // el->close();
+                }
+                break;
+            }
+        }
+    }
+
+    if (!is_first_node) {
+        eLog("[Network] Reconnect to first node");
+        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+    }
+
+    return;
+
+    /*
     eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
     auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
@@ -121,6 +183,7 @@ void NetworkManager::reconnection() {
 
         connectToWebSocket(it->first.ip, it->first.port);
     }
+    */
 }
 
 void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
@@ -247,7 +310,7 @@ NetworkManager::~NetworkManager() {
 
 void NetworkManager::checkConnectionsStatus() {
     std::unordered_set<std::string> ind_temp;
-    m_reconnectTimer->stop();
+    // m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
     {
@@ -1477,36 +1540,6 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::NewListConnections: {
-        auto new_connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
-        if (!new_connection_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new connection", type);
-            break;
-        }
-        node->connectionsManager()->addNewConnection(new_connection_result.value());
-        node->connectionsManager()->addActivity(new_connection_result.value());
-        break;
-    }
-
-    case MessageType::GetListConnections: {
-        auto connection_result = MessagePack::deserialize<DfsP::Connection>(serialized);
-        if (!connection_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for get connections", type);
-            break;
-        }
-        node->connectionsManager()->addConnection(connection_result.value());
-        for (const auto &active_connection : node->connectionsManager()->getActiveConnection()) {
-            this->send_message(active_connection, MessageType::NewListConnections, SendMode::Neighbours);
-        }
-        this->send_message("", MessageType::ProcessNewConnections, SendMode::Neighbours);
-        break;
-    }
-
-    case MessageType::ProcessNewConnections: {
-        node->connectionsManager()->tryToNewConnect();
-        break;
-    }
-
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,
@@ -1555,6 +1588,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
         return;
     }
 
+    /*
     if (error != Network::SocketServiceError::DuplicateIdentifier
         && error != Network::SocketServiceError::IncompatibleIdentifier) {
         auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
@@ -1570,6 +1604,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
             }
         }
     }
+    */
 }
 
 void NetworkManager::localInizialization() {
@@ -1629,6 +1664,52 @@ void NetworkManager::setNetworkVPNHash() noexcept {
 
 QString NetworkManager::localIp() {
     return local->ip().toString();
+}
+
+void NetworkManager::initialize_first_node() {
+    try {
+        std::ifstream first_node_file(".first_node");
+        if (first_node_file.is_open()) {
+            std::string address;
+            std::getline(first_node_file, address);
+
+            if (Utils::is_valid_ip(address) || Utils::is_valid_domain(address)) {
+                first_node_ = address;
+                return;
+            }
+        }
+    } catch (const std::exception &) {
+    }
+
+    save_first_node(first_node_);
+}
+
+std::string NetworkManager::first_node() {
+    return first_node_;
+}
+
+bool NetworkManager::save_first_node(const std::string_view first_node) {
+    if (!Utils::is_valid_ip(first_node) && !Utils::is_valid_domain(first_node)) {
+        eWarning("[Network] Incorrect first node: {}", first_node);
+        return false;
+    }
+
+    first_node_ = first_node;
+
+    try {
+        std::ofstream file(".first_node", std::ios::out | std::ios::binary);
+        if (!file.is_open()) {
+            return false;
+        }
+
+        file.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+        file.write(first_node_.data(), first_node_.size());
+        file.close();
+        return true;
+    } catch (const std::ios_base::failure &e) {
+        eWarning("[Network] First node file write error: {}", e.what());
+        return false;
+    }
 }
 
 void NetworkManager::onNewWsConnection() {
@@ -1735,9 +1816,14 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip) {
+std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip, bool alt) {
+    static QMap<QString, QString> cache;
+    if (!ip.isEmpty() && cache.contains(ip)) {
+        return { ip, cache[ip] };
+    }
+
     try {
-        QString query = "http://ip-api.com/json";
+        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-api.com/json";
         if (!ip.isEmpty()) {
             query += "/" + ip;
         }
@@ -1776,17 +1862,40 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
 
         QJsonObject jsonObj = jsonDoc.object();
 
-        ip      = jsonObj.value("query").toString();
-        country = jsonObj.value("country").toString();
+        ip      = jsonObj.value(alt ? "ipAddress" : "query").toString();
+        country = jsonObj.value(alt ? "countryName" : "country").toString();
+
+        if (country.contains("United Kingdom")) {
+            country = "United Kingdom";
+        }
 
         eLog("Country: {}", country);
+        cache.insert(ip, country);
         return { ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
+#ifdef Q_OS_LINUX
         return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     } catch (...) {
         eCritical("Get public ip error unknown");
+
+        if (!alt) {
+            return getPublicIPAndCountry(ip, true);
+        }
+
+#ifdef Q_OS_LINUX
         return {};
+#endif
+
+        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
     }
 }
 

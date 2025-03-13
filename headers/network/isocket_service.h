@@ -20,6 +20,7 @@
 #ifndef ISOCKETSERVICE_H
 #define ISOCKETSERVICE_H
 
+#include "boost/describe.hpp"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "utils/exc_utils.h"
@@ -52,6 +53,7 @@ public:
         std::string          version;
         std::string          identifier;
         SocketType           socket_type = SocketType::Full;
+        std::string          your_ip;
         std::set<SocketPair> connections;
         bool                 is_available = false;
         bool                 is_constant  = false;
@@ -111,7 +113,7 @@ protected:
     int              bytes_incoming_   = 0;
     int              bytes_outgoing_   = 0;
     int              bytes_compressed_ = 0;
-    SocketType       socket_type_      = SocketType::Full;
+    SocketType       socket_type_      = SocketType::Full; // TODO: this is for socket, need also global
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
 
@@ -130,7 +132,7 @@ protected:
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
                       (),
-                      (network_id, version, identifier, socket_type, connections, is_available))
+                      (network_id, version, identifier, socket_type, your_ip, connections, is_available))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 

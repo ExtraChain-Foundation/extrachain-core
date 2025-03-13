@@ -105,7 +105,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -125,7 +124,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -135,7 +133,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return false;
     }
 
@@ -170,7 +167,6 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                    ip_.toStdString(),
                    identifier_.toStdString());
         eLog("[Socket] Closing: duplicate identifier");
-        closeSocket();
         return false;
     }
 
@@ -187,14 +183,13 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     if (node->network()->active_connections_count() >= Network::maxConnections) {
         emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
         eLog("[Socket] Closing: maximum connections reached");
-        closeSocket();
         return false;
     }
 
     // 7. Checking slots availability
     if (!handshake.is_available) {
         eLog("[Socket] Closing: peer unavailable");
-        closeSocket();
+        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString());
         emit shareConnections(handshake.connections);
         return false;
     }
@@ -208,6 +203,8 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     emit activated();
     emit shareConnections(handshake.connections);
 
+    node->network()->set_public_ip(handshake.your_ip);
+
     return true;
 }
 
@@ -220,6 +217,7 @@ QByteArray SocketService::generate_first_message() {
                            .version      = extrachain_version,
                            .identifier   = Network::currentIdentifier().toStdString(),
                            .socket_type  = socket_type_,
+                           .your_ip      = ip_.toStdString(),
                            .connections  = {},
                            .is_available = true,
                            .is_constant  = is_constant_.load() };
