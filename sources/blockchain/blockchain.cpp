@@ -1678,7 +1678,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     //                      tmp.getSender().toByteArray()
     //                      });
     // }
-    TIMER_END(addBlockNetwork)
+    //TIMER_END(addBlockNetwork)
 }
 
 // Actors //
