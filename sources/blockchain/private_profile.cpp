@@ -29,10 +29,10 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
                                       ExtraChainNode          *node) {
     PrivateProfile user;
     user.actors_.push_back(system_actor);
-    // user.actors_.push_back(main_actor);
+    user.actors_.push_back(main_actor);
 
-    user.system_ = system_actor.id();
-    // user.main_          = main_actor.id();
+    user.system_        = system_actor.id();
+    user.main_          = main_actor.id();
     user.hash_          = hash;
     user.creation_date_ = Utils::current_date_ms();
     user.modified_date_ = user.creation_date_;
