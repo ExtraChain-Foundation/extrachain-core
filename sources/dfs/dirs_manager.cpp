@@ -162,6 +162,21 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     }
     */
 
+    // temp sync for removed
+    for (const auto& row : dir_rows) {
+        if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
+            auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
+            if (!file_path.has_value()) {
+                continue;
+            }
+
+            if (file_path->exists()) {
+                node->dfs()->remove_local_file(owner_id, row.file_id);
+                Dfs::Tables::ActorDirFile::update_file_state(owner_id, row.file_id, Dfs::FileState::Removed);
+            }
+        }
+    }
+
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 

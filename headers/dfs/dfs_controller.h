@@ -105,7 +105,7 @@ public:
 
     // auto: + network id + local actors
     std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
-    DfsMode           dfs_mode_        = DfsMode::Light;
+    DfsMode           dfs_mode_        = DfsMode::Full;
 
     const std::set<ActorId> &priority_actors() const {
         return priority_actors_;
