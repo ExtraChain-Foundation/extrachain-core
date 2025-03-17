@@ -241,7 +241,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::File,
-                            .encryption    = data_security,
+                            .encrypted     = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
     if (!visual_folder.empty()) {
         dir_row.folder = visual_folder;
@@ -414,7 +414,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Collection,
-                            .encryption    = data_security,
+                            .encrypted     = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -503,7 +503,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
-                            .encryption    = data_security,
+                            .encrypted     = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -661,10 +661,10 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     std::expected<HistoricalCollectionRow, CollectionError> historical_row;
     switch (type) {
     case CollectionOperation::Add:
-        historical_row = chain->add_row(row, dir_row_result->encryption, security_data);
+        historical_row = chain->add_row(row, Dfs::DataSecurity::Public, security_data);
         break;
     case CollectionOperation::Update:
-        historical_row = chain->update_row(id, row, dir_row_result->encryption, security_data);
+        historical_row = chain->update_row(id, row, Dfs::DataSecurity::Public, security_data);
         break;
     case CollectionOperation::Remove:
         historical_row = chain->remove_row(id);

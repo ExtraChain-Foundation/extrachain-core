@@ -475,6 +475,7 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
                                         .version       = extrachain_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
+                                        .main          = current_profile.main()->get().id(),
                                         .actors        = current_profile.actors(),
                                         .imports       = current_profile.imports(),
                                         .wallet_names  = current_profile.wallet_names(),

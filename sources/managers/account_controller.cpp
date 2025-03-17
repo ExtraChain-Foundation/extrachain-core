@@ -34,26 +34,30 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     if (hash.empty())
         eFatal("[Accounts] Create actor: hash is empty");
 
-    Actor<KeyPrivate> actor;
+    Actor<KeyPrivate> system_actor;
     if (predefine_actor.has_value())
-        actor = predefine_actor.value();
+        system_actor = predefine_actor.value();
     else
-        actor.create(type);
-    auto profile = PrivateProfile::create(actor, hash, node);
+        system_actor.create(type);
+
+    Actor<KeyPrivate> main_actor;
+    main_actor.create(type);
+
+    auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     m_profiles.push_back(profile);
-    m_currentProfile = actor.id();
-    node->actorIndex()->store_new_actor(actor.to_public());
-    insert_to_profile_set(actor.id());
+    m_currentProfile = system_actor.id();
+    node->actorIndex()->store_new_actor(system_actor.to_public());
+    insert_to_profile_set(system_actor.id());
     autologinHash.save(hash); // TODO: add arg
 
-    eLog("[Accounts] Created new profile: {}", actor.id());
+    eLog("[Accounts] Created new profile: {}", system_actor.id());
 
     node->start(); // TODO: remove
 
     node->calculateBlockCount();
     //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
     //        node.blockchain()->getBlockZero();
-    return actor;
+    return system_actor;
 }
 
 Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &walletName) {

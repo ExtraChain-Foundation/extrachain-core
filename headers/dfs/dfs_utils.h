@@ -232,9 +232,9 @@ namespace Dfs {
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
-        Dfs::FileType     type       = Dfs::FileType::File;
-        Dfs::DataSecurity encryption = Dfs::DataSecurity::Public;
-        Dfs::FileState    state      = Dfs::FileState::Known;
+        Dfs::FileType  type      = Dfs::FileType::File;
+        bool           encrypted = false;
+        Dfs::FileState state     = Dfs::FileState::Known;
 
         Signature sign = Signature();
 
@@ -252,10 +252,6 @@ namespace Dfs {
             return state == Dfs::FileState::Ready;
         }
 
-        bool encrypted() const {
-            return encryption != Dfs::DataSecurity::Public;
-        }
-
         bool empty() const {
             return file_id.empty() || name.empty();
         }
@@ -269,7 +265,7 @@ namespace Dfs {
                                         std::to_string(created),
                                         std::to_string(last_modified),
                                         std::to_string(std::to_underlying(type)),
-                                        std::to_string(std::to_underlying(encryption)),
+                                        std::to_string(encrypted),
                                         (with_remove ? "removed" : ""));
             auto hash     = Utils::calculate_hash(for_hash);
             return hash;
@@ -288,7 +284,7 @@ namespace Dfs {
                            created,
                            last_modified,
                            type,
-                           encryption,
+                           encrypted,
                            state,
                            sign))
 
