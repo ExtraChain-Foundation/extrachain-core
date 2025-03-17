@@ -85,7 +85,8 @@ bool WebSocketService::is_active() const {
 
 void WebSocketService::open(const QString &ip, quint16 port) {
     if (m_ws->isValid()) {
-        eFatal("[WS] Already opened");
+        eCritical("[WS] Already opened");
+        closeSocket();
     } else {
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         eLog("[WS] Open {}", url);
@@ -224,7 +225,8 @@ void WebSocketService::processMessage(const QByteArray &message) {
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
-        eFatal("[WS] Message is empty after prepare");
+        eCritical("[WS] Message is empty after prepare");
+        closeSocket();
     }
 }
 
@@ -234,7 +236,8 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
         return;
     }
     if (data.isEmpty()) {
-        eFatal("[WS] Error send size");
+        eCritical("[WS] Error send size");
+        closeSocket();
         return;
     }
 
