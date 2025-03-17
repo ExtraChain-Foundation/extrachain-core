@@ -39,7 +39,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
         actor = predefine_actor.value();
     else
         actor.create(type);
-    auto profile = PrivateProfile::create(actor, hash);
+    auto profile = PrivateProfile::create(actor, hash, node);
     m_profiles.push_back(profile);
     m_currentProfile = actor.id();
     node->actorIndex()->store_new_actor(actor.to_public());
@@ -80,7 +80,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
 }
 
 void AccountController::import_profile(const ImportedUser &imported_profile, const std::string &hash) {
-    auto              profile = PrivateProfile::import(imported_profile, hash);
+    auto              profile = PrivateProfile::import(imported_profile, hash, node);
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
@@ -114,7 +114,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 
     int count = 0;
     for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash);
+        auto profile = PrivateProfile::read(actor_id, hash, node);
         if (profile.has_value()) {
             count++;
             if (count > 1) {
@@ -143,7 +143,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 }
 
 bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
-    auto profile = PrivateProfile::load(actor_id, hash);
+    auto profile = PrivateProfile::load(actor_id, hash, node);
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
@@ -167,7 +167,7 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
     std::set<ActorId> multiple_profiles;
 
     for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash);
+        auto profile = PrivateProfile::read(actor_id, hash, node);
         if (profile.has_value()) {
             multiple_profiles.insert(actor_id);
         }

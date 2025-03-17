@@ -198,8 +198,9 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &r
                             MessageStatus::Response);
 }
 
-bool ActorIndex::actorExist(const ActorId &actorId) {
-    return !getById(actorId).isEmpty();
+bool ActorIndex::exists(const ActorId &actor_id) {
+    auto actor = this->get_actor(actor_id, ActorGetType::NoRequest);
+    return actor.has_value();
 }
 
 std::string ActorIndex::getFolderPath() const {

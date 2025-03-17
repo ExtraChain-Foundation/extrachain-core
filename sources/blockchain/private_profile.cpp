@@ -19,37 +19,46 @@
 
 #include "blockchain/private_profile.h"
 
+#include "managers/extrachain_node.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor,
+                                      const std::string       &hash,
+                                      ExtraChainNode          *node) {
     PrivateProfile user;
     user.actors_.push_back(actor);
     user.system_        = actor.id();
     user.hash_          = hash;
     user.creation_date_ = Utils::current_date_ms();
     user.modified_date_ = user.creation_date_;
+    user.node           = node;
     user.save();
     return user;
 }
 
 std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
-                                                                            const std::string &hash) {
+                                                                            const std::string &hash,
+                                                                            ExtraChainNode    *node) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
+    user.node    = node;
     return user.read();
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash) {
+PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash, ExtraChainNode *node) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
+    user.node    = node;
     user.load();
     return user;
 }
 
-PrivateProfile PrivateProfile::import(const ImportedUser &imported_user, const std::string &hash) {
+PrivateProfile PrivateProfile::import(const ImportedUser &imported_user,
+                                      const std::string  &hash,
+                                      ExtraChainNode     *node) {
     PrivateProfile private_profile;
     private_profile.hash_         = hash;
     private_profile.actors_       = imported_user.actors;
@@ -118,12 +127,17 @@ void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor) {
     save();
 }
 
-bool PrivateProfile::rename_wallet(const ActorId &actorId, const std::string &walletName) {
+bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &walletName) {
     if (walletName.empty()) {
         return false;
     }
 
-    wallet_names_[actorId] = walletName;
+    bool is_exists = node->actorIndex()->exists(actor_id);
+    if (!is_exists) {
+        return false;
+    }
+
+    wallet_names_[actor_id] = walletName;
     save();
     return true;
 }

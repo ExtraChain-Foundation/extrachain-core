@@ -53,14 +53,17 @@ struct ImportedUser {
 };
 BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
 
+class ExtraChainNode;
+
 class EXTRACHAIN_EXPORT PrivateProfile {
 public:
     PrivateProfile() = default; // only for json
-    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash);
+    static PrivateProfile create(const Actor<KeyPrivate> &actor, const std::string &hash, ExtraChainNode *node);
     static std::expected<PrivateProfile, PrivateProfileReadError> read(const ActorId     &actor_id,
-                                                                       const std::string &hash);
-    static PrivateProfile load(const ActorId &actor_id, const std::string &hash);
-    static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash);
+                                                                       const std::string &hash,
+                                                                       ExtraChainNode    *node);
+    static PrivateProfile load(const ActorId &actor_id, const std::string &hash, ExtraChainNode *node);
+    static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash, ExtraChainNode *node);
 
     const Actor<KeyPrivate>              &system() const;
     const Actor<KeyPrivate>              &current() const;
@@ -68,7 +71,7 @@ public:
     const std::vector<Actor<KeyPrivate>> &imports() const;
     bool                                  change_current(const ActorId &actorId);
     void                                  add_wallet(const Actor<KeyPrivate> &actor);
-    bool                                  rename_wallet(const ActorId &actorId, const std::string &walletName);
+    bool                                  rename_wallet(const ActorId &actor_id, const std::string &walletName);
 
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> get_actor(
         const ActorId &actorId) const;
@@ -101,6 +104,8 @@ private:
     std::map<ActorId, std::string> wallet_names_;
     std::uint64_t                  creation_date_ = 0;
     std::uint64_t                  modified_date_ = 0;
+
+    ExtraChainNode *node;
 
     BOOST_DESCRIBE_CLASS(PrivateProfile,
                          (),
