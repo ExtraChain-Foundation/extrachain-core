@@ -170,10 +170,18 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     if (dir_rows.empty()) {
         return;
     }
+
     auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
     this->update_dirs(owner_id, max_value);
 
-    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+    bool is_full   = node->dfs()->dfs_mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
+    eLog("--------------- need load {} {}", owner_id, need_load);
+
+    if (need_load) {
+        node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+    }
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {

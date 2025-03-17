@@ -83,6 +83,11 @@ enum class ExportFileError {
     CopyError
 };
 
+enum class DfsMode {
+    Full,
+    Light
+};
+
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -99,8 +104,53 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
-    std::set<ActorId> priority_actors = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
-    bool              light_mode      = false;
+    std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    DfsMode           dfs_mode_        = DfsMode::Light;
+
+    const std::set<ActorId> &priority_actors() const {
+        return priority_actors_;
+    }
+
+    void add_priority_actor(const ActorId &actor_id) {
+        priority_actors_.insert(actor_id);
+    }
+
+    void remove_priority_actor(const ActorId &actor_id) {
+        priority_actors_.erase(actor_id);
+    }
+
+    void clear_priority_actors() {
+        priority_actors_.clear();
+    }
+
+    bool contains_priority_actor(const ActorId &actor_id) const {
+        return priority_actors_.find(actor_id) != priority_actors_.end();
+    }
+
+    bool is_priority(const ActorId &actor_id) const {
+        if (actor_id == node->network_id()) {
+            return true;
+        }
+
+        const auto actor_ids = node->accountController()->accountsIds();
+        if (std::find(actor_ids.begin(), actor_ids.end(), actor_id) != actor_ids.end()) {
+            return true;
+        }
+
+        if (contains_priority_actor(actor_id)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    DfsMode dfs_mode() const {
+        return dfs_mode_;
+    }
+
+    void set_dfs_mode(DfsMode mode) {
+        dfs_mode_ = mode;
+    }
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
