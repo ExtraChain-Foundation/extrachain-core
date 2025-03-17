@@ -30,7 +30,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
     QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
         if (dir_row.folder == CHAT_DAPP_INVITE_FOLDER) {
-            if (!dir_row.encrypted) {
+            if (!dir_row.encryption) {
                 return;
             }
 

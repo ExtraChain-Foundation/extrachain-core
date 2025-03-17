@@ -241,7 +241,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::File,
-                            .encrypted     = data_security != Dfs::DataSecurity::Public,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
     if (!visual_folder.empty()) {
         dir_row.folder = visual_folder;
@@ -414,7 +414,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Collection,
-                            .encrypted     = data_security != Dfs::DataSecurity::Public,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -503,7 +503,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
-                            .encrypted     = data_security != Dfs::DataSecurity::Public,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -1499,6 +1499,19 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
 
     if (output_path.exists()) {
         return std::unexpected(ExportFileError::OutputFileExists);
+    }
+
+    if (dir_row_result->encryption) {
+        auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+        if (!actor.has_value()) {
+            return std::unexpected(ExportFileError::Unknown);
+        }
+
+        auto decrypt_result = actor->get().key().decrypt_self_file(dfs_path, output_path);
+        if (!decrypt_result.has_value()) {
+            return std::unexpected(ExportFileError::Unknown);
+        }
+        return {};
     }
 
     try {
