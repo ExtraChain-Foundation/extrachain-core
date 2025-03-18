@@ -220,7 +220,12 @@ namespace Network {
         IncorrectPublicKey,
         IncorrectFirstMessage,
         MaxConnections,
-        PeerUnavailable
+        PeerUnavailable,
+        EmptyMessage,
+        IncorrectMessage,
+        CantSend,
+        PhysicalKill,
+        IncorrectHandshake
     };
     Q_ENUM_NS(SocketServiceError)
 

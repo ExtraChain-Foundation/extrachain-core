@@ -152,7 +152,6 @@ void WebSocketService::onTextMessage(const QString &message) {
                        "",
                        ip_.toStdString(),
                        identifier_.toStdString());
-            closeSocket();
             return;
         }
 
@@ -169,7 +168,6 @@ void WebSocketService::onTextMessage(const QString &message) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return;
     }
 
@@ -180,13 +178,12 @@ void WebSocketService::onTextMessage(const QString &message) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return;
     }
 
     if (decoded.contains("Error ")) {
         auto error = Network::SocketServiceError(decoded.mid(6).toInt());
-        eLog("[WS] Error received (ip: {}, id: {}), error: {}", ip_, identifier_, error);
+        eLog("[WS] Error received (from ip: {}, id: {}): {}", ip_, identifier_, error);
         closeSocket();
         return;
     }
@@ -198,7 +195,6 @@ void WebSocketService::onTextMessage(const QString &message) {
                    "",
                    ip_.toStdString(),
                    identifier_.toStdString());
-        closeSocket();
         return;
     }
 
@@ -226,7 +222,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
         node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
         eCritical("[WS] Message is empty after prepare");
-        closeSocket();
+        emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString());
     }
 }
 
@@ -237,7 +233,10 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
     }
     if (data.isEmpty()) {
         eCritical("[WS] Error send size");
-        closeSocket();
+        emit error(Network::SocketServiceError::IncorrectMessage,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString());
         return;
     }
 
@@ -321,7 +320,7 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     qint64 written = m_ws->sendBinaryMessage(prepared);
     if (written < 0) {
         eCritical("[WS] Failed to send message");
-        closeSocket();
+        emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
     }
 }
 
@@ -359,7 +358,9 @@ void WebSocketService::connections() {
             &WebSocketService::onBinaryMessage,
             Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, this, &WebSocketService::closeSocket); // slot
+    connect(this, &WebSocketService::close, [this] {
+        emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
+    }); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
         if (waiting_buffer_space_) {
@@ -387,7 +388,10 @@ void WebSocketService::send_public_key() {
     auto written = m_ws->sendTextMessage(QString::fromStdString(pub_key_str));
     if (written < 0) {
         eCritical("[WS] Handshake send failed");
-        closeSocket();
+        emit error(Network::SocketServiceError::IncorrectHandshake,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString());
         return;
     }
 }
@@ -396,7 +400,10 @@ void WebSocketService::handshake() {
     auto first_message = generate_first_message();
     auto encrypted     = prepareSendMessage(first_message);
     if (encrypted.isEmpty()) {
-        closeSocket();
+        emit error(Network::SocketServiceError::IncorrectHandshake,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString());
         return;
     }
     auto encoded_json = Utils::to_base64(encrypted.toStdString());
@@ -404,6 +411,7 @@ void WebSocketService::handshake() {
     if (m_ws == nullptr) {
         return;
     }
+
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         closeSocket();
         return;
@@ -412,7 +420,10 @@ void WebSocketService::handshake() {
     auto written = m_ws->sendTextMessage(QString::fromStdString(encoded_json));
     if (written < 0) {
         eCritical("[WS] Handshake send failed");
-        closeSocket();
+        emit error(Network::SocketServiceError::IncorrectHandshake,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString());
         return;
     }
 }

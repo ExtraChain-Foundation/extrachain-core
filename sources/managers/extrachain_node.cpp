@@ -346,7 +346,10 @@ void ExtraChainNode::start() {
                                            data_security);
 
             if (store.has_value()) {
-                m_dfs->remove_stored_file(system_id, row.file_id);
+                auto removed_result = m_dfs->remove_stored_file(system_id, row.file_id);
+                if (!removed_result.has_value()) {
+                    eCritical("REMOVE ERROR: {}", removed_result.error());
+                }
             }
         }
     });
