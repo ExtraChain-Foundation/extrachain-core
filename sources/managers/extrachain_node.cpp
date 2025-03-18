@@ -319,7 +319,7 @@ void ExtraChainNode::start() {
         emit m_blockchain->transaction_cache().make_cache();
     }
 
-    // Version compatibility: 0.16.1 (temp)
+    // Version compatibility: 0.17.0 (temp)
 #ifdef IS_RC
     std::thread rc_thread([this]() {
         auto system_id     = m_accountController->system_actor().id();

@@ -255,7 +255,7 @@ void PrivateProfile::load() {
     }
 
     if (profile->main_.is_zero()) {
-        // Version compatibility: 0.16.1
+        // Version compatibility: 0.17.0
         Actor<KeyPrivate> main_actor;
         main_actor.create(ActorType::User);
         this->actors_.insert(this->actors_.begin() + 1, main_actor);
