@@ -41,16 +41,17 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
         system_actor.create(type);
 
     Actor<KeyPrivate> main_actor;
-    main_actor.create(type);
+    main_actor.create(ActorType::User);
 
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     m_profiles.push_back(profile);
     m_currentProfile = system_actor.id();
     node->actorIndex()->store_new_actor(system_actor.to_public());
+    node->actorIndex()->store_new_actor(main_actor.to_public());
     insert_to_profile_set(system_actor.id());
     autologinHash.save(hash); // TODO: add arg
 
-    eLog("[Accounts] Created new profile: {}", system_actor.id());
+    eLog("[Accounts] Created new profile. System: {}, main: {}", system_actor.id(), main_actor.id());
 
     node->start(); // TODO: remove
 

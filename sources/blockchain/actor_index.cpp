@@ -185,8 +185,11 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
-    auto system_actor = node->accountController()->system_actor().to_public();
-    responder.send_response(system_actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
+    // auto system_actor = node->accountController()->system_actor().to_public();
+    const auto &actors = node->accountController()->currentProfile().actors();
+    for (const auto &actor : actors) {
+        responder.send_response(actor.to_public(), MessageType::Actor, SendMode::Focused, MessageStatus::Response);
+    }
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &responder) {

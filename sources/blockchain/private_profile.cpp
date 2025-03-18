@@ -260,6 +260,7 @@ void PrivateProfile::load() {
         main_actor.create(ActorType::User);
         this->actors_.insert(this->actors_.begin() + 1, main_actor);
         this->main_ = main_actor.id();
+        node->actorIndex()->store_new_actor(main_actor.to_public());
         this->save();
     }
 }
