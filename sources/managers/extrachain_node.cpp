@@ -401,7 +401,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    eWarning("Attempting to create {} from user {}", tx, actor.id().to_string());
+    eLog("Attempting to create {} from user {}", tx, actor.id().to_string());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->read_last_block();

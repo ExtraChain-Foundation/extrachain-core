@@ -111,8 +111,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
-    std::string newTargetVirtualFilePath = (!visual_folder.empty() ? visual_folder + "/" : "") + visual_name;
-
 #ifdef ANDROID
     auto tempPath =
         "dfs/temp"
@@ -172,6 +170,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         // }
     }
 
+    auto visual_name_new   = visual_name;
+    auto visual_folder_new = visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder);
+
     if (data_security == Dfs::DataSecurity::Public) {
         try {
             std::filesystem::create_directories(place_in_dfs.c_str());
@@ -194,6 +195,22 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
+
+            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value()) {
+                auto encrypted_folder =
+                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
             auto res = actor->get().key().encrypt_self_file(new_file_path, dfs_path);
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
@@ -236,16 +253,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = file_hash,
-                            .name          = visual_name,
+                            .folder        = visual_folder_new,
+                            .name          = visual_name_new,
                             .size          = file_size_dfs.value(),
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::File,
                             .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
-    if (!visual_folder.empty()) {
-        dir_row.folder = visual_folder;
-    }
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
