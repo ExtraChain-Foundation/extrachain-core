@@ -96,7 +96,7 @@ public:
      * @param actorId
      * @return resultCode, true - exist, false - none
      */
-    bool actorExist(const ActorId &actorId);
+    bool exists(const ActorId &actor_id);
 
     /**
      * @brief Gets actor from local storage

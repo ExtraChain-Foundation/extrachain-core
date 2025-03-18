@@ -19,37 +19,50 @@
 
 #include "blockchain/private_profile.h"
 
+#include "managers/extrachain_node.h"
 #include "encryption/encryption_tools.h"
 #include "utils/exc_utils.h"
 
-PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &actor, const std::string &hash) {
+PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
+                                      const Actor<KeyPrivate> &main_actor,
+                                      const std::string       &hash,
+                                      ExtraChainNode          *node) {
     PrivateProfile user;
-    user.actors_.push_back(actor);
-    user.system_        = actor.id();
+    user.actors_.push_back(system_actor);
+    user.actors_.push_back(main_actor);
+
+    user.system_        = system_actor.id();
+    user.main_          = main_actor.id();
     user.hash_          = hash;
     user.creation_date_ = Utils::current_date_ms();
     user.modified_date_ = user.creation_date_;
+    user.node           = node;
     user.save();
     return user;
 }
 
 std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
-                                                                            const std::string &hash) {
+                                                                            const std::string &hash,
+                                                                            ExtraChainNode    *node) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
+    user.node    = node;
     return user.read();
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash) {
+PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash, ExtraChainNode *node) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
+    user.node    = node;
     user.load();
     return user;
 }
 
-PrivateProfile PrivateProfile::import(const ImportedUser &imported_user, const std::string &hash) {
+PrivateProfile PrivateProfile::import(const ImportedUser &imported_user,
+                                      const std::string  &hash,
+                                      ExtraChainNode     *node) {
     PrivateProfile private_profile;
     private_profile.hash_         = hash;
     private_profile.actors_       = imported_user.actors;
@@ -66,6 +79,7 @@ PrivateProfile PrivateProfile::import(const ImportedUser &imported_user, const s
     }
 
     private_profile.system_  = imported_user.system;
+    private_profile.main_    = imported_user.main;
     private_profile.current_ = imported_user.system;
 
     private_profile.save();
@@ -90,7 +104,7 @@ const Actor<KeyPrivate> &PrivateProfile::current() const {
 
     auto current_actor = get_actor(system_);
     if (!current_actor.has_value()) {
-        eFatal("ExtraUser system error");
+        eFatal("ExtraUser current error");
     }
     return current_actor->get();
 }
@@ -101,6 +115,10 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::actors() const {
 
 const std::vector<Actor<KeyPrivate>> &PrivateProfile::imports() const {
     return imports_;
+}
+
+std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> PrivateProfile::main() const {
+    return get_actor(main_);
 }
 
 bool PrivateProfile::change_current(const ActorId &actorId) {
@@ -118,12 +136,25 @@ void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor) {
     save();
 }
 
-bool PrivateProfile::rename_wallet(const ActorId &actorId, const std::string &walletName) {
-    if (walletName.empty()) {
+bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &wallet_name) {
+    if (wallet_name.empty()) {
         return false;
     }
 
-    wallet_names_[actorId] = walletName;
+    // TODO: check unicode
+
+    // if (wallet_name.size() > 50) {
+    //     return false;
+    // }
+
+    bool is_exists = node->actorIndex()->exists(actor_id);
+    if (!is_exists) {
+        return false;
+    }
+
+    this->wallet_names_[actor_id] = wallet_name;
+    // eLog("_____> {} {} {}", fmt::ptr(this), fmt::ptr(&wallet_names_), wallet_names_);
+
     save();
     return true;
 }
@@ -133,11 +164,13 @@ std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileErr
     if (actorId.is_zero()) {
         return std::unexpected(PrivateProfileError::ZeroActor);
     }
+
     for (const auto &actor : std::as_const(actors_)) {
         if (actorId == actor.id()) {
             return std::ref(actor);
         }
     }
+
     return std::unexpected(PrivateProfileError::NoActor);
 }
 
@@ -156,7 +189,8 @@ void PrivateProfile::save(uint64_t modified_date) {
     this->modified_date_ = modified_date;
 
     auto json_bytes = Json::serialize(*this);
-    auto encrypted  = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()), hash_);
+    // eLog("_____ {}", json_bytes);
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(json_bytes.begin(), json_bytes.end()), hash_);
     if (!encrypted.has_value()) {
         eFatal("Incorrect private profile save");
     }
@@ -202,6 +236,7 @@ void PrivateProfile::load() {
 
     this->system_       = profile->system_;
     this->current_      = profile->system_;
+    this->main_         = profile->main_;
     this->actors_       = profile->actors_;
     this->imports_      = profile->imports_;
     this->wallet_names_ = profile->wallet_names_;
@@ -218,13 +253,23 @@ void PrivateProfile::load() {
         this->creation_date_ = profile->creation_date_;
         this->modified_date_ = profile->modified_date_;
     }
+
+    if (profile->main_.is_zero()) {
+        // Version compatibility: 0.16.1
+        Actor<KeyPrivate> main_actor;
+        main_actor.create(ActorType::User);
+        this->actors_.insert(this->actors_.begin() + 1, main_actor);
+        this->main_ = main_actor.id();
+        node->actorIndex()->store_new_actor(main_actor.to_public());
+        this->save();
+    }
 }
 
 std::filesystem::path PrivateProfile::path() {
     return Profiles::folder + Utils::platformDelimeter() + system_.to_string() + Profiles::format;
 }
 
-std::map<ActorId, std::string> PrivateProfile::wallet_names() const {
+std::unordered_map<ActorId, std::string> PrivateProfile::wallet_names() const {
     return wallet_names_;
 }
 

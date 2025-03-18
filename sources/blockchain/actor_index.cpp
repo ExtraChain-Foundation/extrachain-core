@@ -185,8 +185,11 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
-    auto system_actor = node->accountController()->system_actor().to_public();
-    responder.send_response(system_actor, MessageType::Actor, SendMode::Focused, MessageStatus::Response);
+    // auto system_actor = node->accountController()->system_actor().to_public();
+    const auto &actors = node->accountController()->currentProfile().actors();
+    for (const auto &actor : actors) {
+        responder.send_response(actor.to_public(), MessageType::Actor, SendMode::Focused, MessageStatus::Response);
+    }
 }
 
 void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &responder) {
@@ -198,8 +201,9 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &r
                             MessageStatus::Response);
 }
 
-bool ActorIndex::actorExist(const ActorId &actorId) {
-    return !getById(actorId).isEmpty();
+bool ActorIndex::exists(const ActorId &actor_id) {
+    auto actor = this->get_actor(actor_id, ActorGetType::NoRequest);
+    return actor.has_value();
 }
 
 std::string ActorIndex::getFolderPath() const {

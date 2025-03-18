@@ -318,6 +318,44 @@ void ExtraChainNode::start() {
 
         emit m_blockchain->transaction_cache().make_cache();
     }
+
+    // Version compatibility: 0.16.1 (temp)
+#ifdef IS_RC
+    std::thread rc_thread([this]() {
+        auto system_id     = m_accountController->system_actor().id();
+        auto main_id       = m_accountController->currentProfile().main_id();
+        auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
+
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
+        if (!dir_rows.has_value()) {
+            return;
+        }
+
+        for (const auto& row : dir_rows.value()) {
+            auto file_path = Dfs::Path::file_path(system_id, row.file_id);
+            if (!file_path.has_value()) {
+                continue;
+            }
+
+            auto store = m_dfs->store_file(main_id,
+                                           main_id,
+                                           file_path->native(),
+                                           row.folder.has_value() ? row.folder.value() : "",
+                                           row.name,
+                                           Dfs::DataSecurity::Self,
+                                           data_security);
+
+            if (store.has_value()) {
+                auto removed_result = m_dfs->remove_stored_file(system_id, row.file_id);
+                if (!removed_result.has_value()) {
+                    eCritical("REMOVE ERROR: {}", removed_result.error());
+                }
+            }
+        }
+    });
+
+    rc_thread.detach();
+#endif
 }
 
 // void ExtraChainNode::connectResolveManager() {
@@ -363,7 +401,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    eWarning("Attempting to create {} from user {}", tx, actor.id().to_string());
+    eLog("Attempting to create {} from user {}", tx, actor.id().to_string());
 
     // 1) set prev block id
     auto lastRealBlock = m_blockchain->read_last_block();
@@ -475,6 +513,7 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
                                         .version       = extrachain_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
+                                        .main          = current_profile.main()->get().id(),
                                         .actors        = current_profile.actors(),
                                         .imports       = current_profile.imports(),
                                         .wallet_names  = current_profile.wallet_names(),

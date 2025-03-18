@@ -232,9 +232,9 @@ namespace Dfs {
         std::uint64_t created       = 0;
         std::uint64_t last_modified = 0;
 
-        Dfs::FileType     type       = Dfs::FileType::File;
-        Dfs::DataSecurity encryption = Dfs::DataSecurity::Public;
-        Dfs::FileState    state      = Dfs::FileState::Known;
+        Dfs::FileType  type       = Dfs::FileType::File;
+        bool           encryption = false;
+        Dfs::FileState state      = Dfs::FileState::Known;
 
         Signature sign = Signature();
 
@@ -252,25 +252,22 @@ namespace Dfs {
             return state == Dfs::FileState::Ready;
         }
 
-        bool encrypted() const {
-            return encryption != Dfs::DataSecurity::Public;
-        }
-
         bool empty() const {
             return file_id.empty() || name.empty();
         }
 
-        std::string calculate_hash(bool with_remove = false) {
-            auto for_hash = std::format("{}{}{}{}{}{}{}{}{}",
+        std::string calculate_hash() {
+            auto for_hash = std::format("{}{}{}{}{}{}{}{}{}{}",
                                         actor_id.to_string(),
                                         file_id,
                                         prev_file_id.value_or(""),
+                                        hash,
                                         folder.value_or(""),
                                         std::to_string(created),
                                         std::to_string(last_modified),
                                         std::to_string(std::to_underlying(type)),
-                                        std::to_string(std::to_underlying(encryption)),
-                                        (with_remove ? "removed" : ""));
+                                        std::to_string(encryption),
+                                        state == FileState::Removed ? "removed" : "");
             auto hash     = Utils::calculate_hash(for_hash);
             return hash;
         }
@@ -553,6 +550,11 @@ namespace Dfs {
 
             // TODO: add expected
             void update_file_state(const ActorId& actor_id, const std::string file_id, Dfs::FileState state);
+
+            void update_file_after_stored_remove(const ActorId&     actor_id,
+                                                 const std::string& file_id,
+                                                 const Signature&   sign,
+                                                 std::uint64_t      last_modified);
 
             // TODO: expected
             std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,

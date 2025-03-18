@@ -111,8 +111,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
-    std::string newTargetVirtualFilePath = (!visual_folder.empty() ? visual_folder + "/" : "") + visual_name;
-
 #ifdef ANDROID
     auto tempPath =
         "dfs/temp"
@@ -172,6 +170,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         // }
     }
 
+    auto visual_name_new   = visual_name;
+    auto visual_folder_new = visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder);
+
     if (data_security == Dfs::DataSecurity::Public) {
         try {
             std::filesystem::create_directories(place_in_dfs.c_str());
@@ -194,6 +195,22 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
+
+            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value()) {
+                auto encrypted_folder =
+                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
             auto res = actor->get().key().encrypt_self_file(new_file_path, dfs_path);
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
@@ -236,16 +253,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = file_hash,
-                            .name          = visual_name,
+                            .folder        = visual_folder_new,
+                            .name          = visual_name_new,
                             .size          = file_size_dfs.value(),
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::File,
-                            .encryption    = data_security,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
-    if (!visual_folder.empty()) {
-        dir_row.folder = visual_folder;
-    }
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
@@ -414,7 +429,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Collection,
-                            .encryption    = data_security,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -503,7 +518,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
-                            .encryption    = data_security,
+                            .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
     bool add_dir_row_result = Dfs::Tables::ActorDirFile::add_dir_row(owner_id, dir_row, author_actor.value());
@@ -661,10 +676,10 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     std::expected<HistoricalCollectionRow, CollectionError> historical_row;
     switch (type) {
     case CollectionOperation::Add:
-        historical_row = chain->add_row(row, dir_row_result->encryption, security_data);
+        historical_row = chain->add_row(row, Dfs::DataSecurity::Public, security_data);
         break;
     case CollectionOperation::Update:
-        historical_row = chain->update_row(id, row, dir_row_result->encryption, security_data);
+        historical_row = chain->update_row(id, row, Dfs::DataSecurity::Public, security_data);
         break;
     case CollectionOperation::Remove:
         historical_row = chain->remove_row(id);
@@ -1126,20 +1141,31 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
         return std::unexpected(false);
     }
 
-    auto hash = dir_row->calculate_hash(true);
-    auto sign = actor.value().get().key().sign(hash);
+    auto last_modified     = Utils::current_date_ms();
+    dir_row->hash          = "";
+    dir_row->folder        = std::nullopt;
+    dir_row->name          = "";
+    dir_row->size          = 0;
+    dir_row->state         = Dfs::FileState::Removed;
+    dir_row->last_modified = last_modified;
+    auto hash              = dir_row->calculate_hash();
+    auto sign              = actor.value().get().key().sign(hash);
     if (!sign.has_value()) {
         return std::unexpected(false); // sign
     }
     auto remove_file = Dfs::Packets::RemoveFile { .owner_id      = owner_id,
                                                   .file_id       = file_id,
                                                   .sign          = sign.value(),
-                                                  .last_modified = Utils::current_date_ms() };
+                                                  .last_modified = last_modified };
 
     remove_local_file(owner_id, file_id);
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
-    // update last time
-    // update dirs
+    Dfs::Tables::ActorDirFile::update_file_after_stored_remove(remove_file.owner_id,
+                                                               remove_file.file_id,
+                                                               remove_file.sign,
+                                                               remove_file.last_modified);
+    Dfs::DirsFile::update_row(owner_id, remove_file.last_modified);
+
     node->network()->send_broadcast(remove_file, MessageType::DfsFileRemove);
     emit removed(owner_id, file_id);
     return {};
@@ -1157,22 +1183,27 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
 
     auto actor = node->actorIndex()->get_actor(owner_id);
     if (!actor.has_value()) {
-        eWarning("[Dfs] Can't remove file, because no owner");
+        eWarning("[Dfs] Can't remove file, because no owner {}", actor.error());
         return;
     }
 
-    auto hash   = dir_row_new.calculate_hash(true);
-    auto verify = actor.value().key().verify(hash, sign);
+    dir_row->hash          = "";
+    dir_row->folder        = std::nullopt;
+    dir_row->name          = "";
+    dir_row->size          = 0;
+    dir_row->state         = Dfs::FileState::Removed;
+    dir_row->last_modified = last_modified;
+    auto hash              = dir_row_new.calculate_hash();
+    auto verify            = actor.value().key().verify(hash, sign);
     if (!verify) {
+        eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);
         return;
     }
 
     remove_local_file(owner_id, file_id);
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, file_id, Dfs::FileState::Removed);
-    dir_row_new.last_modified = last_modified;
-    dir_row_new.sign          = sign;
-    Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row_new);
-    // update dirs
+    Dfs::Tables::ActorDirFile::update_file_after_stored_remove(owner_id, file_id, sign, last_modified);
+    Dfs::DirsFile::update_row(owner_id, last_modified);
 
     // sizeTaken--, totalDfsSize--
     emit removed(owner_id, file_id);
@@ -1499,6 +1530,19 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
 
     if (output_path.exists()) {
         return std::unexpected(ExportFileError::OutputFileExists);
+    }
+
+    if (dir_row_result->encryption) {
+        auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+        if (!actor.has_value()) {
+            return std::unexpected(ExportFileError::Unknown);
+        }
+
+        auto decrypt_result = actor->get().key().decrypt_self_file(dfs_path, output_path);
+        if (!decrypt_result.has_value()) {
+            return std::unexpected(ExportFileError::Unknown);
+        }
+        return {};
     }
 
     try {

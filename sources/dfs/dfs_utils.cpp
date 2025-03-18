@@ -134,6 +134,25 @@ void Dfs::Tables::ActorDirFile::update_file_state(const ActorId    &actor_id,
     actrDirFile.close();
 }
 
+void Dfs::Tables::ActorDirFile::update_file_after_stored_remove(const ActorId     &actor_id,
+                                                                const std::string &file_id,
+                                                                const Signature   &sign,
+                                                                std::uint64_t      last_modified) {
+    auto dir_file = get_actor_dir_file(actor_id);
+    auto query    = fmt::format(
+        "UPDATE {} SET folder = NULL, name = '', hash = '', last_modified = '{}', size = 0, sign = "
+           "'{}' WHERE "
+           "file_id = '{}'",
+        TableName,
+        last_modified,
+        Utils::to_base64(sign),
+        file_id);
+    dir_file.update(query);
+    dir_file.close();
+
+    eLog("update_file_after_stored_remove {}", query);
+}
+
 std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &owner_id,
                                                                                  const std::string &search_value,
                                                                                  const std::string &field) {
@@ -321,7 +340,7 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, Di
                dir_row.size,
                dir_row.last_modified,
                dir_row.file_id,
-               dir_row.sign);
+               Utils::to_base64(dir_row.sign));
     auto upd = db.update(query);
     if (!upd) {
         return false;

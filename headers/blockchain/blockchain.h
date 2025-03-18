@@ -64,7 +64,7 @@ enum class BlockchainSyncStatus {
     Blocks
 };
 
-enum BlockchainMode {
+enum class BlockchainMode {
     Full,
     Light
 };
