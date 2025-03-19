@@ -349,7 +349,6 @@ void Utils::wipeDataFiles() {
     QDir("tmp").removeRecursively();
     QDir("encrypt").removeRecursively();
     QDir("tokens").removeRecursively();
-    QFile(".settings").remove();
     QFile(".auth_hash").remove();
 
     // QDir dir(QDir::currentPath());
@@ -984,4 +983,38 @@ bool Utils::is_valid_ip(const std::string_view ip) {
         "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
 
     return std::regex_match(ip.begin(), ip.end(), ip_regex);
+}
+
+ExtraChainSettings Utils::read_settings() {
+    auto path = FsPath::create(std::string(".settings"));
+    if (!path.has_value()) {
+        return ExtraChainSettings {};
+    }
+
+    auto content = Utils::read_file_content(path.value());
+    if (!content.has_value()) {
+        return ExtraChainSettings {};
+    }
+
+    auto settings = Json::deserialize<ExtraChainSettings>(content.value());
+    if (!settings.has_value()) {
+        return ExtraChainSettings {};
+    }
+
+    return settings.value();
+}
+
+bool Utils::write_settings(const ExtraChainSettings &settings) {
+    auto json = Json::serialize(settings);
+    auto path = FsPath::create(std::string(".settings"));
+    if (!path.has_value()) {
+        return false;
+    }
+
+    auto res = Utils::write_file_content(path.value(), json);
+    if (!res.has_value()) {
+        return false;
+    }
+
+    return true;
 }

@@ -41,6 +41,18 @@ DfsController::DfsController(ExtraChainNode *node)
     connect(node->actorIndex(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
         Dfs::initialize_actor_folder(actor_id);
     });
+
+#ifdef IS_RC
+    this->dfs_mode_ = DfsMode::Light;
+#endif
+
+    auto settings = Utils::read_settings();
+    if (settings.dfs_mode.has_value()) {
+        this->dfs_mode_ = settings.dfs_mode.value();
+    } else {
+        settings.dfs_mode = this->dfs_mode_;
+        Utils::write_settings(settings);
+    }
 }
 
 DfsController::~DfsController() {
@@ -247,6 +259,24 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     if (!file_size_dfs.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
+
+    // auto search_result2 = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
+    //                                                                                 visual_folder_new.has_value()
+    //                                                                                     ?
+    //                                                                                     visual_folder_new.value()
+    //                                                                                     : "",
+    //                                                                                 visual_name_new);
+    // if (search_result2.has_value()) {
+    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
+    // }
+
+    // if (Dfs::Tables::ActorDirFile::search_file_by_hash(owner_id, file_hash).has_value()) {
+    //     try {
+    //         std::filesystem::remove(dfs_path.native());
+    //     } catch (const std::exception &) {
+    //     }
+    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
+    // }
 
     // create new dir row
     Dfs::DirRow dir_row = { .actor_id      = author_id,
@@ -1526,11 +1556,6 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
     }
 
     auto output_path = output_folder;
-    output_path.append(dir_row_result->name);
-
-    if (output_path.exists()) {
-        return std::unexpected(ExportFileError::OutputFileExists);
-    }
 
     if (dir_row_result->encryption) {
         auto actor = node->accountController()->currentProfile().get_actor(owner_id);
@@ -1538,11 +1563,29 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
             return std::unexpected(ExportFileError::Unknown);
         }
 
+        auto encrypted_name = Utils::from_base64(dir_row_result->name);
+        if (actor.has_value() && encrypted_name.has_value()) {
+            auto res = actor->get().key().decrypt_self(ByteArray(encrypted_name.value()).toBytes());
+            if (res.has_value()) {
+                auto name = ByteArray(res.value()).toString();
+                output_path.append(name);
+
+                if (output_path.exists()) {
+                    return std::unexpected(ExportFileError::OutputFileExists);
+                }
+            }
+        }
+
         auto decrypt_result = actor->get().key().decrypt_self_file(dfs_path, output_path);
         if (!decrypt_result.has_value()) {
             return std::unexpected(ExportFileError::Unknown);
         }
         return {};
+    }
+
+    output_path.append(dir_row_result->name);
+    if (output_path.exists()) {
+        return std::unexpected(ExportFileError::OutputFileExists);
     }
 
     try {

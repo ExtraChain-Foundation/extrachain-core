@@ -321,7 +321,7 @@ void ExtraChainNode::start() {
 
     // Version compatibility: 0.17.0 (temp)
 #ifdef IS_RC
-    std::thread rc_thread([this]() {
+    QThreadPool::globalInstance()->start([this]() {
         auto system_id     = m_accountController->system_actor().id();
         auto main_id       = m_accountController->currentProfile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -353,8 +353,6 @@ void ExtraChainNode::start() {
             }
         }
     });
-
-    rc_thread.detach();
 #endif
 }
 
@@ -669,14 +667,27 @@ void ExtraChainNode::timer_reward_request() {
     dataMiningManager()->requestCoinReward();
 }
 
-void ExtraChainNode::createNetworkIdentifier() {
-    QFile file(".settings");
-    file.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    file.write(Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                     + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                   .c_str());
-    file.flush();
-    file.close();
+std::string ExtraChainNode::generate_network_identifier() {
+    std::string network_identifier =
+        Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                              + std::to_string(QRandomGenerator::global()->bounded(100000)));
+
+    auto settings               = Utils::read_settings();
+    settings.network_identifier = network_identifier;
+    Utils::write_settings(settings);
+
+    return network_identifier;
+}
+
+std::string ExtraChainNode::network_identifier() {
+    auto settings = Utils::read_settings();
+
+    if (!settings.network_identifier.has_value()) {
+        auto new_network_identifier = generate_network_identifier();
+        return new_network_identifier;
+    }
+
+    return settings.network_identifier.value();
 }
 
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
@@ -838,9 +849,7 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
     QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
-    QFile(".settings").remove();
-    if (!QFile(".settings").exists())
-        createNetworkIdentifier();
+    generate_network_identifier();
 }
 
 void ExtraChainNode::calculateBlockCount() {

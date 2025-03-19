@@ -125,7 +125,7 @@ void LoadManager::check_all_files(std::string identifier) {
     }
 
     for (const auto& dir : dirs.value()) {
-        bool is_full   = node->dfs()->dfs_mode() == DfsMode::Full;
+        bool is_full   = node->dfs()->mode() == DfsMode::Full;
         bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
 
         if (!need_load) {
