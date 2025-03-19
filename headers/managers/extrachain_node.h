@@ -190,7 +190,8 @@ public:
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
 
-    void createNetworkIdentifier();
+    std::string generate_network_identifier();
+    std::string network_identifier();
 
     std::uint64_t getBlockCount() const;
 

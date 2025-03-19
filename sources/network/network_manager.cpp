@@ -120,7 +120,7 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
     }
     msg.nodes_identifiers_to_ignore_later.clear();
 
-    msg.nodes_identifiers_to_ignore_later.emplace(Network::currentIdentifier().toStdString());
+    msg.nodes_identifiers_to_ignore_later.emplace(node->network_identifier());
 
     auto connectionsLocked = *m_connections;
     for (const auto &service : *connectionsLocked) {
@@ -262,7 +262,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                                 break;
                             }
 
-                            if (identifier == Network::currentIdentifier()) {
+                            if (identifier == node->network_identifier()) {
                                 can_connect = false;
                                 break;
                             }
@@ -879,7 +879,7 @@ void NetworkManager::messageReceived(const std::string &message,
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
             message_edited.sender_id   = node->accountController()->system_actor().id();
-            message_edited.nodes_identifiers_to_ignore.emplace(Network::currentIdentifier());
+            message_edited.nodes_identifiers_to_ignore.emplace(node->network_identifier());
 
             auto serialized = message_edited.serialize();
             send_message_connections(serialized + std::string(sign),
@@ -1667,18 +1667,36 @@ QString NetworkManager::localIp() {
 }
 
 void NetworkManager::initialize_first_node() {
-    try {
-        std::ifstream first_node_file(".first_node");
-        if (first_node_file.is_open()) {
-            std::string address;
-            std::getline(first_node_file, address);
+    auto settings = Utils::read_settings();
 
-            if (Utils::is_valid_ip(address) || Utils::is_valid_domain(address)) {
-                first_node_ = address;
+    if (settings.first_node.has_value()) {
+        std::string address = settings.first_node.value();
+
+        if (Utils::is_valid_ip(address) || Utils::is_valid_domain(address)) {
+            first_node_ = address;
+            return;
+        }
+    }
+
+    // Version compatibility: 0.17.1
+    if (!settings.first_node.has_value()) {
+        try {
+            std::ifstream first_node_file(".first_node");
+            if (first_node_file.is_open()) {
+                std::string address;
+                std::getline(first_node_file, address);
+                first_node_file.close();
+
+                if (Utils::is_valid_ip(address) || Utils::is_valid_domain(address)) {
+                    first_node_ = address;
+                    save_first_node(first_node_);
+                }
+
+                QFile(".first_node").remove();
                 return;
             }
+        } catch (const std::exception &) {
         }
-    } catch (const std::exception &) {
     }
 
     save_first_node(first_node_);
@@ -1696,20 +1714,16 @@ bool NetworkManager::save_first_node(const std::string_view first_node) {
 
     first_node_ = first_node;
 
-    try {
-        std::ofstream file(".first_node", std::ios::out | std::ios::binary);
-        if (!file.is_open()) {
-            return false;
-        }
+    auto settings       = Utils::read_settings();
+    settings.first_node = first_node_;
+    bool res            = Utils::write_settings(settings);
 
-        file.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-        file.write(first_node_.data(), first_node_.size());
-        file.close();
-        return true;
-    } catch (const std::ios_base::failure &e) {
-        eWarning("[Network] First node file write error: {}", e.what());
+    if (!res) {
+        eWarning("[Network] First node settings write error");
         return false;
     }
+
+    return true;
 }
 
 void NetworkManager::onNewWsConnection() {

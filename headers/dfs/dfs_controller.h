@@ -83,11 +83,6 @@ enum class ExportFileError {
     CopyError
 };
 
-enum class DfsMode {
-    Full,
-    Light
-};
-
 class EXTRACHAIN_EXPORT DfsController : public QObject {
     Q_OBJECT
 
@@ -144,11 +139,11 @@ public:
         return false;
     }
 
-    DfsMode dfs_mode() const {
+    DfsMode mode() const {
         return dfs_mode_;
     }
 
-    void set_dfs_mode(DfsMode mode) {
+    void set_mode(DfsMode mode) {
         dfs_mode_ = mode;
     }
 
