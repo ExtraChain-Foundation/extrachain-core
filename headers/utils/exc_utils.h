@@ -63,6 +63,27 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
 
+enum class BlockchainMode {
+    Full,
+    Light
+};
+
+enum class DfsMode {
+    Full,
+    Light
+};
+
+struct ExtraChainSettings {
+    std::optional<std::string>    first_node;
+    std::optional<BlockchainMode> blockchain_mode;
+    std::optional<bool>           blockchain_need_reset;
+    std::optional<DfsMode>        dfs_mode;
+    std::optional<std::string>    network_identifier;
+};
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
+                      (),
+                      (first_node, blockchain_mode, blockchain_need_reset, dfs_mode, network_identifier))
+
 class ByteArray {
 public:
     template <size_t N>
@@ -220,21 +241,14 @@ namespace Network {
         IncorrectPublicKey,
         IncorrectFirstMessage,
         MaxConnections,
-        PeerUnavailable
+        PeerUnavailable,
+        EmptyMessage,
+        IncorrectMessage,
+        CantSend,
+        PhysicalKill,
+        IncorrectHandshake
     };
     Q_ENUM_NS(SocketServiceError)
-
-    [[maybe_unused]] inline static QByteArray currentIdentifier() {
-        // static QByteArray identifier;
-        // if (!identifier.isEmpty())
-        //     return identifier;
-
-        QFile file(".settings");
-        file.open(QIODevice::ReadOnly);
-        QByteArray identifier = file.readAll();
-        file.close();
-        return identifier;
-    }
 } // namespace Network
 
 namespace Config {
@@ -840,6 +854,10 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::expected<void, FileError> write_file_chunk(const FsPath          &file_path,
                                                                       const std::string_view data,
                                                                       std::uint64_t          offset);
+
+    EXTRACHAIN_EXPORT ExtraChainSettings read_settings();
+    EXTRACHAIN_EXPORT bool               write_settings(const ExtraChainSettings &settings);
+
 } // namespace Utils
 
 namespace BlockchainConst {

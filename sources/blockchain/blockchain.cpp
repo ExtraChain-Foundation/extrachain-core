@@ -41,9 +41,15 @@ Blockchain::Blockchain(ExtraChainNode *node)
 #ifdef IS_RC
     // TODO: move as set
     if (blockIndex.first_saved_id != BigNumber(0)) {
-        mode = BlockchainMode::Light;
+        mode_ = BlockchainMode::Light;
     }
 #endif
+
+    auto settings = Utils::read_settings();
+    if (!settings.blockchain_mode.has_value()) {
+        settings.blockchain_mode = mode_;
+        Utils::write_settings(settings);
+    }
 }
 
 Blockchain::~Blockchain() {
@@ -252,12 +258,12 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.write(QByteArray::fromStdString(block.second));
         file.close();
 
-        if (mode == BlockchainMode::Light
+        if (mode_ == BlockchainMode::Light
             && (block.first != BigNumber(0) || blocks.size() == 1
                 || (blocks.size() > 1 && blocks[1].first == BigNumber(1)))) {
             blockIndex.update_last_id(block.first);
         }
-        if (mode == BlockchainMode::Full) {
+        if (mode_ == BlockchainMode::Full) {
             blockIndex.update_last_id(block.first);
         }
     }
@@ -514,7 +520,7 @@ void Blockchain::send_request_blocks() {
     }
 
     auto last_block = this->read_last_block();
-    auto sync_index = mode == BlockchainMode::Light
+    auto sync_index = mode_ == BlockchainMode::Light
                           ? calculate_genesis_id_for_block(nodes_by_block.front().second)
                           : (last_block.has_value() ? last_block->id() + 1 : BigNumber(0));
     sync_last_index = nodes_by_block.front().second;
@@ -1678,7 +1684,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
     //                      tmp.getSender().toByteArray()
     //                      });
     // }
-    //TIMER_END(addBlockNetwork)
+    // TIMER_END(addBlockNetwork)
 }
 
 // Actors //
@@ -1921,10 +1927,10 @@ void Blockchain::timer_sync_tick() {
     start_sync();
 }
 
-BlockchainMode Blockchain::getMode() const {
-    return mode;
+BlockchainMode Blockchain::mode() const {
+    return mode_;
 }
 
 void Blockchain::setMode(BlockchainMode newMode) {
-    mode = newMode;
+    mode_ = newMode;
 }

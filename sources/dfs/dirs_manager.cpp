@@ -162,6 +162,21 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     }
     */
 
+    // temp sync for removed
+    for (const auto& row : dir_rows) {
+        if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
+            auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
+            if (!file_path.has_value()) {
+                continue;
+            }
+
+            if (file_path->exists()) {
+                node->dfs()->remove_local_file(owner_id, row.file_id);
+                Dfs::Tables::ActorDirFile::update_file_state(owner_id, row.file_id, Dfs::FileState::Removed);
+            }
+        }
+    }
+
     // Need to change adding
     auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
 
@@ -170,10 +185,16 @@ void DirsManager::network_response_dir_rows(const ActorId&                  owne
     if (dir_rows.empty()) {
         return;
     }
+
     auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
     this->update_dirs(owner_id, max_value);
 
-    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
+    if (need_load) {
+        node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+    }
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {

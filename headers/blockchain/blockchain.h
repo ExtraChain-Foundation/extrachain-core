@@ -64,11 +64,6 @@ enum class BlockchainSyncStatus {
     Blocks
 };
 
-enum BlockchainMode {
-    Full,
-    Light
-};
-
 struct BlockchainLastInfo {
     BigNumber     last_block_id;
     std::string   last_hash;
@@ -100,7 +95,7 @@ private:
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
 
-    BlockchainMode mode = BlockchainMode::Full;
+    BlockchainMode mode_ = BlockchainMode::Full;
 
     QTimer *timer_sync;
 
@@ -359,7 +354,7 @@ public:
      */
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
 
-    BlockchainMode getMode() const;
+    BlockchainMode mode() const;
     void           setMode(BlockchainMode newMode);
 
 public slots:
