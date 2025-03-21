@@ -21,6 +21,7 @@
 
 #include "utils/bignumber.h"
 #include "blockchain/transaction.h"
+#include "blockchain/transaction_cache.h"
 
 class ExtraChainNode;
 
@@ -54,6 +55,10 @@ public:
         this->status_ = status;
     }
 
+    TransactionCache &transaction_cache() {
+        return transaction_cache_;
+    }
+
     std::expected<Transaction, TransactionError> send_transaction(const Transaction       &transaction,
                                                                   const Actor<KeyPrivate> &signer);
     std::expected<void, bool>                    network_transaction(const Transaction &transaction);
@@ -62,11 +67,13 @@ public:
                                                                          const TokenId              &token_id);
 
 private:
-    ExtraChainNode *node;
-    BigNumber       current_section_     = BigNumber(-1);
-    BigNumber       first_saved_section_ = BigNumber(0); // temp, must be -1
-    DagMode         mode_                = DagMode::Full;
-    DagStatus       status_              = DagStatus::Ready;
+    ExtraChainNode  *node;
+    TransactionCache transaction_cache_;
+
+    BigNumber current_section_     = BigNumber("c");
+    BigNumber first_saved_section_ = BigNumber(0); // temp, must be -1
+    DagMode   mode_                = DagMode::Full;
+    DagStatus status_              = DagStatus::Ready;
 
     std::optional<std::set<Transaction>> read_transactions(const BigNumber &section);
     std::optional<bool> save_transactions(const BigNumber &section, const std::set<Transaction> &txs);

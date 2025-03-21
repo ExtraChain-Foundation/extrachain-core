@@ -36,6 +36,8 @@ enum class MessageType {
 
     DagTransaction = 30,
 
+    CoinReward = 40,
+
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
     // DfsSyncSearchResult = 52, // true or false

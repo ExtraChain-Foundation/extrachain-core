@@ -1413,6 +1413,24 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::CoinReward: {
+        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
+        if (!reward_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for coin reward", type);
+            break;
+        }
+        const auto &reward_request = reward_request_result.value();
+        switch (status) {
+        case MessageStatus::Request: {
+            node->dataMiningManager()->network_request_coin_reward(reward_request);
+            break;
+        }
+        default:
+            break;
+        }
+        break;
+    }
+
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,

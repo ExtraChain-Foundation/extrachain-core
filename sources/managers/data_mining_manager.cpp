@@ -87,6 +87,7 @@ void DataMiningManager::requestCoinReward() {
     transaction.setReceiver(actor.id());
     transaction.setAmount(amount);
     transaction.setType(TransactionType::Reward);
+    transaction.set_section(node->dag()->current_section() + 1);
 
     // use status
     // auto lastRealBlock = node->blockchain()->read_last_block();
@@ -107,10 +108,13 @@ void DataMiningManager::requestCoinReward() {
                                      .BlocksStored = BigNumber(10000), // node->blockchain()->getBlocksStored(),
                                      .transaction  = transaction };
 
-    // node->network()->send_message(requestReward,
-    //                               MessageType::BlockchainCoinReward,
-    //                               SendMode::Neighbours,
-    //                               MessageStatus::Request);
+    // temp
+    node->dag()->network_transaction(transaction);
+
+    node->network()->send_message(requestReward,
+                                  MessageType::CoinReward,
+                                  SendMode::Neighbours,
+                                  MessageStatus::Request);
 
     eLog("[Reward] Sended {}", requestReward);
 }
@@ -187,7 +191,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto amount = requestReward.transaction.amount();
 
     // * KoefReward
-    if (calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (true || calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }

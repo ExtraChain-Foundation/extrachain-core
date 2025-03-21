@@ -82,7 +82,7 @@ private:
     BigNumberFloat  m_amount;                               // coin amount
     std::string     m_data;                                 // additional payload field
     ActorId         m_token;                                // token contract address
-    BigNumber       m_section;                              // section id at the moment of tx creation
+    BigNumber       m_section = BigNumber("-1");            // section id at the moment of tx creation
     std::string     m_hash;                                 // hash from all fields
     Signature       m_signature = Signature();              // digital signature
     TransactionType m_type      = TransactionType::Regular; // transaction type

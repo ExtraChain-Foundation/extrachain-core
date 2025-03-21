@@ -24,7 +24,8 @@
 #include "network/network_manager.h"
 
 Dag::Dag(ExtraChainNode *node)
-    : node(node) {
+    : node(node)
+    , transaction_cache_(node, node) {
     // create folders
 }
 
@@ -40,13 +41,14 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     }
 
     eLog("[Dag] Send {}", tx);
+    save_transaction(transaction); // temp
     node->network()->send_message(transaction, MessageType::DagTransaction, SendMode::Broadcast);
 
     return tx;
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction) {
-    if (status_ == DagStatus::Ready) {
+    if (status_ != DagStatus::Ready) {
         return std::unexpected(false);
     }
 
@@ -62,6 +64,8 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     if (!save_result) {
         return std::unexpected(false);
     }
+
+    current_section_ = transaction.section();
 
     return {};
 }
@@ -109,9 +113,14 @@ bool Dag::save_transaction(const Transaction &transaction) {
         txs = txs_result.value();
     }
 
-    txs_result->insert(transaction);
+    txs.insert(transaction);
 
-    return false;
+    auto res = this->save_transactions(transaction.section(), txs);
+    if (!res.has_value()) {
+        return false;
+    }
+
+    return true;
 }
 
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> transactions) {
