@@ -18,11 +18,10 @@
  */
 
 #include "managers/data_mining_manager.h"
+#include "blockchain/dag.h"
 #include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
-#include "blockchain/blockchain.h"
 #include "dfs/dfs_controller.h"
-#include "managers/transaction_manager.h"
 #include "network/network_manager.h"
 #include "utils/bignumber_float.h"
 
@@ -62,9 +61,9 @@ void DataMiningManager::requestCoinReward() {
     if (node->accountController()->empty()) {
         return;
     }
-    if (node->blockchain()->status() != BlockchainStatus::Ready) {
-        return;
-    }
+    // if (node->blockchain()->status() != BlockchainStatus::Ready) {
+    //     return;
+    // }
 
     const auto actor      = node->accountController()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
@@ -89,27 +88,29 @@ void DataMiningManager::requestCoinReward() {
     transaction.setAmount(amount);
     transaction.setType(TransactionType::Reward);
 
-    auto lastRealBlock = node->blockchain()->read_last_block();
-    if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-        eLog("[Reward] No blocks");
-        return;
-    }
+    // use status
+    // auto lastRealBlock = node->blockchain()->read_last_block();
+    // if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
+    //     eLog("[Reward] No blocks");
+    //     return;
+    // }
 
-    BigNumber lastBlockId = lastRealBlock->id();
-    transaction.setPrevBlock(lastBlockId);
+    // BigNumber lastBlockId = lastRealBlock->id();
+    // transaction.setPrevBlock(lastBlockId);
     transaction.sign(actor);
 
-    auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
-                                                      .TypeFunctioningObj = Dfs::Reward::Base,
-                                                      .BytesSent          = totalBytes.first,
-                                                      .BytesReceived      = totalBytes.second,
-                                                      .BlocksStored       = node->blockchain()->getBlocksStored(),
-                                                      .transaction        = transaction };
+    auto requestReward =
+        Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
+                                     .TypeFunctioningObj = Dfs::Reward::Base,
+                                     .BytesSent          = totalBytes.first,
+                                     .BytesReceived      = totalBytes.second,
+                                     .BlocksStored = BigNumber(10000), // node->blockchain()->getBlocksStored(),
+                                     .transaction  = transaction };
 
-    node->network()->send_message(requestReward,
-                                  MessageType::BlockchainCoinReward,
-                                  SendMode::Neighbours,
-                                  MessageStatus::Request);
+    // node->network()->send_message(requestReward,
+    //                               MessageType::BlockchainCoinReward,
+    //                               SendMode::Neighbours,
+    //                               MessageStatus::Request);
 
     eLog("[Reward] Sended {}", requestReward);
 }
@@ -126,24 +127,24 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
         return BigNumberFloat(0);
     }
 
-    auto lastBlock = node->blockchain()->read_last_block();
-    if (!lastBlock.has_value())
-        return BigNumberFloat(0);
-    if (lastBlock->isEmpty())
-        return BigNumberFloat(0);
-    auto lastIndex = lastBlock->id();
-    if (lastIndex == BigNumber(0)) {
-        lastIndex = BigNumber(1);
-        // return BigNumberFloat(0);
-    }
+    // auto lastBlock = node->blockchain()->read_last_block();
+    // if (!lastBlock.has_value())
+    //     return BigNumberFloat(0);
+    // if (lastBlock->isEmpty())
+    //     return BigNumberFloat(0);
+    // auto lastIndex = lastBlock->id();
+    // if (lastIndex == BigNumber(0)) {
+    //     lastIndex = BigNumber(1);
+    //     // return BigNumberFloat(0);
+    // }
 
     auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
     auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
-    auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
-    auto res              = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-               + (blocksStored / BigNumberFloat(lastIndex) * 100);
+    // auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
+    auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+               + (BigNumberFloat(1) / BigNumberFloat(1) * 100);
     res *= KoefReward;
 
     // eLog(
@@ -163,20 +164,20 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
         return BigNumberFloat(0);
     }
 
-    auto lastBlock = node->blockchain()->read_last_block();
-    if (!lastBlock.has_value())
-        return BigNumberFloat(0);
-    if (lastBlock->isEmpty())
-        return BigNumberFloat(0);
-    auto lastIndex = lastBlock->id();
-    if (lastIndex == 0) { // a u jk
-        lastIndex = BigNumber(1);
-        // return BigNumberFloat(0);
-    }
+    // auto lastBlock = node->blockchain()->read_last_block();
+    // if (!lastBlock.has_value())
+    //     return BigNumberFloat(0);
+    // if (lastBlock->isEmpty())
+    //     return BigNumberFloat(0);
+    // auto lastIndex = lastBlock->id();
+    // if (lastIndex == 0) { // a u jk
+    //     lastIndex = BigNumber(1);
+    //     // return BigNumberFloat(0);
+    // }
 
     auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
                 + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(lastIndex) * 100));
+                + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(1) * 100));
     res *= KoefReward;
     return res;
 }
@@ -192,7 +193,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        node->transactionManager()->network_add_transaction_signal(requestReward.transaction);
+        node->dag()->network_transaction(requestReward.transaction);
     } else {
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }

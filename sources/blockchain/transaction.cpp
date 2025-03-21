@@ -25,7 +25,7 @@ Transaction::Transaction() {
     this->m_token     = ActorId();
     this->m_amount    = BigNumberFloat(0);
     this->m_data      = std::string();
-    this->m_prevBlock = BigNumber(0);
+    this->m_section   = BigNumber(0);
     this->m_hash      = "";
     this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
@@ -41,7 +41,7 @@ Transaction::Transaction(const ActorId        &sender,
     this->m_receiver  = receiver;
     this->m_amount    = amount;
     this->m_data      = data;
-    this->m_prevBlock = BigNumber(0);
+    this->m_section   = BigNumber(0);
     this->m_hash      = "";
     this->m_signature = Signature();
     this->m_type      = TransactionType::Regular;
@@ -55,7 +55,7 @@ Transaction::Transaction(const Transaction &other) {
     this->m_amount    = other.m_amount;
     this->m_data      = other.m_data;
     this->m_token     = other.m_token;
-    this->m_prevBlock = other.m_prevBlock;
+    this->m_section   = other.m_section;
     this->m_hash      = other.m_hash;
     this->m_signature = other.m_signature;
     this->m_type      = other.m_type;
@@ -68,7 +68,7 @@ Transaction::Transaction(Transaction &&other) noexcept {
     m_amount    = std::move(other.m_amount);
     m_data      = std::move(other.m_data);
     m_token     = std::move(other.m_token);
-    m_prevBlock = std::move(other.m_prevBlock);
+    m_section   = std::move(other.m_section);
     m_hash      = std::move(other.m_hash);
     m_signature = std::move(other.m_signature);
     m_type      = std::move(other.m_type);
@@ -85,8 +85,7 @@ bool Transaction::isRewardTransaction() const {
     return m_type == TransactionType::Reward;
 }
 
-bool Transaction::isConversionTransaction() const
-{
+bool Transaction::isConversionTransaction() const {
     return m_type == TransactionType::Conversion;
 }
 
@@ -116,7 +115,7 @@ void Transaction::setToken(const ActorId &value) {
 
 void Transaction::calculate_hash() {
     auto hashData = m_sender.to_string() + m_receiver.to_string() + m_amount.to_string(NumeralBase::Hex) + m_data
-                    + m_token.to_string() + m_prevBlock.to_string();
+                    + m_token.to_string() + m_section.to_string();
 
     std::string resultHash = Utils::calculate_hash(hashData);
     if (!resultHash.empty()) {
@@ -158,8 +157,8 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
     return verify.value();
 }
 
-void Transaction::setPrevBlock(const BigNumber &value) {
-    this->m_prevBlock = value;
+void Transaction::set_section(const BigNumber &value) {
+    this->m_section = value;
 
     calculate_hash();
 }
@@ -176,8 +175,8 @@ BigNumberFloat Transaction::amount() const {
     return this->m_amount;
 }
 
-BigNumber Transaction::prevBlock() const {
-    return this->m_prevBlock;
+BigNumber Transaction::section() const {
+    return this->m_section;
 }
 
 std::string Transaction::hash() const {
@@ -197,12 +196,12 @@ Signature Transaction::signature() const {
 }
 
 bool Transaction::isEmpty() const {
-    return m_sender.is_zero() && m_receiver.is_zero() && m_amount <= 0 && m_data.empty() && m_prevBlock == -1
+    return m_sender.is_zero() && m_receiver.is_zero() && m_amount <= 0 && m_data.empty() && m_section == -1
            && m_hash.empty();
 }
 
 bool Transaction::isBurn() const {
-    return m_sender.is_zero() && m_amount <= 0 && m_data.empty() && m_prevBlock == -1 && m_hash.empty();
+    return m_sender.is_zero() && m_amount <= 0 && m_data.empty() && m_section == -1 && m_hash.empty();
 }
 
 bool Transaction::isSigned() const {
@@ -222,7 +221,7 @@ bool Transaction::operator==(const Transaction &transaction) const {
         return false;
     //    if (this->hash != transaction.getHash())
     //        return false;
-    if (this->m_prevBlock != transaction.prevBlock())
+    if (this->m_section != transaction.section())
         return false;
     //    if (this->signature != transaction.getSignature())
     //        return false;
@@ -235,7 +234,7 @@ void Transaction::operator=(const Transaction &other) {
     this->m_amount    = other.m_amount;
     this->m_data      = other.m_data;
     this->m_token     = other.m_token;
-    this->m_prevBlock = other.m_prevBlock;
+    this->m_section   = other.m_section;
     this->m_hash      = other.m_hash;
     this->m_signature = other.m_signature;
     this->m_type      = other.m_type;
@@ -248,7 +247,7 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
         m_amount    = std::move(other.m_amount);
         m_data      = std::move(other.m_data);
         m_token     = std::move(other.m_token);
-        m_prevBlock = std::move(other.m_prevBlock);
+        m_section   = std::move(other.m_section);
         m_hash      = std::move(other.m_hash);
         m_signature = std::move(other.m_signature);
         m_type      = std::move(other.m_type);

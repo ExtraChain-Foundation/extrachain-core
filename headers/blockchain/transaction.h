@@ -82,7 +82,7 @@ private:
     BigNumberFloat  m_amount;                               // coin amount
     std::string     m_data;                                 // additional payload field
     ActorId         m_token;                                // token contract address
-    BigNumber       m_prevBlock;                            // last block id at the moment of tx creation
+    BigNumber       m_section;                              // section id at the moment of tx creation
     std::string     m_hash;                                 // hash from all fields
     Signature       m_signature = Signature();              // digital signature
     TransactionType m_type      = TransactionType::Regular; // transaction type
@@ -108,14 +108,14 @@ public:
 
     // void setSenderBalance(BigNumber balance);
     // void setReceiverBalance(BigNumber balance);
-    void setPrevBlock(const BigNumber &value);
+    void set_section(const BigNumber &value);
     void setSignature(const Signature &value);
     void setHash(const std::string &value);
 
     ActorId        sender() const;
     ActorId        receiver() const;
     BigNumberFloat amount() const;
-    BigNumber      prevBlock() const;
+    BigNumber      section() const;
     std::string    data() const;
     std::string    hash() const;
     ActorId        token() const;
@@ -145,14 +145,13 @@ public:
     TransactionType type() const;
     virtual void    setType(TransactionType newType);
 
-    MSGPACK_DEFINE(m_sender, m_receiver, m_amount, m_data, m_token, m_prevBlock, m_hash, m_signature, m_type)
+    MSGPACK_DEFINE(m_sender, m_receiver, m_amount, m_data, m_token, m_section, m_hash, m_signature, m_type)
 
-    BOOST_DESCRIBE_CLASS(
-        Transaction,
-        (),
-        (),
-        (),
-        (m_sender, m_receiver, m_amount, m_data, m_token, m_prevBlock, m_hash, m_signature, m_type))
+    BOOST_DESCRIBE_CLASS(Transaction,
+                         (),
+                         (),
+                         (),
+                         (m_sender, m_receiver, m_amount, m_data, m_token, m_section, m_hash, m_signature, m_type))
 };
 
 struct TransactionInfo {

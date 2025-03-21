@@ -34,17 +34,7 @@ enum class MessageType {
     ActorAll   = 4,
     Actors     = 15,
 
-    BlockchainNewBlock     = 30,
-    BlockchainSyncBlock    = 31,
-    BlockchainTransaction  = 32,
-    BlockchainCoinReward   = 35,
-    BlockchainRequestBlock = 36,
-    BlockchainSync         = 37,
-    BlockchainLastSaved    = 38,
-
-    BlockchainSyncLastInfo = 40, // last id, last hash
-
-    BlockchainSyncBlocks = 49,
+    DagTransaction = 30,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
@@ -77,8 +67,6 @@ enum class MessageType {
     RequestDfsSize  = 90,
     ResponseDfsSize = 91,
     // DfsState = 92,
-    RequestBlockCount  = 93,
-    ResponseBlockCount = 94,
 
     NewListConnections    = 100,
     GetListConnections    = 101,

@@ -17,12 +17,11 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/blockchain.h"
 #include "blockchain/actor_index.h"
+#include "blockchain/dag.h"
 #include "dfs/dfs_controller.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
-#include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
@@ -1013,29 +1012,6 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::ResponseBlockCount: {
-        const auto block_count_result = MessagePack::deserialize<DfsP::ResponseBlockCount>(serialized);
-        if (!block_count_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for response block count", type);
-            return;
-        }
-
-        BigNumber count = block_count_result.value().blockCount;
-        emit      messageCountReceived(count);
-        break;
-    }
-
-    case MessageType::RequestBlockCount: {
-        const auto block_request_result = MessagePack::deserialize<DfsP::RequestBlockCount>(serialized);
-        if (!block_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for request block count", type);
-            return;
-        }
-        BigNumber dfs_block_count = node->blockchain()->getBlockCount();
-        node->dfs()->sendCountReponseMsg(block_request_result.value(), dfs_block_count, responder);
-        break;
-    }
-
     case MessageType::NewActor: {
         auto new_actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         if (!new_actor_result.has_value()) {
@@ -1421,121 +1397,18 @@ void NetworkManager::messageReceived(const std::string &message,
            }
        */
 
-    case MessageType::BlockchainNewBlock: {
-        auto new_block_result = MessagePack::deserialize<BlockVariant>(serialized);
-
-        if (!new_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new block", type);
-            break;
-        }
-
-        if (!new_block_result.value().isEmpty()) {
-            // need verify:
-            node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
-        }
-
-        break;
-    }
-
-    case MessageType::BlockchainSyncBlock: {
-        auto sync_block_result = MessagePack::deserialize<BlockVariant>(serialized);
-
-        if (!sync_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new block", type);
-            break;
-        }
-
-        if (!sync_block_result.value().isEmpty()) {
-            node->blockchain()->addBlockFromNetwork(sync_block_result.value(), responder, package_data, false);
-        }
-
-        break;
-    }
-
-    case MessageType::BlockchainTransaction: {
+    case MessageType::DagTransaction: {
         // eLog("BlockchainTransaction");
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
-        node->transactionManager()->network_add_transaction_signal(transaction_result.value());
-        sendBrodcastMessageFurther(package_data);
-        break;
-    }
 
-    case MessageType::BlockchainRequestBlock: {
-        eLog("BlockchainRequestBlock");
-        auto block_request_result = MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
-        if (!block_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for block request", type);
-            break;
-        }
-        const auto &[block_type, block_number] = block_request_result.value();
-        if (block_type == BlockType::Data)
-            node->blockchain()->sendBlockByNumber(block_number);
-        else if (block_type == BlockType::Genesis)
-            node->blockchain()->sendLastGenesisBlock();
-        break;
-    }
+        auto res = node->dag()->network_transaction(transaction_result.value());
 
-    case MessageType::BlockchainSync: {
-        auto sync_from_block_result = MessagePack::deserialize<BigNumber>(serialized);
-        if (!sync_from_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
-            break;
-        }
-        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), responder);
-        break;
-    }
-
-    case MessageType::BlockchainSyncBlocks: {
-        // auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
-        auto sync_blocks_result = MessagePack::deserialize<std::string>(serialized);
-        if (!sync_blocks_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
-            break;
-        }
-
-        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder, package_data);
-        break;
-    }
-
-    case MessageType::BlockchainSyncLastInfo: {
-        if (status == MessageStatus::Request) {
-            auto last_info_result = MessagePack::deserialize<bool>(serialized);
-            if (!last_info_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
-                break;
-            }
-
-            node->blockchain()->network_status_sync_request_signal(responder);
-        } else if (status == MessageStatus::Response) {
-            auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
-            if (!last_info_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
-                break;
-            }
-
-            node->blockchain()->network_status_sync_response_signal(last_info_result.value(), responder);
-        }
-        break;
-    }
-
-    case MessageType::BlockchainCoinReward: {
-        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
-        if (!reward_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for coin reward", type);
-            break;
-        }
-        const auto &reward_request = reward_request_result.value();
-        switch (status) {
-        case MessageStatus::Request: {
-            node->dataMiningManager()->network_request_coin_reward(reward_request);
-            break;
-        }
-        default:
-            break;
+        if (res.has_value()) {
+            sendBrodcastMessageFurther(package_data);
         }
         break;
     }

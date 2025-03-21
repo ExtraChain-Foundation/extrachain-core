@@ -52,22 +52,18 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/load_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/version_controller.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/historical_collection.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manager.h
+    # ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/permission_manasger.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_utils.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/collection_template.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_vector.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_id.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/blockchain.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/genesis_block.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_variant.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/block_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/dag.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
@@ -76,7 +72,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/logs_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/thread_pool.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/managers/transaction_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/data_mining_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/file_data_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/managers/token_manager.h
@@ -116,20 +111,16 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/collection_template.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/version_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/historical_collection.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
+    # ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/permission_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_id.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/blockchain.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/genesis_block.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_variant.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_index.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/block_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/private_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/dag.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
@@ -139,7 +130,6 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/extrachain_node.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/logs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thread_pool.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/managers/transaction_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/data_mining_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/token_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp

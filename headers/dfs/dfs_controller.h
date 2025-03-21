@@ -374,10 +374,6 @@ private:
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
-    void  sendCountRequestMsg(const ActorId &actorId) const;
-    void  sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                              BigNumber                              dfsCount,
-                              const Responder                       &responder) const;
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
     void  loadVPNLocalizationFiles();
 

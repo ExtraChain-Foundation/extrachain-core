@@ -1663,21 +1663,6 @@ void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, 
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);
 }
 
-void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
-    DfsP::RequestDfsSize msg { .actorId = actorId };
-    node->network()->send_message(msg,
-                                  MessageType::RequestBlockCount,
-                                  SendMode::Neighbours,
-                                  MessageStatus::Request);
-}
-
-void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                                        BigNumber                              dfsCount,
-                                        const Responder                       &responder) const {
-    DfsP::ResponseBlockCount response { .actorId = msg.actorId, .blockCount = dfsCount };
-    responder.send_response(response, MessageType::ResponseBlockCount, SendMode::Focused, MessageStatus::Response);
-}
-
 float DfsController::percentVerified(std::vector<Dfs::Packets::VerifyFileMessage> &fileList) {
     float result             = 0.0;
     int   countFilesVerified = 0;

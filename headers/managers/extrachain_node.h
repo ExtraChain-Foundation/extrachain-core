@@ -37,7 +37,7 @@
 
 class DfsController;
 class ActorIndex;
-class Blockchain;
+class Dag;
 class NetworkManager;
 class TransactionManager;
 class AccountController;
@@ -106,17 +106,16 @@ public:
 
 private:
     // common object for
-    DfsController*      m_dfs                = nullptr;
-    ActorIndex*         m_actorIndex         = nullptr;
-    Blockchain*         m_blockchain         = nullptr;
-    NetworkManager*     m_networkManager     = nullptr;
-    TransactionManager* m_transactionManager = nullptr;
-    AccountController*  m_accountController  = nullptr;
-    DataMiningManager*  m_dmm                = nullptr;
-    TokenManager*       m_tokenManager       = nullptr;
-    ChatManager*        chat_manager_        = nullptr;
-    QTimer*             timer                = nullptr;
-    QTimer*             timer_reward         = nullptr;
+    DfsController*     m_dfs               = nullptr;
+    ActorIndex*        m_actorIndex        = nullptr;
+    Dag*               dag_                = nullptr;
+    NetworkManager*    m_networkManager    = nullptr;
+    AccountController* m_accountController = nullptr;
+    DataMiningManager* m_dmm               = nullptr;
+    TokenManager*      m_tokenManager      = nullptr;
+    ChatManager*       chat_manager_       = nullptr;
+    QTimer*            timer               = nullptr;
+    QTimer*            timer_reward        = nullptr;
 
     bool                        started                          = false;
     bool                        isClientApplication              = false;
@@ -145,13 +144,12 @@ public:
 
     std::pair<QString, QString> getInitPublicIPAndCountry() const;
 
-    Blockchain*         blockchain();
-    NetworkManager*     network();
-    AccountController*  accountController() const;
-    ActorIndex*         actorIndex() const;
-    DfsController*      dfs() const;
-    TransactionManager* transactionManager() const;
-    DataMiningManager*  dataMiningManager() const;
+    Dag*               dag();
+    NetworkManager*    network();
+    AccountController* accountController() const;
+    ActorIndex*        actorIndex() const;
+    DfsController*     dfs() const;
+    DataMiningManager* dataMiningManager() const;
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
@@ -177,7 +175,7 @@ public:
                                                                        BigNumberFloat amount,
                                                                        ActorId        token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(Transaction              transaction,
+    std::expected<Transaction, TransactionError> sendTransaction(const Transaction&       transaction,
                                                                  const Actor<KeyPrivate>& signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
@@ -218,8 +216,6 @@ private:
     /**
      * @brief Connect signals between NetworkManager and Blockchain
      */
-    void connectTransactionManager();
-    void connectContractManager();
     void connectBlockchain();
     //    void connectAccountController();
     void connectActorIndex();

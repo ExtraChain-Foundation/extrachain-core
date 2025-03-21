@@ -22,7 +22,6 @@
 #include <QDir>
 
 #include "managers/extrachain_node.h"
-#include "blockchain/blockchain.h"
 #include "utils/db_connector.h"
 
 TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
@@ -56,19 +55,19 @@ void TransactionCache::cache() {
 
     eLog("[TransactionCache] Start first cache");
 
-    auto ids = node->accountController()->accountsIds();
-    auto txs = node->blockchain()
-                   ->getBlockIndex()
-                   .getTxsBySenderOrReceiverInRow(ids,
-                                                  BigNumber(-1),
-                                                  50,
-                                                  ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
+    // auto ids = node->accountController()->accountsIds();
+    // auto txs = node->blockchain()
+    //                ->getBlockIndex()
+    //                .getTxsBySenderOrReceiverInRow(ids,
+    //                                               BigNumber(-1),
+    //                                               50,
+    //                                               ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
 
-    for (const auto &[actor_id, tx_infos] : txs) {
-        for (const auto &info : tx_infos) {
-            adding(info.block_id, info.block_date, info.transaction);
-        }
-    }
+    // for (const auto &[actor_id, tx_infos] : txs) {
+    //     for (const auto &info : tx_infos) {
+    //         adding(info.block_id, info.block_date, info.transaction);
+    //     }
+    // }
 
     eLog("[TransactionCache] Finish first cache");
 }
@@ -92,7 +91,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     db.close();
 
     if (res) {
-        node->blockchain()->selfTxAdded(block_id, block_date, transaction);
+        // node->blockchain()->selfTxAdded(block_id, block_date, transaction);
     }
 }
 

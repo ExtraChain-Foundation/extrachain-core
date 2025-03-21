@@ -63,7 +63,7 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
 
-enum class BlockchainMode {
+enum class DagMode {
     Full,
     Light
 };
@@ -75,7 +75,7 @@ enum class DfsMode {
 
 struct ExtraChainSettings {
     std::optional<std::string>    first_node;
-    std::optional<BlockchainMode> blockchain_mode;
+    std::optional<DagMode> blockchain_mode;
     std::optional<bool>           blockchain_need_reset;
     std::optional<DfsMode>        dfs_mode;
     std::optional<std::string>    network_identifier;
@@ -873,13 +873,13 @@ namespace BlockchainConst {
     static const std::string ACTORS_FOLDER = "actors";
 
     // Folder with blocks
-    static const std::string BLOCKCHAIN_FOLDER     = "blocks";
+    static const std::string BLOCKCHAIN_FOLDER     = "dag";
     static const std::string BLOCKCHAIN_RANGE      = "range";
     static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
 
     // Cache
-    static const std::string BLOCKCHAIN_CACHE_FOLDER = "blocks/cache";
-    static const std::string TRANSACTION_CACHE       = "blocks/cache/SelfTransactions.db";
+    static const std::string BLOCKCHAIN_CACHE_FOLDER = BLOCKCHAIN_FOLDER + "/cache";
+    static const std::string TRANSACTION_CACHE       = BLOCKCHAIN_FOLDER + "/cache/SelfTransactions.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;
