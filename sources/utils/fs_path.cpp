@@ -72,6 +72,7 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
 #endif
 
         auto current = fs_path;
+#ifndef Q_OS_IOS
         while (true) {
             if (std::filesystem::is_symlink(current)) {
                 return std::unexpected(FsError::SymlinkFound);
@@ -91,6 +92,7 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
                 return std::unexpected(FsError::ParentNotDirectory);
             }
         }
+#endif
 
         return FsPath(std::filesystem::weakly_canonical(fs_path));
     } catch (const std::exception& e) {
