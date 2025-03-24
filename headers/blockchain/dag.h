@@ -92,7 +92,7 @@ private:
     ExtraChainNode  *node;
     TransactionCache transaction_cache_;
 
-    BigNumber current_section_     = BigNumber("c");
+    BigNumber current_section_     = BigNumber("-1");
     BigNumber first_saved_section_ = BigNumber(0); // temp, must be -1
     DagMode   mode_                = DagMode::Full;
     DagStatus status_              = DagStatus::Ready;
