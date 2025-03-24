@@ -239,7 +239,7 @@ signals:
     void vpnDisconnect();
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
-    emit selfTxAdded(BigNumber section, Transaction tx);
+    void selfTxAdded(const BigNumber& section, std::uint64_t timestamp, const Transaction& tx);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
 private slots:

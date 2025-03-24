@@ -19,11 +19,27 @@
 
 #pragma once
 
+#include <boost/describe.hpp>
+
+#include "network/network_manager.h"
 #include "utils/bignumber.h"
 #include "blockchain/transaction.h"
 #include "blockchain/transaction_cache.h"
 
 class ExtraChainNode;
+
+struct Section {
+    BigNumber             id;
+    std::uint64_t         timestamp;
+    std::set<Transaction> transactions;
+};
+BOOST_DESCRIBE_STRUCT(Section, (), (timestamp, transactions))
+
+struct TransactionResult {
+    std::string           hash;
+    TransactionProveError result;
+};
+BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 
 enum class DagStatus {
     Unknown,
@@ -61,10 +77,16 @@ public:
 
     std::expected<Transaction, TransactionError> send_transaction(const Transaction       &transaction,
                                                                   const Actor<KeyPrivate> &signer);
-    std::expected<void, bool>                    network_transaction(const Transaction &transaction);
+    std::expected<void, bool> network_transaction(const Transaction &transaction, const Responder &responder);
+
+    void network_transaction_result(const std::string hash, TransactionProveError result);
+
+    void network_section(const Section &section);
 
     std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance(const std::vector<ActorId> &actor_ids,
                                                                          const TokenId              &token_id);
+
+    void add_transaction_sended(const Transaction &transaction);
 
 private:
     ExtraChainNode  *node;
@@ -75,8 +97,10 @@ private:
     DagMode   mode_                = DagMode::Full;
     DagStatus status_              = DagStatus::Ready;
 
-    std::optional<std::set<Transaction>> read_transactions(const BigNumber &section);
-    std::optional<bool> save_transactions(const BigNumber &section, const std::set<Transaction> &txs);
+    std::unordered_map<std::string, Transaction> sended_transactions;
+
+    std::optional<Section> read_section(const BigNumber &section_id);
+    std::optional<bool>    write_section(const Section &section);
 
     bool save_transaction(const Transaction &transaction);
 

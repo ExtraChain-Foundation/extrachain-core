@@ -41,46 +41,117 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     }
 
     eLog("[Dag] Send {}", tx);
-    save_transaction(transaction); // temp
+    add_transaction_sended(tx);
     node->network()->send_message(transaction, MessageType::DagTransaction, SendMode::Broadcast);
 
     return tx;
 }
 
-std::expected<void, bool> Dag::network_transaction(const Transaction &transaction) {
+std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
     if (status_ != DagStatus::Ready) {
         return std::unexpected(false);
     }
 
     TransactionProveError res = this->prove_transaction(transaction, {});
+    TransactionResult     transaction_result { .hash = transaction.hash(), .result = res };
 
     if (res != TransactionProveError::NoError) {
         eLog("[Dag] Transaction not approved: {} {}", transaction, res);
+    } else {
+        eLog("[Dag] Transaction from network approved: {}", transaction);
     }
 
-    eLog("[Dag] Transaction approved: {}", transaction);
+    if (res == TransactionProveError::NoError) {
+        auto save_result = save_transaction(transaction);
+        if (!save_result) {
+            transaction_result.result = TransactionProveError::NoSectionAdded;
+            // send response
+            return std::unexpected(false);
+        }
 
-    auto save_result = save_transaction(transaction);
-    if (!save_result) {
-        return std::unexpected(false);
+        current_section_ = transaction.section();
     }
 
-    current_section_ = transaction.section();
+    responder.send_response(transaction_result,
+                            MessageType::DagTransactionResult,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 
     return {};
 }
 
-std::optional<std::set<Transaction>> Dag::read_transactions(const BigNumber &section) {
+void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
+    if (sended_transactions.find(hash) == sended_transactions.end()) {
+        eLog("[Dag] Ignore transaction result: {}", hash);
+        return;
+    }
+
+    auto transaction = this->sended_transactions[hash];
+    this->sended_transactions.erase(hash);
+
+    if (result != TransactionProveError::NoError) {
+        eLog("[Dag] Our transaction not approved: {} / {}", transaction.section(), transaction.hash());
+        return;
+    } else {
+        eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
+        current_section_ = transaction.section();
+    }
+
+    auto save_result = this->save_transaction(transaction);
+    if (!save_result) {
+        eLog("[Dag] Can't save our approved transaction {} in section {}",
+             transaction.hash(),
+             transaction.section());
+        return;
+    }
+
+    const auto accounts = node->accountController()->accountsIds();
+    for (const auto &accountId : accounts) {
+        if (transaction.sender() == accountId || transaction.receiver() == accountId) {
+            auto section = read_section(transaction.section());
+            if (!section.has_value()) {
+                continue;
+            }
+
+            emit transaction_cache_.add(section->id, section->timestamp, transaction);
+
+#ifdef IS_RC
+            if (transaction.type() == TransactionType::Reward
+                && accountId == node->accountController()->system_actor().id()) {
+                Transaction tx;
+                tx.setSender(accountId);
+                tx.setReceiver(accountId);
+                tx.setType(TransactionType::Conversion);
+                tx.setData(ActorId().to_string());
+                tx.setAmount(transaction.amount());
+                tx.set_section(current_section_ + 1);
+                tx.setToken(
+                    ActorId("468faf2f1be6504a9a26f7f027"
+                            "f7e43380b0d77d"));
+                eLog("[Reward] Send conversion: {} coins", tx.amount());
+                node->sendTransaction(tx, node->accountController()->system_actor());
+            }
+#endif
+        }
+    }
+}
+
+void Dag::network_section(const Section &section) {
+    //
+}
+
+std::optional<Section> Dag::read_section(const BigNumber &section_id) {
     // mutex
 
-    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section.to_string());
+    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section_id.to_string());
     auto path = FsPath::create(p);
     if (path.has_value()) {
         auto content = Utils::read_file_content(path.value());
         if (content.has_value()) {
-            auto txs_result = Json::deserialize<std::set<Transaction>>(content.value());
-            if (txs_result.has_value()) {
-                return txs_result.value();
+            auto section = Json::deserialize<Section>(content.value());
+            if (section.has_value()) {
+                section->id = section_id;
+                return section.value();
             }
         }
     }
@@ -88,16 +159,16 @@ std::optional<std::set<Transaction>> Dag::read_transactions(const BigNumber &sec
     return std::nullopt;
 }
 
-std::optional<bool> Dag::save_transactions(const BigNumber &section, const std::set<Transaction> &txs) {
+std::optional<bool> Dag::write_section(const Section &section) {
     // mutex
 
-    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section.to_string());
+    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section.id.to_string());
     auto path = FsPath::create(p);
     if (!path.has_value()) {
         return std::nullopt;
     }
 
-    auto res = Utils::write_file_content(path.value(), Json::serialize(txs));
+    auto res = Utils::write_file_content(path.value(), Json::serialize(section));
     if (!res.has_value()) {
         return std::nullopt;
     }
@@ -106,21 +177,19 @@ std::optional<bool> Dag::save_transactions(const BigNumber &section, const std::
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
-    std::set<Transaction> txs = {};
+    auto section = this->read_section(transaction.section());
 
-    auto txs_result = this->read_transactions(transaction.section());
-    if (txs_result.has_value()) {
-        txs = txs_result.value();
+    if (!section.has_value()) {
+        // create new one
+        Section section { .id           = transaction.section(),
+                          .timestamp    = Utils::current_date_ms(),
+                          .transactions = { transaction } };
+
+        return write_section(section).has_value();
     }
 
-    txs.insert(transaction);
-
-    auto res = this->save_transactions(transaction.section(), txs);
-    if (!res.has_value()) {
-        return false;
-    }
-
-    return true;
+    section->transactions.insert(transaction);
+    return write_section(section.value()).has_value();
 }
 
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> transactions) {
@@ -218,10 +287,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::MissingSignature;
     }
 
-    bool verify = tx.verify(senderActor);
-    if (!verify) {
-        return TransactionProveError::InvalidSignature;
-    }
+    // bool verify = tx.verify(senderActor);
+    // if (!verify) {
+    //     return TransactionProveError::InvalidSignature;
+    // }
 
     if (tx.type() == TransactionType::Reward) {
         return TransactionProveError::NoError;
@@ -326,13 +395,13 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
         return balances;
     }
 
-    for (BigNumber i = current_section_; i >= first_saved_section_; i--) {
-        auto txs = this->read_transactions(i);
+    for (BigNumber i = current_section_ + 1; i >= first_saved_section_; i--) {
+        auto section = this->read_section(i);
 
-        if (!txs.has_value()) {
+        if (!section.has_value()) {
             continue;
         }
-        if (txs.has_value() && txs->empty()) {
+        if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
             continue;
         }
 
@@ -357,7 +426,7 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
         // }
 
         // tx check
-        for (auto &tx : txs.value()) {
+        for (auto &tx : section->transactions) {
             for (const auto &actor_id : actor_ids) {
                 if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
@@ -418,4 +487,9 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
     }
 
     return balances;
+}
+
+void Dag::add_transaction_sended(const Transaction &transaction) {
+    // eLog("[Dag] Add to sended: {}", transaction.hash());
+    sended_transactions.insert({ transaction.hash(), transaction });
 }

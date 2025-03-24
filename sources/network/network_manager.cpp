@@ -1398,18 +1398,28 @@ void NetworkManager::messageReceived(const std::string &message,
        */
 
     case MessageType::DagTransaction: {
-        // eLog("BlockchainTransaction");
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
 
-        auto res = node->dag()->network_transaction(transaction_result.value());
+        auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
         if (res.has_value()) {
             sendBrodcastMessageFurther(package_data);
         }
+        break;
+    }
+
+    case MessageType::DagTransactionResult: {
+        auto transaction_result = MessagePack::deserialize<TransactionResult>(serialized);
+        if (!transaction_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for transaction result", type);
+            break;
+        }
+
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
         break;
     }
 
@@ -1422,7 +1432,7 @@ void NetworkManager::messageReceived(const std::string &message,
         const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::Request: {
-            node->dataMiningManager()->network_request_coin_reward(reward_request);
+            node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
             break;
         }
         default:

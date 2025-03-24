@@ -71,7 +71,8 @@ enum class TransactionProveError {
     BurnIncorrectReceiver,
     ConversionIncorrectFromToken,
     ConversionIncorrectBalance,
-    ConversionEqualToken
+    ConversionEqualToken,
+    NoSectionAdded
 };
 // FORMAT_ENUM(TransactionProveError)
 

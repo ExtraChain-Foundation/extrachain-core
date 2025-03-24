@@ -56,8 +56,13 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 
 void DataMiningManager::requestCoinReward() {
 #if defined(Q_OS_LINUX) && !defined(RACCOON_CLIENT_CONSOLE)
-    return;
+
 #endif
+
+#ifndef IS_RC
+    return; // temp
+#endif
+
     if (node->accountController()->empty()) {
         return;
     }
@@ -88,28 +93,16 @@ void DataMiningManager::requestCoinReward() {
     transaction.setAmount(amount);
     transaction.setType(TransactionType::Reward);
     transaction.set_section(node->dag()->current_section() + 1);
-
-    // use status
-    // auto lastRealBlock = node->blockchain()->read_last_block();
-    // if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-    //     eLog("[Reward] No blocks");
-    //     return;
-    // }
-
-    // BigNumber lastBlockId = lastRealBlock->id();
-    // transaction.setPrevBlock(lastBlockId);
     transaction.sign(actor);
 
-    auto requestReward =
-        Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
-                                     .TypeFunctioningObj = Dfs::Reward::Base,
-                                     .BytesSent          = totalBytes.first,
-                                     .BytesReceived      = totalBytes.second,
-                                     .BlocksStored = BigNumber(10000), // node->blockchain()->getBlocksStored(),
-                                     .transaction  = transaction };
+    auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
+                                                      .TypeFunctioningObj = Dfs::Reward::Base,
+                                                      .BytesSent          = totalBytes.first,
+                                                      .BytesReceived      = totalBytes.second,
+                                                      .BlocksStored       = node->dag()->current_section(),
+                                                      .transaction        = transaction };
 
-    // temp
-    node->dag()->network_transaction(transaction);
+    node->dag()->add_transaction_sended(transaction);
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
@@ -186,7 +179,8 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     return res;
 }
 
-void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward) {
+void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward,
+                                                    const Responder                  &responder) {
     auto calc   = calculateRewardAmount(requestReward);
     auto amount = requestReward.transaction.amount();
 
@@ -197,7 +191,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        node->dag()->network_transaction(requestReward.transaction);
+        node->dag()->network_transaction(requestReward.transaction, responder);
     } else {
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }

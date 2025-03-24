@@ -34,9 +34,10 @@ enum class MessageType {
     ActorAll   = 4,
     Actors     = 15,
 
-    DagTransaction = 30,
+    CoinReward = 19,
 
-    CoinReward = 40,
+    DagTransaction       = 30,
+    DagTransactionResult = 31,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
