@@ -29,7 +29,8 @@ enum class TransactionType {
     InitContract = 2,
     Reward       = 3,
     Repeatable   = 4,
-    Conversion   = 5
+    Conversion   = 5,
+    Genesis      = 100
 };
 MSGPACK_ADD_ENUM(TransactionType)
 
@@ -72,21 +73,23 @@ enum class TransactionProveError {
     ConversionIncorrectFromToken,
     ConversionIncorrectBalance,
     ConversionEqualToken,
-    NoSectionAdded
+    NoSectionAdded,
+    GenesisOnlyZeroSection
 };
 // FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
 private:
-    ActorId         m_sender;                               // sender address
-    ActorId         m_receiver;                             // receiver address
-    BigNumberFloat  m_amount;                               // coin amount
-    std::string     m_data;                                 // additional payload field
-    ActorId         m_token;                                // token contract address
-    BigNumber       m_section = BigNumber("-1");            // section id at the moment of tx creation
-    std::string     m_hash;                                 // hash from all fields
-    Signature       m_signature = Signature();              // digital signature
-    TransactionType m_type      = TransactionType::Regular; // transaction type
+    ActorId                    m_sender;                               // sender address
+    ActorId                    m_receiver;                             // receiver address
+    BigNumberFloat             m_amount;                               // coin amount
+    std::optional<std::string> m_data;                                 // additional payload field
+    ActorId                    m_token;                                // token contract address
+    BigNumber                  m_section = BigNumber("-1");            // section id at the moment of tx creation
+    std::string                m_hash;                                 // hash from all fields
+    Signature                  m_signature = Signature();              // digital signature
+    TransactionType            m_type      = TransactionType::Regular; // transaction type
+    std::set<std::string>      prev_hashs_;
 
 public:
     // Construct empty transaction
@@ -113,14 +116,18 @@ public:
     void setSignature(const Signature &value);
     void setHash(const std::string &value);
 
-    ActorId        sender() const;
-    ActorId        receiver() const;
-    BigNumberFloat amount() const;
-    BigNumber      section() const;
-    std::string    data() const;
-    std::string    hash() const;
-    ActorId        token() const;
-    Signature      signature() const;
+    ActorId                    sender() const;
+    ActorId                    receiver() const;
+    BigNumberFloat             amount() const;
+    BigNumber                  section() const;
+    std::optional<std::string> data() const;
+    std::string                hash() const;
+    ActorId                    token() const;
+    TransactionType            type() const;
+    std::set<std::string>      prev_hash() const {
+        return prev_hashs_;
+    }
+    Signature signature() const;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -136,23 +143,38 @@ public:
     void         operator=(const Transaction &transaction);
     Transaction &operator=(Transaction &&other) noexcept;
 
-    void            setToken(const ActorId &value);
-    void            setData(const std::string &value);
-    void            setAmount(const BigNumberFloat &value);
-    void            setSender(const ActorId &value);
-    void            setReceiver(const ActorId &value);
-    bool            isRewardTransaction() const;
-    bool            isConversionTransaction() const;
-    TransactionType type() const;
-    virtual void    setType(TransactionType newType);
+    void setToken(const ActorId &value);
+    void setData(const std::string &value);
+    void setAmount(const BigNumberFloat &value);
+    void setSender(const ActorId &value);
+    void setReceiver(const ActorId &value);
+    bool isRewardTransaction() const;
+    bool isConversionTransaction() const;
+    void setType(TransactionType newType);
+    void set_prev_hashs(const std::set<std::string> &prev_hashs) {
+        this->prev_hashs_ = prev_hashs;
+    }
+    void insert_prev_hash(const std::string hash) {
+        this->prev_hashs_.insert(hash);
+    }
 
-    MSGPACK_DEFINE(m_sender, m_receiver, m_amount, m_data, m_token, m_section, m_hash, m_signature, m_type)
+    MSGPACK_DEFINE(m_section,
+                   m_type,
+                   m_sender,
+                   m_receiver,
+                   m_token,
+                   m_amount,
+                   m_data,
+                   prev_hashs_,
+                   m_hash,
+                   m_signature)
 
-    BOOST_DESCRIBE_CLASS(Transaction,
-                         (),
-                         (),
-                         (),
-                         (m_sender, m_receiver, m_amount, m_data, m_token, m_section, m_hash, m_signature, m_type))
+    BOOST_DESCRIBE_CLASS(
+        Transaction,
+        (),
+        (),
+        (),
+        (m_section, m_type, m_sender, m_receiver, m_token, m_amount, m_data, prev_hashs_, m_hash, m_signature))
 };
 
 struct TransactionInfo {

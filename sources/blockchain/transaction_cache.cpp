@@ -82,6 +82,7 @@ void TransactionCache::adding(const BigNumber &section, uint64_t section_date, c
 
     auto map = Utils::to_dbrow(transaction);
     map.erase("section");
+    map.erase("prev_hashs");
     map["block"] = section.to_string();
     map["date"]  = std::to_string(section_date);
 

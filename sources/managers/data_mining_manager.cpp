@@ -92,22 +92,31 @@ void DataMiningManager::requestCoinReward() {
     transaction.setReceiver(actor.id());
     transaction.setAmount(amount);
     transaction.setType(TransactionType::Reward);
-    transaction.set_section(node->dag()->current_section() + 1);
-    transaction.sign(actor);
+    // transaction.set_section(node->dag()->current_section() + 1);
+    // transaction.sign(actor);
+    auto tx_result = node->dag()->prepare_transaction(transaction, actor);
+    if (!tx_result.has_value()) {
+        eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
+        return;
+    }
+    auto tx = tx_result.value();
 
     auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = Dfs::Reward::Base,
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored       = node->dag()->current_section(),
-                                                      .transaction        = transaction };
+                                                      .transaction        = tx };
 
-    node->dag()->add_transaction_sended(transaction);
+    node->dag()->add_transaction_sended(tx);
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
+
+    auto data_serialized = MessagePack::serialize(requestReward);
+    auto des             = MessagePack::deserialize<Dfs::Reward::RequestReward>(data_serialized);
 
     eLog("[Reward] Sended {}", requestReward);
 }
@@ -185,7 +194,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto amount = requestReward.transaction.amount();
 
     // * KoefReward
-    if (true || calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }

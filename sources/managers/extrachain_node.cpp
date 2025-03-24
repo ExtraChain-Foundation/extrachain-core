@@ -177,17 +177,27 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    // if (m_blockchain->getRecords() <= 0) {
-    //     auto& first      = m_accountController->system_actor();
-    //     auto  firstBlock = m_blockchain->create_zero_genesis_block(first);
-    //     if (!firstBlock.has_value())
-    //         return false;
+    if (dag_->current_section() < 0) {
+        Transaction tx;
+        tx.setSender(first.id());
+        tx.setReceiver(first.id());
+        tx.setType(TransactionType::Genesis);
 
-    //     Responder responder(this->m_networkManager);
-    //     auto      block = m_blockchain->addBlock(firstBlock.value());
-    //     // network()->send_message(block.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
-    //     blockchain()->status_ = BlockchainStatus::Ready;
-    // }
+        auto prepared_tx = dag_->prepare_transaction(tx, first);
+        if (!prepared_tx.has_value()) {
+            eCritical("[Node] Can't prepare transaction for new network");
+            std::exit(-10);
+        }
+
+        dag_->first_saved_section_ = BigNumber(0);
+        auto save_result           = dag_->save_transaction(prepared_tx.value());
+        if (!save_result) {
+            eCritical("[Node] Can't save transaction for new network");
+            std::exit(-11);
+        }
+
+        dag_->set_status(DagStatus::Ready);
+    }
 
     create_network_need_dfs_creation = true;
 
@@ -582,8 +592,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         // add sent tx balances
 
         tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
+        //        if (actorIndex->network_id() != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->network_id()))
         //                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     } else {
@@ -660,10 +670,10 @@ std::string ExtraChainNode::network_identifier() {
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto firstId = m_actorIndex->network_id();
-    if (firstId.is_zero())
+    auto network_id = m_actorIndex->network_id();
+    if (network_id.is_zero())
         return;
-    auto first = m_actorIndex->getActor(firstId);
+    auto first = m_actorIndex->getActor(network_id);
     if (first.empty())
         return;
     auto& mainKey   = m_accountController->system_actor().key();
@@ -778,7 +788,7 @@ void ExtraChainNode::prepareFolders() {
 
     // Version compatibility: 0.15.0
     if (QDir("keystore").exists()) {
-        QDir().rename("keystore", "profiles");
+        QDir().rename("keystore", QString::fromStdString(Profiles::folder));
     }
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));

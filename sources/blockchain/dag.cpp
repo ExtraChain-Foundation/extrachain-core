@@ -26,23 +26,86 @@
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node) {
-    // create folders
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+    if (file.open(QFile::ReadOnly)) {
+        auto last_id_content = file.readAll();
+
+        auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
+        if (section_range.has_value()) {
+            auto first_id_result   = BigNumber::create(section_range->first);
+            auto current_id_result = BigNumber::create(section_range->current);
+
+            if (!first_id_result.has_value() || !current_id_result.has_value()) {
+                return;
+            }
+
+            current_section_     = current_id_result.value();
+            first_saved_section_ = first_id_result.value();
+
+            // return;
+        }
+    } else {
+        QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    }
+
+    if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
+        QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+        transaction_cache_.make_files();
+    }
+
+    auto section = this->read_section(BigNumber(0));
+    if (section.has_value() && section->transactions.size() == 1) {
+        // prove_transaction()
+        auto network_id = section->transactions.begin()->sender();
+        node->actorIndex()->set_network_id(network_id);
+    }
 }
 
-std::expected<Transaction, TransactionError> Dag::send_transaction(const Transaction       &transaction,
-                                                                   const Actor<KeyPrivate> &signer) {
+std::string Dag::file_folder(const BigNumber &section) const {
+    BigNumber file_section = section / Config::DataStorage::SECTION_SIZE;
+    auto      path         = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, file_section.to_string());
+    return path;
+}
+
+std::string Dag::file_path(const BigNumber &section) const {
+    auto path = std::format("{}/{}", this->file_folder(section), section.to_string());
+    return path;
+}
+
+std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
+                                                                      const Actor<KeyPrivate> &signer) {
     auto tx = transaction;
     tx.set_section(current_section_ + 1);
-    // hash array
+
+    auto section = read_section(tx.section() - 1);
+    if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
+        return std::unexpected(TransactionError::Unknown);
+    }
+
+    if (section.has_value()) {
+        for (const auto &prev_tx : section->transactions) {
+            tx.insert_prev_hash(prev_tx.hash());
+        }
+    }
 
     auto sign_res = tx.sign(signer);
     if (!sign_res) {
         return std::unexpected(TransactionError::Unknown);
     }
 
-    eLog("[Dag] Send {}", tx);
-    add_transaction_sended(tx);
-    node->network()->send_message(transaction, MessageType::DagTransaction, SendMode::Broadcast);
+    return tx;
+}
+
+std::expected<Transaction, TransactionError> Dag::send_transaction(const Transaction       &transaction,
+                                                                   const Actor<KeyPrivate> &signer) {
+    auto tx = prepare_transaction(transaction, signer);
+    if (!tx.has_value()) {
+        return std::unexpected(tx.error());
+    }
+
+    eLog("[Dag] Send {}", tx.value());
+    add_transaction_sended(tx.value());
+    node->network()->send_message(tx.value(), MessageType::DagTransaction, SendMode::Broadcast);
 
     return tx;
 }
@@ -70,12 +133,17 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         }
 
         current_section_ = transaction.section();
+        update_range();
     }
 
     responder.send_response(transaction_result,
                             MessageType::DagTransactionResult,
                             SendMode::Focused,
                             MessageStatus::Response);
+
+    if (res != TransactionProveError::NoError) {
+        return std::unexpected(false);
+    }
 
     return {};
 }
@@ -95,6 +163,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
         current_section_ = transaction.section();
+        update_range();
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -124,7 +193,6 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
                 tx.setType(TransactionType::Conversion);
                 tx.setData(ActorId().to_string());
                 tx.setAmount(transaction.amount());
-                tx.set_section(current_section_ + 1);
                 tx.setToken(
                     ActorId("468faf2f1be6504a9a26f7f027"
                             "f7e43380b0d77d"));
@@ -143,7 +211,7 @@ void Dag::network_section(const Section &section) {
 std::optional<Section> Dag::read_section(const BigNumber &section_id) {
     // mutex
 
-    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section_id.to_string());
+    auto p    = this->file_path(section_id);
     auto path = FsPath::create(p);
     if (path.has_value()) {
         auto content = Utils::read_file_content(path.value());
@@ -162,7 +230,13 @@ std::optional<Section> Dag::read_section(const BigNumber &section_id) {
 std::optional<bool> Dag::write_section(const Section &section) {
     // mutex
 
-    auto p    = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, section.id.to_string());
+    // try
+    auto folder = this->file_folder(section.id);
+    if (!std::filesystem::exists(folder)) {
+        std::filesystem::create_directory(folder);
+    }
+
+    auto p    = this->file_path(section.id);
     auto path = FsPath::create(p);
     if (!path.has_value()) {
         return std::nullopt;
@@ -173,6 +247,7 @@ std::optional<bool> Dag::write_section(const Section &section) {
         return std::nullopt;
     }
 
+    update_range();
     return true;
 }
 
@@ -185,6 +260,9 @@ bool Dag::save_transaction(const Transaction &transaction) {
                           .timestamp    = Utils::current_date_ms(),
                           .transactions = { transaction } };
 
+        current_section_ = section.id;
+        update_range();
+
         return write_section(section).has_value();
     }
 
@@ -194,8 +272,25 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> transactions) {
     // temp
-    if (tx.type() == TransactionType::Repeatable) {
+    // if (tx.type() == TransactionType::Repeatable) {
+    //     return TransactionProveError::NoError;
+    // }
+
+    if (tx.type() == TransactionType::Genesis) {
+        if (tx.section() != BigNumber(0)) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
         return TransactionProveError::NoError;
+    }
+
+    auto section = this->read_section(BigNumber(tx.section() - 1));
+    if (section.has_value()) {
+        // TODO: check
     }
 
     // eLog("[Blockchain] Transaction prove started: {}",
@@ -287,10 +382,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::MissingSignature;
     }
 
-    // bool verify = tx.verify(senderActor);
-    // if (!verify) {
-    //     return TransactionProveError::InvalidSignature;
-    // }
+    bool verify = tx.verify(senderActor);
+    if (!verify) {
+        return TransactionProveError::InvalidSignature;
+    }
 
     if (tx.type() == TransactionType::Reward) {
         return TransactionProveError::NoError;
@@ -314,7 +409,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     TokenId token = tx.token();
     if (tx.type() == TransactionType::Conversion) {
-        auto from_token = TokenId::create(tx.data());
+        if (!tx.data().has_value()) {
+            return TransactionProveError::ConversionIncorrectFromToken;
+        }
+        auto from_token = TokenId::create(tx.data().value());
         if (!from_token.has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
@@ -446,7 +544,10 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
                 }
 
                 if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-                    auto from_token = ActorId::create(tx.data());
+                    if (!tx.data().has_value()) {
+                        continue;
+                    }
+                    auto from_token = ActorId::create(tx.data().value());
                     if (!from_token.has_value()) {
                         continue;
                     }

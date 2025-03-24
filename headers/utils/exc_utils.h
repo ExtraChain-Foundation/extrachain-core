@@ -74,11 +74,11 @@ enum class DfsMode {
 };
 
 struct ExtraChainSettings {
-    std::optional<std::string>    first_node;
-    std::optional<DagMode> blockchain_mode;
-    std::optional<bool>           blockchain_need_reset;
-    std::optional<DfsMode>        dfs_mode;
-    std::optional<std::string>    network_identifier;
+    std::optional<std::string> first_node;
+    std::optional<DagMode>     blockchain_mode;
+    std::optional<bool>        blockchain_need_reset;
+    std::optional<DfsMode>     dfs_mode;
+    std::optional<std::string> network_identifier;
 };
 BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
                       (),
@@ -338,7 +338,7 @@ namespace Config {
                                                       ");";
 
         // How many files one section folder will store
-        static const int SECTION_SIZE = 100000;
+        static const BigNumber SECTION_SIZE = BigNumber(10000);
 
         // How often to construct block from pending transactions (in miliseconds)
         static const int BLOCK_CREATION_PERIOD = 5000;

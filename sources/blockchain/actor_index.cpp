@@ -221,7 +221,7 @@ void ActorIndex::set_network_id(const ActorId &value) {
         return;
     }
 
-    eLog("[ActorIndex] Save first id: {}", value);
+    eLog("[ActorIndex] Save network id: {}", value);
     network_id_ = value;
 }
 

@@ -41,6 +41,12 @@ struct TransactionResult {
 };
 BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 
+struct SectionRange {
+    std::string first;
+    std::string current;
+};
+BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, current))
+
 enum class DagStatus {
     Unknown,
     Started,
@@ -51,15 +57,15 @@ class Dag {
 public:
     Dag(ExtraChainNode *node);
 
-    BigNumber current_section() {
+    BigNumber current_section() const {
         return current_section_;
     }
 
-    DagMode mode() {
+    DagMode mode() const {
         return mode_;
     }
 
-    DagStatus status() {
+    DagStatus status() const {
         return status_;
     }
 
@@ -75,6 +81,11 @@ public:
         return transaction_cache_;
     }
 
+    std::string file_folder(const BigNumber &section) const;
+    std::string file_path(const BigNumber &section) const;
+
+    std::expected<Transaction, TransactionError> prepare_transaction(const Transaction       &transaction,
+                                                                     const Actor<KeyPrivate> &signer);
     std::expected<Transaction, TransactionError> send_transaction(const Transaction       &transaction,
                                                                   const Actor<KeyPrivate> &signer);
     std::expected<void, bool> network_transaction(const Transaction &transaction, const Responder &responder);
@@ -88,12 +99,21 @@ public:
 
     void add_transaction_sended(const Transaction &transaction);
 
+    void update_range() {
+        std::string json = Json::serialize(
+            SectionRange { .first = first_saved_section_.to_string(), .current = current_section_.to_string() });
+        QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+        file.open(QFile::WriteOnly);
+        file.write(json.data());
+        file.close();
+    }
+
 private:
     ExtraChainNode  *node;
     TransactionCache transaction_cache_;
 
-    BigNumber current_section_     = BigNumber("-1");
-    BigNumber first_saved_section_ = BigNumber(0); // temp, must be -1
+    BigNumber current_section_     = BigNumber(-1);
+    BigNumber first_saved_section_ = BigNumber(-1);
     DagMode   mode_                = DagMode::Full;
     DagStatus status_              = DagStatus::Ready;
 
@@ -105,4 +125,6 @@ private:
     bool save_transaction(const Transaction &transaction);
 
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
+
+    friend class ExtraChainNode;
 };
