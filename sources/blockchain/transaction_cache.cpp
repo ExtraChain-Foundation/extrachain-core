@@ -72,7 +72,7 @@ void TransactionCache::cache() {
     eLog("[TransactionCache] Finish first cache");
 }
 
-void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction) {
+void TransactionCache::adding(const BigNumber &section, uint64_t block_date, const Transaction &transaction) {
     // TODO: remove
     if (transaction.token() != ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d")) {
         return;
@@ -82,7 +82,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
 
     auto map = Utils::to_dbrow(transaction);
     map.erase("prevBlock");
-    map["block"] = block_id.to_string();
+    map["block"] = section.to_string();
     map["date"]  = std::to_string(block_date);
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
@@ -91,7 +91,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     db.close();
 
     if (res) {
-        // node->blockchain()->selfTxAdded(block_id, block_date, transaction);
+        emit node->selfTxAdded(section, block_date, transaction);
     }
 }
 
