@@ -41,7 +41,7 @@ Dag::Dag(ExtraChainNode *node)
 
             current_section_     = current_id_result.value();
             first_saved_section_ = first_id_result.value();
-
+            eLog("[Dag] Current: {}, first: {}", current_section_, first_saved_section_);
             // return;
         }
     } else {
@@ -115,8 +115,11 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         return std::unexpected(false);
     }
 
-    TransactionProveError res = this->prove_transaction(transaction, {});
-    TransactionResult     transaction_result { .hash = transaction.hash(), .result = res };
+    auto                  section = read_section(transaction.section());
+    TransactionProveError res =
+        this->prove_transaction(transaction,
+                                section.has_value() ? section->transactions : std::set<Transaction> {});
+    TransactionResult transaction_result { .hash = transaction.hash(), .result = res };
 
     if (res != TransactionProveError::NoError) {
         eLog("[Dag] Transaction not approved: {} {}", transaction, res);
@@ -208,7 +211,7 @@ void Dag::network_section(const Section &section) {
     //
 }
 
-std::optional<Section> Dag::read_section(const BigNumber &section_id) {
+std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     // mutex
 
     auto p    = this->file_path(section_id);
@@ -270,7 +273,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
     return write_section(section.value()).has_value();
 }
 
-TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> transactions) {
+TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions) {
     // temp
     // if (tx.type() == TransactionType::Repeatable) {
     //     return TransactionProveError::NoError;
@@ -321,10 +324,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::WrongHash;
     }
 
-    // auto res = this->blockIndex.search_duplicate(tx_copy.hash());
-    // if (res.second != BigNumber(-1)) {
-    //     return TransactionProveError::Duplicate;
-    // }
+    auto tx_result = search_transaction(tx_copy.hash());
+    if (tx_result.has_value()) {
+        return TransactionProveError::Duplicate;
+    }
 
     if (targetSender.is_zero()) {
         return TransactionProveError::SenderZero;
@@ -485,7 +488,7 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
         balances[actor_id] = BigNumberFloat(0);
     }
 
-    eLog("calculate_actorS_balance: {} for token {}", actor_ids, token_id);
+    eLog("calculate_actors_balance: {} for token {}", actor_ids, token_id);
     if (current_section_ == -1) {
         for (const auto &actor_id : actor_ids) {
             balances[actor_id] = BigNumberFloat(0);
@@ -499,6 +502,7 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
         if (!section.has_value()) {
             continue;
         }
+
         if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
             continue;
         }
@@ -528,18 +532,12 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
             for (const auto &actor_id : actor_ids) {
                 if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE Reward += {}, =
-                    // {}", i, tx.amount(),
-                    // balances[actor_id]);
                     continue;
                 }
 
                 if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
                     && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE InitContract += {},
-                    // = {}", i, tx.amount(),
-                    // balances[actor_id]);
                     continue;
                 }
 
@@ -558,30 +556,20 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
 
                     if (from_token.value() == token_id) {
                         balances[actor_id] -= tx.amount();
-                        // eLog("{} BAALANCE Conversion -=
-                        // {}, = {}", i, tx.amount(),
-                        // balances[actor_id]);
                     }
 
                     if (tx.token() == token_id) {
                         balances[actor_id] += tx.amount();
-                        // eLog("{} BAALANCE Conversion +=
-                        // {}, = {}", i, tx.amount(),
-                        // balances[actor_id]);
                     }
                     continue;
                 }
 
                 if (tx.receiver() == actor_id && tx.token() == token_id) {
                     balances[actor_id] += tx.amount();
-                    // eLog("{} BAALANCE += {}, = {}", i,
-                    // tx.amount(), balances[actor_id]);
                 }
 
                 if (tx.sender() == actor_id && tx.token() == token_id) {
                     balances[actor_id] -= tx.amount();
-                    // eLog("{} BAALANCE -= {}, = {}", i,
-                    // tx.amount(), balances[actor_id]);
                 }
             }
         }
@@ -593,4 +581,42 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions.insert({ transaction.hash(), transaction });
+}
+
+void Dag::update_range() {
+    std::string json = Json::serialize(
+        SectionRange { .first = first_saved_section_.to_string(), .current = current_section_.to_string() });
+    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+    file.open(QFile::WriteOnly);
+    file.write(json.data());
+    file.close();
+}
+
+std::optional<Transaction> Dag::search_transaction(const std::string &hash, int deep) const {
+    int count = 0;
+
+    for (BigNumber i = current_section_ + 1; i >= first_saved_section_; i--) {
+        auto section = this->read_section(i);
+
+        if (!section.has_value()) {
+            continue;
+        }
+
+        if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
+            continue;
+        }
+
+        for (auto &tx : section->transactions) {
+            if (tx.hash() == hash) {
+                return tx;
+            }
+        }
+
+        count += 1;
+        if (deep != 0 && count > deep) {
+            return std::nullopt;
+        }
+    }
+
+    return std::nullopt;
 }

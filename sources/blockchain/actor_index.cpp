@@ -216,7 +216,7 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 void ActorIndex::set_network_id(const ActorId &value) {
     if (!network_id_.is_zero()) {
         if (network_id() != value) {
-            eFatal("Another FirstId: {} != {}", network_id(), value);
+            eFatal("Another network id: {} != {}", network_id(), value);
         }
         return;
     }

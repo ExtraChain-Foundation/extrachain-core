@@ -99,14 +99,11 @@ public:
 
     void add_transaction_sended(const Transaction &transaction);
 
-    void update_range() {
-        std::string json = Json::serialize(
-            SectionRange { .first = first_saved_section_.to_string(), .current = current_section_.to_string() });
-        QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
-        file.open(QFile::WriteOnly);
-        file.write(json.data());
-        file.close();
-    }
+    void update_range();
+
+    std::optional<Transaction> search_transaction(const std::string &hash, int deep = 100) const;
+
+    std::optional<Section> read_section(const BigNumber &section_id) const;
 
 private:
     ExtraChainNode  *node;
@@ -119,12 +116,11 @@ private:
 
     std::unordered_map<std::string, Transaction> sended_transactions;
 
-    std::optional<Section> read_section(const BigNumber &section_id);
-    std::optional<bool>    write_section(const Section &section);
+    std::optional<bool> write_section(const Section &section);
 
     bool save_transaction(const Transaction &transaction);
 
-    TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> transactions);
+    TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
 
     friend class ExtraChainNode;
 };
