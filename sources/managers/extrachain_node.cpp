@@ -139,6 +139,10 @@ void ExtraChainNode::process() {
     connect(timer_reward, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
     timer_reward->start(60000);
 
+    timer_info = new QTimer(this);
+    connect(timer_info, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
+    timer_info->start(5000);
+
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
     connectSignals();
@@ -644,6 +648,14 @@ void ExtraChainNode::timer_reward_request() {
     dataMiningManager()->requestCoinReward();
 }
 
+void ExtraChainNode::timer_info_print() {
+    eLog("[Node] Dag{}: {} sections. Dfs: {} from {} bytes",
+         dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
+         dag_->current_section(),
+         m_dfs->sizeTaken(),
+         m_dfs->totalDfsSize());
+}
+
 std::string ExtraChainNode::generate_network_identifier() {
     std::string network_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
@@ -737,7 +749,7 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
-                // m_blockchain->need_check();
+                dag_->start_check();
                 // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });

@@ -38,6 +38,9 @@ enum class MessageType {
 
     DagTransaction       = 30,
     DagTransactionResult = 31,
+    DagSections          = 32,
+
+    BlockchainSyncLastInfo = 39,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
@@ -178,6 +181,13 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
+inline std::string generate_message_id() {
+    std::string message_id = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                                   + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                                 .substr(0, 15);
+    return message_id;
+}
+
 inline MessageBody make_init_message(const std::string& data,
                                      SendMode           send_type,
                                      MessageType        type,
@@ -188,14 +198,10 @@ inline MessageBody make_init_message(const std::string& data,
         eFatal("make message error: incorrect message id size");
     }
 
-    std::string randomId = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                                 + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                               .substr(0, 15); // temp
-
     MessageBody message = { .send_type      = send_type,
                             .message_type   = type,
                             .status         = status,
-                            .message_id     = !to_message_id.empty() ? to_message_id : randomId,
+                            .message_id     = !to_message_id.empty() ? to_message_id : generate_message_id(),
                             .sender_id      = sender,
                             .init_sender_id = sender,
                             .data           = data };

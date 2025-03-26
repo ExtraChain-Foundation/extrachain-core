@@ -74,7 +74,8 @@ enum class TransactionProveError {
     ConversionIncorrectBalance,
     ConversionEqualToken,
     NoSectionAdded,
-    GenesisOnlyZeroSection
+    GenesisOnlyZeroSection,
+    SectionTooBig
 };
 // FORMAT_ENUM(TransactionProveError)
 

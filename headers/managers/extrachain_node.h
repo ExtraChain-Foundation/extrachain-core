@@ -116,6 +116,7 @@ private:
     ChatManager*       chat_manager_       = nullptr;
     QTimer*            timer               = nullptr;
     QTimer*            timer_reward        = nullptr;
+    QTimer*            timer_info          = nullptr;
 
     bool                        started                          = false;
     bool                        isClientApplication              = false;
@@ -245,6 +246,7 @@ signals:
 private slots:
     void getAllActorsTimerCall();
     void timer_reward_request();
+    void timer_info_print();
 
     void selfTxRepeatableAdded(const BigNumber& block_id, uint64_t block_date, const Transaction& transaction);
 

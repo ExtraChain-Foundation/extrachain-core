@@ -66,9 +66,10 @@ void DataMiningManager::requestCoinReward() {
     if (node->accountController()->empty()) {
         return;
     }
-    // if (node->blockchain()->status() != BlockchainStatus::Ready) {
-    //     return;
-    // }
+
+    if (node->dag()->status() != DagStatus::Ready) {
+        return;
+    }
 
     const auto actor      = node->accountController()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();

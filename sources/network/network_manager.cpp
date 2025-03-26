@@ -1423,6 +1423,33 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DagSections: {
+        if (status == MessageStatus::Request) {
+            auto range = MessagePack::deserialize<SectionRange>(serialized);
+            if (!range.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            auto first = BigNumber::create(range->first);
+            auto last  = BigNumber::create(range->last);
+            if (!first.has_value() || !last.has_value()) {
+                break;
+            }
+
+            node->dag()->network_request_sections(first.value(), last.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto txs = MessagePack::deserialize<std::string>(serialized);
+            if (!txs.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_request_sections_response(txs.value(), responder);
+        }
+        break;
+    }
+
     case MessageType::CoinReward: {
         auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
         if (!reward_request_result.has_value()) {
@@ -1437,6 +1464,27 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         default:
             break;
+        }
+        break;
+    }
+
+    case MessageType::BlockchainSyncLastInfo: {
+        if (status == MessageStatus::Request) {
+            auto last_info_result = MessagePack::deserialize<bool>(serialized);
+            if (!last_info_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_status_sync_request(responder);
+        } else if (status == MessageStatus::Response) {
+            auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
+            if (!last_info_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_status_sync_response(last_info_result.value(), responder);
         }
         break;
     }

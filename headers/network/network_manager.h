@@ -178,6 +178,14 @@ public:
         message_id_ = message_id;
     }
 
+    Responder with_new_message_id() const {
+        Responder responder   = *this;
+        responder.message_id_ = generate_message_id();
+        return responder;
+    }
+
+    Responder& operator=(const Responder&) = default;
+
 private:
     std::string send_response_impl(const std::string& data_serialized,
                                    MessageType        type,
