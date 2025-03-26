@@ -55,10 +55,16 @@ struct SectionRange {
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last))
 
+struct ActorPair {
+    ActorId actor_id;
+    TokenId token_id;
+};
+BOOST_DESCRIBE_STRUCT(ActorPair, (), (actor_id, token_id))
+
 struct DagCache {
-    BigNumber                                                       section   = BigNumber(-1);
-    std::uint64_t                                                   timestamp = 0;
-    std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat> balances;
+    BigNumber                           section   = BigNumber(-1);
+    std::uint64_t                       timestamp = 0;
+    std::map<ActorPair, BigNumberFloat> balances;
 };
 BOOST_DESCRIBE_STRUCT(DagCache, (), (section, timestamp, balances))
 
