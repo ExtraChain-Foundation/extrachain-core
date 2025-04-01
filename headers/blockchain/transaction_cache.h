@@ -30,6 +30,7 @@ class TransactionCache : public QObject {
 
 public:
     explicit TransactionCache(ExtraChainNode *node, QObject *parent);
+    void make_files();
 
 signals:
     void add(const BigNumber &block_id, uint64_t block_date, const Transaction &transaction);
@@ -43,8 +44,6 @@ private slots:
     void cache();
 
 private:
-    void make_files();
-
     ExtraChainNode *node;
     bool            is_exists = false;
 };

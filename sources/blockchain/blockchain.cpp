@@ -1912,6 +1912,8 @@ void Blockchain::removeAllSlot(bool is_mega, bool is_exit) {
     QFile(QString::fromStdString(BlockchainConst::TMP_GENESIS_BLOCK)).remove();
     eLog("[Blockchain] Removed all");
 
+    transaction_cache_.make_files();
+
 #ifdef IS_RC
     if (is_exit) {
         qApp->exit();
