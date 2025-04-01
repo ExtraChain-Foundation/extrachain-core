@@ -944,7 +944,7 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
 }
 
 std::optional<uint64_t> Utils::read_file_creation_time_ms(const std::filesystem::path &filepath) {
-#ifdef Q_OS_MAC
+#if defined(Q_OS_MAC) || defined(Q_OS_ANDROID)
     try {
         auto file_time = std::filesystem::last_write_time(filepath);
         auto sys_time  = std::chrono::file_clock::to_sys(file_time);

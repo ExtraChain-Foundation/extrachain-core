@@ -59,7 +59,10 @@ public:
     const std::string &to_string() const;
     bool               is_zero() const;
 
-    auto     operator<=>(const ActorId &) const = default;
+    bool operator==(const ActorId &) const = default;
+    bool operator<(const ActorId &other) const {
+        return m_id < other.m_id;
+    }
     ActorId &operator=(const ActorId &actorId);
     ActorId &operator=(const std::string &actorId);
     ActorId &operator=(ActorId &&other) noexcept;
@@ -85,10 +88,10 @@ MAKE_CUSTOM_MAGICAL(ActorId)
 using TokenId = ActorId;
 
 namespace std {
-    template<>
+    template <>
     struct hash<ActorId> {
-        size_t operator()(const ActorId& id) const {
-            return std::hash<std::string>{}(id.value());
+        size_t operator()(const ActorId &id) const {
+            return std::hash<std::string> {}(id.value());
         }
     };
-}
+} // namespace std
