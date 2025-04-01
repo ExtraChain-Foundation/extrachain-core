@@ -185,7 +185,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
-    std::string query_folder = folder.empty() ? "" : std::format("folder = '{}' AND", folder);
+    std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
     std::string query        = fmt::format("SELECT * FROM {} WHERE {} name = '{}' AND state != '{}';",
                                     TableName,
                                     query_folder,

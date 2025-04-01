@@ -24,6 +24,7 @@
 #include <array>
 #include <vector>
 #include <expected>
+#include <compare>
 #include <utils/exc_utils.h>
 #include <sodium.h>
 

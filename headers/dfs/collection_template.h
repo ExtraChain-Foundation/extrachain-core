@@ -134,7 +134,7 @@ namespace Dfs {
 
         std::expected<DbColumn, SqlCreateError> to_db_column() const;
 
-        auto operator<=>(const FieldBuilder&) const = default;
+        bool operator==(const FieldBuilder&) const = default;
 
         const std::string& name() const {
             return m_name;
@@ -247,7 +247,7 @@ namespace Dfs {
 
         void set_actor_file(const ActorId& actor_id, const std::string file_id);
 
-        auto operator<=>(const CollectionTemplate&) const = default;
+        bool operator==(const CollectionTemplate&) const = default;
 
         BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields));
         // no need actor_id or file_id

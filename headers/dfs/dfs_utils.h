@@ -143,8 +143,7 @@ namespace Dfs {
         ActorId     owner_id;
         std::string file_id;
 
-        bool operator==(const FileLink&) const  = default;
-        auto operator<=>(const FileLink&) const = default;
+        bool operator==(const FileLink&) const = default;
 
         size_t hash() const {
             return std::hash<std::string>()(owner_id.to_string() + file_id);
@@ -257,7 +256,7 @@ namespace Dfs {
         }
 
         std::string calculate_hash() {
-            auto for_hash = std::format("{}{}{}{}{}{}{}{}{}{}",
+            auto for_hash = fmt::format("{}{}{}{}{}{}{}{}{}{}",
                                         actor_id.to_string(),
                                         file_id,
                                         prev_file_id.value_or(""),

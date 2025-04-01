@@ -107,7 +107,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
 
-    const auto query = std::format(
+    const auto query = fmt::format(
         "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' {} ORDER by date DESC LIMIT "
         "50 OFFSET {};",
         Config::DataStorage::TX_CACHE_TABLE,

@@ -45,7 +45,13 @@ public:
         std::string ip;
         std::string identifier;
 
-        auto operator<=>(const SocketPair &) const = default;
+        bool operator==(const SocketPair &) const = default;
+
+        bool operator<(const SocketPair &other) const {
+            if (ip != other.ip)
+                return ip < other.ip;
+            return identifier < other.identifier;
+        }
     };
 
     struct HandshakeMessage {

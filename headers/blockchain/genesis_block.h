@@ -33,9 +33,13 @@ struct EXTRACHAIN_EXPORT GenesisDataActor {
     ActorId actorId; /**< Unique identifier for the actor */
     TokenId tokenId; /**< Identifier for the associated token */
 
-    auto operator<=>(const GenesisDataActor &) const = default;
-    bool operator==(const GenesisDataActor &) const  = default;
+    bool operator==(const GenesisDataActor &) const = default;
 
+    bool operator<(const GenesisDataActor &other) const {
+        if (actorId != other.actorId)
+            return actorId < other.actorId;
+        return tokenId < other.tokenId;
+    }
     /**
      * @brief MessagePack serialization definition
      */
@@ -51,8 +55,7 @@ struct EXTRACHAIN_EXPORT GenesisDataInfo {
     BlockchainConst::DataRowType type =
         BlockchainConst::DataRowType::Universal; /**< Type of the data row, default is Universal */
 
-    auto operator<=>(const GenesisDataInfo &) const = default;
-    bool operator==(const GenesisDataInfo &) const  = default;
+    bool operator==(const GenesisDataInfo &) const = default;
 
     /**
      * @brief MessagePack serialization definition

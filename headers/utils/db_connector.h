@@ -111,10 +111,12 @@ namespace Utils {
                     });
             }
 
-            return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
-                eLog("Json parse error: {}", err);
-                return Utils::ParseError::Invalid;
-            });
+            auto result = Json::deserialize<T>(boost::json::serialize(json));
+            if (!result.has_value()) {
+                eLog("Json parse error: {}", result.error());
+                return std::unexpected(Utils::ParseError::Invalid);
+            }
+            return result.value();
         } catch (...) {
             return std::unexpected(Utils::ParseError::Invalid);
         }

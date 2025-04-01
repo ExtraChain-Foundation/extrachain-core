@@ -44,8 +44,7 @@ struct Approver {
         return oss.str();
     }
 
-    auto operator<=>(const Approver &) const = default;
-    bool operator==(const Approver &) const  = default;
+    bool operator==(const Approver &) const = default;
 
     MSGPACK_DEFINE(actorId, sign, isApprove)
 };
