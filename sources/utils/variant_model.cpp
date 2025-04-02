@@ -66,6 +66,26 @@ void VariantModel::append(const QVariantMap &variant) {
     insert(m_datas.length(), variant);
 }
 
+void VariantModel::appends(const QVariantList &variants) {
+    if (variants.empty()) {
+        return;
+    }
+
+    int startIndex = m_datas.size();
+    beginInsertRows(QModelIndex(), startIndex, startIndex + variants.length() - 1);
+
+    if (m_datas.size() + variants.size() > m_datas.capacity()) {
+        m_datas.reserve(m_datas.size() + variants.size());
+    }
+
+    for (const auto &variant : variants) {
+        m_datas.append(variant.toMap());
+    }
+
+    setCount(m_datas.length());
+    endInsertRows();
+}
+
 void VariantModel::insert(int i, const QVariantMap &variant) {
     beginInsertRows(QModelIndex(), i, i);
 

@@ -43,6 +43,7 @@ public:
 
     Q_INVOKABLE void        prepend(const QVariantMap &variant);
     Q_INVOKABLE void        append(const QVariantMap &variant);
+    Q_INVOKABLE void        appends(const QVariantList &variants);
     Q_INVOKABLE void        insert(int index, const QVariantMap &variant);
     Q_INVOKABLE void        inserts(int index, const QVariantList &variant);
     Q_INVOKABLE void        move(int from, int to, int n);
