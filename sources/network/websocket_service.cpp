@@ -72,7 +72,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
             });
 
     connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
-        eLog("[WS] Pong");
+        eLog("[WS] Pong {}", ip());
         m_failedPongs = 0;
     });
 
@@ -119,6 +119,7 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         connections();
         m_ws->open(url);
         ip_ = ip; // m_ws->peerAddress().toString();
+
         // port_ = m_ws->peerPort();
 
         // QTimer *timeout = new QTimer(this);
