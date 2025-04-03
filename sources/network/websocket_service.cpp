@@ -70,6 +70,29 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
                 emit closeSocketSig();
             });
+
+    connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
+        m_failedPongs = 0;
+    });
+
+    if (!m_pingTimer) {
+        m_pingTimer = new QTimer(this);
+        connect(m_pingTimer, &QTimer::timeout, this, [this]() {
+            if (m_ws && m_ws->isValid()) {
+                m_ws->ping();
+                m_failedPongs++;
+
+                if (m_failedPongs > 3) {
+                    eLog("[WS] Connection lost (no pong) from {}", ip_);
+                    emit error(Network::SocketServiceError::ConnectionLost,
+                               "No pong response",
+                               ip_.toStdString(),
+                               identifier_.toStdString());
+                }
+            }
+        });
+        m_pingTimer->start(1100);
+    }
 }
 
 WebSocketService::~WebSocketService() {
@@ -134,6 +157,12 @@ void WebSocketService::closeSocket() {
         is_disconnected_ = true;
         emit disconnected();
         // m_ws->disconnect();
+    }
+
+    if (m_pingTimer) {
+        m_pingTimer->stop();
+        m_pingTimer->deleteLater();
+        m_pingTimer = nullptr;
     }
 }
 
