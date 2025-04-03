@@ -72,14 +72,16 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
             });
 
     connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
+        eLog("[WS] Pong");
         m_failedPongs = 0;
     });
 
     if (!m_pingTimer) {
         m_pingTimer = new QTimer(this);
         connect(m_pingTimer, &QTimer::timeout, this, [this]() {
-            if (m_ws && m_ws->isValid()) {
+            if (m_ws && m_ws->isValid() && activated_) {
                 m_ws->ping();
+                eLog("[WS] Ping {}", ip());
                 m_failedPongs++;
 
                 if (m_failedPongs > 3) {
@@ -91,7 +93,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 }
             }
         });
-        m_pingTimer->start(1100);
+        m_pingTimer->start(3000);
     }
 }
 
@@ -118,6 +120,20 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         m_ws->open(url);
         ip_ = ip; // m_ws->peerAddress().toString();
         // port_ = m_ws->peerPort();
+
+        // QTimer *timeout = new QTimer(this);
+        // timeout->setSingleShot(true);
+
+        // connect(timeout, &QTimer::timeout, this, [this, timeout]() {
+        //     eLog("[WS] Connection timeout");
+        //     timeout->deleteLater();
+        //     closeSocket();
+        // });
+
+        // connect(m_ws, &QWebSocket::connected, timeout, [timeout]() {
+        //     timeout->stop();
+        //     timeout->deleteLater();
+        // });
     }
 }
 
@@ -159,7 +175,7 @@ void WebSocketService::closeSocket() {
         // m_ws->disconnect();
     }
 
-    if (m_pingTimer) {
+    if (m_pingTimer != nullptr) {
         m_pingTimer->stop();
         m_pingTimer->deleteLater();
         m_pingTimer = nullptr;
