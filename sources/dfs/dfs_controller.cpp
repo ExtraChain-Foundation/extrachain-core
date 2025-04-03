@@ -123,15 +123,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
-#ifdef ANDROID
-    // auto tempPath =
-    //     "dfs/temp"
-    //     + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
-    // QFile::copy(newFilePath.string().c_str(), tempPath);
-    // fpath       = tempPath.toStdString();
-    // newFilePath = fpath;
-#endif
-
     if (!new_file_path.exists()) {
         eLog("[Dfs] Can't load file: file doesn't exist");
         return std::unexpected(Dfs::DfsError::NotExists);
@@ -188,11 +179,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     if (data_security == Dfs::DataSecurity::Public) {
         try {
             std::filesystem::create_directories(place_in_dfs.c_str());
-            // #ifdef ANDROID
-            // std::filesystem::rename(newFilePath, dfsPath);
-            // #else
             std::filesystem::copy(new_file_path.native(), dfs_path.native());
-            // #endif
         } catch (std::filesystem::filesystem_error const &err) {
             eWarning("[Dfs] Copy error: {}", err.what());
             return std::unexpected(Dfs::DfsError::NotWritable);

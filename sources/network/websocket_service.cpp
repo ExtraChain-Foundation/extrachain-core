@@ -28,6 +28,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
         eLog("[WS] Create new ws");
     } else {
         // from server
+        timestamp_  = Utils::current_date_ms();
         m_ws        = ws;
         this->ip_   = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->port_ = m_ws->peerPort();
@@ -114,6 +115,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         eCritical("[WS] Already opened");
         closeSocket();
     } else {
+        timestamp_ = Utils::current_date_ms();
+
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         eLog("[WS] Open {}", url);
         connections();

@@ -100,6 +100,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+
     /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
@@ -149,7 +151,8 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    bool is_first_node = false;
+    bool                  is_first_node  = false;
+    std::set<std::string> need_reconnect = reconn_;
 
     {
         auto connectionsLocked = *m_connections;
@@ -158,19 +161,30 @@ void NetworkManager::reconnection() {
                 is_first_node = el->is_active();
 
                 if (!is_first_node) {
-                    // el->close();
+                    break;
                 }
-                break;
+            }
+
+            if (el->timestamp() != 0 && reconn_.contains(el->ip().toStdString())) {
+                need_reconnect.erase(el->ip().toStdString());
+
+                if (!el->is_active() && Utils::current_date_ms() - el->timestamp() < 10000) {
+                    emit el->close();
+                }
             }
         }
     }
 
     if (!is_first_node) {
         eLog("[Network] Reconnect to first node");
-        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        return;
     }
 
-    return;
+    for (const auto &ip : need_reconnect) {
+        eLog("[Network] Reconnect to node: {}", ip);
+        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+    }
 
     /*
     eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
@@ -368,10 +382,10 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(const QString    &ip,
-                                   Network::Protocol protocol,
-                                   const bool        request,
-                                   const bool        isConstant) {
+void NetworkManager::connectToNodeSlot(const QString    &ip,
+                                       Network::Protocol protocol,
+                                       const bool        request,
+                                       const bool        isConstant) {
     if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -411,6 +425,10 @@ void NetworkManager::connectToWebSocket(const QString &ip,
     connectWsService(service, requestListNodes);
     m_reconnectionsToIdentifier
         ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
+
+    if (ip != first_node()) {
+        reconn_.insert(ip.toStdString());
+    }
 }
 
 void NetworkManager::clearNetworkCaches() {
@@ -1583,6 +1601,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew) {
+        reconn_.erase(ip);
         failed_ips.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;

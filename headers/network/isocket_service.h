@@ -88,6 +88,10 @@ public:
     bool                      is_vpn() const;
     void                      set_vpn(bool isVPN);
 
+    std::uint64_t timestamp() const {
+        return timestamp_;
+    }
+
 public:
     virtual void flush()                                                                  = 0;
     virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
@@ -122,6 +126,7 @@ protected:
     SocketType       socket_type_      = SocketType::Full; // TODO: this is for socket, need also global
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
+    std::uint64_t    timestamp_        = 0;
 
     QMutex             queue_mutex_;
     QQueue<QByteArray> high_queue_;
