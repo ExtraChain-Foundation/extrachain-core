@@ -57,6 +57,7 @@ public:
 signals:
     void sendMessageInternal(const QByteArray &data);
     void needToTryDequeue();
+    void closeSocketSig();
 
 private slots:
     void onTextMessage(const QString &message);

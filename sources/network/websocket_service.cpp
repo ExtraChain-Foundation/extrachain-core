@@ -68,7 +68,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 auto written     = m_ws->sendTextMessage(QString::fromStdString(encoded));
                 m_ws->flush();
                 eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
-                this->closeSocket();
+                emit closeSocketSig();
             });
 }
 
@@ -352,6 +352,7 @@ void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
 void WebSocketService::connections() {
     connect(m_ws, &QWebSocket::connected, this, &WebSocketService::onConnected);
     connect(m_ws, &QWebSocket::disconnected, this, &WebSocketService::closeSocket);
+    connect(this, &WebSocketService::closeSocketSig, this, &WebSocketService::closeSocket);
     connect(m_ws, &QWebSocket::textMessageReceived, this, &WebSocketService::onTextMessage, Qt::QueuedConnection);
     connect(m_ws,
             &QWebSocket::binaryMessageReceived,
