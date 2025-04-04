@@ -78,7 +78,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
             });
 
     connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
-        eLog("[WS] Pong {}", ip());
+        // eLog("[WS] Pong {}", ip());
         m_failedPongs = 0;
     });
 
@@ -87,7 +87,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
         connect(m_pingTimer, &QTimer::timeout, this, [this]() {
             if (m_ws && m_ws->isValid() && activated_) {
                 m_ws->ping();
-                eLog("[WS] Ping {}", ip());
+                // eLog("[WS] Ping {}", ip());
                 m_failedPongs++;
 
                 if (m_failedPongs > 3) {

@@ -158,7 +158,7 @@ void NetworkManager::reconnection() {
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
-            eLog("_____________");
+            // eLog("_____________");
             if (el->is_null()) {
                 // if (Utils::current_date_ms() - el->timestamp() > 10000) {
                 //     s.insert(el);
