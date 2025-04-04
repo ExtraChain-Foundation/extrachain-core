@@ -170,9 +170,9 @@ void NetworkManager::reconnection() {
                 bool is_early = Utils::current_date_ms() - el->timestamp() < 10000;
                 is_first_node = el->is_active() || is_early;
 
-                if (!is_early) {
-                    to_close.insert(el);
-                }
+                // if (!is_early) {
+                //     to_close.insert(el);
+                // }
 
                 if (!is_first_node) {
                     break;
@@ -184,7 +184,7 @@ void NetworkManager::reconnection() {
             }
 
             if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
-                eLog("PHYYYY");
+                eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
                 to_close.insert(el);
             }
         }
