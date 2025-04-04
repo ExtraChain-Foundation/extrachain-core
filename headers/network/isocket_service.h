@@ -104,7 +104,7 @@ signals:
     void send(const QByteArray &data);
     void disconnected();
     void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier);
-    void close();
+    void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
     void activated();
     void finished(); // if threads
     void shareConnections(const std::set<SocketPair> &);

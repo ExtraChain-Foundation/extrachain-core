@@ -214,7 +214,7 @@ private:
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
 
-    std::set<std::string> reconn_;
+    std::map<std::string, int> reconn_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
     std::map<std::string, MessageIdDataWaiting>                                 m_messages_waiting;

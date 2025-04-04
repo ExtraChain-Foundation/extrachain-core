@@ -418,8 +418,8 @@ void WebSocketService::connections() {
             &WebSocketService::onBinaryMessage,
             Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, [this] {
-        emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
+    connect(this, &WebSocketService::close, [this](Network::SocketServiceError code) {
+        emit error(code, "", ip_.toStdString(), identifier_.toStdString());
     }); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {

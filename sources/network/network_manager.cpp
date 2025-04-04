@@ -152,14 +152,17 @@ void NetworkManager::reconnection() {
     }
 
     bool                      is_first_node  = false;
-    std::set<std::string>     need_reconnect = reconn_;
-    std::set<SocketService *> s;
+    auto                      need_reconnect = reconn_;
+    std::set<SocketService *> to_close;
 
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
             eLog("_____________");
             if (el->is_null()) {
+                // if (Utils::current_date_ms() - el->timestamp() > 10000) {
+                //     s.insert(el);
+                // }
                 continue;
             }
 
@@ -168,7 +171,7 @@ void NetworkManager::reconnection() {
                 is_first_node = el->is_active() || is_early;
 
                 if (!is_early) {
-                    s.insert(el);
+                    to_close.insert(el);
                 }
 
                 if (!is_first_node) {
@@ -176,19 +179,19 @@ void NetworkManager::reconnection() {
                 }
             }
 
-            if (el->timestamp() != 0 && reconn_.contains(el->ip().toStdString())) {
+            if (el->timestamp() != 0 && need_reconnect.contains(el->ip().toStdString())) {
                 need_reconnect.erase(el->ip().toStdString());
+            }
 
-                if (!el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
-                    eLog("PHYYYY");
-                    s.insert(el);
-                }
+            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
+                eLog("PHYYYY");
+                to_close.insert(el);
             }
         }
     }
 
-    for (const auto &el : s) {
-        emit el->close();
+    for (const auto &el : to_close) {
+        emit el->close(Network::SocketServiceError::Secs10Inactive);
     }
 
     if (!is_first_node) {
@@ -197,41 +200,15 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    for (const auto &ip : need_reconnect) {
+    for (const auto &[ip, count] : need_reconnect) {
         eLog("[Network] Reconnect to node: {}", ip);
+
+        if (failed_ips.contains(ip)) {
+            continue;
+        }
+
         emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
     }
-
-    /*
-    eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
-    auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-    for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
-         ++it) {
-        if (failed_ips.contains(it->first.ip.toStdString())) {
-            return;
-        }
-
-        connectToWebSocket(it->first.ip, it->first.port);
-    }
-    */
-}
-
-void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
-    auto connectionsLocked = *m_connections;
-    for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
-        if ((*it)->identifier() == identifier) {
-            emit(*it)->close();
-            // emit(*it)->finished();
-        }
-        break;
-    }
-
-    if (failed_ips.contains(connectInfo.ip.toStdString())) {
-        return;
-    }
-
-    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
-    connectToWebSocket(connectInfo.ip, connectInfo.port);
 }
 
 void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
@@ -263,7 +240,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivated();
 
         if (service->ip() != first_node()) {
-            reconn_.insert(service->ip().toStdString());
+            reconn_.insert({ service->ip().toStdString(), 1 });
         }
     });
 
@@ -340,7 +317,7 @@ NetworkManager::~NetworkManager() {
     }
 
     for (const auto &connection : copied) {
-        emit connection->flush();
+        connection->flush();
         emit connection->close();
     }
 }
