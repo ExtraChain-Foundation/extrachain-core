@@ -305,7 +305,6 @@ public slots:
                            const bool        isConstant = false);
     void process();
     void reconnection();
-    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(QNetworkProxy::ProxyType type,
                     const QString&           hostName,
                     quint16                  port,
