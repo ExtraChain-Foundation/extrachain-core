@@ -151,14 +151,25 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    bool                  is_first_node  = false;
-    std::set<std::string> need_reconnect = reconn_;
+    bool                      is_first_node  = false;
+    std::set<std::string>     need_reconnect = reconn_;
+    std::set<SocketService *> s;
 
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
+            eLog("_____________");
+            if (el->is_null()) {
+                continue;
+            }
+
             if (el->ip() == first_node_) {
-                is_first_node = el->is_active();
+                bool is_early = Utils::current_date_ms() - el->timestamp() < 10000;
+                is_first_node = el->is_active() || is_early;
+
+                if (!is_early) {
+                    s.insert(el);
+                }
 
                 if (!is_first_node) {
                     break;
@@ -168,11 +179,16 @@ void NetworkManager::reconnection() {
             if (el->timestamp() != 0 && reconn_.contains(el->ip().toStdString())) {
                 need_reconnect.erase(el->ip().toStdString());
 
-                if (!el->is_active() && Utils::current_date_ms() - el->timestamp() < 10000) {
-                    emit el->close();
+                if (!el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
+                    eLog("PHYYYY");
+                    s.insert(el);
                 }
             }
         }
+    }
+
+    for (const auto &el : s) {
+        emit el->close();
     }
 
     if (!is_first_node) {
@@ -202,7 +218,7 @@ void NetworkManager::reconnection() {
 
 void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
     auto connectionsLocked = *m_connections;
-    for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
+    for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
         if ((*it)->identifier() == identifier) {
             emit(*it)->close();
             // emit(*it)->finished();
@@ -245,6 +261,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
+
+        if (service->ip() != first_node()) {
+            reconn_.insert(service->ip().toStdString());
+        }
     });
 
     {
@@ -313,13 +333,16 @@ void NetworkManager::removeConnection(const QString &identifier) {
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
-    // auto connectionsLocked = *m_connections;
-    // for (const auto &connection : *connectionsLocked) {
-    //     connection->final();
-    //     emit connection->close();
-    //     // emit connection->finished();
-    // }
-    m_connections->clear();
+    std::set<SocketService *> copied;
+    {
+        auto connectionsLocked = *m_connections;
+        copied                 = **m_connections;
+    }
+
+    for (const auto &connection : copied) {
+        emit connection->flush();
+        emit connection->close();
+    }
 }
 
 void NetworkManager::checkConnectionsStatus() {
@@ -425,10 +448,6 @@ void NetworkManager::connectToWebSocket(const QString &ip,
     connectWsService(service, requestListNodes);
     m_reconnectionsToIdentifier
         ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
-
-    if (ip != first_node()) {
-        reconn_.insert(ip.toStdString());
-    }
 }
 
 void NetworkManager::clearNetworkCaches() {

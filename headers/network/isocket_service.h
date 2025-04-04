@@ -95,6 +95,7 @@ public:
 public:
     virtual void flush()                                                                  = 0;
     virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
+    virtual bool is_null()                                                                = 0;
 
 protected slots:
     virtual void closeSocket();
