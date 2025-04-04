@@ -176,7 +176,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calculate_hash(login + password);
-    auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
+    auto first       = m_accountController->createProfile(consoleHash, true, ActorType::DAppMaster);
     m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
@@ -882,12 +882,14 @@ DataMiningManager* ExtraChainNode::dataMiningManager() const {
     return m_dmm;
 }
 
-std::expected<void, LoadError> ExtraChainNode::login(const std::string& login, const std::string& password) {
-    return m_accountController->load(Utils::calculate_hash(login + password));
+std::expected<void, LoadError> ExtraChainNode::login(const std::string& login,
+                                                     const std::string& password,
+                                                     const bool&        autologin) {
+    return m_accountController->load(Utils::calculate_hash(login + password), autologin);
 }
 
 std::expected<void, LoadError> ExtraChainNode::login(const std::string& hash) {
-    return m_accountController->load(hash);
+    return m_accountController->load(hash, true);
 }
 
 void ExtraChainNode::logout() {

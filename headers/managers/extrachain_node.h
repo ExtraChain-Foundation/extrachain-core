@@ -153,7 +153,7 @@ public:
     TransactionManager* transactionManager() const;
     DataMiningManager*  dataMiningManager() const;
 
-    std::expected<void, LoadError> login(const std::string& login, const std::string& password);
+    std::expected<void, LoadError> login(const std::string& login, const std::string& password, const bool &autologin);
     std::expected<void, LoadError> login(const std::string& hash);
     void                           logout();
 

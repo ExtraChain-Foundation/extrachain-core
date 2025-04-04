@@ -49,6 +49,7 @@ public:
      * @return created actor
      */
     Actor<KeyPrivate> createProfile(const std::string               &hash,
+                                    const bool                       autohash        = true,
                                     ActorType                        type            = ActorType::User,
                                     std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
     Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
@@ -61,9 +62,9 @@ public:
 
     void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
-    std::expected<void, LoadError> load(const std::string &hash);
-    bool                           load_profile(const ActorId &actor_id, const std::string &hash);
-    std::set<ActorId>              multiple_profiles(const std::string &hash);
+    std::expected<void, LoadError> load(const std::string &hash, const bool &autologin);
+    bool              load_profile(const ActorId &actor_id, const std::string &hash, const bool &autologin);
+    std::set<ActorId> multiple_profiles(const std::string &hash);
 
     // TODO: expected?
     const Actor<KeyPrivate> &system_actor();

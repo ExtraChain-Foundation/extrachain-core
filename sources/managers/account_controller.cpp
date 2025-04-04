@@ -29,6 +29,7 @@ AccountController::AccountController(ExtraChainNode *node)
 }
 
 Actor<KeyPrivate> AccountController::createProfile(const std::string               &hash,
+                                                   const bool                       autohash,
                                                    ActorType                        type,
                                                    std::optional<Actor<KeyPrivate>> predefine_actor) {
     if (hash.empty())
@@ -49,7 +50,8 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     node->actorIndex()->store_new_actor(system_actor.to_public());
     node->actorIndex()->store_new_actor(main_actor.to_public());
     insert_to_profile_set(system_actor.id());
-    autologinHash.save(hash); // TODO: add arg
+    if (autohash)
+        autologinHash.save(hash); // TODO: add arg
 
     eLog("[Accounts] Created new profile. System: {}, main: {}", system_actor.id(), main_actor.id());
 
@@ -106,7 +108,7 @@ void AccountController::renameWallet(const ActorId     &profileActor,
     profile.rename_wallet(actorId, walletName);
 }
 
-std::expected<void, LoadError> AccountController::load(const std::string &hash) {
+std::expected<void, LoadError> AccountController::load(const std::string &hash, const bool &autologin) {
     if (hash.empty()) {
         return std::unexpected(LoadError::EmptyHash);
     }
@@ -138,7 +140,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
     }
 
     for (auto &actor_id : profiles) {
-        auto res = load_profile(actor_id, hash);
+        auto res = load_profile(actor_id, hash, autologin);
         if (res) {
             return {};
         }
@@ -147,7 +149,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
     return std::unexpected(LoadError::Unknown);
 }
 
-bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
+bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash, const bool &autologin) {
     auto profile = PrivateProfile::load(actor_id, hash, node);
     if (profile.loaded()) {
         const auto &actors = profile.actors();
@@ -159,8 +161,9 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
 
         m_profiles.push_back(profile);
         m_currentProfile = profile.system().id();
-        node->start();            // TODO: remove
-        autologinHash.save(hash); // TODO: add arg
+        node->start(); // TODO: remove
+        if (autologin)
+            autologinHash.save(hash); // TODO: add arg
         return true;
     }
 
