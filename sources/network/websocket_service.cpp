@@ -197,6 +197,8 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 // for first message
 void WebSocketService::onTextMessage(const QString &message) {
+    m_failedPongs = 0;
+
     if (message.isEmpty())
         return;
 
@@ -260,6 +262,8 @@ void WebSocketService::onTextMessage(const QString &message) {
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
+    m_failedPongs = 0;
+
     if (!activated_) {
         QMutexLocker locker(&queue_mutex_);
         m_messageCache.enqueue(message);
