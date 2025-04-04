@@ -208,6 +208,11 @@ void NetworkManager::reconnection() {
         }
 
         emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        // reconn_[ip] += 1; // count
+
+        // if (reconn_[ip] > 1000) {
+        //     reconn_.erase(ip);
+        // }
     }
 }
 
