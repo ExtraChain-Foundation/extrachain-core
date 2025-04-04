@@ -92,7 +92,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
 
                 if (m_failedPongs > 3) {
                     eLog("[WS] Connection lost (no pong) from {}", ip_);
-                    emit error(Network::SocketServiceError::ConnectionLost,
+                    emit error(Network::SocketServiceError::PongLost,
                                "No pong response",
                                ip_.toStdString(),
                                identifier_.toStdString());
