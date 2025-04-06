@@ -277,6 +277,12 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
 void WebSocketService::processMessage(const QByteArray &message) {
     auto mess = prepareReceiveMessage(message);
+
+    if (!node_enabled) {
+        // emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
+        return;
+    }
+
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
