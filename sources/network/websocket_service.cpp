@@ -28,6 +28,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
         eLog("[WS] Create new ws");
     } else {
         // from server
+        timestamp_  = Utils::current_date_ms();
         m_ws        = ws;
         this->ip_   = m_ws->peerAddress().toString().replace("::ffff:", "");
         this->port_ = m_ws->peerPort();
@@ -64,12 +65,42 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
 
                 auto code_string = QByteArray::number(std::to_underlying(code));
                 auto encrypted   = prepareSendMessage("Error " + code_string);
-                auto encoded     = Utils::to_base64(encrypted.toStdString());
-                auto written     = m_ws->sendTextMessage(QString::fromStdString(encoded));
+                if (encrypted.isEmpty()) {
+                    eLog("[WS] Error not sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
+                    emit closeSocketSig();
+                    return;
+                }
+                auto encoded = Utils::to_base64(encrypted.toStdString());
+                auto written = m_ws->sendTextMessage(QString::fromStdString(encoded));
                 m_ws->flush();
                 eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
                 emit closeSocketSig();
             });
+
+    connect(m_ws, &QWebSocket::pong, this, [this](quint64) {
+        // eLog("[WS] Pong {}", ip());
+        m_failedPongs = 0;
+    });
+
+    if (!m_pingTimer) {
+        m_pingTimer = new QTimer(this);
+        connect(m_pingTimer, &QTimer::timeout, this, [this]() {
+            if (m_ws && m_ws->isValid() && activated_) {
+                m_ws->ping();
+                // eLog("[WS] Ping {}", ip());
+                m_failedPongs++;
+
+                if (m_failedPongs > 3) {
+                    eLog("[WS] Connection lost (no pong) from {}", ip_);
+                    emit error(Network::SocketServiceError::PongLost,
+                               "No pong response",
+                               ip_.toStdString(),
+                               identifier_.toStdString());
+                }
+            }
+        });
+        m_pingTimer->start(3000);
+    }
 }
 
 WebSocketService::~WebSocketService() {
@@ -89,12 +120,29 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         eCritical("[WS] Already opened");
         closeSocket();
     } else {
+        timestamp_ = Utils::current_date_ms();
+
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         eLog("[WS] Open {}", url);
         connections();
         m_ws->open(url);
         ip_ = ip; // m_ws->peerAddress().toString();
+
         // port_ = m_ws->peerPort();
+
+        // QTimer *timeout = new QTimer(this);
+        // timeout->setSingleShot(true);
+
+        // connect(timeout, &QTimer::timeout, this, [this, timeout]() {
+        //     eLog("[WS] Connection timeout");
+        //     timeout->deleteLater();
+        //     closeSocket();
+        // });
+
+        // connect(m_ws, &QWebSocket::connected, timeout, [timeout]() {
+        //     timeout->stop();
+        //     timeout->deleteLater();
+        // });
     }
 }
 
@@ -135,6 +183,12 @@ void WebSocketService::closeSocket() {
         emit disconnected();
         // m_ws->disconnect();
     }
+
+    if (m_pingTimer != nullptr) {
+        m_pingTimer->stop();
+        m_pingTimer->deleteLater();
+        m_pingTimer = nullptr;
+    }
 }
 
 bool WebSocketService::operator==(const WebSocketService &service) const {
@@ -143,6 +197,8 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 
 // for first message
 void WebSocketService::onTextMessage(const QString &message) {
+    m_failedPongs = 0;
+
     if (message.isEmpty())
         return;
 
@@ -206,6 +262,8 @@ void WebSocketService::onTextMessage(const QString &message) {
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
+    m_failedPongs = 0;
+
     if (!activated_) {
         QMutexLocker locker(&queue_mutex_);
         m_messageCache.enqueue(message);
@@ -219,6 +277,12 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
 void WebSocketService::processMessage(const QByteArray &message) {
     auto mess = prepareReceiveMessage(message);
+
+    if (!node_enabled) {
+        // emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
+        return;
+    }
+
     if (!mess.isEmpty()) {
         node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
@@ -360,8 +424,8 @@ void WebSocketService::connections() {
             &WebSocketService::onBinaryMessage,
             Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
-    connect(this, &WebSocketService::close, [this] {
-        emit error(Network::SocketServiceError::PhysicalKill, "", ip_.toStdString(), identifier_.toStdString());
+    connect(this, &WebSocketService::close, [this](Network::SocketServiceError code) {
+        emit error(code, "", ip_.toStdString(), identifier_.toStdString());
     }); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {

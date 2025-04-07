@@ -70,13 +70,15 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
+    node_enabled = false;
 
     if (m_thread) {
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
-    } else
+    } else {
         delete node;
+    }
 }
 
 void ExtraChainNodeWrapper::Init(bool makeAsync) {
@@ -101,7 +103,7 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
 #endif
 
 #ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_DFL);
+    signal(SIGPIPE, SIG_IGN);
 #endif
 }
 
@@ -146,6 +148,8 @@ void ExtraChainNode::process() {
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
     connectSignals();
+
+    node_enabled = true;
     emit NodeInitialised();
 }
 

@@ -88,9 +88,14 @@ public:
     bool                      is_vpn() const;
     void                      set_vpn(bool isVPN);
 
+    std::uint64_t timestamp() const {
+        return timestamp_;
+    }
+
 public:
     virtual void flush()                                                                  = 0;
     virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
+    virtual bool is_null()                                                                = 0;
 
 protected slots:
     virtual void closeSocket();
@@ -99,7 +104,7 @@ signals:
     void send(const QByteArray &data);
     void disconnected();
     void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier);
-    void close();
+    void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
     void activated();
     void finished(); // if threads
     void shareConnections(const std::set<SocketPair> &);
@@ -122,6 +127,7 @@ protected:
     SocketType       socket_type_      = SocketType::Full; // TODO: this is for socket, need also global
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
+    std::uint64_t    timestamp_        = 0;
 
     QMutex             queue_mutex_;
     QQueue<QByteArray> high_queue_;

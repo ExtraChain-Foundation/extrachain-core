@@ -100,6 +100,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+
     /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
@@ -149,59 +151,69 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    bool is_first_node = false;
+    bool                      is_first_node  = false;
+    auto                      need_reconnect = reconn_;
+    std::set<SocketService *> to_close;
 
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
+            // eLog("_____________");
+            if (el->is_null()) {
+                // if (Utils::current_date_ms() - el->timestamp() > 10000) {
+                //     s.insert(el);
+                // }
+                continue;
+            }
+
             if (el->ip() == first_node_) {
-                is_first_node = el->is_active();
+                bool is_early = Utils::current_date_ms() - el->timestamp() < 10000;
+                is_first_node = el->is_active() || is_early;
+
+                // if (!is_early) {
+                //     to_close.insert(el);
+                // }
 
                 if (!is_first_node) {
-                    // el->close();
+                    break;
                 }
-                break;
+            }
+
+            if (el->timestamp() != 0 && need_reconnect.contains(el->ip().toStdString())) {
+                need_reconnect.erase(el->ip().toStdString());
+            }
+
+            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
+                eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
+                to_close.insert(el);
             }
         }
     }
 
+    for (const auto &el : to_close) {
+        emit el->close(Network::SocketServiceError::Secs10Inactive);
+    }
+
     if (!is_first_node) {
         eLog("[Network] Reconnect to first node");
-        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
-    }
-
-    return;
-
-    /*
-    eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
-    auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-    for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
-         ++it) {
-        if (failed_ips.contains(it->first.ip.toStdString())) {
-            return;
-        }
-
-        connectToWebSocket(it->first.ip, it->first.port);
-    }
-    */
-}
-
-void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
-    auto connectionsLocked = *m_connections;
-    for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
-        if ((*it)->identifier() == identifier) {
-            emit(*it)->close();
-            // emit(*it)->finished();
-        }
-        break;
-    }
-
-    if (failed_ips.contains(connectInfo.ip.toStdString())) {
+        emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
     }
 
-    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
-    connectToWebSocket(connectInfo.ip, connectInfo.port);
+    for (const auto &[ip, count] : need_reconnect) {
+        eLog("[Network] Reconnect to node: {}", ip);
+
+        if (failed_ips.contains(ip)) {
+            continue;
+        }
+
+        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        // reconn_[ip] += 1; // count
+
+        // if (reconn_[ip] > 1000) {
+        //     reconn_.erase(ip);
+        // }
+    }
 }
 
 void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
@@ -231,6 +243,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
+
+        if (service->ip() != first_node()) {
+            reconn_.insert({ service->ip().toStdString(), 1 });
+        }
     });
 
     {
@@ -299,13 +315,16 @@ void NetworkManager::removeConnection(const QString &identifier) {
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
-    // auto connectionsLocked = *m_connections;
-    // for (const auto &connection : *connectionsLocked) {
-    //     connection->final();
-    //     emit connection->close();
-    //     // emit connection->finished();
-    // }
-    m_connections->clear();
+    std::set<SocketService *> copied;
+    {
+        auto connectionsLocked = *m_connections;
+        copied                 = **m_connections;
+    }
+
+    for (const auto &connection : copied) {
+        connection->flush();
+        emit connection->close();
+    }
 }
 
 void NetworkManager::checkConnectionsStatus() {
@@ -368,10 +387,10 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(const QString    &ip,
-                                   Network::Protocol protocol,
-                                   const bool        request,
-                                   const bool        isConstant) {
+void NetworkManager::connectToNodeSlot(const QString    &ip,
+                                       Network::Protocol protocol,
+                                       const bool        request,
+                                       const bool        isConstant) {
     if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -1583,6 +1602,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew) {
+        reconn_.erase(ip);
         failed_ips.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;

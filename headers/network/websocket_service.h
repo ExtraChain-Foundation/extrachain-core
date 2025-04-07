@@ -53,6 +53,9 @@ public:
     void send_message(const QByteArray &data, Priority priority = Priority::High) override;
 
     virtual void flush() override;
+    bool         is_null() override {
+        return m_ws == nullptr;
+    }
 
 signals:
     void sendMessageInternal(const QByteArray &data);
@@ -75,6 +78,9 @@ private:
 
     QWebSocket *m_ws = nullptr;
     QTimer      m_timer;
+
+    QTimer *m_pingTimer   = nullptr;
+    int     m_failedPongs = 0;
 
     void tryDequeueMessage();
     bool canSendMore() const;

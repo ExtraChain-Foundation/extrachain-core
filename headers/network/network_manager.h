@@ -214,6 +214,8 @@ private:
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
 
+    std::map<std::string, int> reconn_;
+
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
     std::map<std::string, MessageIdDataWaiting>                                 m_messages_waiting;
     std::map<std::string, MessageIdDataReceived>                                m_messages_received;
@@ -270,6 +272,10 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
+    void connectToNode(const QString&    ip,
+                       Network::Protocol protocol,
+                       const bool        request    = false,
+                       const bool        isConstant = false);
 
 protected:
     void connectToWebSocket(const QString& ip,
@@ -293,13 +299,12 @@ protected slots:
 
 public slots:
     void startNetwork();
-    void connectToNode(const QString&    ip,
-                       Network::Protocol protocol,
-                       const bool        request    = false,
-                       const bool        isConstant = false);
+    void connectToNodeSlot(const QString&    ip,
+                           Network::Protocol protocol,
+                           const bool        request    = false,
+                           const bool        isConstant = false);
     void process();
     void reconnection();
-    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(QNetworkProxy::ProxyType type,
                     const QString&           hostName,
                     quint16                  port,

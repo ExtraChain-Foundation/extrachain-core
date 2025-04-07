@@ -246,7 +246,9 @@ namespace Network {
         IncorrectMessage,
         CantSend,
         PhysicalKill,
-        IncorrectHandshake
+        IncorrectHandshake,
+        PongLost,
+        Secs10Inactive
     };
     Q_ENUM_NS(SocketServiceError)
 } // namespace Network

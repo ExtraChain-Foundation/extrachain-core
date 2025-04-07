@@ -244,8 +244,9 @@ QByteArray SocketService::generate_first_message() {
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
-    if (pub_.empty())
-        eFatal("Socket encrypt error");
+    if (pub_.empty()) {
+        return "";
+    }
 
     auto encrypt_result = priv_.encrypt(ByteArray(message).toBytes(), pub_.public_key());
     if (!encrypt_result.has_value()) {
