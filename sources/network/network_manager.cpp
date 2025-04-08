@@ -167,9 +167,9 @@ void NetworkManager::reconnection() {
             }
 
             if (el->ip() == first_node_) {
-                bool is_early = Utils::current_date_ms() - el->timestamp() < 10000;
+                bool is_early = Utils::current_date_ms() - el->timestamp() < 30000;
 
-                if (!is_early) {
+                if (!is_early && !el->is_active()) {
                     skip_first_node = false;
                     to_close.insert(el);
                     break;
@@ -182,9 +182,9 @@ void NetworkManager::reconnection() {
                 need_reconnect.erase(el->ip().toStdString());
             }
 
-            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 10000) {
+            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
                 eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
-                to_close.insert(el);
+                // to_close.insert(el);
             }
         }
     }

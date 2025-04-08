@@ -99,7 +99,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 }
             }
         });
-        m_pingTimer->start(3000);
+        // m_pingTimer->start(3000);
     }
 }
 
