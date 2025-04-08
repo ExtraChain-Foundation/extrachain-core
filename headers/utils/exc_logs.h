@@ -59,6 +59,7 @@ class Logger {
     bool              file_output_enabled = false;
     const std::string logs_directory      = "logs";
     std::thread::id   main_thread_id;
+    std::string       file_name;
 
     FileFilter file_filter;
     bool       filter_enabled = false;
@@ -70,7 +71,8 @@ class Logger {
         std::tm bt    = *std::localtime(&timer);
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-        return fmt::format("extrachain-{:02d}-{:02d}-{:02d}.{:02d}.{:02d}.{:03d}.log",
+        return fmt::format("{}-{:02d}-{:02d}-{:02d}.{:02d}.{:02d}.{:03d}.log",
+                           instance().file_name,
                            bt.tm_hour,
                            bt.tm_min,
                            bt.tm_sec,
@@ -215,7 +217,8 @@ public:
         return std::this_thread::get_id() == main_thread_id;
     }
 
-    static void start_file() {
+    static void start_file(const std::string& file_name = "extrachain") {
+        instance().file_name = file_name;
         instance().start_file_logging();
     }
 
