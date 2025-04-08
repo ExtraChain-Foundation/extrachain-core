@@ -157,6 +157,7 @@ Network::Protocol WebSocketService::protocol() const {
 void WebSocketService::closeSocket() {
     activated_            = false;
     waiting_buffer_space_ = false;
+    closed_               = true;
 
     {
         QMutexLocker locker(&queue_mutex_);

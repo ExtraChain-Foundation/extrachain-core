@@ -151,15 +151,15 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    bool                      is_first_node  = false;
-    auto                      need_reconnect = reconn_;
+    bool                      skip_first_node = false;
+    auto                      need_reconnect  = reconn_;
     std::set<SocketService *> to_close;
 
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
             // eLog("_____________");
-            if (el->is_null()) {
+            if (el->is_closed()) {
                 // if (Utils::current_date_ms() - el->timestamp() > 10000) {
                 //     s.insert(el);
                 // }
@@ -168,14 +168,13 @@ void NetworkManager::reconnection() {
 
             if (el->ip() == first_node_) {
                 bool is_early = Utils::current_date_ms() - el->timestamp() < 10000;
-                is_first_node = el->is_active() || is_early;
 
-                // if (!is_early) {
-                //     to_close.insert(el);
-                // }
-
-                if (!is_first_node) {
+                if (!is_early) {
+                    skip_first_node = false;
+                    to_close.insert(el);
                     break;
+                } else {
+                    skip_first_node = true;
                 }
             }
 
@@ -194,7 +193,7 @@ void NetworkManager::reconnection() {
         emit el->close(Network::SocketServiceError::Secs10Inactive);
     }
 
-    if (!is_first_node) {
+    if (!skip_first_node) {
         eLog("[Network] Reconnect to first node");
         emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
@@ -426,8 +425,8 @@ void NetworkManager::connectToWebSocket(const QString &ip,
     }
 
     auto service = new WebSocketService(nullptr, node, this, isConstant);
-    service->open(ip, port);
     connectWsService(service, requestListNodes);
+    service->open(ip, port);
     m_reconnectionsToIdentifier
         ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
 }
@@ -1774,25 +1773,35 @@ void NetworkManager::onNewWsConnection() {
 bool NetworkManager::removeOneConnection() {
     auto connectionsLocked = *m_connections;
     bool isChanged         = false;
-    for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
-        if (!(*it)->is_constant()) {
-            eLog("[NetworkManager] Socket with ip {} was changed to another", (*it)->ip());
+
+    SocketService *doomed;
+
+    for (auto socket : *connectionsLocked) {
+        if (!socket->is_constant()) {
+            eLog("[NetworkManager] Socket with ip {} was changed to another", socket->ip());
+
+            doomed = socket;
             //
-            connectionsLocked->erase(it);
+            // connectionsLocked->erase(it);
 
-            NetworkReconnect tempConnection { .ip       = (*it)->ip(),
-                                              .port     = (*it)->port(),
-                                              .protocol = Network::Protocol::WebSocket };
+            // NetworkReconnect tempConnection { .ip       = (*it)->ip(),
+            //                                   .port     = (*it)->port(),
+            //                                   .protocol = Network::Protocol::WebSocket };
 
-            auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-            auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
-            if (findRes != reconnectionsToIdentifierLocked->end())
-                reconnectionsToIdentifierLocked->erase(tempConnection);
+            // auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
+            // auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
+            // if (findRes != reconnectionsToIdentifierLocked->end())
+            //     reconnectionsToIdentifierLocked->erase(tempConnection);
 
             isChanged = true;
             break;
         }
     }
+
+    if (isChanged) {
+        emit doomed->close();
+    }
+
     return isChanged;
 }
 

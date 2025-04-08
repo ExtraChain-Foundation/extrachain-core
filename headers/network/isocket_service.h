@@ -95,7 +95,10 @@ public:
 public:
     virtual void flush()                                                                  = 0;
     virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
-    virtual bool is_null()                                                                = 0;
+
+    bool is_closed() {
+        return closed_;
+    }
 
 protected slots:
     virtual void closeSocket();
@@ -140,6 +143,7 @@ protected:
     KeyPrivate priv_   = KeyPrivate();
     KeyPublic  pub_    = KeyPublic();
     bool       is_pub_ = false;
+    bool       closed_ = false;
 };
 
 BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
