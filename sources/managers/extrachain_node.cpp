@@ -66,11 +66,15 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
-    node_enabled = false;
+    node_enabled.store(false);
+    eLog("Set node_enabled to {}", node_enabled);
 
     if (m_thread) {
         m_thread->quit();
@@ -100,10 +104,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 #ifndef RACCOON_CLIENT_CONSOLE
     Logger::instance().set_debug(true);
-#endif
-
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
 #endif
 }
 
@@ -158,6 +158,7 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
+    node_enabled = false;
     eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
