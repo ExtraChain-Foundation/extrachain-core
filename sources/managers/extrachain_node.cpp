@@ -120,6 +120,10 @@ void ExtraChainNode::process() {
         QCoreApplication::exit(-1000);
     }
 
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     prepareFolders();
     m_actorIndex         = new ActorIndex(this);
     m_accountController  = new AccountController(this);
