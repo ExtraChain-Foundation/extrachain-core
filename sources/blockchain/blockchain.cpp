@@ -103,15 +103,24 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
         fromBlock = 0;
     // eLog("[Blockchain] Request sync from {}", fromBlock);
 
+    auto package = BlockchainSyncPackage { .from     = fromBlock,
+                                           .to       = std::min(fromBlock + 489, sync_last_index),
+                                           .is_light = this->mode_ == BlockchainMode::Light };
+
     if (!responder.has_value()) {
         eFatal("[Blockchain] all parent sync");
-        node->network()->send_message(fromBlock,
+        node->network()->send_message(package,
                                       MessageType::BlockchainSync,
                                       SendMode::Neighbours,
                                       MessageStatus::Request);
     } else {
-        eLog("[Blockchain] Sync from {}", fromBlock);
-        node->network()->send_message(fromBlock,
+        eLog("[Blockchain] Sync from {} to {}", package.from, package.to);
+
+        responder->set_message_id(
+            Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                  + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                .substr(0, 15));
+        node->network()->send_message(package,
                                       MessageType::BlockchainSync,
                                       SendMode::Focused,
                                       MessageStatus::Request,
@@ -119,29 +128,32 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     }
 }
 
-void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &responder) {
+void Blockchain::syncResponse(const BigNumber  from_block,
+                              const BigNumber &to_block,
+                              bool             is_light,
+                              const Responder &responder) {
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
         return;
     }
 
-    BigNumber lastIndex = lastBlock->id();
+    BigNumber lastIndex = std::min(lastBlock->id(), to_block);
 
-    if (lastIndex < fromBlock) {
+    if (lastIndex < from_block) {
         // this->sync();
         // eLog("{} {}", lastIndex, fromBlock);
         return;
     }
 
-    BigNumber from = fromBlock;
+    BigNumber from = from_block;
     if (from < 0)
         from = 0;
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
-    blocks.reserve(1000);
+    blocks.reserve(600);
 
-    if (fromBlock != 0) {
+    if (is_light) {
         auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
         if (!zero_block.has_value()) {
             return;
@@ -158,6 +170,10 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
 
     for (; from <= lastIndex; from++) {
         // eLog("[Blockchain] Send sync {}", from);
+        if (is_light && from == 0) {
+            continue;
+        }
+
         auto block = blockIndex.read_block_by_id(from);
 
         if (!block.has_value()) {
@@ -314,12 +330,19 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
 #endif
 
     emit syncProgress(blockIndex.last_saved_id);
-    eLog("-> {} {}", blockIndex.last_saved_id, sync_last_index - 1);
-    if (blockIndex.last_saved_id >= sync_last_index - 1) {
+    auto sync_from = sync_last_index == 0 ? sync_last_index : sync_last_index - 1;
+    eLog("-> {} {} | {} {}",
+         blockIndex.last_saved_id,
+         sync_from,
+         blockIndex.last_saved_id.to_string(NumeralBase::Dec),
+         sync_from.to_string(NumeralBase::Dec));
+    if (blockIndex.last_saved_id >= sync_from) {
         eLog("-> START CHECK");
         status_ = BlockchainStatus::Maybe;
         emit statusChanged(status_);
         start_check();
+    } else {
+        sync(std::min(sync_from, blockIndex.getLastSavedId()), responder);
     }
 }
 
@@ -376,9 +399,12 @@ void Blockchain::network_status_sync_request(const Responder &responder) {
     BigNumber   block_id   = block.has_value() ? block->id() : BigNumber(-1);
     std::string hash       = block.has_value() ? block->getHash() : "";
     auto        zero_block = this->read_block_by_id(BigNumber(0));
-    auto        last_info  = BlockchainLastInfo { .last_block_id = block_id,
-                                                  .last_hash     = hash,
-                                                  .zero_date = zero_block.has_value() ? zero_block->getDate() : 0 };
+
+    auto last_info = BlockchainLastInfo { .last_block_id = block_id,
+                                          .last_hash     = hash,
+                                          .zero_date     = zero_block.has_value() ? zero_block->getDate() : 0,
+                                          .is_light      = this->mode_ == BlockchainMode::Light };
+
     // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
@@ -473,7 +499,7 @@ void Blockchain::send_request_blocks() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+        if (info.last_block_id >= 0 && !info.last_hash.empty() && !info.is_light) {
             nodes_by_block.emplace_back(id, info.last_block_id);
         }
     }
@@ -531,7 +557,12 @@ void Blockchain::send_request_blocks() {
         return;
     }
 
-    eLog("sync_last_index {}", sync_last_index);
+    eLog("sync_index, sync_last_index: {} {} | {} {}",
+         sync_index,
+         sync_last_index,
+         sync_index.to_string(NumeralBase::Dec),
+         sync_last_index.to_string(NumeralBase::Dec));
+
     sync(sync_index, responder);
     check_status_ = BlockchainSyncStatus::None;
     emit syncStart(sync_index, sync_last_index);
