@@ -46,7 +46,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
             }
             from_id = from_id.substr(prefix.length());
 
-            const auto& main_actor = this->node->accountController()->system_actor();
+            const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
             auto        from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
 
             auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
@@ -83,15 +83,15 @@ ChatManager::ChatManager(ExtraChainNode* node)
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
-    KeyBytes    key        = Cryptography::keygen();
-    const auto& main_actor = node->accountController()->system_actor();
-    chat_actor_            = main_actor.id();
+    KeyBytes   key           = Cryptography::keygen();
+    const auto main_actor_id = node->accountController()->currentProfile().main_id();
+    chat_actor_              = main_actor_id;
 
     // TODO: my actor = use actor for chats
 
     // ... check if chats is exists ...
 
-    auto rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor.id());
+    auto rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor_id);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -108,14 +108,14 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
     auto search_result =
         Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
                                                                   Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Subscription");
+                                                                  "Chat");
     if (!search_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
     auto store_chat_res =
-        node->dfs()->store_vector(main_actor.id(),
-                                  main_actor.id(),
+        node->dfs()->store_vector(main_actor_id,
+                                  main_actor_id,
                                   fmt::format("chat-{}", node->dfs()->create_file_id_from("chat")),
                                   network_id,
                                   search_result->file_id);
@@ -161,7 +161,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
 
 std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat) {
     // check if with this person chat exists
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor_id = node->accountController()->currentProfile().main_id();
 
     if (!chat.another.has_value()) {
         return chat;
@@ -172,7 +172,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
                                                chat.myself,
                                                ByteArray(json).toBytes(),
                                                CHAT_DAPP_INVITE_FOLDER,
-                                               fmt::format("From_{}", main_actor.id()),
+                                               fmt::format("From_{}", main_actor_id),
                                                Dfs::DataSecurity::Actor,
                                                Dfs::DataSecurityActor { .sender_id   = chat.myself,
                                                                          .receiver_id = chat.another.value() });
@@ -186,34 +186,35 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
 }
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->accountController()->currentProfile().main()->get();
     auto my_chats   = get_my_chats();
 
     if (!my_chats.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto chain = HistoricalCollection::load(node, main_actor, my_chats->actor_id, my_chats->file_id);
-    if (!chain.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-    auto rows = chain->get_collection_rows();
-    if (!rows.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
+    return {};
+    // auto chain = HistoricalCollection::load(node, main_actor, my_chats->actor_id, my_chats->file_id);
+    // if (!chain.has_value()) {
+    //     return std::unexpected(ChatError::Unknown);
+    // }
+    // auto rows = chain->get_collection_rows();
+    // if (!rows.has_value()) {
+    //     return std::unexpected(ChatError::Unknown);
+    // }
 
-    std::vector<Chat::Chat> chats;
-    chats.reserve(rows->size());
+    // std::vector<Chat::Chat> chats;
+    // chats.reserve(rows->size());
 
-    for (const auto& row : rows.value()) {
-        auto chat = Utils::from_dbrow<Chat::Chat>(row);
-        if (!chat.has_value()) {
-            continue;
-        }
-        chats.push_back(chat.value());
-    }
+    // for (const auto& row : rows.value()) {
+    //     auto chat = Utils::from_dbrow<Chat::Chat>(row);
+    //     if (!chat.has_value()) {
+    //         continue;
+    //     }
+    //     chats.push_back(chat.value());
+    // }
 
-    return chats;
+    // return chats;
 }
 
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId&     actor_id,
@@ -265,14 +266,14 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
     auto search_result =
         Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
                                                                   Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Subscription");
+                                                                  "MyChats");
     if (!search_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor_id = node->accountController()->currentProfile().main_id();
     auto store_chats_res =
-        node->dfs()->store_vector(main_actor.id(), main_actor.id(), "MyChats", network_id, search_result->file_id);
+        node->dfs()->store_vector(main_actor_id, main_actor_id, "MyChats", network_id, search_result->file_id);
     if (!store_chats_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -286,9 +287,9 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
         return my_chats;
     }
 
-    auto main_actor = node->accountController()->system_actor();
-    chat_actor_     = main_actor.id();
-    auto rows       = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor.id());
+    auto main_actor_id = node->accountController()->currentProfile().main_id();
+    chat_actor_        = main_actor_id;
+    auto rows          = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor_id);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -318,6 +319,7 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
         my_chats = my_chats_result;
     }
 
+    // TODO: use another with chat_id
     auto res = node->dfs()->add_vector_row(chat_actor_, my_chats->file_id, chat);
 
     if (!res) {
