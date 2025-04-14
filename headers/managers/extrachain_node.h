@@ -137,6 +137,7 @@ public:
 
     bool create_new_network(const std::string& login, const std::string& password);
     bool create_usernames_vector();
+    bool create_chat_templates();
     bool create_subscription_template();
     bool create_subscription_vector(const std::string& file_name);
     void create_new_network_dfs();

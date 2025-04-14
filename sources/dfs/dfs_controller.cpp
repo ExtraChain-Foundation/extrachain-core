@@ -1084,7 +1084,7 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.local_add(row);
+    auto operation_res          = dfs_vector.local_add(row, true);
     // load_manager_.finish_him(owner_id, dir_row);
 
     if (operation_res) {
@@ -1105,7 +1105,7 @@ void DfsController::network_vector_remove(const ActorId &owner_id, const std::st
 
     auto &[dir_row, dfs_vector] = res.value();
     auto row2                   = row;
-    auto operation_res          = dfs_vector.local_add(row2);
+    auto operation_res          = dfs_vector.local_add(row2, true);
     // load_manager_.finish_him(owner_id, dir_row);
 
     if (operation_res) {

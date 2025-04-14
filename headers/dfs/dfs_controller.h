@@ -218,12 +218,12 @@ public:
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
     template <typename T>
-    ExpectedDirHistoricalRow add_vector_row(const ActorId               &owner_id,
-                                            const std::string           &file_id,
-                                            T                            row,
-                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+    bool add_vector_row(const ActorId               &owner_id,
+                        const std::string           &file_id,
+                        T                            row,
+                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_collection_row(owner_id, file_id, db_row, security_data);
+        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, security_data);
         return dir_row;
     }
 

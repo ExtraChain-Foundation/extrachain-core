@@ -95,10 +95,19 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     auto [vector_template, is_link] = from_template_result.value();
     dfs_vector.collection_template_ = vector_template;
 
-    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                    Dfs::Field::Blob("sign").not_null(),
-                                    Dfs::Field::Timestamp("timestamp").not_null(),
-                                    Dfs::Field::Integer("status").not_null() });
+    if (vector_template.primary.has_value()) {
+        const auto &primary = vector_template.primary.value();
+        vector_template.preadd_fields({ primary,
+                                        Dfs::Field::ActorId("actor").not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    } else {
+        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    }
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
@@ -278,10 +287,19 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
-    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                    Dfs::Field::Blob("sign").not_null(),
-                                    Dfs::Field::Timestamp("timestamp"),
-                                    Dfs::Field::Integer("status").not_null() });
+    if (vector_template.primary.has_value()) {
+        const auto &primary = vector_template.primary.value();
+        vector_template.preadd_fields({ primary,
+                                        Dfs::Field::ActorId("actor").not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    } else {
+        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    }
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
@@ -320,19 +338,31 @@ bool DfsVector::store_add(DbRow &row) {
 
     row["actor"] = actor_.id().to_string();
     row["sign"]  = ByteArray(sign.value()).toString();
-    auto res     = local_add(row);
+    auto res     = local_add(row, false);
     return res;
 }
 
-bool DfsVector::local_add(const DbRow &row) {
+bool DfsVector::local_add(const DbRow &row, bool check) {
     bool verify = this->verify(row);
     if (!verify) {
         return false;
     }
 
+    if (check) {
+        auto exrow = read_row(ActorId(row.at("actor")));
+        if (exrow.has_value()) {
+            auto extimestamp = std::stoull(exrow->at("timestamp"));
+            auto timestamp   = std::stoull(row.at("timestamp"));
+            if (extimestamp > timestamp) {
+                return true;
+            }
+        }
+    }
+
     DbConnector db(file_path_);
-    db.open();
-    // check exists id
+    if (!db.open()) {
+        return false;
+    }
     bool res = db.replace("Vector", row);
     db.close();
     return res;

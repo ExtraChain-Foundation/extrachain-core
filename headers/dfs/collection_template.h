@@ -249,8 +249,10 @@ namespace Dfs {
 
         bool operator==(const CollectionTemplate&) const = default;
 
-        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields));
+        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields, primary));
         // no need actor_id or file_id
+
+        std::optional<FieldBuilder> primary;
 
     private:
         explicit CollectionTemplate(std::string name);
