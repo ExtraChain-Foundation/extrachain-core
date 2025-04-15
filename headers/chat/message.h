@@ -24,10 +24,10 @@
 
 namespace Chat {
     struct Message {
-        // id
-        // timestamp
-        ActorId     sender;
-        std::string message;
+        std::string   id;
+        std::uint64_t timestamp = 0;
+        ActorId       sender;
+        std::string   message;
     };
-    BOOST_DESCRIBE_STRUCT(Message, (), (sender, message))
+    BOOST_DESCRIBE_STRUCT(Message, (), (id, timestamp, sender, message))
 } // namespace Chat

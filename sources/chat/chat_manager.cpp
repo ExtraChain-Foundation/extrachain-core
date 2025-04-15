@@ -214,7 +214,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
 
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId&     actor_id,
                                                                                     const std::string& file_id) {
-    auto db_rows = node->dfs()->get_vector_rows(actor_id, file_id);
+    auto db_rows = node->dfs()->get_vector_rows(actor_id, file_id, "where status = '1' ORDER by timestamp");
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -239,7 +239,10 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
                                                             const Chat::Message& message) {
     // ... checks for file ...
 
-    auto res = node->dfs()->add_vector_row(file_actor_id, file_id, message);
+    auto message_new = message;
+    message_new.id   = Utils::generate_random_hex(6);
+
+    auto res = node->dfs()->add_vector_row(file_actor_id, file_id, message_new);
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
