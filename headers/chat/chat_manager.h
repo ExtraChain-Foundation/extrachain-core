@@ -52,13 +52,14 @@ public:
     std::expected<std::vector<Chat::Message>, ChatError> get_chat_messages(const ActorId     &actor_id,
                                                                            const std::string &file_id);
 
+    std::expected<Dfs::DirRow, ChatError> get_my_chats();
+
     std::expected<bool, ChatError> add_new_message(const ActorId       &file_actor_id,
                                                    const std::string   &file_id,
                                                    const Chat::Message &message);
 
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
-    std::expected<Dfs::DirRow, ChatError> get_my_chats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
 
     ActorId chat_actor_;

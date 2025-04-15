@@ -320,10 +320,6 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
     auto chat_new    = chat;
     chat_new.chat_id = Utils::generate_random_hex(6);
 
-    if (chat.another.has_value()) {
-        chat_new.another = "";
-    }
-
     auto res = node->dfs()->add_vector_row(chat_actor_, my_chats->file_id, chat_new);
 
     if (!res) {
