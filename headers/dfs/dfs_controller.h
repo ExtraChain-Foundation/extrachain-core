@@ -238,6 +238,9 @@ public:
                                                         const std::string &file_id,
                                                         const ActorId     &actor_id);
 
+    std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(const ActorId     &owner_id,
+                                                                      const std::string &file_id);
+
     // TODO: function: get collection size
 
     std::expected<DbRow, CollectionError> get_collection_row(

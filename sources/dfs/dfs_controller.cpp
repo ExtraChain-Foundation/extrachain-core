@@ -626,6 +626,21 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
     return row;
 }
 
+std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows(const ActorId     &owner_id,
+                                                                                 const std::string &file_id) {
+    auto v = DfsVector::load(node, node->accountController()->system_actor(), owner_id, file_id);
+    if (!v.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    auto row = v->read_rows();
+    if (!row.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    return row;
+}
+
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const ActorId     &owner_id,
                                                                       const ActorId     &author_id,
                                                                       const std::string &visual_name,

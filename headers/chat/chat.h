@@ -24,6 +24,7 @@
 
 namespace Chat {
     struct Chat {
+        std::string            chat_id;
         ActorId                myself;
         std::optional<ActorId> another;
         KeyBytes               chat_key;
@@ -31,5 +32,5 @@ namespace Chat {
         ActorId     file_actor_id;
         std::string file_id;
     };
-    BOOST_DESCRIBE_STRUCT(Chat, (), (myself, another, chat_key, file_actor_id, file_id))
+    BOOST_DESCRIBE_STRUCT(Chat, (), (chat_id, myself, another, chat_key, file_actor_id, file_id))
 } // namespace Chat

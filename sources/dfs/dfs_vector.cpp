@@ -401,6 +401,10 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
 
     const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
+        if (row.find(field.name()) == row.end()) {
+            continue;
+        }
+
         std::string value = row.at(field.name());
         if (!value.empty()) {
             all_empty = false;
