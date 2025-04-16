@@ -24,6 +24,7 @@
 #include "managers/extrachain_node.h"
 #include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
+#include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
@@ -1642,6 +1643,45 @@ void NetworkManager::localInizialization() {
     // eLog("Tunnel creation started!");
     // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
+
+
+    //UPnP v2
+    upnpConnector = std::make_unique<UPnPConnector>(local);
+    QObject::connect(upnpConnector.get(), &UPnPConnector::deviceDiscovered, [&](const QHostAddress &address, const QString &location) {
+        std::cout << "Discovered device at " << address.toString().toStdString()
+        << " with location: " << location.toStdString() << std::endl;
+        // Now retrieve and parse the device description.
+        upnpConnector->retrieveDeviceDescription(QUrl(location));
+    });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::errorOccurred, [](const QString &errorMessage) {
+        std::cout << "Error: " << errorMessage.toStdString()<<std::endl;
+    });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::soapResponseReceived, [this](const QString &response) {
+        std::cout << "SOAP response: " << response.toStdString()<<std::endl;
+    });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::controlURLFound, [this](const QString &response) {
+        //Example parameters:
+        QUrl controlUrl(response);
+        int internalPort = 8080;      // The port on your internal application
+        int externalPort = 8080;      // The external port on your router
+        QString protocol = "TCP";     // Typically TCP
+        QString description = "MyApp Tunnel";
+        QString internalClient = local->ip().toString();  // Your internal IP address
+
+        // Call addPortMapping to establish the tunnel.
+        upnpConnector->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
+        // Call getSpecificPortMappingEntry to check if port has been mapped.
+        upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+
+        // upnpConnector->removePortMapping(controlUrl, externalPort, protocol);
+        // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+    });
+
+    //Uncomment to start UPnP connection
+    //upnpConnector->discoverDevices();
 }
 
 std::string NetworkManager::getNetworkVPNHash() noexcept {
