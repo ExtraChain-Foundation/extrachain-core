@@ -39,6 +39,7 @@
 class SocketService;
 class WebSocketService;
 class UPNPConnection;
+class UPnPConnector;
 
 class CalculateTraffic {
 private:
@@ -205,6 +206,7 @@ private:
     std::set<std::string>           failed_ips;
     std::unique_ptr<UPNPConnection> upnpDis;
     std::unique_ptr<UPNPConnection> upnpNet;
+    std::unique_ptr<UPnPConnector>  upnpConnector;
     QMap<std::string, int>          msgHashList = {};
 
     ExtraChainNode*                              node;
