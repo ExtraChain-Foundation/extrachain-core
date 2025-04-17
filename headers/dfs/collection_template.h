@@ -132,6 +132,10 @@ namespace Dfs {
             return *this;
         }
 
+        void set_type(FieldType type) {
+            m_type = type;
+        }
+
         std::expected<DbColumn, SqlCreateError> to_db_column() const;
 
         bool operator==(const FieldBuilder&) const = default;
@@ -243,6 +247,12 @@ namespace Dfs {
         const std::string                name() const;
         const std::vector<FieldBuilder>& fields() const {
             return m_fields;
+        }
+
+        void set_to_blob() {
+            for (auto& field : m_fields) {
+                field.set_type(FieldType::Blob);
+            }
         }
 
         void set_actor_file(const ActorId& actor_id, const std::string file_id);

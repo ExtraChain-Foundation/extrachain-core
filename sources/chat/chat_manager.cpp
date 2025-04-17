@@ -118,7 +118,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
                                   main_actor_id,
                                   fmt::format("chat-{}", node->dfs()->create_file_id_from("chat")),
                                   network_id,
-                                  search_result->file_id);
+                                  search_result->file_id,
+                                  Dfs::DataSecurity::Encrypted);
 
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -247,13 +248,14 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
     return messages;
 }
 
-std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       file_owner_id,
-                                                            const std::string&   file_id,
-                                                            const Chat::Message& message) {
+std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           file_owner_id,
+                                                                 const std::string&       file_id,
+                                                                 const Chat::MessageText& message_text) {
     // ... checks for file ...
 
-    auto message_new = message;
-    message_new.id   = Utils::generate_random_hex(6);
+    auto message = Chat::Message { .id      = Utils::generate_random_hex(6),
+                                   .type    = Chat::MessageType::Text,
+                                   .message = Json::serialize(message_text) };
 
     auto key = get_key(file_owner_id, file_id);
     if (!key.has_value()) {
@@ -261,13 +263,14 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
     }
 
     auto security_actor = Dfs::DataSecurityKey { .key = key.value() };
-    auto res            = node->dfs()->add_vector_row(file_owner_id, file_id, message_new, security_actor);
+    auto res            = node->dfs()->add_vector_row(file_owner_id, file_id, message, security_actor);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    emit node->messageAdded(file_owner_id, file_id, message_new);
+    // TODO: send full correct
+    emit node->messageAdded(file_owner_id, file_id, message);
     return res;
 }
 

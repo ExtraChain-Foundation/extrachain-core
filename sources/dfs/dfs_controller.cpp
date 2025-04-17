@@ -1081,15 +1081,12 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     // }
 
     auto main_actor = node->accountController()->system_actor();
+    auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
+
     auto dfs_vector =
-        !is_network
-            ? DfsVector::load(node, main_actor, owner_id, file_id, Dfs::DataSecurity::Public, security_data)
-            : DfsVector::load_network(node,
-                                      main_actor,
-                                      owner_id,
-                                      file_id,
-                                      Dfs::DataSecurity::Public, // TODO: if security_data -> encrypted?
-                                      security_data);
+        !is_network ? DfsVector::load(node, main_actor, owner_id, file_id, encryption, security_data)
+                    : DfsVector::load_network(node, main_actor, owner_id, file_id, encryption, security_data);
+
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }

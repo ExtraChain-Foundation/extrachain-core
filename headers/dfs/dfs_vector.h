@@ -45,6 +45,7 @@ private:
     Dfs::DataSecurity       data_security_;
     Dfs::DataSecurityData   security_data_;
     Dfs::CollectionTemplate collection_template_;
+    bool                    is_encrypted_;
 
     DfsVector() = default;
     DfsVector(ExtraChainNode*              node,

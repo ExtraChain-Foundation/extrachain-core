@@ -243,7 +243,7 @@ bool ExtraChainNode::create_chat_templates() {
     my_chats_template.primary = Dfs::Field::String("chat_id").unique().not_null();
 
     auto chat_template = Dfs::CollectionTemplate::create("Chat").value().add_fields(
-        { Dfs::Field::ActorId("sender").not_null(), Dfs::Field::String("message").not_null() });
+        { Dfs::Field::Integer("type").not_null(), Dfs::Field::String("message").not_null() });
     chat_template.primary = Dfs::Field::String("id").unique().not_null();
 
     auto my_chats_result = dfs()->store_template(system_actor_id, my_chats_template);

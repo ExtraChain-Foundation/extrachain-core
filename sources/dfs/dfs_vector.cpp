@@ -35,6 +35,8 @@ DfsVector::DfsVector(ExtraChainNode              *node,
     this->file_id_       = file_id;
     this->data_security_ = data_security;
     this->security_data_ = security_data;
+    this->is_encrypted_ =
+        data_security != Dfs::DataSecurity::Public || !std::holds_alternative<std::monostate>(security_data_);
 }
 
 // std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode              *node,
@@ -94,6 +96,10 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
 
     auto [vector_template, is_link] = from_template_result.value();
     dfs_vector.collection_template_ = vector_template;
+
+    if (dfs_vector.is_encrypted_) {
+        vector_template.set_to_blob();
+    }
 
     if (vector_template.primary.has_value()) {
         const auto &primary = vector_template.primary.value();
@@ -304,6 +310,10 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     auto vector_template = dfs_vector_content.vector_template;
     if (vector_template.fields().size() == 0) {
         return false;
+    }
+
+    if (is_encrypted_) {
+        vector_template.set_to_blob();
     }
 
     if (vector_template.primary.has_value()) {

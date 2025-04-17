@@ -23,11 +23,22 @@
 // #include "encryption/encryption_tools.h"
 
 namespace Chat {
+    enum class MessageType {
+        Text
+    };
+
     struct Message {
         std::string   id;
         std::uint64_t timestamp = 0;
-        ActorId       sender;
+        ActorId       actor;
+        MessageType   type = MessageType::Text;
         std::string   message;
     };
-    BOOST_DESCRIBE_STRUCT(Message, (), (id, timestamp, sender, message))
+    BOOST_DESCRIBE_STRUCT(Message, (), (id, timestamp, actor, type, message))
+
+    struct MessageText {
+        std::string text;
+    };
+    BOOST_DESCRIBE_STRUCT(MessageText, (), (text))
+
 } // namespace Chat
