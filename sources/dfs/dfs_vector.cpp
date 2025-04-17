@@ -512,10 +512,18 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
             encrypted_row[key] = "";
             continue;
         }
+
+        if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            encrypted_row[key] = value;
+            continue;
+        }
+
         auto res = encryptor(ByteArray(value));
+
         if (!res.has_value()) {
             return std::unexpected(DfsVectorError::IncorrectEncryption);
         }
+
         encrypted_row[key] = ByteArray(res.value()).toString();
     }
 
@@ -560,10 +568,12 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
         }
 
         if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            decrypted_row[key] = value;
             continue;
         }
 
         if (key == "actor" || key == "status" || key == "timestamp" || key == "sign") {
+            decrypted_row[key] = value;
             continue;
         }
 

@@ -205,7 +205,13 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
     chats.reserve(rows->size());
 
     for (const auto& row : rows.value()) {
-        auto chat = Utils::from_dbrow<Chat::Chat>(row);
+        auto rown = row;
+        rown.erase("actor");
+        rown.erase("sign");
+        rown.erase("timestamp");
+        rown.erase("status");
+
+        auto chat = Utils::from_dbrow<Chat::Chat>(rown);
         if (!chat.has_value()) {
             continue;
         }
@@ -238,7 +244,11 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
     messages.reserve(db_rows->size());
 
     for (const auto& db_row : db_rows.value()) {
-        auto message = Utils::from_dbrow<Chat::Message>(db_row);
+        auto rown = db_row;
+        rown.erase("sign");
+        rown.erase("status");
+
+        auto message = Utils::from_dbrow<Chat::Message>(rown);
         if (!message.has_value()) {
             continue;
         }
