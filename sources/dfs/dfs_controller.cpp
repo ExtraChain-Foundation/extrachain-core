@@ -509,13 +509,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto res = DfsVector::create(node,
-                                 actor.value(),
-                                 actor->get().id(),
-                                 file_id,
-                                 vector_template,
-                                 data_security,
-                                 security_data);
+    auto res =
+        DfsVector::create(node, actor.value(), owner_id, file_id, vector_template, data_security, security_data);
 
     auto [collection_hash, collection_size] =
         Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
@@ -615,7 +610,7 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
                                                                    const std::string           &file_id,
                                                                    const ActorId               &actor_id,
                                                                    const Dfs::DataSecurityData &security_data) {
-    auto v = DfsVector::load(node, node->accountController()->system_actor(), owner_id, file_id);
+    auto v = DfsVector::load(node, node->accountController()->currentProfile().main()->get(), owner_id, file_id);
     if (!v.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1044,7 +1039,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->accountController()->currentProfile().main()->get();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
 
     if (!dfs_vector.has_value()) {
@@ -1080,7 +1075,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->accountController()->currentProfile().main()->get();
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
     auto dfs_vector =
