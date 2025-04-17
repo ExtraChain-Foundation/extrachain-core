@@ -29,8 +29,8 @@ namespace Chat {
         std::optional<ActorId> another;
         KeyBytes               chat_key;
 
-        ActorId     file_actor_id;
+        ActorId     file_owner_id;
         std::string file_id;
     };
-    BOOST_DESCRIBE_STRUCT(Chat, (), (chat_id, myself, another, chat_key, file_actor_id, file_id))
+    BOOST_DESCRIBE_STRUCT(Chat, (), (chat_id, myself, another, chat_key, file_owner_id, file_id))
 } // namespace Chat

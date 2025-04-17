@@ -124,7 +124,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    chat.file_actor_id = store_chat_res->actor_id;
+    chat.file_owner_id = store_chat_res->actor_id;
     chat.file_id       = store_chat_res->file_id;
 
     if (save_chat) {
@@ -211,15 +211,23 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
         chats.push_back(chat.value());
     }
 
+    chats_ = chats;
     return chats;
 }
 
-std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId&     actor_id,
+std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId& file_owner_id,
                                                                                     const std::string& file_id) {
-    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
+    auto key = get_key(file_owner_id, file_id);
+    if (!key.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
 
-    auto db_rows =
-        node->dfs()->get_vector_rows(actor_id, file_id, "where status = '1' ORDER by timestamp", security_actor);
+    auto security_actor = Dfs::DataSecurityKey { .key = key.value() };
+
+    auto db_rows = node->dfs()->get_vector_rows(file_owner_id,
+                                                file_id,
+                                                "where status = '1' ORDER by timestamp",
+                                                security_actor);
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -239,7 +247,7 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
     return messages;
 }
 
-std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       file_actor_id,
+std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       file_owner_id,
                                                             const std::string&   file_id,
                                                             const Chat::Message& message) {
     // ... checks for file ...
@@ -247,14 +255,19 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
     auto message_new = message;
     message_new.id   = Utils::generate_random_hex(6);
 
-    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
-    auto res            = node->dfs()->add_vector_row(file_actor_id, file_id, message_new, security_actor);
+    auto key = get_key(file_owner_id, file_id);
+    if (!key.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto security_actor = Dfs::DataSecurityKey { .key = key.value() };
+    auto res            = node->dfs()->add_vector_row(file_owner_id, file_id, message_new, security_actor);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    emit node->messageAdded(file_actor_id, file_id, message_new);
+    emit node->messageAdded(file_owner_id, file_id, message_new);
     return res;
 }
 
@@ -277,8 +290,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto main_actor_id = node->accountController()->currentProfile().main_id();
-
+    auto main_actor_id  = node->accountController()->currentProfile().main_id();
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
 
     auto store_chats_res = node->dfs()->store_vector(main_actor_id,
@@ -347,4 +359,14 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
     emit node->chatAdded(chat);
 
     return res;
+}
+
+std::optional<KeyBytes> ChatManager::get_key(const ActorId& owner_id, const std::string& file_id) {
+    for (const auto& chat : std::as_const(chats_)) {
+        if (chat.file_owner_id == owner_id && chat.file_id == file_id) {
+            return chat.chat_key;
+        }
+    }
+
+    return std::nullopt;
 }

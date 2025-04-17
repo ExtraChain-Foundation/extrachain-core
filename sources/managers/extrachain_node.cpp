@@ -237,7 +237,7 @@ bool ExtraChainNode::create_chat_templates() {
                                  .value()
                                  .add_fields({ Dfs::Field::ActorId("myself").not_null(),
                                                Dfs::Field::ActorId("another"),
-                                               Dfs::Field::ActorId("file_actor_id").not_null(),
+                                               Dfs::Field::ActorId("file_owner_id").not_null(),
                                                Dfs::Field::String("file_id").not_null(),
                                                Dfs::Field::String("chat_key").not_null() });
     my_chats_template.primary = Dfs::Field::String("chat_id").unique().not_null();
