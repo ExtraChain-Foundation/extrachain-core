@@ -280,6 +280,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
     }
 
     // TODO: send full correct
+    message.actor = node->accountController()->currentProfile().main_id();
     emit node->messageAdded(file_owner_id, file_id, message);
     return res;
 }
