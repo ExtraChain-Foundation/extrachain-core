@@ -29,6 +29,8 @@
 #include <QTimer>
 
 #include "blockchain/actor_index.h"
+#include "chat/chat.h"
+#include "chat/message.h"
 #include "managers/account_controller.h"
 #include "blockchain/transaction.h"
 #include "blockchain/private_profile.h"
@@ -248,6 +250,9 @@ signals:
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
+
+    void chatAdded(Chat::Chat chat);
+    void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
 
 private slots:
     void getAllActorsTimerCall();

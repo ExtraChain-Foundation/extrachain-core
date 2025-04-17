@@ -233,12 +233,13 @@ bool ExtraChainNode::create_usernames_vector() {
 
 bool ExtraChainNode::create_chat_templates() {
     auto system_actor_id   = accountController()->system_actor().id();
-    auto my_chats_template = Dfs::CollectionTemplate::create("MyChats").value().add_fields(
-        { Dfs::Field::ActorId("myself").not_null(),
-          Dfs::Field::ActorId("another"),
-          Dfs::Field::ActorId("file_actor_id").not_null(),
-          Dfs::Field::String("file_id").not_null(),
-          Dfs::Field::String("chat_key").not_null() });
+    auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
+                                 .value()
+                                 .add_fields({ Dfs::Field::ActorId("myself").not_null(),
+                                               Dfs::Field::ActorId("another"),
+                                               Dfs::Field::ActorId("file_actor_id").not_null(),
+                                               Dfs::Field::String("file_id").not_null(),
+                                               Dfs::Field::String("chat_key").not_null() });
     my_chats_template.primary = Dfs::Field::String("chat_id").unique().not_null();
 
     auto chat_template = Dfs::CollectionTemplate::create("Chat").value().add_fields(

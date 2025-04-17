@@ -567,7 +567,7 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
                                    const std::string           &file_id,
                                    DbRow                        row,
                                    const Dfs::DataSecurityData &security_data) {
-    auto res = make_vector(owner_id, file_id);
+    auto res = make_vector(owner_id, file_id, false, security_data);
     if (!res.has_value()) {
         return false;
     }
@@ -611,9 +611,10 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
     return true;
 }
 
-std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId     &owner_id,
-                                                                   const std::string &file_id,
-                                                                   const ActorId     &actor_id) {
+std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId               &owner_id,
+                                                                   const std::string           &file_id,
+                                                                   const ActorId               &actor_id,
+                                                                   const Dfs::DataSecurityData &security_data) {
     auto v = DfsVector::load(node, node->accountController()->system_actor(), owner_id, file_id);
     if (!v.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
@@ -627,10 +628,17 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
 }
 
 std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows(
-    const ActorId     &owner_id,
-    const std::string &file_id,
-    const std::string &where_statement) {
-    auto v = DfsVector::load(node, node->accountController()->system_actor(), owner_id, file_id);
+    const ActorId               &owner_id,
+    const std::string           &file_id,
+    const std::string           &where_statement,
+    const Dfs::DataSecurityData &security_data) {
+    auto v = DfsVector::load(node,
+                             node->accountController()->system_actor(),
+                             owner_id,
+                             file_id,
+                             Dfs::DataSecurity::Public,
+                             security_data);
+
     if (!v.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1060,9 +1068,10 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
 }
 
 std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::make_vector(
-    const ActorId     &owner_id,
-    const std::string &file_id,
-    bool               is_network) {
+    const ActorId               &owner_id,
+    const std::string           &file_id,
+    bool                         is_network,
+    const Dfs::DataSecurityData &security_data) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
     if (!dir_row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
@@ -1072,8 +1081,15 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     // }
 
     auto main_actor = node->accountController()->system_actor();
-    auto dfs_vector = !is_network ? DfsVector::load(node, main_actor, owner_id, file_id)
-                                  : DfsVector::load_network(node, main_actor, owner_id, file_id);
+    auto dfs_vector =
+        !is_network
+            ? DfsVector::load(node, main_actor, owner_id, file_id, Dfs::DataSecurity::Public, security_data)
+            : DfsVector::load_network(node,
+                                      main_actor,
+                                      owner_id,
+                                      file_id,
+                                      Dfs::DataSecurity::Public, // TODO: if security_data -> encrypted?
+                                      security_data);
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }

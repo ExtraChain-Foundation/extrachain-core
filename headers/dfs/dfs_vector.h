@@ -105,7 +105,13 @@ public:
     bool                 local_add(const DbRow& row, bool check);
     std::optional<DbRow> remove(/*const ActorId & actor_id,*/ const ActorId& actor_id);
 
-    std::pair<std::string, bool> calculate_hash(const DbRow &row);
+    std::pair<std::string, bool> calculate_hash(const DbRow& row);
 
-    bool verify(const DbRow &row);
+    bool verify(const DbRow& row);
+
+    std::expected<DbRow, DfsVectorError> encrypt_data(const DbRow&                 row,
+                                                      const Dfs::DataSecurityData& security_data);
+
+    std::expected<DbRow, DfsVectorError> decrypt_data(const DbRow&                 row,
+                                                      const Dfs::DataSecurityData& security_data);
 };

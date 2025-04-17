@@ -234,13 +234,17 @@ public:
 
     bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
 
-    std::expected<DbRow, DfsVectorError> get_vector_row(const ActorId     &owner_id,
-                                                        const std::string &file_id,
-                                                        const ActorId     &actor_id);
+    std::expected<DbRow, DfsVectorError> get_vector_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const ActorId               &actor_id,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(const ActorId     &owner_id,
-                                                                      const std::string &file_id,
-                                                                      const std::string &where_statement = "");
+    std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const std::string           &where_statement = "",
+        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData());
 
     // TODO: function: get collection size
 
@@ -300,9 +304,11 @@ public:
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
-    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
-                                                                                 const std::string &file_id,
-                                                                                 bool is_network = false);
+    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        bool                         is_network    = false,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
 

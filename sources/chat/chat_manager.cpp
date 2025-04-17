@@ -193,7 +193,9 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto rows = node->dfs()->get_vector_rows(my_chats->actor_id, my_chats->file_id);
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
+    auto rows =
+        node->dfs()->get_vector_rows(my_chats->actor_id, my_chats->file_id, "where status = '1'", security_actor);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -214,7 +216,10 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
 
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId&     actor_id,
                                                                                     const std::string& file_id) {
-    auto db_rows = node->dfs()->get_vector_rows(actor_id, file_id, "where status = '1' ORDER by timestamp");
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
+
+    auto db_rows =
+        node->dfs()->get_vector_rows(actor_id, file_id, "where status = '1' ORDER by timestamp", security_actor);
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -242,11 +247,14 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
     auto message_new = message;
     message_new.id   = Utils::generate_random_hex(6);
 
-    auto res = node->dfs()->add_vector_row(file_actor_id, file_id, message_new);
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
+    auto res            = node->dfs()->add_vector_row(file_actor_id, file_id, message_new, security_actor);
+
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
 
+    emit node->messageAdded(file_actor_id, file_id, message_new);
     return res;
 }
 
@@ -264,14 +272,23 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
     auto search_result =
         Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
                                                                   Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "MyChats");
+                                                                  CHAT_MY_CHATS);
     if (!search_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
     auto main_actor_id = node->accountController()->currentProfile().main_id();
-    auto store_chats_res =
-        node->dfs()->store_vector(main_actor_id, main_actor_id, "MyChats", network_id, search_result->file_id);
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
+
+    auto store_chats_res = node->dfs()->store_vector(main_actor_id,
+                                                     main_actor_id,
+                                                     CHAT_MY_CHATS,
+                                                     network_id,
+                                                     search_result->file_id,
+                                                     Dfs::DataSecurity::Self,
+                                                     security_actor);
+
     if (!store_chats_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -293,7 +310,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
     }
 
     for (const auto& row : rows.value()) {
-        if (row.name == "MyChats") { // TODO: need normal search
+        if (row.name == CHAT_MY_CHATS) { // TODO: need normal search
             my_chats = row;
         }
     }
@@ -320,11 +337,14 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
     auto chat_new    = chat;
     chat_new.chat_id = Utils::generate_random_hex(6);
 
-    auto res = node->dfs()->add_vector_row(chat_actor_, my_chats->file_id, chat_new);
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
+    auto res            = node->dfs()->add_vector_row(chat_actor_, my_chats->file_id, chat_new, security_actor);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
+
+    emit node->chatAdded(chat);
 
     return res;
 }

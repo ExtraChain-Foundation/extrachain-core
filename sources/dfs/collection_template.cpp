@@ -144,7 +144,7 @@ namespace Dfs {
 
         // Add combined checks if any exist
         if (!checks.empty()) {
-            column.check(boost::algorithm::join(checks, " AND "));
+            // column.check(boost::algorithm::join(checks, " AND "));
         }
 
         return column;

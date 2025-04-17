@@ -196,7 +196,17 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id
 
     db.close();
 
-    return db_rows.front();
+    auto row = db_rows.front();
+
+    auto decryption_res = decrypt_data(row, security_data_);
+    if (!decryption_res.has_value()) {
+        return std::unexpected(DfsVectorError::CollectionEmpty);
+    }
+    if (!decryption_res.value().empty()) {
+        row = decryption_res.value();
+    }
+
+    return row;
 }
 
 std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
@@ -208,12 +218,21 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 
     auto               query   = fmt::format("SELECT * FROM {} {}", "Vector", where_statement);
     std::vector<DbRow> db_rows = db.select(query);
+    db.close();
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
     }
 
-    db.close();
+    for (auto &row : db_rows) {
+        auto decryption_res = decrypt_data(row, security_data_);
+        if (!decryption_res.has_value()) {
+            return std::unexpected(DfsVectorError::CollectionEmpty);
+        }
+        if (!decryption_res.value().empty()) {
+            row = decryption_res.value();
+        }
+    }
 
     return db_rows;
 }
@@ -321,6 +340,14 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
+    auto encryption_res = encrypt_data(row, security_data_);
+    if (!encryption_res.has_value()) {
+        return false;
+    }
+    if (!encryption_res->empty()) {
+        row = encryption_res.value();
+    }
+
     row["timestamp"] = std::to_string(Utils::current_date_ms());
     if (row["status"] != "0") {
         row["status"] = "1";
@@ -437,4 +464,106 @@ bool DfsVector::verify(const DbRow &row) {
     }
 
     return verify.value();
+}
+
+std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow                 &row,
+                                                             const Dfs::DataSecurityData &security_data) {
+    std::function<Cryptography::CryptoResult(const ByteArray &)> encryptor;
+
+    if (const auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+        auto myself = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+        if (myself.has_value()) {
+            encryptor = [myself = myself.value()](const ByteArray &data) {
+                return myself.get().key().encrypt_self(data.toBytes());
+            };
+        }
+    } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+        auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+        auto receiver = node->actorIndex()->get_actor(security_actor->receiver_id);
+        if (sender.has_value() && receiver.has_value()) {
+            encryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+                return s.get().key().encrypt(data.toBytes(), r.key().public_key());
+            };
+        }
+    } else if (const auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+        encryptor = [key = security_key->key](const ByteArray &data) {
+            return Cryptography::symmetric_encrypt(data.toBytes(), key);
+        };
+    }
+
+    if (!encryptor) {
+        return DbRow {};
+    }
+
+    DbRow encrypted_row;
+
+    for (const auto &[key, value] : row) {
+        if (value.empty()) {
+            encrypted_row[key] = "";
+            continue;
+        }
+        auto res = encryptor(ByteArray(value));
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::IncorrectEncryption);
+        }
+        encrypted_row[key] = ByteArray(res.value()).toBase64();
+    }
+
+    return encrypted_row;
+}
+
+std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow                 &row,
+                                                             const Dfs::DataSecurityData &security_data) {
+    std::function<Cryptography::CryptoResult(const ByteArray &)> decryptor;
+
+    if (const auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+        auto myself = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+        if (myself.has_value()) {
+            decryptor = [myself = myself.value()](const ByteArray &data) {
+                return myself.get().key().decrypt_self(data.toBytes());
+            };
+        }
+    } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+        auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+        auto receiver = node->actorIndex()->get_actor(security_actor->receiver_id);
+        if (sender.has_value() && receiver.has_value()) {
+            decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+                return s.get().key().decrypt(data.toBytes(), r.key().public_key());
+            };
+        }
+    } else if (const auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+        decryptor = [key = security_key->key](const ByteArray &data) {
+            return Cryptography::symmetric_decrypt(data.toBytes(), key);
+        };
+    }
+
+    if (!decryptor) {
+        return DbRow {};
+    }
+
+    DbRow decrypted_row;
+
+    for (const auto &[key, value] : row) {
+        if (value.empty()) {
+            decrypted_row[key] = "";
+            continue;
+        }
+
+        if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            continue;
+        }
+
+        if (key == "actor" || key == "status" || key == "timestamp" || key == "sign") {
+            continue;
+        }
+
+        auto res = decryptor(ByteArray::fromBase64(value));
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::IncorrectEncryption);
+        }
+
+        decrypted_row[key] = ByteArray(res.value()).toString();
+    }
+
+    return decrypted_row;
 }
