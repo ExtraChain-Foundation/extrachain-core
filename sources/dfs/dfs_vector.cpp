@@ -516,7 +516,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
         if (!res.has_value()) {
             return std::unexpected(DfsVectorError::IncorrectEncryption);
         }
-        encrypted_row[key] = ByteArray(res.value()).toBase64();
+        encrypted_row[key] = ByteArray(res.value()).toString();
     }
 
     return encrypted_row;
@@ -567,7 +567,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
             continue;
         }
 
-        auto res = decryptor(ByteArray::fromBase64(value));
+        auto res = decryptor(ByteArray(value).toBytes());
         if (!res.has_value()) {
             return std::unexpected(DfsVectorError::IncorrectEncryption);
         }
