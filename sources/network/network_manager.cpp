@@ -1362,6 +1362,7 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsVectorCreation:
     case MessageType::DfsVectorContent: {
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
         if (!db_content_result.has_value()) {
@@ -1371,7 +1372,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->network_response_content_vector(db_content_result.value());
 
-        // broadcast and not broadcast?
+        if (type == MessageType::DfsVectorCreation) {
+            sendBrodcastMessageFurther(package_data);
+        }
+
         break;
     }
 

@@ -553,7 +553,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    node->network()->send_broadcast(rows.value(), MessageType::DfsVectorContent);
+    node->network()->send_broadcast(rows.value(), MessageType::DfsVectorCreation);
 
     return dir_row;
 }
@@ -583,14 +583,14 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
 
 bool DfsController::remove_vector_row(const ActorId     &owner_id,
                                       const std::string &file_id,
-                                      const ActorId     &actor_id) {
+                                      const std::string &primary_data) {
     auto res = make_vector(owner_id, file_id);
     if (!res.has_value()) {
         return false;
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto row                    = dfs_vector.remove(actor_id);
+    auto row                    = dfs_vector.remove(primary_data);
     if (!row.has_value()) {
         return false;
     }
@@ -608,17 +608,23 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
 
 std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId               &owner_id,
                                                                    const std::string           &file_id,
-                                                                   const ActorId               &actor_id,
+                                                                   const std::string           &primary_data,
                                                                    const Dfs::DataSecurityData &security_data) {
-    auto v = DfsVector::load(node, node->accountController()->currentProfile().main()->get(), owner_id, file_id);
+    auto v = DfsVector::load(node,
+                             node->accountController()->currentProfile().main()->get(),
+                             owner_id,
+                             file_id,
+                             Dfs::DataSecurity::Encrypted,
+                             security_data);
     if (!v.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto row = v->read_row(actor_id);
+    auto row = v->read_row(primary_data);
     if (!row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
+
     return row;
 }
 

@@ -232,12 +232,12 @@ public:
                         DbRow                        row,
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
+    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const std::string &primary_data);
 
     std::expected<DbRow, DfsVectorError> get_vector_row(
         const ActorId               &owner_id,
         const std::string           &file_id,
-        const ActorId               &actor_id,
+        const std::string &primary_data,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(

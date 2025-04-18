@@ -186,14 +186,19 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode 
     return dfs_vector;
 }
 
-std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id) {
+std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &primary_data) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
 
-    auto query = fmt::format("SELECT * FROM {} WHERE actor = '{}' AND status = '1'", "Vector", actor_id);
+    std::string field = "actor";
+    if (collection_template_.primary.has_value()) {
+        field = collection_template_.primary.value().name();
+    }
+
+    auto query = fmt::format("SELECT * FROM {} WHERE {} = '{}' AND status = '1'", "Vector", field, data);
     std::vector<DbRow> db_rows = db.select(query);
 
     if (db_rows.empty()) {
@@ -386,7 +391,12 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
     }
 
     if (check) {
-        auto exrow = read_row(ActorId(row.at("actor")));
+        std::string field = "actor";
+        if (collection_template_.primary.has_value()) {
+            field = collection_template_.primary.value().name();
+        }
+
+        auto exrow = read_row(row.at(field));
         if (exrow.has_value()) {
             auto extimestamp = std::stoull(exrow->at("timestamp"));
             auto timestamp   = std::stoull(row.at("timestamp"));
@@ -405,11 +415,13 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
     return res;
 }
 
-std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
-    auto row_result = read_row(actor_id);
+std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
+    auto row_result = read_row(primary_data);
     if (!row_result.has_value()) {
         return std::nullopt;
     }
+
+    // TODO: check if actor correct
 
     auto row = std::move(row_result.value());
     for (const auto &[key, _] : row) {

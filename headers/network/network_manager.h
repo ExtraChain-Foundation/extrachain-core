@@ -178,6 +178,15 @@ public:
         message_id_ = message_id;
     }
 
+    Responder with_new_message_id() const {
+        Responder   responder = *this;
+        std::string randomId  = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                                     + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                                   .substr(0, 15); // temp
+        responder.message_id_ = randomId;
+        return responder;
+    }
+
 private:
     std::string send_response_impl(const std::string& data_serialized,
                                    MessageType        type,

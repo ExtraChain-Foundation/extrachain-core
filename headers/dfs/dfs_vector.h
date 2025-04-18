@@ -90,7 +90,7 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
-    std::expected<DbRow, DfsVectorError> read_row(const ActorId& actor_id);
+    std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
         const std::string& where_statement = "where status = '1'");
@@ -104,7 +104,7 @@ public:
 
     bool                 store_add(DbRow& row);
     bool                 local_add(const DbRow& row, bool check);
-    std::optional<DbRow> remove(/*const ActorId & actor_id,*/ const ActorId& actor_id);
+    std::optional<DbRow> remove(const std::string& primary_data);
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);
 

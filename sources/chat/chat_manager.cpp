@@ -73,13 +73,32 @@ ChatManager::ChatManager(ExtraChainNode* node)
         // if MyChats downloaded
     });
 
-    // QObject::connect(node->dfs(),
-    //                  &DfsController::collectio nChanged,
-    //                  [this](ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectio nRow row) {
-    //                      if (dir_row.name == chats_template().name()) {
-    //                          // update chat to ui
-    //                      }
-    //                  });
+    QObject::connect(node->dfs(),
+                     &DfsController::vectorRowAdded,
+                     [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
+                         for (const auto& chat : std::as_const(chats_)) {
+                             if ((chat.file_owner_id == owner_id || chat.another == owner_id)
+                                 && chat.file_id == dir_row.file_id) {
+                                 auto securiry_key = Dfs::DataSecurityKey { .key = chat.chat_key };
+                                 auto message_row  = this->node->dfs()->get_vector_row(owner_id,
+                                                                                      dir_row.file_id,
+                                                                                      row["id"],
+                                                                                      securiry_key);
+                                 if (!message_row.has_value()) {
+                                     return;
+                                 }
+
+                                 message_row->erase("sign");
+                                 message_row->erase("status");
+                                 auto message = Utils::from_dbrow<Chat::Message>(message_row.value());
+                                 if (!message.has_value()) {
+                                     return;
+                                 }
+
+                                 emit this->node->messageAdded(owner_id, dir_row.file_id, message.value());
+                             }
+                         }
+                     });
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
@@ -147,6 +166,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) {
+    if (with.is_zero()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
     auto chat = create_chat(false);
 
     if (!chat.has_value()) {
@@ -229,12 +252,12 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto security_actor = Dfs::DataSecurityKey { .key = key.value() };
+    auto security_key = Dfs::DataSecurityKey { .key = key.value() };
 
     auto db_rows = node->dfs()->get_vector_rows(file_owner_id,
                                                 file_id,
                                                 "where status = '1' ORDER by timestamp",
-                                                security_actor);
+                                                security_key);
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -272,17 +295,17 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto security_actor = Dfs::DataSecurityKey { .key = key.value() };
-    auto res            = node->dfs()->add_vector_row(file_owner_id, file_id, message, security_actor);
+    auto security_key = Dfs::DataSecurityKey { .key = key.value() };
+    auto res          = node->dfs()->add_vector_row(file_owner_id, file_id, message, security_key);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
     }
 
     // TODO: send full correct
-    message.actor     = node->accountController()->currentProfile().main_id();
-    message.timestamp = Utils::current_date_ms();
-    emit node->messageAdded(file_owner_id, file_id, message);
+    // message.actor     = node->accountController()->currentProfile().main_id();
+    // message.timestamp = Utils::current_date_ms();
+    // emit node->messageAdded(file_owner_id, file_id, message);
     return res;
 }
 
@@ -371,6 +394,7 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
         return std::unexpected(ChatError::Unknown);
     }
 
+    chats_.push_back(chat);
     emit node->chatAdded(chat);
 
     return res;

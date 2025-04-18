@@ -108,8 +108,15 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
 void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                std::string                     identifier) {
+    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
     for (const auto& dir_row : dir_rows) {
         if (dir_row.state == Dfs::FileState::Removed) {
+            continue;
+        }
+
+        if (dir_row.type == Dfs::FileType::File && !need_load) {
             continue;
         }
 
@@ -128,10 +135,6 @@ void LoadManager::check_all_files(std::string identifier) {
         bool is_full   = node->dfs()->mode() == DfsMode::Full;
         bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
 
-        if (!need_load) {
-            continue;
-        }
-
         const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
         if (!dir_rows.has_value()) {
             //
@@ -148,6 +151,10 @@ void LoadManager::check_all_files(std::string identifier) {
                 if (row.type == Dfs::FileType::File && file_path->exists()) {
                     auto size = file_path->file_size();
                     if (size.has_value() && size == row.size) {
+                        continue;
+                    }
+
+                    if (!need_load) {
                         continue;
                     }
                 }
