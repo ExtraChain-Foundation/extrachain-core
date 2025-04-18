@@ -198,7 +198,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &prim
         field = collection_template_.primary.value().name();
     }
 
-    auto query = fmt::format("SELECT * FROM {} WHERE {} = '{}' AND status = '1'", "Vector", field, data);
+    auto query = fmt::format("SELECT * FROM {} WHERE {} = '{}' AND status = '1'", "Vector", field, primary_data);
     std::vector<DbRow> db_rows = db.select(query);
 
     if (db_rows.empty()) {
