@@ -1887,7 +1887,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(5000);
+        request.setTransferTimeout(2000);
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;
