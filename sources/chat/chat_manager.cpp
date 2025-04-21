@@ -43,15 +43,9 @@ ChatManager::ChatManager(ExtraChainNode* node)
                 return;
             }
 
-            constexpr std::string_view prefix  = "From_";
-            std::string                from_id = dir_row.name;
-            if (from_id.length() < prefix.length() || from_id.compare(0, prefix.length(), prefix) != 0) {
-                eCritical("[ChatManager] Name must start with 'From_'");
-            }
-            from_id = from_id.substr(prefix.length());
-
+            const auto& from_id    = dir_row.actor_id;
             const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
-            auto        from_actor = this->node->actorIndex()->getActor(ActorId(from_id));
+            auto        from_actor = this->node->actorIndex()->getActor(from_id);
 
             auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
             if (!content.has_value()) {
