@@ -45,7 +45,12 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
             const auto& from_id    = dir_row.actor_id;
             const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
-            auto        from_actor = this->node->actorIndex()->getActor(from_id);
+
+            auto from_actor_result = this->node->actorIndex()->get_actor(from_id);
+            if (!from_actor_result.has_value()) {
+                return;
+            }
+            auto from_actor = from_actor_result.value();
 
             auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
             if (!content.has_value()) {
@@ -66,6 +71,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
             chat->myself  = temp;
 
             this->insert_chat_to_mychats(chat.value());
+            this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
         }
 
         // if MyChats downloaded
@@ -137,7 +143,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
                                   fmt::format("chat-{}", node->dfs()->create_file_id_from("chat").substr(0, 10)),
                                   network_id,
                                   search_result->file_id,
-                                  Dfs::DataSecurity::Encrypted,
+                                  Dfs::DataSecurity::Key,
                                   security_key);
 
     if (!store_chat_res.has_value()) {
