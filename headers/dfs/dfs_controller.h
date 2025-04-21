@@ -221,23 +221,28 @@ public:
     bool add_vector_row(const ActorId               &owner_id,
                         const std::string           &file_id,
                         T                            row,
+                        const ActorId               &signer_id     = ActorId(),
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, security_data);
+        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, signer_id, security_data);
         return dir_row;
     }
 
     bool add_vector_row(const ActorId               &owner_id,
                         const std::string           &file_id,
                         DbRow                        row,
+                        const ActorId               &signer_id     = ActorId(),
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const std::string &primary_data);
+    bool remove_vector_row(const ActorId     &owner_id,
+                           const std::string &file_id,
+                           const std::string &primary_data,
+                           const ActorId     &signer_id = ActorId());
 
     std::expected<DbRow, DfsVectorError> get_vector_row(
         const ActorId               &owner_id,
         const std::string           &file_id,
-        const std::string &primary_data,
+        const std::string           &primary_data,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(
@@ -308,6 +313,7 @@ public:
         const ActorId               &owner_id,
         const std::string           &file_id,
         bool                         is_network    = false,
+        const ActorId               &signer_id     = ActorId(),
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);

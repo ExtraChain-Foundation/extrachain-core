@@ -512,7 +512,7 @@ void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map);
+    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
         emit subscriptionAdded(row.owner_id, row.file_id);

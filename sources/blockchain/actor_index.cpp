@@ -264,7 +264,7 @@ std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QBy
         return std::unexpected(ActorSaveError::NotOpened);
     }
 
-    eLog("[ActorIndex] Saving the file: {}", path);
+    // eLog("[ActorIndex] Saving the file: {}", path);
     file.write(data);
     file.flush();
     file.close();

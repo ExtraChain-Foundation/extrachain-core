@@ -561,8 +561,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
 bool DfsController::add_vector_row(const ActorId               &owner_id,
                                    const std::string           &file_id,
                                    DbRow                        row,
+                                   const ActorId               &signer_id,
                                    const Dfs::DataSecurityData &security_data) {
-    auto res = make_vector(owner_id, file_id, false, security_data);
+    auto res = make_vector(owner_id, file_id, false, signer_id, security_data);
     if (!res.has_value()) {
         return false;
     }
@@ -583,8 +584,9 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
 
 bool DfsController::remove_vector_row(const ActorId     &owner_id,
                                       const std::string &file_id,
-                                      const std::string &primary_data) {
-    auto res = make_vector(owner_id, file_id);
+                                      const std::string &primary_data,
+                                      const ActorId     &signer_id) {
+    auto res = make_vector(owner_id, file_id, false, signer_id);
     if (!res.has_value()) {
         return false;
     }
@@ -1072,8 +1074,10 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     const ActorId               &owner_id,
     const std::string           &file_id,
     bool                         is_network,
+    const ActorId               &signer_id,
     const Dfs::DataSecurityData &security_data) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+
     if (!dir_row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1081,12 +1085,18 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto main_actor = node->accountController()->currentProfile().main()->get();
+    auto signer_actor = node->accountController()->currentProfile().get_actor(
+        !signer_id.is_zero() ? signer_id : node->accountController()->currentProfile().main_id());
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
+    if (!signer_actor.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     auto dfs_vector =
-        !is_network ? DfsVector::load(node, main_actor, owner_id, file_id, encryption, security_data)
-                    : DfsVector::load_network(node, main_actor, owner_id, file_id, encryption, security_data);
+        !is_network
+            ? DfsVector::load(node, signer_actor.value(), owner_id, file_id, encryption, security_data)
+            : DfsVector::load_network(node, signer_actor.value(), owner_id, file_id, encryption, security_data);
 
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
