@@ -235,26 +235,25 @@ bool ExtraChainNode::create_chat_templates() {
     auto system_actor_id   = accountController()->system_actor().id();
     auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
                                  .value()
+                                 .use_id()
                                  .add_fields({ Dfs::Field::ActorId("myself").not_null(),
                                                Dfs::Field::ActorId("another"),
                                                Dfs::Field::ActorId("file_owner_id").not_null(),
                                                Dfs::Field::String("file_id").not_null(),
                                                Dfs::Field::String("chat_key").not_null() });
-    my_chats_template.primary = Dfs::Field::String("chat_id").unique().not_null();
 
-    auto chat_template = Dfs::CollectionTemplate::create("Chat").value().add_fields(
-        { Dfs::Field::Integer("type").not_null(), Dfs::Field::String("message").not_null() });
-    chat_template.primary = Dfs::Field::String("id").unique().not_null();
+    auto chat_template = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
+        { Dfs::Field::String("message").not_null() });
 
     auto my_chats_result = dfs()->store_template(system_actor_id, my_chats_template);
     if (!my_chats_result.has_value()) {
-        eCritical("Can't create \"my chats\" template, because {}", my_chats_result.error());
+        eCritical("Can't create my chats template, because {}", my_chats_result.error());
         return false;
     }
 
     auto chat_result = dfs()->store_template(system_actor_id, chat_template);
     if (!chat_result.has_value()) {
-        eCritical("Can't create \"my chat\" template, because {}", chat_result.error());
+        eCritical("Can't create chat template, because {}", chat_result.error());
         return false;
     }
 

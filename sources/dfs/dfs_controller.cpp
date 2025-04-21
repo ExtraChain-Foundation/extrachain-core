@@ -173,9 +173,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         // }
     }
 
-    auto visual_name_new   = visual_name;
-    auto visual_folder_new = visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder);
-
     if (data_security == Dfs::DataSecurity::Public) {
         try {
             std::filesystem::create_directories(place_in_dfs.c_str());
@@ -185,7 +182,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             return std::unexpected(Dfs::DfsError::NotWritable);
         }
     } else {
-        eLog("security_data = {}", security_data);
+        //  eLog("security_data = {}", security_data);
     }
 
     if (data_security == Dfs::DataSecurity::Self) {
@@ -193,21 +190,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
-            }
-
-            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
-            if (!encrypted_name.has_value()) {
-                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
-            }
-            visual_name_new = Utils::to_base64(encrypted_name.value());
-
-            if (visual_folder_new.has_value()) {
-                auto encrypted_folder =
-                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
-                if (!encrypted_folder.has_value()) {
-                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
-                }
-                visual_folder_new = Utils::to_base64(encrypted_folder.value());
             }
 
             auto res = actor->get().key().encrypt_self_file(new_file_path, dfs_path);
@@ -240,6 +222,16 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
         }
     }
+
+    auto names_result =
+        this->encrypt_name(visual_name,
+                           visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder),
+                           data_security,
+                           security_data);
+    if (!names_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto [visual_name_new, visual_folder_new] = names_result.value();
 
     std::string file_hash     = Utils::calculate_hash_file(dfs_path).value();
     auto        file_size_dfs = dfs_path.file_size();
@@ -520,12 +512,18 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
 
+    auto names_result = this->encrypt_name(visual_name, std::nullopt, data_security, security_data);
+    if (!names_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto [visual_name_new, _] = names_result.value();
+
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = collection_hash,
                             .folder        = Dfs::Basic::TEMPLATE_VECTOR,
-                            .name          = visual_name,
+                            .name          = visual_name_new,
                             .size          = collection_size,
                             .created       = 0,
                             .last_modified = 0,
@@ -1648,6 +1646,184 @@ Dfs::DfsSize DfsController::calculate_size() {
     m_sizeTaken    = dfs_size.local;
 
     return dfs_size;
+}
+
+std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> DfsController::encrypt_name(
+    const std::string                &visual_name,
+    const std::optional<std::string> &visual_folder,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
+    std::string                visual_name_new   = visual_name;
+    std::optional<std::string> visual_folder_new = visual_folder;
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::Unknown);
+            }
+
+            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder =
+                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Actor) {
+        if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+
+            auto encrypted_name =
+                sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder = sender->get().key().encrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                                    receiver.key().public_key());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Key) {
+        if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+            auto encrypted_name =
+                Cryptography::symmetric_encrypt(ByteArray(visual_name_new).toBytes(), security_key->key);
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder =
+                    Cryptography::symmetric_encrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                    security_key->key);
+
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    return std::pair { visual_name_new, visual_folder_new };
+}
+
+std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> DfsController::decrypt_name(
+    const std::string                &visual_name,
+    const std::optional<std::string> &visual_folder,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
+    std::string                visual_name_new   = visual_name;
+    std::optional<std::string> visual_folder_new = visual_folder;
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::Unknown);
+            }
+
+            auto decrypted_name = actor->get().key().decrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder =
+                    actor->get().key().decrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Actor) {
+        if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+
+            auto decrypted_name =
+                sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder = sender->get().key().decrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                                    receiver.key().public_key());
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Key) {
+        if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+            auto decrypted_name =
+                Cryptography::symmetric_decrypt(ByteArray(visual_name_new).toBytes(), security_key->key);
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder =
+                    Cryptography::symmetric_decrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                    security_key->key);
+
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    return std::pair { visual_name_new, visual_folder_new };
 }
 
 std::uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const {

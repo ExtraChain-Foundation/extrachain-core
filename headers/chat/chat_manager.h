@@ -58,7 +58,7 @@ public:
 
     std::expected<bool, ChatError> add_new_message_text(const ActorId           &file_owner_id,
                                                         const std::string       &file_id,
-                                                        const Chat::MessageText &message);
+                                                        const Chat::MessageText &message_text);
 
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();

@@ -50,6 +50,11 @@ namespace Dfs {
         return *this;
     }
 
+    CollectionTemplate& CollectionTemplate::use_id() {
+        this->primary = Dfs::Field::String("id").unique().not_null();
+        return *this;
+    }
+
     std::expected<DbSchema, SqlCreateError> CollectionTemplate::to_db_schema() const {
         DbSchema schema(m_name);
 

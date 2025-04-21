@@ -29,6 +29,10 @@
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
     QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
+        if (this->chat_actor_ != owner_id) {
+            return;
+        }
+
         if (dir_row.folder == CHAT_DAPP_INVITE_FOLDER) {
             if (!dir_row.encryption) {
                 return;
@@ -132,13 +136,15 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
         return std::unexpected(ChatError::Unknown);
     }
 
+    auto security_key = Dfs::DataSecurityKey { .key = chat.chat_key };
     auto store_chat_res =
         node->dfs()->store_vector(main_actor_id,
                                   main_actor_id,
-                                  fmt::format("chat-{}", node->dfs()->create_file_id_from("chat")),
+                                  fmt::format("chat-{}", node->dfs()->create_file_id_from("chat").substr(0, 10)),
                                   network_id,
                                   search_result->file_id,
-                                  Dfs::DataSecurity::Encrypted);
+                                  Dfs::DataSecurity::Encrypted,
+                                  security_key);
 
     if (!store_chat_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -286,9 +292,9 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
                                                                  const Chat::MessageText& message_text) {
     // ... checks for file ...
 
-    auto message = Chat::Message { .id      = Utils::generate_random_hex(6),
-                                   .type    = Chat::MessageType::Text,
-                                   .message = Json::serialize(message_text) };
+    auto message_data = Chat::MessageData { .data = message_text.text };
+    // auto message_data_json = Json::serialize(message_data);
+    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
 
     auto key = get_key(file_owner_id, file_id);
     if (!key.has_value()) {
@@ -359,9 +365,26 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    for (const auto& row : rows.value()) {
-        if (row.name == CHAT_MY_CHATS) { // TODO: need normal search
+    for (const auto& row : rows.value()) { // TODO: need normal search (as function)
+        if (row.folder != Dfs::Basic::TEMPLATE_VECTOR) {
+            continue;
+        }
+
+        auto from_base64 = Utils::from_base64(row.name);
+        if (!from_base64.has_value()) {
+            continue;
+        }
+
+        auto actor       = node->accountController()->currentProfile().main()->get();
+        auto name_result = actor.key().decrypt_self(ByteArray(from_base64.value()).toBytes());
+        if (!name_result.has_value()) {
+            continue;
+        }
+
+        auto name = ByteArray(name_result.value()).toString();
+        if (name == CHAT_MY_CHATS) {
             my_chats = row;
+            break;
         }
     }
 
@@ -384,8 +407,8 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
         my_chats = my_chats_result;
     }
 
-    auto chat_new    = chat;
-    chat_new.chat_id = Utils::generate_random_hex(6);
+    auto chat_new = chat;
+    chat_new.id   = Utils::generate_random_hex(6);
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
     auto res = node->dfs()->add_vector_row(chat_actor_, my_chats->file_id, chat_new, chat_actor_, security_actor);

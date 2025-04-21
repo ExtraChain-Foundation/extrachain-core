@@ -387,6 +387,17 @@ private:
 
     void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
+    std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> encrypt_name(
+        const std::string                &visual_name,
+        const std::optional<std::string> &visual_folder,
+        Dfs::DataSecurity                 data_security,
+        const Dfs::DataSecurityData      &security_data);
+    std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> decrypt_name(
+        const std::string                &visual_name,
+        const std::optional<std::string> &visual_folder,
+        Dfs::DataSecurity                 data_security,
+        const Dfs::DataSecurityData      &security_data);
+
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
@@ -401,8 +412,6 @@ public slots:
 
 public:
     std::uint64_t bytesLimit() const;
-
-public:
     std::uint64_t bytesAvailable();
     bool          writeAvailable(std::size_t = 10000);
 

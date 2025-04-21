@@ -27,18 +27,22 @@ namespace Chat {
         Text
     };
 
+    struct MessageData {
+        std::optional<MessageType> type;
+        std::string                data;
+        // std::optional<std::string> data1;
+    };
+    BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data))
+
     struct Message {
         std::string   id;
         std::uint64_t timestamp = 0;
         ActorId       actor;
-        MessageType   type = MessageType::Text;
-        std::string   message;
+        MessageData   message;
     };
-    BOOST_DESCRIBE_STRUCT(Message, (), (id, timestamp, actor, type, message))
+    BOOST_DESCRIBE_STRUCT(Message, (), (id, timestamp, actor, message))
 
     struct MessageText {
         std::string text;
     };
-    BOOST_DESCRIBE_STRUCT(MessageText, (), (text))
-
 } // namespace Chat
