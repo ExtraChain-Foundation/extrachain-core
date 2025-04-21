@@ -156,7 +156,10 @@ void ActorIndex::network_actors_all_response(const std::vector<ActorId> &actors,
         return;
     }
 
-    responder.send_response(needed_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Request);
+    responder.with_new_message_id().send_response(needed_actors,
+                                                  MessageType::Actors,
+                                                  SendMode::Neighbours,
+                                                  MessageStatus::Request);
 }
 
 void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const Responder &responder) {
@@ -218,7 +221,7 @@ QString ActorIndex::buildFilePath(const ActorId &id) const {
 
     QDir dir(pathToFolder);
     if (!dir.exists()) {
-        eLog("[ActorIndex] Creating dir: {}", pathToFolder);
+        // eLog("[ActorIndex] Creating dir: {}", pathToFolder);
         dir = QDir();
         dir.mkpath(pathToFolder);
     }
@@ -261,7 +264,7 @@ std::expected<void, ActorSaveError> ActorIndex::add(const ActorId &id, const QBy
         return std::unexpected(ActorSaveError::NotOpened);
     }
 
-    eLog("[ActorIndex] Saving the file: {}", path);
+    // eLog("[ActorIndex] Saving the file: {}", path);
     file.write(data);
     file.flush();
     file.close();

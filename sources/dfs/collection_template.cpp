@@ -50,6 +50,11 @@ namespace Dfs {
         return *this;
     }
 
+    CollectionTemplate& CollectionTemplate::use_id() {
+        this->primary = Dfs::Field::String("id").unique().not_null();
+        return *this;
+    }
+
     std::expected<DbSchema, SqlCreateError> CollectionTemplate::to_db_schema() const {
         DbSchema schema(m_name);
 
@@ -144,7 +149,7 @@ namespace Dfs {
 
         // Add combined checks if any exist
         if (!checks.empty()) {
-            column.check(boost::algorithm::join(checks, " AND "));
+            // column.check(boost::algorithm::join(checks, " AND "));
         }
 
         return column;

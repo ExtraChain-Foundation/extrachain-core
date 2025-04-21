@@ -45,6 +45,7 @@ private:
     Dfs::DataSecurity       data_security_;
     Dfs::DataSecurityData   security_data_;
     Dfs::CollectionTemplate collection_template_;
+    bool                    is_encrypted_;
 
     DfsVector() = default;
     DfsVector(ExtraChainNode*              node,
@@ -89,7 +90,7 @@ public:
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
 
-    std::expected<DbRow, DfsVectorError> read_row(const ActorId& actor_id);
+    std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_rows(
         const std::string& where_statement = "where status = '1'");
@@ -102,10 +103,16 @@ public:
     bool handle_package(const Dfs::Packets::DfsVectorContentPackage& dfs_vector_content);
 
     bool                 store_add(DbRow& row);
-    bool                 local_add(const DbRow& row);
-    std::optional<DbRow> remove(/*const ActorId & actor_id,*/ const ActorId& actor_id);
+    bool                 local_add(const DbRow& row, bool check);
+    std::optional<DbRow> remove(const std::string& primary_data);
 
-    std::pair<std::string, bool> calculate_hash(const DbRow &row);
+    std::pair<std::string, bool> calculate_hash(const DbRow& row);
 
-    bool verify(const DbRow &row);
+    bool verify(const DbRow& row);
+
+    std::expected<DbRow, DfsVectorError> encrypt_data(const DbRow&                 row,
+                                                      const Dfs::DataSecurityData& security_data);
+
+    std::expected<DbRow, DfsVectorError> decrypt_data(const DbRow&                 row,
+                                                      const Dfs::DataSecurityData& security_data);
 };

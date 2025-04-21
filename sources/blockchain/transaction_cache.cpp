@@ -92,7 +92,7 @@ void TransactionCache::adding(const BigNumber &block_id, uint64_t block_date, co
     db.close();
 
     if (res) {
-        node->blockchain()->selfTxAdded(block_id, block_date, transaction);
+        emit node->blockchain()->selfTxAdded(block_id, block_date, transaction);
     }
 }
 

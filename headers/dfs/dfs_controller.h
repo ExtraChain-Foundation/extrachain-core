@@ -218,25 +218,38 @@ public:
         const Dfs::DataSecurityData   &security_data = Dfs::DataSecurityData());
 
     template <typename T>
-    ExpectedDirHistoricalRow add_vector_row(const ActorId               &owner_id,
-                                            const std::string           &file_id,
-                                            T                            row,
-                                            const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+    bool add_vector_row(const ActorId               &owner_id,
+                        const std::string           &file_id,
+                        T                            row,
+                        const ActorId               &signer_id     = ActorId(),
+                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_collection_row(owner_id, file_id, db_row, security_data);
+        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, signer_id, security_data);
         return dir_row;
     }
 
     bool add_vector_row(const ActorId               &owner_id,
                         const std::string           &file_id,
                         DbRow                        row,
+                        const ActorId               &signer_id     = ActorId(),
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    bool remove_vector_row(const ActorId &owner_id, const std::string &file_id, const ActorId &actor_id);
+    bool remove_vector_row(const ActorId     &owner_id,
+                           const std::string &file_id,
+                           const std::string &primary_data,
+                           const ActorId     &signer_id = ActorId());
 
-    std::expected<DbRow, DfsVectorError> get_vector_row(const ActorId     &owner_id,
-                                                        const std::string &file_id,
-                                                        const ActorId     &actor_id);
+    std::expected<DbRow, DfsVectorError> get_vector_row(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const std::string           &primary_data,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const std::string           &where_statement = "",
+        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData());
 
     // TODO: function: get collection size
 
@@ -296,9 +309,12 @@ public:
                                    const std::string             &file_id,
                                    const HistoricalCollectionRow &row);
 
-    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(const ActorId     &owner_id,
-                                                                                 const std::string &file_id,
-                                                                                 bool is_network = false);
+    std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        bool                         is_network    = false,
+        const ActorId               &signer_id     = ActorId(),
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
 
@@ -371,6 +387,17 @@ private:
 
     void updateFileState(const ActorId &actorId, const std::string fileName, Dfs::FileState state);
 
+    std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> encrypt_name(
+        const std::string                &visual_name,
+        const std::optional<std::string> &visual_folder,
+        Dfs::DataSecurity                 data_security,
+        const Dfs::DataSecurityData      &security_data);
+    std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> decrypt_name(
+        const std::string                &visual_name,
+        const std::optional<std::string> &visual_folder,
+        Dfs::DataSecurity                 data_security,
+        const Dfs::DataSecurityData      &security_data);
+
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
@@ -385,8 +412,6 @@ public slots:
 
 public:
     std::uint64_t bytesLimit() const;
-
-public:
     std::uint64_t bytesAvailable();
     bool          writeAvailable(std::size_t = 10000);
 

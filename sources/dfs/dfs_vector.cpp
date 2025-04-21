@@ -35,6 +35,8 @@ DfsVector::DfsVector(ExtraChainNode              *node,
     this->file_id_       = file_id;
     this->data_security_ = data_security;
     this->security_data_ = security_data;
+    this->is_encrypted_ =
+        data_security != Dfs::DataSecurity::Public || !std::holds_alternative<std::monostate>(security_data_);
 }
 
 // std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode              *node,
@@ -95,10 +97,23 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     auto [vector_template, is_link] = from_template_result.value();
     dfs_vector.collection_template_ = vector_template;
 
-    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                    Dfs::Field::Blob("sign").not_null(),
-                                    Dfs::Field::Timestamp("timestamp").not_null(),
-                                    Dfs::Field::Integer("status").not_null() });
+    if (dfs_vector.is_encrypted_) {
+        vector_template.set_to_blob();
+    }
+
+    if (vector_template.primary.has_value()) {
+        const auto &primary = vector_template.primary.value();
+        vector_template.preadd_fields({ primary,
+                                        Dfs::Field::ActorId("actor").not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    } else {
+        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    }
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
@@ -171,14 +186,19 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode 
     return dfs_vector;
 }
 
-std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id) {
+std::expected<DbRow, DfsVectorError> DfsVector::read_row(const std::string &primary_data) {
     DbConnector db(file_path_);
     db.open();
     if (!db.is_open()) {
         return std::unexpected(DfsVectorError::CollectionNotFound);
     }
 
-    auto query = fmt::format("SELECT * FROM {} WHERE actor = '{}' AND status = '1'", "Vector", actor_id);
+    std::string field = "actor";
+    if (collection_template_.primary.has_value()) {
+        field = collection_template_.primary.value().name();
+    }
+
+    auto query = fmt::format("SELECT * FROM {} WHERE {} = '{}' AND status = '1'", "Vector", field, primary_data);
     std::vector<DbRow> db_rows = db.select(query);
 
     if (db_rows.empty()) {
@@ -187,7 +207,17 @@ std::expected<DbRow, DfsVectorError> DfsVector::read_row(const ActorId &actor_id
 
     db.close();
 
-    return db_rows.front();
+    auto row = db_rows.front();
+
+    auto decryption_res = decrypt_data(row, security_data_);
+    if (!decryption_res.has_value()) {
+        return std::unexpected(DfsVectorError::CollectionEmpty);
+    }
+    if (!decryption_res.value().empty()) {
+        row = decryption_res.value();
+    }
+
+    return row;
 }
 
 std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std::string &where_statement) {
@@ -199,12 +229,21 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 
     auto               query   = fmt::format("SELECT * FROM {} {}", "Vector", where_statement);
     std::vector<DbRow> db_rows = db.select(query);
+    db.close();
 
     if (db_rows.empty()) {
         return std::unexpected(DfsVectorError::CollectionEmpty);
     }
 
-    db.close();
+    for (auto &row : db_rows) {
+        auto decryption_res = decrypt_data(row, security_data_);
+        if (!decryption_res.has_value()) {
+            return std::unexpected(DfsVectorError::CollectionEmpty);
+        }
+        if (!decryption_res.value().empty()) {
+            row = decryption_res.value();
+        }
+    }
 
     return db_rows;
 }
@@ -278,10 +317,23 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
         return false;
     }
 
-    vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
-                                    Dfs::Field::Blob("sign").not_null(),
-                                    Dfs::Field::Timestamp("timestamp"),
-                                    Dfs::Field::Integer("status").not_null() });
+    if (is_encrypted_) {
+        vector_template.set_to_blob();
+    }
+
+    if (vector_template.primary.has_value()) {
+        const auto &primary = vector_template.primary.value();
+        vector_template.preadd_fields({ primary,
+                                        Dfs::Field::ActorId("actor").not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    } else {
+        vector_template.preadd_fields({ Dfs::Field::ActorId("actor").unique().not_null(),
+                                        Dfs::Field::Blob("sign").not_null(),
+                                        Dfs::Field::Timestamp("timestamp").not_null(),
+                                        Dfs::Field::Integer("status").not_null() });
+    }
 
     auto schema = vector_template.to_db_schema();
     if (!schema.has_value()) {
@@ -303,6 +355,14 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 }
 
 bool DfsVector::store_add(DbRow &row) {
+    auto encryption_res = encrypt_data(row, security_data_);
+    if (!encryption_res.has_value()) {
+        return false;
+    }
+    if (!encryption_res->empty()) {
+        row = encryption_res.value();
+    }
+
     row["timestamp"] = std::to_string(Utils::current_date_ms());
     if (row["status"] != "0") {
         row["status"] = "1";
@@ -320,29 +380,48 @@ bool DfsVector::store_add(DbRow &row) {
 
     row["actor"] = actor_.id().to_string();
     row["sign"]  = ByteArray(sign.value()).toString();
-    auto res     = local_add(row);
+    auto res     = local_add(row, false);
     return res;
 }
 
-bool DfsVector::local_add(const DbRow &row) {
+bool DfsVector::local_add(const DbRow &row, bool check) {
     bool verify = this->verify(row);
     if (!verify) {
         return false;
     }
 
+    if (check) {
+        std::string field = "actor";
+        if (collection_template_.primary.has_value()) {
+            field = collection_template_.primary.value().name();
+        }
+
+        auto exrow = read_row(row.at(field));
+        if (exrow.has_value()) {
+            auto extimestamp = std::stoull(exrow->at("timestamp"));
+            auto timestamp   = std::stoull(row.at("timestamp"));
+            if (extimestamp > timestamp) {
+                return true;
+            }
+        }
+    }
+
     DbConnector db(file_path_);
-    db.open();
-    // check exists id
+    if (!db.open()) {
+        return false;
+    }
     bool res = db.replace("Vector", row);
     db.close();
     return res;
 }
 
-std::optional<DbRow> DfsVector::remove(const ActorId &actor_id) {
-    auto row_result = read_row(actor_id);
+std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
+    auto row_result = read_row(primary_data);
     if (!row_result.has_value()) {
         return std::nullopt;
     }
+
+    // TODO: check if actor correct
 
     auto row = std::move(row_result.value());
     for (const auto &[key, _] : row) {
@@ -371,6 +450,10 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
 
     const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
+        if (row.find(field.name()) == row.end()) {
+            continue;
+        }
+
         std::string value = row.at(field.name());
         if (!value.empty()) {
             all_empty = false;
@@ -403,4 +486,116 @@ bool DfsVector::verify(const DbRow &row) {
     }
 
     return verify.value();
+}
+
+std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow                 &row,
+                                                             const Dfs::DataSecurityData &security_data) {
+    std::function<Cryptography::CryptoResult(const ByteArray &)> encryptor;
+
+    if (const auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+        auto myself = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+        if (myself.has_value()) {
+            encryptor = [myself = myself.value()](const ByteArray &data) {
+                return myself.get().key().encrypt_self(data.toBytes());
+            };
+        }
+    } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+        auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+        auto receiver = node->actorIndex()->get_actor(security_actor->receiver_id);
+        if (sender.has_value() && receiver.has_value()) {
+            encryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+                return s.get().key().encrypt(data.toBytes(), r.key().public_key());
+            };
+        }
+    } else if (const auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+        encryptor = [key = security_key->key](const ByteArray &data) {
+            return Cryptography::symmetric_encrypt(data.toBytes(), key);
+        };
+    }
+
+    if (!encryptor) {
+        return DbRow {};
+    }
+
+    DbRow encrypted_row;
+
+    for (const auto &[key, value] : row) {
+        if (value.empty()) {
+            encrypted_row[key] = "";
+            continue;
+        }
+
+        if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            encrypted_row[key] = value;
+            continue;
+        }
+
+        auto res = encryptor(ByteArray(value));
+
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::IncorrectEncryption);
+        }
+
+        encrypted_row[key] = ByteArray(res.value()).toString();
+    }
+
+    return encrypted_row;
+}
+
+std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow                 &row,
+                                                             const Dfs::DataSecurityData &security_data) {
+    std::function<Cryptography::CryptoResult(const ByteArray &)> decryptor;
+
+    if (const auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+        auto myself = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+        if (myself.has_value()) {
+            decryptor = [myself = myself.value()](const ByteArray &data) {
+                return myself.get().key().decrypt_self(data.toBytes());
+            };
+        }
+    } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+        auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+        auto receiver = node->actorIndex()->get_actor(security_actor->receiver_id);
+        if (sender.has_value() && receiver.has_value()) {
+            decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
+                return s.get().key().decrypt(data.toBytes(), r.key().public_key());
+            };
+        }
+    } else if (const auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+        decryptor = [key = security_key->key](const ByteArray &data) {
+            return Cryptography::symmetric_decrypt(data.toBytes(), key);
+        };
+    }
+
+    if (!decryptor) {
+        return DbRow {};
+    }
+
+    DbRow decrypted_row;
+
+    for (const auto &[key, value] : row) {
+        if (value.empty()) {
+            decrypted_row[key] = "";
+            continue;
+        }
+
+        if (collection_template_.primary.has_value() && key == collection_template_.primary->name()) {
+            decrypted_row[key] = value;
+            continue;
+        }
+
+        if (key == "actor" || key == "status" || key == "timestamp" || key == "sign") {
+            decrypted_row[key] = value;
+            continue;
+        }
+
+        auto res = decryptor(ByteArray(value).toBytes());
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::IncorrectEncryption);
+        }
+
+        decrypted_row[key] = ByteArray(res.value()).toString();
+    }
+
+    return decrypted_row;
 }

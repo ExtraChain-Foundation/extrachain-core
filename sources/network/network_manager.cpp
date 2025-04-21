@@ -1363,6 +1363,7 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsVectorCreation:
     case MessageType::DfsVectorContent: {
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
         if (!db_content_result.has_value()) {
@@ -1372,7 +1373,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->network_response_content_vector(db_content_result.value());
 
-        // broadcast and not broadcast?
+        if (type == MessageType::DfsVectorCreation) {
+            sendBrodcastMessageFurther(package_data);
+        }
+
         break;
     }
 
@@ -1927,7 +1931,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(5000);
+        request.setTransferTimeout(2000);
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;

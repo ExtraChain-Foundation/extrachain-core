@@ -29,6 +29,8 @@
 #include <QTimer>
 
 #include "blockchain/actor_index.h"
+#include "chat/chat.h"
+#include "chat/message.h"
 #include "managers/account_controller.h"
 #include "blockchain/transaction.h"
 #include "blockchain/private_profile.h"
@@ -137,6 +139,7 @@ public:
 
     bool create_new_network(const std::string& login, const std::string& password);
     bool create_usernames_vector();
+    bool create_chat_templates();
     bool create_subscription_template();
     bool create_subscription_vector(const std::string& file_name);
     void create_new_network_dfs();
@@ -247,6 +250,9 @@ signals:
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
+
+    void chatAdded(Chat::Chat chat);
+    void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
 
 private slots:
     void getAllActorsTimerCall();
