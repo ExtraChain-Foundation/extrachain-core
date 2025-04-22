@@ -52,6 +52,10 @@ ChatManager::ChatManager(ExtraChainNode* node)
     QObject::connect(node->dfs(),
                      &DfsController::vectorRowAdded,
                      [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
+                         if (row["status"] != "1") {
+                             return;
+                         }
+
                          for (const auto& chat : std::as_const(chats_)) {
                              if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
                                  && chat.file_id == dir_row.file_id) {
@@ -72,6 +76,17 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                  }
 
                                  emit this->node->messageAdded(owner_id, dir_row.file_id, message.value());
+                             }
+                         }
+                     });
+
+    QObject::connect(node->dfs(),
+                     &DfsController::vectorRowRemoved,
+                     [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
+                         for (const auto& chat : std::as_const(chats_)) {
+                             if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
+                                 && chat.file_id == dir_row.file_id) {
+                                 emit this->node->messageRemoved(owner_id, dir_row.file_id, row["id"]);
                              }
                          }
                      });
@@ -283,6 +298,19 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
     // message.actor     = node->accountController()->currentProfile().main_id();
     // message.timestamp = Utils::current_date_ms();
     // emit node->messageAdded(owner_id, file_id, message);
+    return res;
+}
+
+std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     owner_id,
+                                                           const std::string& file_id,
+                                                           const std::string& message_id) {
+    auto res = node->dfs()->remove_vector_row(owner_id, file_id, message_id, chat_actor_);
+
+    if (!res) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    emit node->messageRemoved(owner_id, file_id, message_id);
     return res;
 }
 

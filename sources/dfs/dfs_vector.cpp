@@ -421,10 +421,17 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
         return std::nullopt;
     }
 
-    // TODO: check if actor correct
-
     auto row = std::move(row_result.value());
+
+    if (row["actor"] != actor_.id().to_string()) {
+        return std::nullopt;
+    }
+
     for (const auto &[key, _] : row) {
+        if (collection_template_.primary.has_value() && collection_template_.primary->name() == key) {
+            continue;
+        }
+
         row[key] = "-";
     }
 

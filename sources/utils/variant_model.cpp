@@ -57,6 +57,34 @@ bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int 
     return true;
 }
 
+QVariantList VariantModel::findByField(const QByteArray &field, const QVariant &value, bool firstMatchOnly) {
+    QVariantList results;
+
+    for (int i = 0; i < m_datas.size(); ++i) {
+        const QVariantMap &item = m_datas[i];
+
+        if (item.contains(field) && item[field] == value) {
+            results.append(QVariant(item));
+
+            if (firstMatchOnly) {
+                break;
+            }
+        }
+    }
+
+    return results;
+}
+
+int VariantModel::findIndexByField(const QByteArray &field, const QVariant &value) {
+    for (int i = 0; i < m_datas.size(); ++i) {
+        const QVariantMap &item = m_datas[i];
+        if (item.contains(field) && item[field] == value) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void VariantModel::prepend(const QVariantMap &variant) {
     insert(0, variant);
 }
@@ -130,7 +158,7 @@ void VariantModel::remove(int index, int count) {
 }
 
 QVariantMap VariantModel::get(int index) {
-    if (index > m_count - 1 || index < 0)
+    if (index > m_count - 1 || index < 0 || m_datas.size() <= index)
         return {};
     return m_datas[index];
 }
