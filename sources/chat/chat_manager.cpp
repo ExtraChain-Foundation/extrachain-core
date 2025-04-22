@@ -29,59 +29,31 @@
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
     QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
-        if (this->chat_actor_ != owner_id) {
+        if (this->chat_actor_ != owner_id) { // add my accounts?
             return;
         }
 
-        if (dir_row.folder == CHAT_DAPP_INVITE_FOLDER) {
-            if (!dir_row.encryption) {
-                return;
-            }
+        this->parse_invite(owner_id, dir_row);
+    });
 
-            auto encrypted = Dfs::Tables::ActorDirFile::get_file_content(owner_id, dir_row.file_id);
-            if (!encrypted.has_value()) {
-                return;
-            }
+    QObject::connect(node, &ExtraChainNode::ready, [this]() {
+        auto main_id = this->node->accountController()->currentProfile().main_id();
 
-            const auto& from_id    = dir_row.actor_id;
-            const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
-
-            auto from_actor_result = this->node->actorIndex()->get_actor(from_id);
-            if (!from_actor_result.has_value()) {
-                return;
-            }
-            auto from_actor = from_actor_result.value();
-
-            auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
-            if (!content.has_value()) {
-                return;
-            }
-            auto chat = Json::deserialize<Chat::Chat>(content.value());
-            if (!chat.has_value()) {
-                return;
-            }
-
-            if (!chat->another.has_value()) {
-                return;
-            }
-
-            // TODO: check if myself == myself? if i have ~ devices
-            ActorId temp  = chat->another.value();
-            chat->another = chat->myself;
-            chat->myself  = temp;
-
-            this->insert_chat_to_mychats(chat.value());
-            this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id); // TODO: add where / field
+        if (!dir_rows.has_value()) {
+            return;
         }
 
-        // if MyChats downloaded
+        for (const auto& dir_row : dir_rows.value()) {
+            this->parse_invite(main_id, dir_row);
+        }
     });
 
     QObject::connect(node->dfs(),
                      &DfsController::vectorRowAdded,
                      [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
                          for (const auto& chat : std::as_const(chats_)) {
-                             if ((chat.file_owner_id == owner_id || chat.another == owner_id)
+                             if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
                                  && chat.file_id == dir_row.file_id) {
                                  auto securiry_key = Dfs::DataSecurityKey { .key = chat.chat_key };
                                  auto message_row  = this->node->dfs()->get_vector_row(owner_id,
@@ -121,7 +93,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
 
     // TODO: is_my_chats_exists -> create else return error Exists -> load chat in gui
 
-    auto chat = Chat::Chat { .myself = chat_actor_, .chat_key = key };
+    auto chat = Chat::Chat { .chat_key = key };
 
     auto network_id = node->actorIndex()->network_id();
     if (network_id.is_zero()) {
@@ -150,8 +122,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    chat.file_owner_id = store_chat_res->actor_id;
-    chat.file_id       = store_chat_res->file_id;
+    chat.owner_id = store_chat_res->actor_id;
+    chat.file_id  = store_chat_res->file_id;
 
     if (save_chat) {
         insert_chat_to_mychats(chat);
@@ -182,7 +154,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
         return std::unexpected(ChatError::Unknown);
     }
 
-    chat->another = with.to_string();
+    chat->chat.peer_id = with.to_string();
     insert_chat_to_mychats(chat.value());
     invite(chat.value());
 
@@ -193,19 +165,20 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     // check if with this person chat exists
     auto main_actor_id = node->accountController()->currentProfile().main_id();
 
-    if (!chat.another.has_value()) {
+    if (!chat.chat.peer_id.has_value()) {
         return chat;
     }
 
     auto json = Json::serialize(chat);
-    auto res  = node->dfs()->store_data_as_file(chat.another.value(),
-                                               chat.myself,
-                                               ByteArray(json).toBytes(),
-                                               CHAT_DAPP_INVITE_FOLDER,
-                                               fmt::format("From_{}", main_actor_id),
-                                               Dfs::DataSecurity::Actor,
-                                               Dfs::DataSecurityActor { .sender_id   = chat.myself,
-                                                                         .receiver_id = chat.another.value() });
+    auto res =
+        node->dfs()->store_data_as_file(chat.chat.peer_id.value(),
+                                        chat_actor_,
+                                        ByteArray(json).toBytes(),
+                                        CHAT_DAPP_INVITE_FOLDER,
+                                        fmt::format("From_{}", main_actor_id),
+                                        Dfs::DataSecurity::Actor,
+                                        Dfs::DataSecurityActor { .sender_id   = chat_actor_,
+                                                                 .receiver_id = chat.chat.peer_id.value() });
 
     if (!res.has_value()) {
         eCritical("[ChatManager] Invite error: {}", res.error());
@@ -251,19 +224,17 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::get_chats() {
     return chats;
 }
 
-std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId& file_owner_id,
+std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messages(const ActorId&     owner_id,
                                                                                     const std::string& file_id) {
-    auto key = get_key(file_owner_id, file_id);
+    auto key = get_key(owner_id, file_id);
     if (!key.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
     auto security_key = Dfs::DataSecurityKey { .key = key.value() };
 
-    auto db_rows = node->dfs()->get_vector_rows(file_owner_id,
-                                                file_id,
-                                                "where status = '1' ORDER by timestamp",
-                                                security_key);
+    auto db_rows =
+        node->dfs()->get_vector_rows(owner_id, file_id, "where status = '1' ORDER by timestamp", security_key);
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -287,7 +258,7 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
     return messages;
 }
 
-std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           file_owner_id,
+std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           owner_id,
                                                                  const std::string&       file_id,
                                                                  const Chat::MessageText& message_text) {
     // ... checks for file ...
@@ -296,13 +267,13 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
     // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
 
-    auto key = get_key(file_owner_id, file_id);
+    auto key = get_key(owner_id, file_id);
     if (!key.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
     auto security_key = Dfs::DataSecurityKey { .key = key.value() };
-    auto res          = node->dfs()->add_vector_row(file_owner_id, file_id, message, chat_actor_, security_key);
+    auto res          = node->dfs()->add_vector_row(owner_id, file_id, message, chat_actor_, security_key);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
@@ -311,7 +282,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
     // TODO: send full correct
     // message.actor     = node->accountController()->currentProfile().main_id();
     // message.timestamp = Utils::current_date_ms();
-    // emit node->messageAdded(file_owner_id, file_id, message);
+    // emit node->messageAdded(owner_id, file_id, message);
     return res;
 }
 
@@ -425,10 +396,59 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
 
 std::optional<KeyBytes> ChatManager::get_key(const ActorId& owner_id, const std::string& file_id) {
     for (const auto& chat : std::as_const(chats_)) {
-        if (chat.file_owner_id == owner_id && chat.file_id == file_id) {
+        if (chat.owner_id == owner_id && chat.file_id == file_id) {
             return chat.chat_key;
         }
     }
 
     return std::nullopt;
+}
+
+bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+
+    if (dir_row.folder != CHAT_DAPP_INVITE_FOLDER) {
+        return false;
+    }
+
+    if (!dir_row.encryption) {
+        return false;
+    }
+
+    auto encrypted = Dfs::Tables::ActorDirFile::get_file_content(owner_id, dir_row.file_id);
+    if (!encrypted.has_value()) {
+        return false;
+    }
+
+    const auto& from_id    = dir_row.actor_id;
+    const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
+
+    auto from_actor_result = this->node->actorIndex()->get_actor(from_id);
+    if (!from_actor_result.has_value()) {
+        return false;
+    }
+    auto from_actor = from_actor_result.value();
+
+    auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
+    if (!content.has_value()) {
+        return false;
+    }
+    auto chat = Json::deserialize<Chat::Chat>(content.value());
+    if (!chat.has_value()) {
+        return false;
+    }
+
+    if (!chat->chat.peer_id.has_value()) {
+        return false;
+    }
+
+    // TODO: check if myself == myself? if i have ~ devices
+    chat->chat.peer_id = dir_row.actor_id;
+
+    auto mychats_insert_result = this->insert_chat_to_mychats(chat.value());
+    if (!mychats_insert_result.has_value()) {
+        return false;
+    }
+
+    this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
+    return true;
 }
