@@ -35,7 +35,7 @@ namespace Chat {
         // std::optional<std::vector<ActorId>> peers_id;
         std::optional<ChatType> chat_type;
     };
-    BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id))
+    BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
 
     struct Chat {
         std::string id;
