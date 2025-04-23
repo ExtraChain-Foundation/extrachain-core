@@ -33,6 +33,17 @@ ChatManager::ChatManager(ExtraChainNode* node)
             return;
         }
 
+        auto my_chats = get_my_chats();
+        if (my_chats.has_value()) {
+            if (my_chats->file_id == dir_row.file_id) {
+                emit this->node->chatsLoaded();
+                return;
+            }
+        }
+
+        // load my chats
+        // emit this->node->chatLoaded(owner_id, file_id);
+
         this->parse_invite(owner_id, dir_row);
     });
 

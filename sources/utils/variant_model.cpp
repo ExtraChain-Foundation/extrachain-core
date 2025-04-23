@@ -47,6 +47,10 @@ QHash<int, QByteArray> VariantModel::roleNames() const {
 }
 
 QVariant VariantModel::data(const QModelIndex &index, int role) const {
+    if (index.row() < 0) {
+        return {};
+    }
+
     QVariantMap variants = m_datas[index.row()];
     return variants[m_roles[role]];
 }
@@ -254,8 +258,25 @@ const QList<QVariantMap> &VariantModel::list() const {
 }
 
 void VariantModel::clear() {
+    // Check if there's anything to clear
+    if (m_datas.isEmpty() && m_count == 0) {
+        return;
+    }
+
+    // Properly notify the view that all rows will be removed
+    if (!m_datas.isEmpty()) {
+        beginRemoveRows(QModelIndex(), 0, m_datas.size() - 1);
+        m_datas.clear();
+        endRemoveRows();
+    }
+
+    // Make sure the count is consistent
+    if (m_count != 0) {
+        m_count = 0;
+        emit countChanged(m_count);
+    }
+
+    // Force a model reset as well to ensure views are properly updated
     beginResetModel();
-    m_datas.clear();
-    setCount(0);
     endResetModel();
 }

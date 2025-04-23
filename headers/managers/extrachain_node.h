@@ -251,6 +251,7 @@ signals:
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
+    void chatsLoaded();
     void chatAdded(Chat::Chat chat);
     void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
     void messageRemoved(ActorId owner_id, std::string file_id, std::string id);

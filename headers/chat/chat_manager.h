@@ -66,10 +66,11 @@ public:
                                                   const std::string &file_id,
                                                   const std::string &message_id);
 
+    std::optional<Chat::Chat> get_chat(const ActorId &owner_id, const std::string &file_id);
+
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
-    std::optional<Chat::Chat>             get_chat(const ActorId &owner_id, const std::string &file_id);
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
 
     ActorId chat_actor_;

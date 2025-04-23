@@ -400,6 +400,6 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, dir_row.file_id, Dfs::FileState::Ready);
-    node->dfs()->added(owner_id, dir_row);
-    node->dfs()->downloaded(owner_id, dir_row);
+    emit node->dfs()->added(owner_id, dir_row);
+    emit node->dfs()->downloaded(owner_id, dir_row);
 }
