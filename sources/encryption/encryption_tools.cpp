@@ -181,8 +181,9 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt_password(const Bytes&
     }
 
     auto key_result = key_from_password(password);
-    if (!key_result.has_value())
+    if (!key_result.has_value()) {
         return std::unexpected(CryptoError::KeyConversionFailed);
+    }
 
     return symmetric_decrypt(data, key_result.value());
 }

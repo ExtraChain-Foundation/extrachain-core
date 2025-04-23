@@ -41,7 +41,6 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    // TODO: vectorupdate
     if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
         return;
     }
@@ -63,6 +62,9 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
 
             if (row->type != Dfs::FileType::File && file_path->exists()) {
                 // return; // TODO: vectorupdate
+            }
+
+            if (row->type != Dfs::FileType::Vector && file_path->exists()) {
             }
         }
     }
@@ -375,6 +377,7 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         eWarning("Unknown fragment");
         return;
     }
+
     auto active_download  = active_downloads.at(file_link);
     bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
     if (is_last_fragment) {
