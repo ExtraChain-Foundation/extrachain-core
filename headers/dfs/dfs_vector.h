@@ -108,6 +108,8 @@ public:
 
     std::pair<std::string, bool> calculate_hash(const DbRow& row);
 
+    std::optional<std::string> calculate_template_file_hash();
+
     bool verify(const DbRow& row);
 
     std::expected<DbRow, DfsVectorError> encrypt_data(const DbRow&                 row,

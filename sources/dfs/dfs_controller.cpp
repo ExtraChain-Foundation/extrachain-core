@@ -501,8 +501,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto res =
+    auto dfs_vector =
         DfsVector::create(node, actor.value(), owner_id, file_id, vector_template, data_security, security_data);
+    if (!dfs_vector.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
 
     auto [collection_hash, collection_size] =
         Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
@@ -518,10 +521,15 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     }
     auto [visual_name_new, _] = names_result.value();
 
+    auto vector_hash = dfs_vector->calculate_template_file_hash();
+    if (!vector_hash.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
-                            .hash          = collection_hash,
+                            .hash          = vector_hash.value(),
                             .folder        = Dfs::Basic::TEMPLATE_VECTOR,
                             .name          = visual_name_new,
                             .size          = collection_size,
@@ -542,7 +550,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->generate_content_package();
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
+        dfs_vector->generate_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -741,7 +750,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     dir_row.hash          = hash;
     dir_row.size          = size;
 
-    auto sign = main_actor.key().sign(Utils::calculate_hash(dir_row));
+    auto sign = main_actor.key().sign(dir_row.calculate_hash(owner_id));
     if (!sign.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -779,6 +788,8 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
             if (existing_hash.has_value() && existing_hash.value() == hash) {
                 return true;
             }
+            // if (dir_row->hash == hash) {
+            // }
         }
 
         if (dir_row->type == Dfs::FileType::Collection || dir_row->type == Dfs::FileType::Vector) {
@@ -1104,7 +1115,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 }
 
 void DfsController::network_response_content_vector(
-    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
     if (!dfs_vector_result.has_value()) {
         return;
@@ -1204,7 +1215,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row->calculate_hash();
+    auto hash              = dir_row->calculate_hash(owner_id);
     auto sign              = actor.value().get().key().sign(hash);
     if (!sign.has_value()) {
         return std::unexpected(false); // sign
@@ -1249,7 +1260,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row_new.calculate_hash();
+    auto hash              = dir_row_new.calculate_hash(owner_id);
     auto verify            = actor.value().key().verify(hash, sign);
     if (!verify) {
         eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);

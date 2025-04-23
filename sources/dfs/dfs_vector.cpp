@@ -477,6 +477,14 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
     return { hash, false };
 }
 
+std::optional<std::string> DfsVector::calculate_template_file_hash() {
+    auto hash_result = Utils::calculate_hash_file(vector_path_);
+    if (!hash_result.has_value()) {
+        return std::nullopt;
+    }
+    return hash_result.value();
+}
+
 bool DfsVector::verify(const DbRow &row) {
     auto      actor_id = ActorId(row.at("actor"));
     auto      actor    = node->actorIndex()->getActor(actor_id);
