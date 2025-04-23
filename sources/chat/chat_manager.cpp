@@ -111,7 +111,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
                      });
 }
 
-std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat, bool encryption) {
+std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     KeyBytes   key           = Cryptography::keygen();
     const auto main_actor_id = node->accountController()->currentProfile().main_id();
     chat_actor_              = main_actor_id;
@@ -167,21 +167,18 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool save_chat, bo
     chat.owner_id = store_chat_res->actor_id;
     chat.file_id  = store_chat_res->file_id;
 
-    if (save_chat) {
-        insert_chat_to_mychats(chat);
-    }
-
     return chat;
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
-    auto chat = create_chat(false);
+    auto chat = create_chat();
 
     if (!chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
     insert_chat_to_mychats(chat.value());
+    add_new_message_created(chat->owner_id, chat->file_id);
     return chat;
 }
 
@@ -190,7 +187,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto chat = create_chat(false);
+    auto chat = create_chat();
 
     if (!chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -198,7 +195,9 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
 
     chat->chat.peer_id = with.to_string();
     insert_chat_to_mychats(chat.value());
+    add_new_message_created(chat->owner_id, chat->file_id);
     invite(chat.value());
+    add_new_message_invite(chat->owner_id, chat->file_id, with);
 
     return chat;
 }
@@ -231,7 +230,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
-    auto chat = create_chat(false, false);
+    auto chat = create_chat(false);
 
     if (!chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -239,6 +238,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
 
     chat->chat.chat_type = Chat::ChatType::Channel;
     insert_chat_to_mychats(chat.value());
+    add_new_message_created(chat->owner_id, chat->file_id);
+
     return chat;
 }
 
@@ -320,15 +321,9 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::get_chat_messa
     return messages;
 }
 
-std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           owner_id,
-                                                                 const std::string&       file_id,
-                                                                 const Chat::MessageText& message_text) {
-    // ... checks for file ...
-
-    auto message_data = Chat::MessageData { .data = message_text.text };
-    // auto message_data_json = Json::serialize(message_data);
-    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
-
+std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       owner_id,
+                                                            const std::string&   file_id,
+                                                            const Chat::Message& message) {
     auto chat = get_chat(owner_id, file_id);
     if (!chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -355,6 +350,43 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
     // message.timestamp = Utils::current_date_ms();
     // emit node->messageAdded(owner_id, file_id, message);
     return res;
+}
+
+std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           owner_id,
+                                                                 const std::string&       file_id,
+                                                                 const Chat::MessageText& message_text) {
+    // ... checks for file ...
+
+    auto message_data = Chat::MessageData { .data = message_text.text };
+    // auto message_data_json = Json::serialize(message_data);
+    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    // TODO: with id exists check
+    return add_new_message(owner_id, file_id, message);
+}
+
+std::expected<bool, ChatError> ChatManager::add_new_message_created(const ActorId&     owner_id,
+                                                                    const std::string& file_id) {
+    // TODO: check size, only if size == 0
+
+    auto message_data = Chat::MessageData { .type = Chat::MessageType::Created };
+    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    return add_new_message(owner_id, file_id, message);
+}
+
+std::expected<bool, ChatError> ChatManager::add_new_message_invite(const ActorId&     owner_id,
+                                                                   const std::string& file_id,
+                                                                   const ActorId&     actor) {
+    auto message_data = Chat::MessageData { .type = Chat::MessageType::Invite, .data = actor.to_string() };
+    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    return add_new_message(owner_id, file_id, message);
+}
+
+std::expected<bool, ChatError> ChatManager::add_new_message_joined(const ActorId&     owner_id,
+                                                                   const std::string& file_id,
+                                                                   const ActorId&     actor) {
+    auto message_data = Chat::MessageData { .type = Chat::MessageType::Join, .data = actor.to_string() };
+    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    return add_new_message(owner_id, file_id, message);
 }
 
 std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     owner_id,
@@ -534,5 +566,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     }
 
     this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
+
+    add_new_message_joined(chat->owner_id, chat->file_id, main_actor.id());
     return true;
 }

@@ -24,12 +24,15 @@
 
 namespace Chat {
     enum class MessageType {
-        Text
+        Text,
+        Created,
+        Invite,
+        Join
     };
 
     struct MessageData {
         std::optional<MessageType> type;
-        std::string                data;
+        std::optional<std::string> data;
         // std::optional<std::string> data1;
     };
     BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data))
