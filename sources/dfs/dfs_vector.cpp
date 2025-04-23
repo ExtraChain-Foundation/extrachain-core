@@ -455,6 +455,10 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
         return { "", true };
     }
 
+    if (collection_template_.primary.has_value()) {
+        to_hash += row.at(collection_template_.primary->name());
+    }
+
     const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
         if (row.find(field.name()) == row.end()) {
@@ -483,6 +487,17 @@ std::optional<std::string> DfsVector::calculate_template_file_hash() {
         return std::nullopt;
     }
     return hash_result.value();
+}
+
+std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
+    DbConnector db(file_path_.native());
+    if (!db.open()) {
+        return std::nullopt;
+    }
+
+    auto hash_size =
+        db.hash_size(collection_template_.primary.has_value() ? collection_template_.primary->name() : "actor");
+    return hash_size;
 }
 
 bool DfsVector::verify(const DbRow &row) {

@@ -411,21 +411,26 @@ std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row) {
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row, bool with_sign) {
     auto db = get_actor_dir_file(owner_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
     }
 
-    std::string query = fmt::
-        format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}', sign = '{}' WHERE file_id = '{}'",
-               TableName,
-               dir_row.hash,
-               dir_row.size,
-               dir_row.last_modified,
-               dir_row.file_id,
-               Utils::to_base64(dir_row.sign));
+    std::string sign;
+    if (with_sign) {
+        sign = std::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
+    }
+
+    std::string query =
+        fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE file_id = '{}'",
+                    TableName,
+                    dir_row.hash,
+                    dir_row.size,
+                    dir_row.last_modified,
+                    sign,
+                    dir_row.file_id);
     auto upd = db.update(query);
     if (!upd) {
         return false;

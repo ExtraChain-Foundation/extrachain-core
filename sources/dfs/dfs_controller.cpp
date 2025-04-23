@@ -580,7 +580,16 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     if (!operation_res) {
         return false;
     }
-    // get id?
+    // get and exists check id?
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
+
     emit vectorRowAdded(owner_id, dir_row, row);
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row };
@@ -602,6 +611,14 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
     auto row                    = dfs_vector.remove(primary_data);
     if (!row.has_value()) {
         return false;
+    }
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row->at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
     }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row.value() };
@@ -1137,6 +1154,14 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     auto operation_res          = dfs_vector.local_add(row, true);
     // load_manager_.finish_him(owner_id, dir_row);
 
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
+
     if (operation_res) {
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         if (row.at("status") == "1") {
@@ -1144,22 +1169,6 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
         } else {
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
-    }
-}
-
-void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
-        return;
-    }
-
-    auto &[dir_row, dfs_vector] = res.value();
-    auto row2                   = row;
-    auto operation_res          = dfs_vector.local_add(row2, true);
-    // load_manager_.finish_him(owner_id, dir_row);
-
-    if (operation_res) {
-        emit vectorRowRemoved(owner_id, dir_row, row);
     }
 }
 
@@ -1175,14 +1184,17 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         return;
     }
 
-    auto file_state =
-        Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = dir_row->state };
+    auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                .file_id  = file_id,
+                                                .state    = dir_row->state,
+                                                .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
 void DfsController::network_response_file_state(const ActorId     &owner_id,
                                                 const std::string &file_id,
                                                 Dfs::FileState     state,
+                                                const std::string &hash,
                                                 const Responder   &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
 
@@ -1192,6 +1204,7 @@ void DfsController::network_response_file_state(const ActorId     &owner_id,
 
     if (state == Dfs::FileState::Ready) {
         dir_row->state = state;
+        dir_row->hash  = hash;
         load_manager_.add_to_queue(owner_id, dir_row.value(), *responder.identifiers().begin());
     }
 }

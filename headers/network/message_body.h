@@ -68,7 +68,6 @@ enum class MessageType {
     DfsVectorCreation      = 74,
     DfsVectorContent       = 75,
     DfsVectorAdd           = 76,
-    DfsVectorRemove        = 77,
     DfsDictionaryContent   = 77,
     DfsDictionaryAdd       = 78,
     DfsDictionaryRemove    = 79,

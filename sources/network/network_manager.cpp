@@ -1279,6 +1279,7 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->network_response_file_state(file_state_result->owner_id,
                                                      file_state_result->file_id,
                                                      file_state_result->state,
+                                                     file_state_result->hash,
                                                      responder);
         }
 
@@ -1390,21 +1391,6 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_vector_add(db_content_result->owner_id,
                                         db_content_result->file_id,
                                         db_content_result->row);
-
-        sendBrodcastMessageFurther(package_data);
-
-        break;
-    }
-    case MessageType::DfsVectorRemove: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowRemove>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for vector remove", type);
-            break;
-        }
-
-        node->dfs()->network_vector_remove(db_content_result->owner_id,
-                                           db_content_result->file_id,
-                                           db_content_result->row);
 
         sendBrodcastMessageFurther(package_data);
 

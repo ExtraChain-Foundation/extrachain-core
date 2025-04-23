@@ -295,8 +295,9 @@ namespace Dfs {
             ActorId        owner_id;
             std::string    file_id;
             Dfs::FileState state = Dfs::FileState::Known;
+            std::string    hash;
         };
-        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state))
+        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash))
 
         struct RemoveFile {
             ActorId       owner_id;
@@ -556,7 +557,7 @@ namespace Dfs {
                 const ActorId&     owner_id,
                 const std::string& file_id,
                 const std::string& sort_field = "actor");
-            bool update_file_metadata(const ActorId& owner_id, DirRow& dir_row);
+            bool update_file_metadata(const ActorId& owner_id, DirRow& dir_row, bool with_sign = true);
         } // namespace ActorDirFile
 
         namespace DirsFile {

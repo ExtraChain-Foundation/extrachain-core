@@ -64,7 +64,26 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
                 // return; // TODO: vectorupdate
             }
 
-            if (row->type != Dfs::FileType::Vector && file_path->exists()) {
+            if (row->type == Dfs::FileType::Vector && file_path->exists() && row->hash == dir_row.hash) {
+                auto res = node->dfs()->make_vector(owner_id,
+                                                    dir_row.file_id,
+                                                    false,
+                                                    node->accountController()->system_actor().id());
+                if (res.has_value()) {
+                    auto& [dir_row, dfs_vector] = res.value();
+                    if (row.has_value()) {
+                        auto vector_file_hash = dfs_vector.calculate_template_file_hash();
+                        if (vector_file_hash.has_value()) {
+                            if (dir_row.hash == vector_file_hash.value()) {
+                                return;
+                            }
+                        }
+                        auto hash_size = dfs_vector.data_hash_size();
+                        if (dir_row.hash == hash_size->first) {
+                            return;
+                        }
+                    }
+                }
             }
         }
     }
