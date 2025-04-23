@@ -99,11 +99,11 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
     eLog("[Accounts] Imported profile: {}", imported_profile);
 }
 
-void AccountController::renameWallet(const ActorId     &profileActor,
+bool AccountController::rename_wallet(const ActorId     &profileActor,
                                      const ActorId     &actorId,
                                      const std::string &walletName) {
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
-    profile.rename_wallet(actorId, walletName);
+    return profile.rename_wallet(actorId, walletName);
 }
 
 std::expected<void, LoadError> AccountController::load(const std::string &hash) {
