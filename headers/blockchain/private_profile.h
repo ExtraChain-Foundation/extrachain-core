@@ -52,7 +52,9 @@ struct ImportedUser {
     uint64_t                                 creation_date = 0;
     uint64_t                                 modified_date = 0;
 };
-BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
+BOOST_DESCRIBE_STRUCT(ImportedUser,
+                      (),
+                      (network, date, system, main, actors, imports, wallet_names, creation_date, modified_date))
 
 class ExtraChainNode;
 
