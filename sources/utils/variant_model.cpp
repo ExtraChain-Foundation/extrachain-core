@@ -47,6 +47,10 @@ QHash<int, QByteArray> VariantModel::roleNames() const {
 }
 
 QVariant VariantModel::data(const QModelIndex &index, int role) const {
+    if (index.row() < 0) {
+        return {};
+    }
+
     QVariantMap variants = m_datas[index.row()];
     return variants[m_roles[role]];
 }
@@ -55,6 +59,34 @@ bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int 
     set(index.row(), m_roles[role], value);
 
     return true;
+}
+
+QVariantList VariantModel::findByField(const QByteArray &field, const QVariant &value, bool firstMatchOnly) {
+    QVariantList results;
+
+    for (int i = 0; i < m_datas.size(); ++i) {
+        const QVariantMap &item = m_datas[i];
+
+        if (item.contains(field) && item[field] == value) {
+            results.append(QVariant(item));
+
+            if (firstMatchOnly) {
+                break;
+            }
+        }
+    }
+
+    return results;
+}
+
+int VariantModel::findIndexByField(const QByteArray &field, const QVariant &value) {
+    for (int i = 0; i < m_datas.size(); ++i) {
+        const QVariantMap &item = m_datas[i];
+        if (item.contains(field) && item[field] == value) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void VariantModel::prepend(const QVariantMap &variant) {
@@ -130,7 +162,7 @@ void VariantModel::remove(int index, int count) {
 }
 
 QVariantMap VariantModel::get(int index) {
-    if (index > m_count - 1 || index < 0)
+    if (index > m_count - 1 || index < 0 || m_datas.size() <= index)
         return {};
     return m_datas[index];
 }
@@ -226,8 +258,25 @@ const QList<QVariantMap> &VariantModel::list() const {
 }
 
 void VariantModel::clear() {
+    // Check if there's anything to clear
+    if (m_datas.isEmpty() && m_count == 0) {
+        return;
+    }
+
+    // Properly notify the view that all rows will be removed
+    if (!m_datas.isEmpty()) {
+        beginRemoveRows(QModelIndex(), 0, m_datas.size() - 1);
+        m_datas.clear();
+        endRemoveRows();
+    }
+
+    // Make sure the count is consistent
+    if (m_count != 0) {
+        m_count = 0;
+        emit countChanged(m_count);
+    }
+
+    // Force a model reset as well to ensure views are properly updated
     beginResetModel();
-    m_datas.clear();
-    setCount(0);
     endResetModel();
 }

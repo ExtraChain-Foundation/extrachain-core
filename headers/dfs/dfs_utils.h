@@ -255,21 +255,7 @@ namespace Dfs {
             return file_id.empty() || name.empty();
         }
 
-        std::string calculate_hash() {
-            auto for_hash = fmt::format("{}{}{}{}{}{}{}{}{}{}",
-                                        actor_id.to_string(),
-                                        file_id,
-                                        prev_file_id.value_or(""),
-                                        hash,
-                                        folder.value_or(""),
-                                        std::to_string(created),
-                                        std::to_string(last_modified),
-                                        std::to_string(std::to_underlying(type)),
-                                        std::to_string(encryption),
-                                        state == FileState::Removed ? "removed" : "");
-            auto hash     = Utils::calculate_hash(for_hash);
-            return hash;
-        }
+        std::string calculate_hash(const ActorId& owner_id);
     };
 
     BOOST_DESCRIBE_STRUCT(DirRow,
@@ -309,8 +295,9 @@ namespace Dfs {
             ActorId        owner_id;
             std::string    file_id;
             Dfs::FileState state = Dfs::FileState::Known;
+            std::string    hash;
         };
-        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state))
+        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash))
 
         struct RemoveFile {
             ActorId       owner_id;
@@ -566,9 +553,11 @@ namespace Dfs {
             bool add_dir_row(const ActorId& owner_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
             bool add_dir_rows(const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
-            std::pair<std::string, uint64_t> calculate_collection_hash_size(const ActorId&     owner_id,
-                                                                            const std::string& file_id);
-            bool                             update_file_metadata(const ActorId& owner_id, DirRow& dir_row);
+            std::pair<std::string, uint64_t> calculate_collection_hash_size(
+                const ActorId&     owner_id,
+                const std::string& file_id,
+                const std::string& sort_field = "actor");
+            bool update_file_metadata(const ActorId& owner_id, DirRow& dir_row, bool with_sign = true);
         } // namespace ActorDirFile
 
         namespace DirsFile {

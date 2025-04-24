@@ -501,11 +501,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto res =
+    auto dfs_vector =
         DfsVector::create(node, actor.value(), owner_id, file_id, vector_template, data_security, security_data);
+    if (!dfs_vector.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
 
-    auto [collection_hash, collection_size] =
-        Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
+    // auto [collection_hash, collection_size] =
+    //     Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
@@ -518,13 +521,18 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     }
     auto [visual_name_new, _] = names_result.value();
 
+    auto vector_hash = dfs_vector->calculate_template_file_hash();
+    if (!vector_hash.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
-                            .hash          = collection_hash,
+                            .hash          = vector_hash.value().first,
                             .folder        = Dfs::Basic::TEMPLATE_VECTOR,
                             .name          = visual_name_new,
-                            .size          = collection_size,
+                            .size          = vector_hash.value().second,
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
@@ -542,7 +550,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->generate_content_package();
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
+        dfs_vector->generate_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -571,8 +580,21 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     if (!operation_res) {
         return false;
     }
-    // get id?
-    emit vectorRowAdded(owner_id, dir_row, row);
+    // get and exists check id?
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
+
+    if (row.at("status") == "1") {
+        emit vectorRowAdded(owner_id, dir_row, row);
+    } else {
+        emit vectorRowRemoved(owner_id, dir_row, row);
+    }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row };
     node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
@@ -593,6 +615,14 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
     auto row                    = dfs_vector.remove(primary_data);
     if (!row.has_value()) {
         return false;
+    }
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row->at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
     }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row.value() };
@@ -644,7 +674,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto row = v->read_rows(where_statement);
+    auto row = where_statement.empty() ? v->read_rows() : v->read_rows(where_statement);
     if (!row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -741,7 +771,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     dir_row.hash          = hash;
     dir_row.size          = size;
 
-    auto sign = main_actor.key().sign(Utils::calculate_hash(dir_row));
+    auto sign = main_actor.key().sign(dir_row.calculate_hash(owner_id));
     if (!sign.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -779,6 +809,8 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
             if (existing_hash.has_value() && existing_hash.value() == hash) {
                 return true;
             }
+            // if (dir_row->hash == hash) {
+            // }
         }
 
         if (dir_row->type == Dfs::FileType::Collection || dir_row->type == Dfs::FileType::Vector) {
@@ -1104,7 +1136,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 }
 
 void DfsController::network_response_content_vector(
-    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
     if (!dfs_vector_result.has_value()) {
         return;
@@ -1126,6 +1158,14 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     auto operation_res          = dfs_vector.local_add(row, true);
     // load_manager_.finish_him(owner_id, dir_row);
 
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
+
     if (operation_res) {
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         if (row.at("status") == "1") {
@@ -1133,22 +1173,6 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
         } else {
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
-    }
-}
-
-void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
-        return;
-    }
-
-    auto &[dir_row, dfs_vector] = res.value();
-    auto row2                   = row;
-    auto operation_res          = dfs_vector.local_add(row2, true);
-    // load_manager_.finish_him(owner_id, dir_row);
-
-    if (operation_res) {
-        emit vectorRowRemoved(owner_id, dir_row, row);
     }
 }
 
@@ -1164,14 +1188,17 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         return;
     }
 
-    auto file_state =
-        Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = dir_row->state };
+    auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                .file_id  = file_id,
+                                                .state    = dir_row->state,
+                                                .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
 void DfsController::network_response_file_state(const ActorId     &owner_id,
                                                 const std::string &file_id,
                                                 Dfs::FileState     state,
+                                                const std::string &hash,
                                                 const Responder   &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
 
@@ -1181,6 +1208,7 @@ void DfsController::network_response_file_state(const ActorId     &owner_id,
 
     if (state == Dfs::FileState::Ready) {
         dir_row->state = state;
+        dir_row->hash  = hash;
         load_manager_.add_to_queue(owner_id, dir_row.value(), *responder.identifiers().begin());
     }
 }
@@ -1204,7 +1232,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row->calculate_hash();
+    auto hash              = dir_row->calculate_hash(owner_id);
     auto sign              = actor.value().get().key().sign(hash);
     if (!sign.has_value()) {
         return std::unexpected(false); // sign
@@ -1249,7 +1277,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row_new.calculate_hash();
+    auto hash              = dir_row_new.calculate_hash(owner_id);
     auto verify            = actor.value().key().verify(hash, sign);
     if (!verify) {
         eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);

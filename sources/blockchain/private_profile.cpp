@@ -41,22 +41,26 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
     return user;
 }
 
-std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId     &actor_id,
-                                                                            const std::string &hash,
-                                                                            ExtraChainNode    *node) {
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const ActorId                &actor_id,
+                                                                            const std::string            &hash,
+                                                                            ExtraChainNode               *node,
+                                                                            const std::optional<KeyPass> &key) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
     user.node    = node;
-    return user.read();
+    return user.read(key);
 }
 
-PrivateProfile PrivateProfile::load(const ActorId &actor_id, const std::string &hash, ExtraChainNode *node) {
+PrivateProfile PrivateProfile::load(const ActorId                &actor_id,
+                                    const std::string            &hash,
+                                    ExtraChainNode               *node,
+                                    const std::optional<KeyPass> &key) {
     PrivateProfile user;
     user.system_ = actor_id;
     user.hash_   = hash;
     user.node    = node;
-    user.load();
+    user.load(key);
     return user;
 }
 
@@ -206,14 +210,15 @@ void PrivateProfile::save(uint64_t modified_date) {
     file.close();
 }
 
-std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read() {
+std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read(const std::optional<KeyPass> &key) {
     std::ifstream file(path(), std::ios::binary);
     if (!file) {
         return std::unexpected(PrivateProfileReadError::File);
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
-    auto json_bytes = Cryptography::symmetric_decrypt_password(Bytes(data.begin(), data.end()), hash_);
+    auto json_bytes = key.has_value() ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
+                                      : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
     if (!json_bytes.has_value()) {
         // eWarning("Incorrect private profile load");
         return std::unexpected(PrivateProfileReadError::Decrypt);
@@ -228,8 +233,8 @@ std::expected<PrivateProfile, PrivateProfileReadError> PrivateProfile::read() {
     return profile.value();
 }
 
-void PrivateProfile::load() {
-    auto profile = this->read();
+void PrivateProfile::load(const std::optional<KeyPass> &key) {
+    auto profile = this->read(key);
     if (!profile.has_value()) {
         return;
     }

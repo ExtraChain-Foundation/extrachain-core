@@ -315,11 +315,10 @@ public:
         bool                         is_network    = false,
         const ActorId               &signer_id     = ActorId(),
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
     void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
     void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
-
     void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
-    void network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
 
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
@@ -327,6 +326,7 @@ public:
     void network_response_file_state(const ActorId     &owner_id,
                                      const std::string &file_id,
                                      Dfs::FileState     state,
+                                     const std::string &hash,
                                      const Responder   &responder);
 
     // full file remove

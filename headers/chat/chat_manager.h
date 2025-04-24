@@ -45,25 +45,47 @@ private:
 public:
     ChatManager(ExtraChainNode *node);
 
-    std::expected<Chat::Chat, ChatError> create_chat(bool save_chat = true);
+    std::expected<Chat::Chat, ChatError> create_chat(bool encryption = true);
     std::expected<Chat::Chat, ChatError> create_myself();
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 
-    std::expected<std::vector<Chat::Chat>, ChatError>    get_chats();
-    std::expected<std::vector<Chat::Message>, ChatError> get_chat_messages(const ActorId     &file_owner_id,
-                                                                           const std::string &file_id);
+    std::expected<Chat::Chat, ChatError> create_channel();
+
+    std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
+    std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
+                                                                           const std::string &file_id,
+                                                                           bool               quick = false);
 
     std::expected<Dfs::DirRow, ChatError> get_my_chats();
 
-    std::expected<bool, ChatError> add_new_message_text(const ActorId           &file_owner_id,
+    std::expected<bool, ChatError> add_new_message(const ActorId       &owner_id,
+                                                   const std::string   &file_id,
+                                                   const Chat::Message &message);
+
+    std::expected<bool, ChatError> add_new_message_text(const ActorId           &owner_id,
                                                         const std::string       &file_id,
                                                         const Chat::MessageText &message_text);
+
+    std::expected<bool, ChatError> add_new_message_created(const ActorId &owner_id, const std::string &file_id);
+
+    std::expected<bool, ChatError> add_new_message_invite(const ActorId     &owner_id,
+                                                          const std::string &file_id,
+                                                          const ActorId     &actor);
+    std::expected<bool, ChatError> add_new_message_joined(const ActorId     &owner_id,
+                                                          const std::string &file_id,
+                                                          const ActorId     &actor);
+
+    std::expected<bool, ChatError> remove_message(const ActorId     &owner_id,
+                                                  const std::string &file_id,
+                                                  const std::string &message_id);
+
+    std::optional<Chat::Chat> get_chat(const ActorId &owner_id, const std::string &file_id);
 
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
-    std::optional<KeyBytes>               get_key(const ActorId &owner_id, const std::string &file_id);
+    bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
 
     ActorId chat_actor_;
 

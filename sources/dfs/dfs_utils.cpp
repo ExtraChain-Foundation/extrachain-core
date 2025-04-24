@@ -22,6 +22,63 @@
 #include "blockchain/actor.h"
 #include "utils/fs_path.h"
 
+std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
+    auto &row = *this;
+
+    blake3_hasher hasher;
+    blake3_hasher_init(&hasher);
+
+    std::string owner_id_str = owner_id.to_string();
+    blake3_hasher_update(&hasher, owner_id_str.data(), owner_id_str.size());
+
+    std::string actor_id = row.actor_id.to_string();
+    blake3_hasher_update(&hasher, actor_id.data(), actor_id.size());
+
+    blake3_hasher_update(&hasher, row.file_id.data(), row.file_id.size());
+
+    if (row.prev_file_id.has_value()) {
+        const std::string &prev = row.prev_file_id.value();
+        blake3_hasher_update(&hasher, prev.data(), prev.size());
+    }
+
+    blake3_hasher_update(&hasher, row.hash.data(), row.hash.size());
+
+    if (row.folder.has_value()) {
+        const std::string &folder = row.folder.value();
+        blake3_hasher_update(&hasher, folder.data(), folder.size());
+    }
+
+    blake3_hasher_update(&hasher, row.name.data(), row.name.size());
+
+    if (row.type != Dfs::FileType::Vector) {
+        auto size_str = std::to_string(row.size);
+        blake3_hasher_update(&hasher, size_str.data(), size_str.size());
+    }
+
+    auto created_str = std::to_string(row.created);
+    blake3_hasher_update(&hasher, created_str.data(), created_str.size());
+
+    if (row.type != Dfs::FileType::Vector) {
+        auto last_modified_str = std::to_string(row.last_modified);
+        blake3_hasher_update(&hasher, last_modified_str.data(), last_modified_str.size());
+    }
+
+    auto type_int = std::to_string(std::to_underlying(row.type));
+    blake3_hasher_update(&hasher, type_int.data(), type_int.size());
+
+    auto encryption_int = std::to_string(int(row.encryption));
+    blake3_hasher_update(&hasher, encryption_int.data(), encryption_int.size());
+
+    if (state == FileState::Removed) {
+        blake3_hasher_update(&hasher, std::string("removed").data(), std::string("removed").size());
+    }
+
+    uint8_t output[BLAKE3_OUT_LEN];
+    blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+
+    return fmt::format("{:02x}", fmt::join(std::span(output, BLAKE3_OUT_LEN), ""));
+}
+
 std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db, std::string name) {
     std::string query = fmt::format("SELECT * FROM {} WHERE file_id = '{}'", TableName, name);
     return db->select(query);
@@ -250,7 +307,7 @@ bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
     dir_row.last_modified = current_ms;
     dir_row.prev_file_id  = prev_file_id;
 
-    auto sign = signer.key().sign(Utils::calculate_hash(dir_row));
+    auto sign = signer.key().sign(dir_row.calculate_hash(owner_id));
     if (!sign.has_value()) {
         return false;
     }
@@ -344,30 +401,36 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
 
 std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
     const ActorId     &owner_id,
-    const std::string &file_id) {
+    const std::string &file_id,
+    const std::string &sort_field) {
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id);
     DbConnector db(dfs_path->native());
     db.open();
-    auto res = db.hash_size("actor");
+    auto res = db.hash_size(sort_field);
     db.close();
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row) {
+bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row, bool with_sign) {
     auto db = get_actor_dir_file(owner_id);
     if (!db.is_open()) {
         eFatal("Database error {}", db.file());
         return 0;
     }
 
-    std::string query = fmt::
-        format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}', sign = '{}' WHERE file_id = '{}'",
-               TableName,
-               dir_row.hash,
-               dir_row.size,
-               dir_row.last_modified,
-               dir_row.file_id,
-               Utils::to_base64(dir_row.sign));
+    std::string sign;
+    if (with_sign) {
+        sign = fmt::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
+    }
+
+    std::string query =
+        fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE file_id = '{}'",
+                    TableName,
+                    dir_row.hash,
+                    dir_row.size,
+                    dir_row.last_modified,
+                    sign,
+                    dir_row.file_id);
     auto upd = db.update(query);
     if (!upd) {
         return false;

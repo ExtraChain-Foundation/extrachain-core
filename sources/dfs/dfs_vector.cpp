@@ -421,10 +421,17 @@ std::optional<DbRow> DfsVector::remove(const std::string &primary_data) {
         return std::nullopt;
     }
 
-    // TODO: check if actor correct
-
     auto row = std::move(row_result.value());
+
+    if (row["actor"] != actor_.id().to_string()) {
+        return std::nullopt;
+    }
+
     for (const auto &[key, _] : row) {
+        if (collection_template_.primary.has_value() && collection_template_.primary->name() == key) {
+            continue;
+        }
+
         row[key] = "-";
     }
 
@@ -448,6 +455,10 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
         return { "", true };
     }
 
+    if (collection_template_.primary.has_value()) {
+        to_hash += row.at(collection_template_.primary->name());
+    }
+
     const auto &fields = collection_template_.fields();
     for (const auto &field : fields) {
         if (row.find(field.name()) == row.end()) {
@@ -468,6 +479,33 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
 
     auto hash = Utils::calculate_hash(to_hash);
     return { hash, false };
+}
+
+std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template_file_hash() {
+    auto hash_result = Utils::calculate_hash_file(vector_path_);
+    if (!hash_result.has_value()) {
+        return std::nullopt;
+    }
+
+    std::size_t size        = 1;
+    auto        size_result = vector_path_.file_size();
+
+    if (size_result.has_value()) {
+        size = size_result.value();
+    }
+
+    return std::pair { hash_result.value(), size };
+}
+
+std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
+    DbConnector db(file_path_.native());
+    if (!db.open()) {
+        return std::nullopt;
+    }
+
+    auto hash_size =
+        db.hash_size(collection_template_.primary.has_value() ? collection_template_.primary->name() : "actor");
+    return hash_size;
 }
 
 bool DfsVector::verify(const DbRow &row) {
