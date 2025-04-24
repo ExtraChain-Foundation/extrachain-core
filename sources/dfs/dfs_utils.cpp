@@ -420,7 +420,7 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, Di
 
     std::string sign;
     if (with_sign) {
-        sign = std::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
+        sign = fmt::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
     }
 
     std::string query =
