@@ -23,50 +23,48 @@
 #include "utils/fs_path.h"
 
 std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
-    auto &row = *this;
-
     blake3_hasher hasher;
     blake3_hasher_init(&hasher);
 
     std::string owner_id_str = owner_id.to_string();
     blake3_hasher_update(&hasher, owner_id_str.data(), owner_id_str.size());
 
-    std::string actor_id = row.actor_id.to_string();
+    std::string actor_id = this->actor_id.to_string();
     blake3_hasher_update(&hasher, actor_id.data(), actor_id.size());
 
-    blake3_hasher_update(&hasher, row.file_id.data(), row.file_id.size());
+    blake3_hasher_update(&hasher, this->file_id.data(), this->file_id.size());
 
-    if (row.prev_file_id.has_value()) {
-        const std::string &prev = row.prev_file_id.value();
+    if (this->prev_file_id.has_value()) {
+        const std::string &prev = this->prev_file_id.value();
         blake3_hasher_update(&hasher, prev.data(), prev.size());
     }
 
-    blake3_hasher_update(&hasher, row.hash.data(), row.hash.size());
+    blake3_hasher_update(&hasher, this->hash.data(), this->hash.size());
 
-    if (row.folder.has_value()) {
-        const std::string &folder = row.folder.value();
+    if (this->folder.has_value()) {
+        const std::string &folder = this->folder.value();
         blake3_hasher_update(&hasher, folder.data(), folder.size());
     }
 
-    blake3_hasher_update(&hasher, row.name.data(), row.name.size());
+    blake3_hasher_update(&hasher, this->name.data(), this->name.size());
 
-    if (row.type != Dfs::FileType::Vector) {
-        auto size_str = std::to_string(row.size);
+    if (this->type != Dfs::FileType::Vector) {
+        auto size_str = std::to_string(this->size);
         blake3_hasher_update(&hasher, size_str.data(), size_str.size());
     }
 
-    auto created_str = std::to_string(row.created);
+    auto created_str = std::to_string(this->created);
     blake3_hasher_update(&hasher, created_str.data(), created_str.size());
 
-    if (row.type != Dfs::FileType::Vector) {
-        auto last_modified_str = std::to_string(row.last_modified);
+    if (this->type != Dfs::FileType::Vector) {
+        auto last_modified_str = std::to_string(this->last_modified);
         blake3_hasher_update(&hasher, last_modified_str.data(), last_modified_str.size());
     }
 
-    auto type_int = std::to_string(std::to_underlying(row.type));
+    auto type_int = std::to_string(std::to_underlying(this->type));
     blake3_hasher_update(&hasher, type_int.data(), type_int.size());
 
-    auto encryption_int = std::to_string(int(row.encryption));
+    auto encryption_int = std::to_string(int(this->encryption));
     blake3_hasher_update(&hasher, encryption_int.data(), encryption_int.size());
 
     if (state == FileState::Removed) {

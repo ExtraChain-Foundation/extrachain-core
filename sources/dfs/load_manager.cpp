@@ -53,9 +53,17 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
                 return;
             }
 
+            if (row->state == Dfs::FileState::Removed) {
+                return;
+            }
+
             if (row->type == Dfs::FileType::File && file_path->exists()) {
                 auto size = file_path->file_size();
                 if (size.has_value() && size == row->size) {
+                    return;
+                }
+
+                if (row->last_modified > dir_row.last_modified) {
                     return;
                 }
             }

@@ -632,7 +632,7 @@ std::expected<std::vector<std::uint8_t>, Utils::ContentError> Utils::read_file_c
     // Get file size
     const auto size = path.file_size();
     if (!size.has_value()) {
-        eLog("Failed to get file size: {}", path.string().value_or("invalid path"));
+        // eLog("Failed to get file size: {}", path.string().value_or("invalid path"));
         return std::unexpected(ContentError::ReadError);
     }
 
