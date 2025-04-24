@@ -52,8 +52,8 @@ public:
 
     std::expected<Chat::Chat, ChatError> create_channel();
 
-    std::expected<std::vector<Chat::Chat>, ChatError>    get_chats();
-    std::expected<std::vector<Chat::Message>, ChatError> get_chat_messages(const ActorId     &owner_id,
+    std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
+    std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
                                                                            const std::string &file_id,
                                                                            bool               quick = false);
 

@@ -670,7 +670,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto row = v->read_rows(where_statement);
+    auto row = where_statement.empty() ? v->read_rows() : v->read_rows(where_statement);
     if (!row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }

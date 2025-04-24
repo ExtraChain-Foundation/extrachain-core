@@ -31,18 +31,26 @@ namespace Chat {
     };
 
     struct ChatData {
-        std::optional<ActorId> peer_id;
-        // std::optional<std::vector<ActorId>> peers_id;
         std::optional<ChatType> chat_type;
+        std::optional<ActorId>  peer_id;
+        // std::optional<std::vector<ActorId>> peers_id;
     };
     BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
 
     struct Chat {
         std::string id;
-        ChatData    chat;
         ActorId     owner_id;
         std::string file_id;
+        ChatData    chat;
         KeyBytes    chat_key;
     };
-    BOOST_DESCRIBE_STRUCT(Chat, (), (id, chat, chat_key, owner_id, file_id))
+    BOOST_DESCRIBE_STRUCT(Chat, (), (id, chat_key, chat, owner_id, file_id))
+
+    struct ChatInvite {
+        ActorId                 owner_id;
+        std::string             file_id;
+        std::optional<ChatType> chat_type;
+        KeyBytes                chat_key;
+    };
+    BOOST_DESCRIBE_STRUCT(ChatInvite, (), (owner_id, file_id, chat_type, chat_key))
 } // namespace Chat
