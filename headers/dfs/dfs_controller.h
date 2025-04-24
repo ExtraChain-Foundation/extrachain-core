@@ -325,7 +325,8 @@ public:
                                     const Responder   &responder);
     void network_response_file_state(const ActorId     &owner_id,
                                      const std::string &file_id,
-                                     Dfs::FileState     state, const std::string &hash,
+                                     Dfs::FileState     state,
+                                     const std::string &hash,
                                      const Responder   &responder);
 
     // full file remove

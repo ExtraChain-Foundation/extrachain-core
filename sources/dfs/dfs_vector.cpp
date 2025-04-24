@@ -481,12 +481,20 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
     return { hash, false };
 }
 
-std::optional<std::string> DfsVector::calculate_template_file_hash() {
+std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template_file_hash() {
     auto hash_result = Utils::calculate_hash_file(vector_path_);
     if (!hash_result.has_value()) {
         return std::nullopt;
     }
-    return hash_result.value();
+
+    std::size_t size        = 1;
+    auto        size_result = vector_path_.file_size();
+
+    if (size_result.has_value()) {
+        size = size_result.value();
+    }
+
+    return std::pair { hash_result.value(), size };
 }
 
 std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {

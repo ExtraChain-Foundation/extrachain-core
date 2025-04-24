@@ -74,7 +74,7 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
                     if (row.has_value()) {
                         auto vector_file_hash = dfs_vector.calculate_template_file_hash();
                         if (vector_file_hash.has_value()) {
-                            if (dir_row.hash == vector_file_hash.value()) {
+                            if (dir_row.hash == vector_file_hash.value().first) {
                                 return;
                             }
                         }

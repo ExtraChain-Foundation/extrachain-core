@@ -507,8 +507,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto [collection_hash, collection_size] =
-        Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
+    // auto [collection_hash, collection_size] =
+    //     Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
@@ -529,10 +529,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
-                            .hash          = vector_hash.value(),
+                            .hash          = vector_hash.value().first,
                             .folder        = Dfs::Basic::TEMPLATE_VECTOR,
                             .name          = visual_name_new,
-                            .size          = collection_size,
+                            .size          = vector_hash.value().second,
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
@@ -590,7 +590,11 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
         Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
     }
 
-    emit vectorRowAdded(owner_id, dir_row, row);
+    if (row.at("status") == "1") {
+        emit vectorRowAdded(owner_id, dir_row, row);
+    } else {
+        emit vectorRowRemoved(owner_id, dir_row, row);
+    }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row };
     node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
