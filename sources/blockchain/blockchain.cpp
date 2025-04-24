@@ -1854,8 +1854,6 @@ TransactionProveError Blockchain::prove_transaction(const Transaction          &
         }
     }
 
-    return TransactionProveError::NoError;
-
     BigNumberFloat transactionAmount = tx.amount();
     BigNumberFloat senderBalance     = calculate_actor_balance(targetSender, token);
 
