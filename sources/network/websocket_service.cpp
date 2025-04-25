@@ -104,6 +104,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
 }
 
 WebSocketService::~WebSocketService() {
+    closeSocket();
     eLog("[WS] I'm socket, i'm death");
 }
 

@@ -1502,10 +1502,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        emit node->blockchain()->syncResponseFromNetwork(sync_result->from,
-                                                         sync_result->to,
-                                                         sync_result->is_light,
-                                                         responder);
+        node->blockchain()->syncResponse(sync_result->from, sync_result->to, sync_result->is_light, responder);
         break;
     }
 
