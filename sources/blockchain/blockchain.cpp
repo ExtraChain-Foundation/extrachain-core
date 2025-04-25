@@ -104,7 +104,7 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     // eLog("[Blockchain] Request sync from {}", fromBlock);
 
     auto package = BlockchainSyncPackage { .from     = fromBlock,
-                                           .to       = std::min(fromBlock + 489, sync_last_index),
+                                           .to       = std::min(fromBlock + 101, sync_last_index),
                                            .is_light = this->mode_ == BlockchainMode::Light };
 
     if (!responder.has_value()) {
@@ -116,15 +116,18 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     } else {
         eLog("[Blockchain] Sync from {} to {}", package.from, package.to);
 
-        responder->set_message_id(
-            Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                  + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                .substr(0, 15));
-        node->network()->send_message(package,
-                                      MessageType::BlockchainSync,
-                                      SendMode::Focused,
-                                      MessageStatus::Request,
-                                      responder.value());
+        auto resp = Responder(responder.value());
+        QTimer::singleShot(10, [this, resp, package]() mutable {
+            resp.set_message_id(
+                Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                      + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                    .substr(0, 15));
+            node->network()->send_message(package,
+                                          MessageType::BlockchainSync,
+                                          SendMode::Focused,
+                                          MessageStatus::Request,
+                                          resp);
+        });
     }
 }
 
@@ -132,10 +135,14 @@ void Blockchain::syncResponse(const BigNumber  from_block,
                               const BigNumber &to_block,
                               bool             is_light,
                               const Responder &responder) {
+    static QMutex mutex;
+    mutex.lock();
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
+        mutex.unlock();
         return;
     }
+    mutex.unlock();
 
     BigNumber lastIndex = std::min(lastBlock->id(), to_block);
 
@@ -151,7 +158,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
-    blocks.reserve(600);
+    blocks.reserve(110);
 
     if (is_light) {
         auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
@@ -225,12 +232,9 @@ void Blockchain::syncResponse(const BigNumber  from_block,
     }
 
     auto ser = MessagePack::serialize(blocks);
-    auto res = qCompress(QByteArray::fromStdString(ser));
+    // auto res = qCompress(QByteArray::fromStdString(ser));
 
-    responder.send_response(res.toStdString(),
-                            MessageType::BlockchainSyncBlocks,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    responder.send_response(ser, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
@@ -238,8 +242,8 @@ void Blockchain::syncResponse(const BigNumber  from_block,
 void Blockchain::syncResponseVector(const std::string           &blocks_,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
-    auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
-    auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(des);
+    // auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
+    auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(blocks_);
     if (!blocks_result.has_value()) {
         return;
     }
