@@ -197,16 +197,16 @@ void Blockchain::syncResponse(const BigNumber  from_block,
         blocks.push_back({ block->id(), content });
         // blocks.push_back(block.value());
 
-        if (blocks.size() >= 1000) {
-            auto ser = MessagePack::serialize(blocks);
-            auto res = qCompress(QByteArray::fromStdString(ser));
+        // if (blocks.size() >= 1000) {
+        //     auto ser = MessagePack::serialize(blocks);
+        //     auto res = qCompress(QByteArray::fromStdString(ser));
 
-            responder.send_response(res.toStdString(),
-                                    MessageType::BlockchainSyncBlocks,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
-            blocks.clear();
-        }
+        //     responder.send_response(res.toStdString(),
+        //                             MessageType::BlockchainSyncBlocks,
+        //                             SendMode::Focused,
+        //                             MessageStatus::Response);
+        //     blocks.clear();
+        // }
 
         // if (block->isGenesisBlock()) {
         //     node->network()->send_message(block->getGenesisBlockConst(),
