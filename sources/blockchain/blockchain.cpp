@@ -232,7 +232,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
     }
 
     auto ser = MessagePack::serialize(blocks);
-    // auto res = qCompress(QByteArray::fromStdString(ser));
+    auto res = qCompress(QByteArray::fromStdString(ser));
 
     responder.send_response(ser, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
 
@@ -242,7 +242,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
 void Blockchain::syncResponseVector(const std::string           &blocks_,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
-    // auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
+    auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
     auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(blocks_);
     if (!blocks_result.has_value()) {
         return;
