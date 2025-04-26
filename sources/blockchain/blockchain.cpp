@@ -240,7 +240,7 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
                                     const Responder             &responder,
                                     const NetworkPackageStorage &package_storage) {
     auto des           = qUncompress(QByteArray::fromStdString(blocks_)).toStdString();
-    auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(blocks_);
+    auto blocks_result = MessagePack::deserialize<std::vector<std::pair<BigNumber, std::string>>>(des);
     if (!blocks_result.has_value()) {
         return;
     }
