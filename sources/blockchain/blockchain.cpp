@@ -104,7 +104,7 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     // eLog("[Blockchain] Request sync from {}", fromBlock);
 
     auto package = BlockchainSyncPackage { .from     = fromBlock,
-                                           .to       = std::min(fromBlock + 101, sync_last_index),
+                                           .to       = std::min(fromBlock + 489, sync_last_index),
                                            .is_light = this->mode_ == BlockchainMode::Light };
 
     if (!responder.has_value()) {
