@@ -132,10 +132,14 @@ void Blockchain::syncResponse(const BigNumber  from_block,
                               const BigNumber &to_block,
                               bool             is_light,
                               const Responder &responder) {
+    static QMutex mutex;
+    mutex.lock();
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
+        mutex.unlock();
         return;
     }
+    mutex.unlock();
 
     BigNumber lastIndex = std::min(lastBlock->id(), to_block);
 
@@ -151,7 +155,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
-    blocks.reserve(600);
+    blocks.reserve(500);
 
     if (is_light) {
         auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
@@ -190,16 +194,16 @@ void Blockchain::syncResponse(const BigNumber  from_block,
         blocks.push_back({ block->id(), content });
         // blocks.push_back(block.value());
 
-        if (blocks.size() >= 1000) {
-            auto ser = MessagePack::serialize(blocks);
-            auto res = qCompress(QByteArray::fromStdString(ser));
+        // if (blocks.size() >= 1000) {
+        //     auto ser = MessagePack::serialize(blocks);
+        //     auto res = qCompress(QByteArray::fromStdString(ser));
 
-            responder.send_response(res.toStdString(),
-                                    MessageType::BlockchainSyncBlocks,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
-            blocks.clear();
-        }
+        //     responder.send_response(res.toStdString(),
+        //                             MessageType::BlockchainSyncBlocks,
+        //                             SendMode::Focused,
+        //                             MessageStatus::Response);
+        //     blocks.clear();
+        // }
 
         // if (block->isGenesisBlock()) {
         //     node->network()->send_message(block->getGenesisBlockConst(),
@@ -227,10 +231,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
     auto ser = MessagePack::serialize(blocks);
     auto res = qCompress(QByteArray::fromStdString(ser));
 
-    responder.send_response(res.toStdString(),
-                            MessageType::BlockchainSyncBlocks,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    responder.send_response(ser, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }

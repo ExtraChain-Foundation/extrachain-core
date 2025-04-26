@@ -140,6 +140,8 @@ public:
         : network_manager(manager) {
     }
 
+    Responder(const Responder&) = default;
+
     template <class T>
     std::string send_response(const T& data, MessageType type, SendMode send_mode, MessageStatus status) const {
         if (network_manager == nullptr) {

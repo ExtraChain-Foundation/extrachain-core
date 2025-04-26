@@ -594,12 +594,12 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
-        || message_type == MessageType::BlockchainSyncBlocks) {
+    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment) {
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::BlockchainSyncBlocks) {
         priority = SocketService::Priority::High;
     }
 
@@ -1502,10 +1502,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        emit node->blockchain()->syncResponseFromNetwork(sync_result->from,
-                                                         sync_result->to,
-                                                         sync_result->is_light,
-                                                         responder);
+        node->blockchain()->syncResponse(sync_result->from, sync_result->to, sync_result->is_light, responder);
         break;
     }
 
