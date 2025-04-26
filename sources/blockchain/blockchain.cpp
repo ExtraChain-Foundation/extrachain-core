@@ -155,7 +155,7 @@ void Blockchain::syncResponse(const BigNumber  from_block,
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
-    blocks.reserve(110);
+    blocks.reserve(500);
 
     if (is_light) {
         auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
