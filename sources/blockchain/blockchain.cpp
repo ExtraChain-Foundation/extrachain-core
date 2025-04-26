@@ -116,18 +116,15 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     } else {
         eLog("[Blockchain] Sync from {} to {}", package.from, package.to);
 
-        auto resp = Responder(responder.value());
-        QTimer::singleShot(10, [this, resp, package]() mutable {
-            resp.set_message_id(
-                Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                      + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                    .substr(0, 15));
-            node->network()->send_message(package,
-                                          MessageType::BlockchainSync,
-                                          SendMode::Focused,
-                                          MessageStatus::Request,
-                                          resp);
-        });
+        responder->set_message_id(
+            Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                  + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                .substr(0, 15));
+        node->network()->send_message(package,
+                                      MessageType::BlockchainSync,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder.value());
     }
 }
 
