@@ -231,7 +231,10 @@ void Blockchain::syncResponse(const BigNumber  from_block,
     auto ser = MessagePack::serialize(blocks);
     auto res = qCompress(QByteArray::fromStdString(ser));
 
-    responder.send_response(ser, MessageType::BlockchainSyncBlocks, SendMode::Focused, MessageStatus::Response);
+    responder.send_response(res.toStdString(),
+                            MessageType::BlockchainSyncBlocks,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
 }
