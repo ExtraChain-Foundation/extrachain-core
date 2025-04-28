@@ -56,6 +56,7 @@ struct VPNConfigStorage {
         std::string nextNodeID;
         std::string nextNodeIP;
         std::string nextNodeNetworkIdentifier;
+        qint64      lastRunExecuteTS = -1;
         qint64      lastUpdateRequsterTS;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
