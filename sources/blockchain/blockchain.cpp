@@ -116,15 +116,11 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     } else {
         eLog("[Blockchain] Sync from {} to {}", package.from, package.to);
 
-        responder->set_message_id(
-            Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                  + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                .substr(0, 15));
         node->network()->send_message(package,
                                       MessageType::BlockchainSync,
                                       SendMode::Focused,
                                       MessageStatus::Request,
-                                      responder.value());
+                                      responder->with_new_message_id());
     }
 }
 
@@ -428,7 +424,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
         removeAll(false, true);
     }
 
-    int count = std::min(requests_count, 5);
+    int count = std::min(requests_count, 3);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -544,6 +540,7 @@ void Blockchain::send_request_blocks() {
 
     eLog("BC 2");
     Responder responder(node->network());
+    responder = responder.with_new_message_id();
     for (const auto &[id, _] : nodes_by_block) {
         // TODO
         responder.add_identifier(id);
