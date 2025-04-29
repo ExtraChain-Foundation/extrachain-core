@@ -599,7 +599,8 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
-        || message_type == MessageType::BlockchainSync || message_type == MessageType::BlockchainSyncLastInfo) {
+        || message_type == MessageType::BlockchainSync || message_type == MessageType::BlockchainSyncLastInfo
+        || message_type == MessageType::BlockchainSyncBlocks) {
         priority = SocketService::Priority::High;
     }
 
