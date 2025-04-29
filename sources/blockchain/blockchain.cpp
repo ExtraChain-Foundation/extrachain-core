@@ -222,27 +222,23 @@ void Blockchain::syncResponse(const BigNumber  from_block,
     auto currentLastBlock = read_last_block();
     mutex.unlock();
 
-    const int MAX_SIZE = 489;
+    const int MAX_SIZE        = 489;
     const int CLOSE_THRESHOLD = 20;
 
-    if (currentLastBlock.has_value() &&
-        currentLastBlock->id() > lastIndex &&
-        blocks.size() < MAX_SIZE &&
-        (currentLastBlock->id() - to_block) < BigNumber(CLOSE_THRESHOLD)) {
+    if (currentLastBlock.has_value() && currentLastBlock->id() > lastIndex && blocks.size() < MAX_SIZE
+        && (currentLastBlock->id() - to_block) < BigNumber(CLOSE_THRESHOLD)) {
 
         eLog("[Blockchain] Adding newer blocks as request is close to current chain tip");
-        for (BigNumber idx = lastIndex + 1;
-             idx <= currentLastBlock->id() && blocks.size() < MAX_SIZE;
-             idx++) {
+        for (BigNumber idx = lastIndex + 1; idx <= currentLastBlock->id() && blocks.size() < MAX_SIZE; idx++) {
 
             auto block = blockIndex.read_block_by_id(idx);
             if (!block.has_value()) {
                 continue;
             }
 
-            auto block_path = blockIndex.buildFilePath(block->id());
+            auto  block_path = blockIndex.buildFilePath(block->id());
             QFile file(block_path.c_str());
-            auto is_open = file.open(QFile::ReadOnly);
+            auto  is_open = file.open(QFile::ReadOnly);
             if (!is_open) {
                 continue;
             }
@@ -376,6 +372,12 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         emit statusChanged(status_);
         start_check();
     } else {
+        if (mode_ == BlockchainMode::Light && blockIndex.getLastSavedId() - sync_from > 100) {
+            eLog("[Blockchain] Prevent light full");
+            start_check();
+            return;
+        }
+
         sync(std::min(sync_from, blockIndex.getLastSavedId()), responder);
     }
 }
@@ -1626,10 +1628,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const Responder            &responder,
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
-    TIMER_START(addBlockNetwork)
+    // TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
         // eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());
+
         node->network()->sendBrodcastMessageFurther(package);
         return std::unexpected(BlockError::BlockchainBusy);
     }
