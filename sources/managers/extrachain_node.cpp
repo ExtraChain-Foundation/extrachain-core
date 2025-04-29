@@ -66,15 +66,11 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
-#endif
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
-    node_enabled.store(false);
-    eLog("Set node_enabled to {}", node_enabled);
+    node_enabled = false;
 
     if (m_thread) {
         m_thread->quit();
@@ -105,6 +101,10 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
 #ifndef RACCOON_CLIENT_CONSOLE
     Logger::instance().set_debug(true);
 #endif
+
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
 }
 
 void ExtraChainNode::process() {
@@ -119,10 +119,6 @@ void ExtraChainNode::process() {
         eFatal("Encryption init error");
         QCoreApplication::exit(-1000);
     }
-
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
-#endif
 
     prepareFolders();
     m_actorIndex         = new ActorIndex(this);
@@ -162,7 +158,6 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    node_enabled = false;
     eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();

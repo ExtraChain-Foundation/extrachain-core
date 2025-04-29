@@ -594,8 +594,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
-        || message_type == MessageType::BlockchainSyncBlocks) {
+    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment) {
         priority = SocketService::Priority::Low;
     }
 
@@ -823,13 +822,6 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
 void NetworkManager::messageReceived(const std::string &message,
                                      const std::string &ip,
                                      const std::string &identifier) {
-
-    // eLog("node_enabled {}", node_enabled.load());
-
-    if (!node_enabled.load()) {
-        return;
-    }
-
     if (!checkMsgCount(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;
@@ -1497,15 +1489,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::BlockchainSync: {
-        auto sync_result = MessagePack::deserialize<BlockchainSyncPackage>(serialized);
-        if (!sync_result.has_value()) {
+        auto sync_from_block_result = MessagePack::deserialize<BigNumber>(serialized);
+        if (!sync_from_block_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
             break;
         }
-        emit node->blockchain()->syncResponseFromNetwork(sync_result->from,
-                                                         sync_result->to,
-                                                         sync_result->is_light,
-                                                         responder);
+        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), responder);
         break;
     }
 
@@ -1517,9 +1506,7 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        emit node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(),
-                                                               responder,
-                                                               package_data);
+        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder, package_data);
         break;
     }
 

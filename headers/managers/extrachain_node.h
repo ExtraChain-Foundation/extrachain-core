@@ -37,8 +37,7 @@
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 
-#include <atomic>
-static std::atomic<bool> node_enabled { true };
+static bool node_enabled = true;
 
 class DfsController;
 class ActorIndex;
