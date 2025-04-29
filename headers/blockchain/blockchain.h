@@ -328,10 +328,10 @@ signals:
                              const Responder    &responder,
                              const NetworkPackageStorage,
                              bool resend);
-    void syncResponseFromNetwork(const BigNumber  from_block,
-                                 const BigNumber &to_block,
-                                 bool             is_light,
-                                 const Responder &responder);
+    // void syncResponseFromNetwork(const BigNumber  from_block,
+    //                              const BigNumber &to_block,
+    //                              bool             is_light,
+    //                              const Responder &responder);
     void syncResponseVectorFromNetwork(const std::string &blocks,
                                        const Responder   &responder,
                                        const NetworkPackageStorage);
@@ -346,8 +346,8 @@ signals:
      */
     void possibleMiningChange(const bool &possibleMinig);
 
-    void network_status_sync_request_signal(const Responder &responder);
-    void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
+    // void network_status_sync_request_signal(const Responder &responder);
+    // void network_status_sync_response_signal(const BlockchainLastInfo &last_info, const Responder &responder);
 
     void syncStart(BigNumber, BigNumber);
     void syncEnd();

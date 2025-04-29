@@ -1914,13 +1914,13 @@ void Blockchain::process() {
         this->start_check();
     });
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
-    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
+    // connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
-    connect(this, &Blockchain::network_status_sync_request_signal, this, &Blockchain::network_status_sync_request);
-    connect(this,
-            &Blockchain::network_status_sync_response_signal,
-            this,
-            &Blockchain::network_status_sync_response);
+    // connect(this, &Blockchain::network_status_sync_request_signal, this,
+    // &Blockchain::network_status_sync_request); connect(this,
+    //         &Blockchain::network_status_sync_response_signal,
+    //         this,
+    //         &Blockchain::network_status_sync_response);
 
     timer_sync = new QTimer(this);
     connect(timer_sync, &QTimer::timeout, this, &Blockchain::timer_sync_tick);
