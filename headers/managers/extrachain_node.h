@@ -85,10 +85,6 @@ struct SubscriptionRow {
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, block_id, transaction_hash))
 
-#include <atomic>
-
-static std::atomic<bool> node_enabled { true };
-
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
