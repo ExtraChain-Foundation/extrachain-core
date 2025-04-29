@@ -218,6 +218,40 @@ void Blockchain::syncResponse(const BigNumber  from_block,
         // }
     }
 
+    mutex.lock();
+    auto currentLastBlock = read_last_block();
+    mutex.unlock();
+
+    const int MAX_SIZE = 489;
+    const int CLOSE_THRESHOLD = 20;
+
+    if (currentLastBlock.has_value() &&
+        currentLastBlock->id() > lastIndex &&
+        blocks.size() < MAX_SIZE &&
+        (currentLastBlock->id() - to_block) < BigNumber(CLOSE_THRESHOLD)) {
+
+        eLog("[Blockchain] Adding newer blocks as request is close to current chain tip");
+        for (BigNumber idx = lastIndex + 1;
+             idx <= currentLastBlock->id() && blocks.size() < MAX_SIZE;
+             idx++) {
+
+            auto block = blockIndex.read_block_by_id(idx);
+            if (!block.has_value()) {
+                continue;
+            }
+
+            auto block_path = blockIndex.buildFilePath(block->id());
+            QFile file(block_path.c_str());
+            auto is_open = file.open(QFile::ReadOnly);
+            if (!is_open) {
+                continue;
+            }
+            auto content = file.readAll().toStdString();
+            blocks.push_back({ block->id(), content });
+            eLog("[Blockchain] Added block {} to response", idx);
+        }
+    }
+
     // mode == BlockchainMode::Light ???????????????
 
     if (blocks.empty()) {
@@ -421,7 +455,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
     auto zero_block = read_block_by_id(BigNumber(0));
     if (zero_block.has_value() && last_info.last_hash != "" && last_info.last_block_id != BigNumber(-1)
         && zero_block->getDate() < last_info.zero_date) {
-        removeAll(false, true);
+        emit removeAll(false, true);
     }
 
     int count = std::min(requests_count, 3);
