@@ -51,14 +51,18 @@ struct VPNConfigStorage {
         std::string uuid;
         int         chainIndex;
         std::string requesterNodeID;
+        std::string requesterPublicKey;
+        std::string nextPublicKey;
         std::string nextNodeID;
         std::string nextNodeIP;
         std::string nextNodeNetworkIdentifier;
+        qint64      lastRunExecuteTS = -1;
         qint64      lastUpdateRequsterTS;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
 
-        qint64 prevPackets = -1;
+        qint64 lastWGTimestampRequester = -1;
+        qint64 lastWGTimestampNext = -1;
     };
 
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
