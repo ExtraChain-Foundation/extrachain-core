@@ -822,6 +822,10 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
 void NetworkManager::messageReceived(const std::string &message,
                                      const std::string &ip,
                                      const std::string &identifier) {
+    if (!node_enabled.load()) {
+        return;
+    }
+
     if (!checkMsgCount(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;

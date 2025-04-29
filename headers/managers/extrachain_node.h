@@ -37,7 +37,9 @@
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 
-static bool node_enabled = true;
+#include <atomic>
+
+static std::atomic<bool> node_enabled { true };
 
 class DfsController;
 class ActorIndex;
@@ -82,6 +84,10 @@ struct SubscriptionRow {
     std::string   transaction_hash;
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, block_id, transaction_hash))
+
+#include <atomic>
+
+static std::atomic<bool> node_enabled { true };
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT

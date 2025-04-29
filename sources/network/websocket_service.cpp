@@ -104,6 +104,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
 }
 
 WebSocketService::~WebSocketService() {
+    closeSocket();
     eLog("[WS] I'm socket, i'm death");
 }
 
@@ -293,10 +294,11 @@ void WebSocketService::processMessage(const QByteArray &message) {
 }
 
 void WebSocketService::send_message(const QByteArray &data, Priority priority) {
-    if (!is_active()) {
+    if (!is_active() || closed_) {
         eLog("[WS] Try to send without activation {}", data.left(35));
         return;
     }
+
     if (data.isEmpty()) {
         eCritical("[WS] Error send size");
         emit error(Network::SocketServiceError::IncorrectMessage,
@@ -339,6 +341,10 @@ bool WebSocketService::canSendMore() const {
 }
 
 void WebSocketService::tryDequeueMessage() {
+    if (closed_) {
+        return;
+    }
+
     if (!canSendMore()) {
         waiting_buffer_space_ = true;
         emit needToTryDequeue();
@@ -367,7 +373,7 @@ void WebSocketService::tryDequeueMessage() {
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
-    if (data.isEmpty()) {
+    if (data.isEmpty() || closed_) {
         return;
     }
 
