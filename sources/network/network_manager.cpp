@@ -599,7 +599,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
-        || message_type == MessageType::BlockchainSyncBlocks) {
+        || message_type == MessageType::BlockchainSync || message_type == MessageType::BlockchainSyncLastInfo) {
         priority = SocketService::Priority::High;
     }
 
@@ -1528,7 +1528,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->blockchain()->network_status_sync_request_signal(responder);
+            node->blockchain()->network_status_sync_request(responder);
         } else if (status == MessageStatus::Response) {
             auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
             if (!last_info_result.has_value()) {
@@ -1536,7 +1536,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->blockchain()->network_status_sync_response_signal(last_info_result.value(), responder);
+            node->blockchain()->network_status_sync_response(last_info_result.value(), responder);
         }
         break;
     }
