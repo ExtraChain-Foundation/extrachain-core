@@ -57,6 +57,7 @@ public:
 signals:
     void sendMessageInternal(const QByteArray &data);
     void needToTryDequeue();
+    void closeSocketSig();
 
 private slots:
     void onTextMessage(const QString &message);
@@ -73,7 +74,9 @@ private:
     void handshake();
 
     QWebSocket *m_ws = nullptr;
-    QTimer      m_timer;
+
+    QTimer *m_pingTimer   = nullptr;
+    int     m_failedPongs = 0;
 
     void tryDequeueMessage();
     bool canSendMore() const;

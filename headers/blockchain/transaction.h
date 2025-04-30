@@ -139,7 +139,8 @@ public:
     virtual bool isEmpty() const;
     virtual bool isBurn() const;
     bool         isSigned() const;
-    auto         operator<=>(const Transaction &) const = default;
+    bool         operator<(const Transaction &other) const;
+
     bool         operator==(const Transaction &transaction) const;
     void         operator=(const Transaction &transaction);
     Transaction &operator=(Transaction &&other) noexcept;

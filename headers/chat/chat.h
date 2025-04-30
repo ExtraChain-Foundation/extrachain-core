@@ -23,13 +23,34 @@
 #include "encryption/encryption_tools.h"
 
 namespace Chat {
-    struct Chat {
-        ActorId                myself;
-        std::optional<ActorId> another;
-        KeyBytes               chat_key;
-
-        ActorId     file_actor_id;
-        std::string file_id;
+    enum ChatType {
+        Dialogue,
+        Group,
+        Channel,
+        Bot
     };
-    BOOST_DESCRIBE_STRUCT(Chat, (), (myself, another, chat_key, file_actor_id, file_id))
+
+    struct ChatData {
+        std::optional<ChatType> chat_type;
+        std::optional<ActorId>  peer_id;
+        // std::optional<std::vector<ActorId>> peers_id;
+    };
+    BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
+
+    struct Chat {
+        std::string id;
+        ActorId     owner_id;
+        std::string file_id;
+        ChatData    chat;
+        KeyBytes    chat_key;
+    };
+    BOOST_DESCRIBE_STRUCT(Chat, (), (id, chat_key, chat, owner_id, file_id))
+
+    struct ChatInvite {
+        ActorId                 owner_id;
+        std::string             file_id;
+        std::optional<ChatType> chat_type;
+        KeyBytes                chat_key;
+    };
+    BOOST_DESCRIBE_STRUCT(ChatInvite, (), (owner_id, file_id, chat_type, chat_key))
 } // namespace Chat

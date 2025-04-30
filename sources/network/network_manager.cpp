@@ -23,6 +23,7 @@
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "network/upnpconnection.h"
+#include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
@@ -99,6 +100,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+
     /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
@@ -143,64 +146,73 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    if (first_node_ == localIp().toStdString()) {
-        m_reconnectTimer->stop();
-        return;
-    }
+    // if (first_node_ == localIp().toStdString()) {
+    //     m_reconnectTimer->stop();
+    //     return;
+    // }
 
-    bool is_first_node = false;
+    bool                      skip_first_node = false;
+    auto                      need_reconnect  = reconn_;
+    std::set<SocketService *> to_close;
 
     {
         auto connectionsLocked = *m_connections;
         for (const auto &el : *connectionsLocked) {
-            if (el->ip() == first_node_) {
-                is_first_node = el->is_active();
+            // eLog("_____________");
+            if (el->is_closed()) {
+                // if (Utils::current_date_ms() - el->timestamp() > 10000) {
+                //     s.insert(el);
+                // }
+                continue;
+            }
 
-                if (!is_first_node) {
-                    // el->close();
+            if (el->ip() == first_node_) {
+                bool is_early = Utils::current_date_ms() - el->timestamp() < 30000;
+
+                if (!is_early && !el->is_active()) {
+                    skip_first_node = false;
+                    to_close.insert(el);
+                    break;
+                } else {
+                    skip_first_node = true;
                 }
-                break;
+            }
+
+            if (el->timestamp() != 0 && need_reconnect.contains(el->ip().toStdString())) {
+                need_reconnect.erase(el->ip().toStdString());
+            }
+
+            if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
+                eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
+                // to_close.insert(el);
             }
         }
     }
 
-    if (!is_first_node) {
+    for (const auto &el : to_close) {
+        emit el->close(Network::SocketServiceError::Secs10Inactive);
+    }
+
+    if (!skip_first_node) {
         eLog("[Network] Reconnect to first node");
-        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
-    }
-
-    return;
-
-    /*
-    eLog("Count reconnections: {}", m_reconnectionsToIdentifier->size());
-    auto m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-    for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
-         ++it) {
-        if (failed_ips.contains(it->first.ip.toStdString())) {
-            return;
-        }
-
-        connectToWebSocket(it->first.ip, it->first.port);
-    }
-    */
-}
-
-void NetworkManager::reconnectSocket(const NetworkReconnect &connectInfo, QString identifier) {
-    auto connectionsLocked = *m_connections;
-    for (auto it = connectionsLocked->begin(); it != m_connections->end(); ++it) {
-        if ((*it)->identifier() == identifier) {
-            emit(*it)->close();
-            // emit(*it)->finished();
-        }
-        break;
-    }
-
-    if (failed_ips.contains(connectInfo.ip.toStdString())) {
+        emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
     }
 
-    eLog("Reconnect socket: {} {}", connectInfo.ip, connectInfo.port);
-    connectToWebSocket(connectInfo.ip, connectInfo.port);
+    for (const auto &[ip, count] : need_reconnect) {
+        eLog("[Network] Reconnect to node: {}", ip);
+
+        if (failed_ips.contains(ip)) {
+            continue;
+        }
+
+        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        // reconn_[ip] += 1; // count
+
+        // if (reconn_[ip] > 1000) {
+        //     reconn_.erase(ip);
+        // }
+    }
 }
 
 void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
@@ -230,6 +242,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
+
+        if (service->ip() != first_node()) {
+            reconn_.insert({ service->ip().toStdString(), 1 });
+        }
     });
 
     {
@@ -298,13 +314,16 @@ void NetworkManager::removeConnection(const QString &identifier) {
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
-    // auto connectionsLocked = *m_connections;
-    // for (const auto &connection : *connectionsLocked) {
-    //     connection->final();
-    //     emit connection->close();
-    //     // emit connection->finished();
-    // }
-    m_connections->clear();
+    std::set<SocketService *> copied;
+    {
+        auto connectionsLocked = *m_connections;
+        copied                 = **m_connections;
+    }
+
+    for (const auto &connection : copied) {
+        connection->flush();
+        emit connection->close();
+    }
 }
 
 void NetworkManager::checkConnectionsStatus() {
@@ -367,10 +386,10 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNode(const QString    &ip,
-                                   Network::Protocol protocol,
-                                   const bool        request,
-                                   const bool        isConstant) {
+void NetworkManager::connectToNodeSlot(const QString    &ip,
+                                       Network::Protocol protocol,
+                                       const bool        request,
+                                       const bool        isConstant) {
     if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -406,8 +425,8 @@ void NetworkManager::connectToWebSocket(const QString &ip,
     }
 
     auto service = new WebSocketService(nullptr, node, this, isConstant);
-    service->open(ip, port);
     connectWsService(service, requestListNodes);
+    service->open(ip, port);
     m_reconnectionsToIdentifier
         ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
 }
@@ -578,7 +597,8 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::BlockchainSyncBlocks) {
         priority = SocketService::Priority::High;
     }
 
@@ -802,6 +822,13 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
 void NetworkManager::messageReceived(const std::string &message,
                                      const std::string &ip,
                                      const std::string &identifier) {
+
+    // eLog("node_enabled {}", node_enabled.load());
+
+    if (!node_enabled.load()) {
+        return;
+    }
+
     if (!checkMsgCount(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;
@@ -1228,6 +1255,7 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->network_response_file_state(file_state_result->owner_id,
                                                      file_state_result->file_id,
                                                      file_state_result->state,
+                                                     file_state_result->hash,
                                                      responder);
         }
 
@@ -1312,6 +1340,7 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsVectorCreation:
     case MessageType::DfsVectorContent: {
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
         if (!db_content_result.has_value()) {
@@ -1321,7 +1350,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
         node->dfs()->network_response_content_vector(db_content_result.value());
 
-        // broadcast and not broadcast?
+        if (type == MessageType::DfsVectorCreation) {
+            sendBrodcastMessageFurther(package_data);
+        }
+
         break;
     }
 
@@ -1335,21 +1367,6 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_vector_add(db_content_result->owner_id,
                                         db_content_result->file_id,
                                         db_content_result->row);
-
-        sendBrodcastMessageFurther(package_data);
-
-        break;
-    }
-    case MessageType::DfsVectorRemove: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowRemove>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for vector remove", type);
-            break;
-        }
-
-        node->dfs()->network_vector_remove(db_content_result->owner_id,
-                                           db_content_result->file_id,
-                                           db_content_result->row);
 
         sendBrodcastMessageFurther(package_data);
 
@@ -1532,6 +1549,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew) {
+        reconn_.erase(ip);
         failed_ips.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;
@@ -1591,6 +1609,47 @@ void NetworkManager::localInizialization() {
     // eLog("Tunnel creation started!");
     // upnpDis->makeTunnel(extPort, extPort, " UDP ", "Discovery tunnel of ExtraChain ");
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
+
+    // UPnP v2
+    upnpConnector = std::make_unique<UPnPConnector>(local);
+    QObject::connect(upnpConnector.get(),
+                     &UPnPConnector::deviceDiscovered,
+                     [&](const QHostAddress &address, const QString &location) {
+                         std::cout << "Discovered device at " << address.toString().toStdString()
+                                   << " with location: " << location.toStdString() << std::endl;
+                         // Now retrieve and parse the device description.
+                         upnpConnector->retrieveDeviceDescription(QUrl(location));
+                     });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::errorOccurred, [](const QString &errorMessage) {
+        std::cout << "Error: " << errorMessage.toStdString() << std::endl;
+    });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::soapResponseReceived, [this](const QString &response) {
+        std::cout << "SOAP response: " << response.toStdString() << std::endl;
+    });
+
+    QObject::connect(upnpConnector.get(), &UPnPConnector::controlURLFound, [this](const QString &response) {
+        // Example parameters:
+        QUrl    controlUrl(response);
+        int     internalPort   = 8080;  // The port on your internal application
+        int     externalPort   = 8080;  // The external port on your router
+        QString protocol       = "TCP"; // Typically TCP
+        QString description    = "MyApp Tunnel";
+        QString internalClient = local->ip().toString(); // Your internal IP address
+
+        // Call addPortMapping to establish the tunnel.
+        upnpConnector
+            ->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
+        // Call getSpecificPortMappingEntry to check if port has been mapped.
+        upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+
+        // upnpConnector->removePortMapping(controlUrl, externalPort, protocol);
+        // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+    });
+
+    // Uncomment to start UPnP connection
+    // upnpConnector->discoverDevices();
 }
 
 std::string NetworkManager::getNetworkVPNHash() noexcept {
@@ -1703,25 +1762,35 @@ void NetworkManager::onNewWsConnection() {
 bool NetworkManager::removeOneConnection() {
     auto connectionsLocked = *m_connections;
     bool isChanged         = false;
-    for (auto it = connectionsLocked->begin(); it != connectionsLocked->end(); ++it) {
-        if (!(*it)->is_constant()) {
-            eLog("[NetworkManager] Socket with ip {} was changed to another", (*it)->ip());
+
+    SocketService *doomed;
+
+    for (auto socket : *connectionsLocked) {
+        if (!socket->is_constant()) {
+            eLog("[NetworkManager] Socket with ip {} was changed to another", socket->ip());
+
+            doomed = socket;
             //
-            connectionsLocked->erase(it);
+            // connectionsLocked->erase(it);
 
-            NetworkReconnect tempConnection { .ip       = (*it)->ip(),
-                                              .port     = (*it)->port(),
-                                              .protocol = Network::Protocol::WebSocket };
+            // NetworkReconnect tempConnection { .ip       = (*it)->ip(),
+            //                                   .port     = (*it)->port(),
+            //                                   .protocol = Network::Protocol::WebSocket };
 
-            auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
-            auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
-            if (findRes != reconnectionsToIdentifierLocked->end())
-                reconnectionsToIdentifierLocked->erase(tempConnection);
+            // auto reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
+            // auto findRes                         = reconnectionsToIdentifierLocked->find(tempConnection);
+            // if (findRes != reconnectionsToIdentifierLocked->end())
+            //     reconnectionsToIdentifierLocked->erase(tempConnection);
 
             isChanged = true;
             break;
         }
     }
+
+    if (isChanged) {
+        emit doomed->close();
+    }
+
     return isChanged;
 }
 
@@ -1794,7 +1863,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(5000);
+        request.setTransferTimeout(2000);
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;

@@ -107,11 +107,12 @@ bool DbConnector::open() {
         eWarning("[DbConnector] {}, failed to open database: {}", m_file, sqlite3_errmsg(db));
         return false;
     } else {
+        if (!QFile::exists(m_file.c_str())) {
+            // eFatal("[DbConnector] Open error: {}", m_file);
+            return false;
+        }
+
         m_open = true;
-
-        if (!QFile::exists(m_file.c_str()))
-            eFatal("[DbConnector] Open error: {}", m_file);
-
         return true;
     }
 }

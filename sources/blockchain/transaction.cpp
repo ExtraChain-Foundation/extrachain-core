@@ -216,6 +216,37 @@ bool Transaction::isSigned() const {
     return !this->m_signature.empty();
 }
 
+bool Transaction::operator<(const Transaction &other) const {
+    if (m_hash != other.m_hash)
+        return m_hash < other.m_hash;
+
+    if (m_sender != other.m_sender)
+        return m_sender < other.m_sender;
+
+    if (m_receiver != other.m_receiver)
+        return m_receiver < other.m_receiver;
+
+    if (m_amount != other.m_amount)
+        return m_amount < other.m_amount;
+
+    if (m_token != other.m_token)
+        return m_token < other.m_token;
+
+    if (m_prevBlock != other.m_prevBlock)
+        return m_prevBlock < other.m_prevBlock;
+
+    if (m_data != other.m_data)
+        return m_data < other.m_data;
+
+    if (m_type != other.m_type)
+        return static_cast<int>(m_type) < static_cast<int>(other.m_type);
+
+    return std::lexicographical_compare(m_signature.begin(),
+                                        m_signature.end(),
+                                        other.m_signature.begin(),
+                                        other.m_signature.end());
+}
+
 bool Transaction::operator==(const Transaction &transaction) const {
     if (this->type() != transaction.type()) {
         return false;

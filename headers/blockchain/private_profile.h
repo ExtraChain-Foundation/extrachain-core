@@ -52,7 +52,9 @@ struct ImportedUser {
     uint64_t                                 creation_date = 0;
     uint64_t                                 modified_date = 0;
 };
-BOOST_DESCRIBE_STRUCT(ImportedUser, (), (network, date, system, actors, imports, wallet_names))
+BOOST_DESCRIBE_STRUCT(ImportedUser,
+                      (),
+                      (network, date, system, main, actors, imports, wallet_names, creation_date, modified_date))
 
 class ExtraChainNode;
 
@@ -63,10 +65,15 @@ public:
                                                                          const Actor<KeyPrivate> &main_actor,
                                                                          const std::string       &hash,
                                                                          ExtraChainNode          *node);
-    static std::expected<PrivateProfile, PrivateProfileReadError> read(const ActorId     &actor_id,
-                                                                       const std::string &hash,
-                                                                       ExtraChainNode    *node);
-    static PrivateProfile load(const ActorId &actor_id, const std::string &hash, ExtraChainNode *node);
+    static std::expected<PrivateProfile, PrivateProfileReadError> read(
+        const ActorId                &actor_id,
+        const std::string            &hash,
+        ExtraChainNode               *node,
+        const std::optional<KeyPass> &key = std::nullopt);
+    static PrivateProfile load(const ActorId                &actor_id,
+                               const std::string            &hash,
+                               ExtraChainNode               *node,
+                               const std::optional<KeyPass> &key = std::nullopt);
     static PrivateProfile import(const ImportedUser &imported_user, const std::string &hash, ExtraChainNode *node);
 
     const Actor<KeyPrivate>              &system() const;
@@ -107,8 +114,8 @@ public:
 
 private:
     void                                                   save(std::uint64_t modified_date = 0);
-    std::expected<PrivateProfile, PrivateProfileReadError> read();
-    void                                                   load();
+    std::expected<PrivateProfile, PrivateProfileReadError> read(const std::optional<KeyPass> &key = std::nullopt);
+    void                                                   load(const std::optional<KeyPass> &key = std::nullopt);
     std::filesystem::path                                  path();
 
     ActorId                                  system_;

@@ -63,17 +63,23 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("ExtraChainNodeWrapper::~ExtraChainNodeWrapper");
+    node_enabled.store(false);
+    eLog("Set node_enabled to {}", node_enabled);
 
     if (m_thread) {
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
-    } else
+    } else {
         delete node;
+    }
 }
 
 void ExtraChainNodeWrapper::Init(bool makeAsync) {
@@ -96,10 +102,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
 #ifndef RACCOON_CLIENT_CONSOLE
     Logger::instance().set_debug(true);
 #endif
-
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_DFL);
-#endif
 }
 
 void ExtraChainNode::process() {
@@ -114,6 +116,10 @@ void ExtraChainNode::process() {
         eFatal("Encryption init error");
         QCoreApplication::exit(-1000);
     }
+
+#ifdef Q_OS_LINUX
+    signal(SIGPIPE, SIG_IGN);
+#endif
 
     prepareFolders();
     m_actorIndex        = new ActorIndex(this);
@@ -146,6 +152,8 @@ void ExtraChainNode::process() {
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
     connectSignals();
+
+    node_enabled = true;
     emit NodeInitialised();
 }
 
@@ -154,6 +162,7 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
+    node_enabled = false;
     eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
@@ -233,8 +242,39 @@ bool ExtraChainNode::create_usernames_vector() {
     return true;
 }
 
+bool ExtraChainNode::create_chat_templates() {
+    auto system_actor_id   = accountController()->system_actor().id();
+    auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
+                                 .value()
+                                 .use_id()
+                                 .add_fields({ Dfs::Field::Json("chat").not_null(),
+                                               Dfs::Field::ActorId("owner_id").not_null(),
+                                               Dfs::Field::String("file_id").not_null(),
+                                               Dfs::Field::String("chat_key").not_null() });
+
+    auto my_chats_result = dfs()->store_template(system_actor_id, my_chats_template);
+    if (!my_chats_result.has_value()) {
+        eCritical("Can't create my chats template, because {}", my_chats_result.error());
+        return false;
+    } else {
+        eLog("My chats template created");
+    }
+
+    auto chat_template = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
+        { Dfs::Field::Json("message").not_null() });
+
+    auto chat_result = dfs()->store_template(system_actor_id, chat_template);
+    if (!chat_result.has_value()) {
+        eCritical("Can't create chat template, because {}", chat_result.error());
+        return false;
+    } else {
+        eLog("Chats template created");
+    }
+
+    return true;
+}
+
 bool ExtraChainNode::create_subscription_template() {
-    auto system_actor_id       = accountController()->system_actor().id();
     auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
                                      .value()
                                      .add_fields({ Dfs::Field::Integer("type").not_null(),
@@ -243,7 +283,8 @@ bool ExtraChainNode::create_subscription_template() {
                                                    Dfs::Field::String("block_id").not_null(),
                                                    Dfs::Field::String("transaction_hash").not_null() });
 
-    auto template_res = dfs()->store_template(system_actor_id, subscription_template);
+    auto system_actor_id = accountController()->system_actor().id();
+    auto template_res    = dfs()->store_template(system_actor_id, subscription_template);
     if (!template_res.has_value()) {
         eCritical("Can't create subscription template, because {}", template_res.error());
         return false;
@@ -267,11 +308,8 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     }
 
     auto system_actor_id = accountController()->system_actor().id();
-    auto sub_res         = dfs()->store_vector(system_actor_id,
-                                       system_actor_id,
-                                       file_name,
-                                       search_result->actor_id,
-                                       search_result->file_id);
+    auto sub_res =
+        dfs()->store_vector(system_actor_id, system_actor_id, file_name, network_id, search_result->file_id);
     if (!sub_res.has_value()) {
         return false;
     }
@@ -323,7 +361,7 @@ void ExtraChainNode::create_new_network_dfs() {
 
 void ExtraChainNode::start() {
     if (!started) {
-        QTimer::singleShot(500, this, &ExtraChainNode::ready);
+        QTimer::singleShot(10, this, &ExtraChainNode::ready);
         // emit startNetwork();
         started = true;
 
@@ -470,7 +508,7 @@ void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map);
+    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
         emit subscriptionAdded(row.owner_id, row.file_id);

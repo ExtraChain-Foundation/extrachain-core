@@ -72,25 +72,27 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
 #endif
 
         auto current = fs_path;
-        while (true) {
-            if (std::filesystem::is_symlink(current)) {
-                return std::unexpected(FsError::SymlinkFound);
-            }
-            if (current.empty() || current.root_path() == current) {
-                break;
-            }
-            current = current.parent_path();
-        }
+#ifndef Q_OS_IOS
+        // while (true) {
+        //     if (std::filesystem::is_symlink(current)) {
+        //         return std::unexpected(FsError::SymlinkFound);
+        //     }
+        //     if (current.empty() || current.root_path() == current) {
+        //         break;
+        //     }
+        //     current = current.parent_path();
+        // }
 
-        auto parent = fs_path.parent_path();
-        if (!parent.empty()) {
-            if (!std::filesystem::exists(parent)) {
-                return std::unexpected(FsError::ParentNotFound);
-            }
-            if (!std::filesystem::is_directory(parent)) {
-                return std::unexpected(FsError::ParentNotDirectory);
-            }
-        }
+        // auto parent = fs_path.parent_path();
+        // if (!parent.empty()) {
+        //     if (!std::filesystem::exists(parent)) {
+        //         return std::unexpected(FsError::ParentNotFound);
+        //     }
+        //     if (!std::filesystem::is_directory(parent)) {
+        //         return std::unexpected(FsError::ParentNotDirectory);
+        //     }
+        // }
+#endif
 
         return FsPath(std::filesystem::weakly_canonical(fs_path));
     } catch (const std::exception& e) {

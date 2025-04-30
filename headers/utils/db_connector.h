@@ -93,16 +93,29 @@ namespace Utils {
                         if constexpr (!std::is_same_v<decltype(D), magic::custom_magic_tag>) {
                             if (key == magic::detail::clean_field_name(D.name)) {
                                 using MemberType = std::remove_reference_t<decltype(std::declval<T>().*D.pointer)>;
-
                                 if constexpr (magic::is_optional<MemberType>::value) {
                                     if (value.empty()) {
                                         json[key] = boost::json::value(nullptr);
                                     } else {
                                         using BaseType = typename MemberType::value_type;
-                                        json[key]      = stringToJsonValue(value, typeid(BaseType));
+                                        if constexpr (boost::describe::has_describe_members<BaseType>::value) {
+                                            // Try to parse as JSON object for nested structures
+                                            try {
+                                                json[key] = boost::json::parse(value);
+                                            } catch (...) {
+                                                json[key] = value;
+                                            }
+                                        } else {
+                                            json[key] = stringToJsonValue(value, typeid(BaseType));
+                                        }
                                     }
                                 } else if constexpr (boost::describe::has_describe_members<MemberType>::value) {
-                                    json[key] = value;
+                                    // Handle nested structure with boost describe
+                                    try {
+                                        json[key] = boost::json::parse(value);
+                                    } catch (...) {
+                                        json[key] = value;
+                                    }
                                 } else {
                                     json[key] = stringToJsonValue(value, typeid(MemberType));
                                 }
@@ -111,10 +124,12 @@ namespace Utils {
                     });
             }
 
-            return Json::deserialize<T>(boost::json::serialize(json)).transform_error([](const std::string &err) {
-                eLog("Json parse error: {}", err);
-                return Utils::ParseError::Invalid;
-            });
+            auto result = Json::deserialize<T>(boost::json::serialize(json));
+            if (!result.has_value()) {
+                eLog("Json parse error: {}", result.error());
+                return std::unexpected(Utils::ParseError::Invalid);
+            }
+            return result.value();
         } catch (...) {
             return std::unexpected(Utils::ParseError::Invalid);
         }

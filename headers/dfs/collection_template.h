@@ -132,9 +132,13 @@ namespace Dfs {
             return *this;
         }
 
+        void set_type(FieldType type) {
+            m_type = type;
+        }
+
         std::expected<DbColumn, SqlCreateError> to_db_column() const;
 
-        auto operator<=>(const FieldBuilder&) const = default;
+        bool operator==(const FieldBuilder&) const = default;
 
         const std::string& name() const {
             return m_name;
@@ -236,8 +240,9 @@ namespace Dfs {
     public:
         CollectionTemplate() = default;
         static std::expected<CollectionTemplate, SqlCreateError> create(std::string name);
-        CollectionTemplate&                     add_fields(const std::initializer_list<FieldBuilder>& fields);
-        CollectionTemplate&                     preadd_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate& add_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate& preadd_fields(const std::initializer_list<FieldBuilder>& fields);
+        CollectionTemplate& use_id();
         std::expected<DbSchema, SqlCreateError> to_db_schema() const;
 
         const std::string                name() const;
@@ -245,12 +250,20 @@ namespace Dfs {
             return m_fields;
         }
 
+        void set_to_blob() {
+            for (auto& field : m_fields) {
+                field.set_type(FieldType::Blob);
+            }
+        }
+
         void set_actor_file(const ActorId& actor_id, const std::string file_id);
 
-        auto operator<=>(const CollectionTemplate&) const = default;
+        bool operator==(const CollectionTemplate&) const = default;
 
-        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields));
+        BOOST_DESCRIBE_CLASS(CollectionTemplate, (), (), (), (m_name, m_fields, primary));
         // no need actor_id or file_id
+
+        std::optional<FieldBuilder> primary;
 
     private:
         explicit CollectionTemplate(std::string name);

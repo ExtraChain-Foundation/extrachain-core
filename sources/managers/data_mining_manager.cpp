@@ -55,12 +55,8 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#if defined(Q_OS_LINUX) && !defined(RACCOON_CLIENT_CONSOLE)
-
-#endif
-
-#ifndef IS_RC
-    return; // temp
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(RACCOON_CLIENT_CONSOLE)
+    return;
 #endif
 
     if (node->accountController()->empty()) {

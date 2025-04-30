@@ -59,7 +59,7 @@ public:
 
     void import_profile(const ImportedUser &imported_profile, const std::string &hash);
 
-    void renameWallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
+    bool rename_wallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     std::expected<void, LoadError> load(const std::string &hash);
     bool                           load_profile(const ActorId &actor_id, const std::string &hash);

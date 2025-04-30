@@ -39,6 +39,7 @@
 class SocketService;
 class WebSocketService;
 class UPNPConnection;
+class UPnPConnector;
 
 class CalculateTraffic {
 private:
@@ -139,6 +140,8 @@ public:
         : network_manager(manager) {
     }
 
+    Responder(const Responder&) = default;
+
     template <class T>
     std::string send_response(const T& data, MessageType type, SendMode send_mode, MessageStatus status) const {
         if (network_manager == nullptr) {
@@ -213,6 +216,7 @@ private:
     std::set<std::string>           failed_ips;
     std::unique_ptr<UPNPConnection> upnpDis;
     std::unique_ptr<UPNPConnection> upnpNet;
+    std::unique_ptr<UPnPConnector>  upnpConnector;
     QMap<std::string, int>          msgHashList = {};
 
     ExtraChainNode*                              node;
@@ -221,6 +225,8 @@ private:
     SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
+
+    std::map<std::string, int> reconn_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
     std::map<std::string, MessageIdDataWaiting>                                 m_messages_waiting;
@@ -278,6 +284,10 @@ public slots:
 
 signals:
     void finished(); // ThreadPool
+    void connectToNode(const QString&    ip,
+                       Network::Protocol protocol,
+                       const bool        request    = false,
+                       const bool        isConstant = false);
 
 protected:
     void connectToWebSocket(const QString& ip,
@@ -301,13 +311,12 @@ protected slots:
 
 public slots:
     void startNetwork();
-    void connectToNode(const QString&    ip,
-                       Network::Protocol protocol,
-                       const bool        request    = false,
-                       const bool        isConstant = false);
+    void connectToNodeSlot(const QString&    ip,
+                           Network::Protocol protocol,
+                           const bool        request    = false,
+                           const bool        isConstant = false);
     void process();
     void reconnection();
-    void reconnectSocket(const NetworkReconnect& connectInfo, QString identifier);
     void setupProxy(QNetworkProxy::ProxyType type,
                     const QString&           hostName,
                     quint16                  port,

@@ -41,7 +41,6 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    // TODO: vectorupdate
     if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
         return;
     }
@@ -54,15 +53,45 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
                 return;
             }
 
+            if (row->state == Dfs::FileState::Removed) {
+                return;
+            }
+
             if (row->type == Dfs::FileType::File && file_path->exists()) {
                 auto size = file_path->file_size();
                 if (size.has_value() && size == row->size) {
+                    return;
+                }
+
+                if (row->last_modified > dir_row.last_modified) {
                     return;
                 }
             }
 
             if (row->type != Dfs::FileType::File && file_path->exists()) {
                 // return; // TODO: vectorupdate
+            }
+
+            if (row->type == Dfs::FileType::Vector && file_path->exists() && row->hash == dir_row.hash) {
+                auto res = node->dfs()->make_vector(owner_id,
+                                                    dir_row.file_id,
+                                                    false,
+                                                    node->accountController()->system_actor().id());
+                if (res.has_value()) {
+                    auto& [dir_row, dfs_vector] = res.value();
+                    if (row.has_value()) {
+                        auto vector_file_hash = dfs_vector.calculate_template_file_hash();
+                        if (vector_file_hash.has_value()) {
+                            if (dir_row.hash == vector_file_hash.value().first) {
+                                return;
+                            }
+                        }
+                        auto hash_size = dfs_vector.data_hash_size();
+                        if (dir_row.hash == hash_size->first) {
+                            return;
+                        }
+                    }
+                }
             }
         }
     }
@@ -108,8 +137,15 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
 void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                std::string                     identifier) {
+    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
     for (const auto& dir_row : dir_rows) {
         if (dir_row.state == Dfs::FileState::Removed) {
+            continue;
+        }
+
+        if (dir_row.type == Dfs::FileType::File && !need_load) {
             continue;
         }
 
@@ -128,10 +164,6 @@ void LoadManager::check_all_files(std::string identifier) {
         bool is_full   = node->dfs()->mode() == DfsMode::Full;
         bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
 
-        if (!need_load) {
-            continue;
-        }
-
         const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
         if (!dir_rows.has_value()) {
             //
@@ -148,6 +180,10 @@ void LoadManager::check_all_files(std::string identifier) {
                 if (row.type == Dfs::FileType::File && file_path->exists()) {
                     auto size = file_path->file_size();
                     if (size.has_value() && size == row.size) {
+                        continue;
+                    }
+
+                    if (!need_load) {
                         continue;
                     }
                 }
@@ -368,6 +404,7 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
         eWarning("Unknown fragment");
         return;
     }
+
     auto active_download  = active_downloads.at(file_link);
     bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
     if (is_last_fragment) {
@@ -393,6 +430,6 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
     Dfs::Tables::ActorDirFile::update_file_state(owner_id, dir_row.file_id, Dfs::FileState::Ready);
-    node->dfs()->added(owner_id, dir_row);
-    node->dfs()->downloaded(owner_id, dir_row);
+    emit node->dfs()->added(owner_id, dir_row);
+    emit node->dfs()->downloaded(owner_id, dir_row);
 }

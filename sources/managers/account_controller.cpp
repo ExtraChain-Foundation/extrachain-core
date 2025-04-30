@@ -97,11 +97,11 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
     eLog("[Accounts] Imported profile: {}", imported_profile);
 }
 
-void AccountController::renameWallet(const ActorId     &profileActor,
+bool AccountController::rename_wallet(const ActorId     &profileActor,
                                      const ActorId     &actorId,
                                      const std::string &walletName) {
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
-    profile.rename_wallet(actorId, walletName);
+    return profile.rename_wallet(actorId, walletName);
 }
 
 std::expected<void, LoadError> AccountController::load(const std::string &hash) {
@@ -115,9 +115,14 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
         return std::unexpected(LoadError::NoProfiles);
     }
 
+    auto key_result = Cryptography::key_from_password(hash);
+    if (!key_result.has_value()) {
+        return {};
+    }
+
     int count = 0;
     for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node);
+        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
         if (profile.has_value()) {
             count++;
             if (count > 1) {
@@ -147,6 +152,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 
 bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
     auto profile = PrivateProfile::load(actor_id, hash, node);
+
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
@@ -169,8 +175,13 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
     auto              profiles = profilesList();
     std::set<ActorId> multiple_profiles;
 
+    auto key_result = Cryptography::key_from_password(hash);
+    if (!key_result.has_value()) {
+        return {};
+    }
+
     for (auto &actor_id : profiles) {
-        auto profile = PrivateProfile::read(actor_id, hash, node);
+        auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
         if (profile.has_value()) {
             multiple_profiles.insert(actor_id);
         }

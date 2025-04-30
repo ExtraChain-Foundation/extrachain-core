@@ -29,11 +29,16 @@
 #include <QTimer>
 
 #include "blockchain/actor_index.h"
+#include "chat/chat.h"
+#include "chat/message.h"
 #include "managers/account_controller.h"
 #include "blockchain/transaction.h"
 #include "blockchain/private_profile.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
+
+#include <atomic>
+static std::atomic<bool> node_enabled { true };
 
 class DfsController;
 class ActorIndex;
@@ -134,6 +139,7 @@ public:
 
     bool create_new_network(const std::string& login, const std::string& password);
     bool create_usernames_vector();
+    bool create_chat_templates();
     bool create_subscription_template();
     bool create_subscription_vector(const std::string& file_name);
     void create_new_network_dfs();
@@ -242,6 +248,11 @@ signals:
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     void selfTxAdded(const BigNumber& section, std::uint64_t timestamp, const Transaction& tx);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
+
+    void chatsLoaded();
+    void chatAdded(Chat::Chat chat);
+    void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
+    void messageRemoved(ActorId owner_id, std::string file_id, std::string id);
 
 private slots:
     void getAllActorsTimerCall();

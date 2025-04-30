@@ -123,15 +123,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::InvalidName);
     }
 
-#ifdef ANDROID
-    auto tempPath =
-        "dfs/temp"
-        + QString::number(QRandomGenerator::global()->bounded(1000) + QDateTime::currentMSecsSinceEpoch());
-    QFile::copy(newFilePath.string().c_str(), tempPath);
-    fpath       = tempPath.toStdString();
-    newFilePath = fpath;
-#endif
-
     if (!new_file_path.exists()) {
         eLog("[Dfs] Can't load file: file doesn't exist");
         return std::unexpected(Dfs::DfsError::NotExists);
@@ -182,23 +173,16 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         // }
     }
 
-    auto visual_name_new   = visual_name;
-    auto visual_folder_new = visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder);
-
     if (data_security == Dfs::DataSecurity::Public) {
         try {
             std::filesystem::create_directories(place_in_dfs.c_str());
-#ifdef ANDROID
-            std::filesystem::rename(newFilePath, dfsPath);
-#else
             std::filesystem::copy(new_file_path.native(), dfs_path.native());
-#endif
         } catch (std::filesystem::filesystem_error const &err) {
             eWarning("[Dfs] Copy error: {}", err.what());
             return std::unexpected(Dfs::DfsError::NotWritable);
         }
     } else {
-        eLog("security_data = {}", security_data);
+        //  eLog("security_data = {}", security_data);
     }
 
     if (data_security == Dfs::DataSecurity::Self) {
@@ -206,21 +190,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
-            }
-
-            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
-            if (!encrypted_name.has_value()) {
-                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
-            }
-            visual_name_new = Utils::to_base64(encrypted_name.value());
-
-            if (visual_folder_new.has_value()) {
-                auto encrypted_folder =
-                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
-                if (!encrypted_folder.has_value()) {
-                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
-                }
-                visual_folder_new = Utils::to_base64(encrypted_folder.value());
             }
 
             auto res = actor->get().key().encrypt_self_file(new_file_path, dfs_path);
@@ -253,6 +222,16 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
         }
     }
+
+    auto names_result =
+        this->encrypt_name(visual_name,
+                           visual_folder.empty() ? std::nullopt : std::make_optional(visual_folder),
+                           data_security,
+                           security_data);
+    if (!names_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto [visual_name_new, visual_folder_new] = names_result.value();
 
     std::string file_hash     = Utils::calculate_hash_file(dfs_path).value();
     auto        file_size_dfs = dfs_path.file_size();
@@ -354,7 +333,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(
     Dfs::DataSecurity               data_security,
     const Dfs::DataSecurityData    &security_data) {
     std::string file_temp = create_file_id("data");
-    std::string temp_path = std::format("tmp/{}", file_temp);
+    std::string temp_path = fmt::format("tmp/{}", file_temp);
 
     std::ofstream temp_file(temp_path, std::ios::binary);
     if (!temp_file) {
@@ -522,29 +501,38 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    auto res = DfsVector::create(node,
-                                 actor.value(),
-                                 actor->get().id(),
-                                 file_id,
-                                 vector_template,
-                                 data_security,
-                                 security_data);
+    auto dfs_vector =
+        DfsVector::create(node, actor.value(), owner_id, file_id, vector_template, data_security, security_data);
+    if (!dfs_vector.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
 
-    auto [collection_hash, collection_size] =
-        Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
+    // auto [collection_hash, collection_size] =
+    //     Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
     auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
 
+    auto names_result = this->encrypt_name(visual_name, std::nullopt, data_security, security_data);
+    if (!names_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    auto [visual_name_new, _] = names_result.value();
+
+    auto vector_hash = dfs_vector->calculate_template_file_hash();
+    if (!vector_hash.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     Dfs::DirRow dir_row = { .actor_id      = author_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
-                            .hash          = collection_hash,
+                            .hash          = vector_hash.value().first,
                             .folder        = Dfs::Basic::TEMPLATE_VECTOR,
-                            .name          = visual_name,
-                            .size          = collection_size,
+                            .name          = visual_name_new,
+                            .size          = vector_hash.value().second,
                             .created       = 0,
                             .last_modified = 0,
                             .type          = Dfs::FileType::Vector,
@@ -562,7 +550,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     emit stored(owner_id, dir_row);
     broadcast_stored(owner_id, dir_row);
 
-    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows = res->generate_content_package();
+    std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
+        dfs_vector->generate_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -571,7 +560,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
-    node->network()->send_broadcast(rows.value(), MessageType::DfsVectorContent);
+    node->network()->send_broadcast(rows.value(), MessageType::DfsVectorCreation);
 
     return dir_row;
 }
@@ -579,8 +568,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
 bool DfsController::add_vector_row(const ActorId               &owner_id,
                                    const std::string           &file_id,
                                    DbRow                        row,
+                                   const ActorId               &signer_id,
                                    const Dfs::DataSecurityData &security_data) {
-    auto res = make_vector(owner_id, file_id);
+    auto res = make_vector(owner_id, file_id, false, signer_id, security_data);
     if (!res.has_value()) {
         return false;
     }
@@ -590,8 +580,21 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     if (!operation_res) {
         return false;
     }
-    // get id?
-    emit vectorRowAdded(owner_id, dir_row, row);
+    // get and exists check id?
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
+
+    if (row.at("status") == "1") {
+        emit vectorRowAdded(owner_id, dir_row, row);
+    } else {
+        emit vectorRowRemoved(owner_id, dir_row, row);
+    }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row };
     node->network()->send_broadcast(package, MessageType::DfsVectorAdd);
@@ -601,16 +604,25 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
 
 bool DfsController::remove_vector_row(const ActorId     &owner_id,
                                       const std::string &file_id,
-                                      const ActorId     &actor_id) {
-    auto res = make_vector(owner_id, file_id);
+                                      const std::string &primary_data,
+                                      const ActorId     &signer_id) {
+    auto res = make_vector(owner_id, file_id, false, signer_id);
     if (!res.has_value()) {
         return false;
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto row                    = dfs_vector.remove(actor_id);
+    auto row                    = dfs_vector.remove(primary_data);
     if (!row.has_value()) {
         return false;
+    }
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row->at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
     }
 
     auto package = Dfs::Packets::VectorRowAdd { .owner_id = owner_id, .file_id = file_id, .row = row.value() };
@@ -624,18 +636,49 @@ bool DfsController::remove_vector_row(const ActorId     &owner_id,
     return true;
 }
 
-std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId     &owner_id,
-                                                                   const std::string &file_id,
-                                                                   const ActorId     &actor_id) {
-    auto v = DfsVector::load(node, node->accountController()->system_actor(), owner_id, file_id);
+std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId               &owner_id,
+                                                                   const std::string           &file_id,
+                                                                   const std::string           &primary_data,
+                                                                   const Dfs::DataSecurityData &security_data) {
+    auto v = DfsVector::load(node,
+                             node->accountController()->currentProfile().main()->get(),
+                             owner_id,
+                             file_id,
+                             Dfs::DataSecurity::Encrypted,
+                             security_data);
     if (!v.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    auto row = v->read_row(actor_id);
+    auto row = v->read_row(primary_data);
     if (!row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
+
+    return row;
+}
+
+std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows(
+    const ActorId               &owner_id,
+    const std::string           &file_id,
+    const std::string           &where_statement,
+    const Dfs::DataSecurityData &security_data) {
+    auto v = DfsVector::load(node,
+                             node->accountController()->system_actor(),
+                             owner_id,
+                             file_id,
+                             Dfs::DataSecurity::Public,
+                             security_data);
+
+    if (!v.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    auto row = where_statement.empty() ? v->read_rows() : v->read_rows(where_statement);
+    if (!row.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     return row;
 }
 
@@ -728,7 +771,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     dir_row.hash          = hash;
     dir_row.size          = size;
 
-    auto sign = main_actor.key().sign(Utils::calculate_hash(dir_row));
+    auto sign = main_actor.key().sign(dir_row.calculate_hash(owner_id));
     if (!sign.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -766,6 +809,8 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
             if (existing_hash.has_value() && existing_hash.value() == hash) {
                 return true;
             }
+            // if (dir_row->hash == hash) {
+            // }
         }
 
         if (dir_row->type == Dfs::FileType::Collection || dir_row->type == Dfs::FileType::Vector) {
@@ -1032,7 +1077,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->accountController()->currentProfile().main()->get();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
 
     if (!dfs_vector.has_value()) {
@@ -1056,10 +1101,13 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
 }
 
 std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::make_vector(
-    const ActorId     &owner_id,
-    const std::string &file_id,
-    bool               is_network) {
+    const ActorId               &owner_id,
+    const std::string           &file_id,
+    bool                         is_network,
+    const ActorId               &signer_id,
+    const Dfs::DataSecurityData &security_data) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+
     if (!dir_row.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1067,9 +1115,19 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto main_actor = node->accountController()->system_actor();
-    auto dfs_vector = !is_network ? DfsVector::load(node, main_actor, owner_id, file_id)
-                                  : DfsVector::load_network(node, main_actor, owner_id, file_id);
+    auto signer_actor = node->accountController()->currentProfile().get_actor(
+        !signer_id.is_zero() ? signer_id : node->accountController()->currentProfile().main_id());
+    auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
+
+    if (!signer_actor.has_value()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
+    auto dfs_vector =
+        !is_network
+            ? DfsVector::load(node, signer_actor.value(), owner_id, file_id, encryption, security_data)
+            : DfsVector::load_network(node, signer_actor.value(), owner_id, file_id, encryption, security_data);
+
     if (!dfs_vector.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
@@ -1078,7 +1136,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 }
 
 void DfsController::network_response_content_vector(
-    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
+    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
     if (!dfs_vector_result.has_value()) {
         return;
@@ -1097,8 +1155,16 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     }
 
     auto &[dir_row, dfs_vector] = res.value();
-    auto operation_res          = dfs_vector.local_add(row);
+    auto operation_res          = dfs_vector.local_add(row, true);
     // load_manager_.finish_him(owner_id, dir_row);
+
+    auto hash_size = dfs_vector.data_hash_size();
+    if (hash_size.has_value()) {
+        dir_row.hash          = hash_size.value().first;
+        dir_row.size          = hash_size.value().second;
+        dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        Dfs::Tables::ActorDirFile::update_file_metadata(owner_id, dir_row, false);
+    }
 
     if (operation_res) {
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
@@ -1107,22 +1173,6 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
         } else {
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
-    }
-}
-
-void DfsController::network_vector_remove(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
-    auto res = make_vector(owner_id, file_id);
-    if (!res.has_value()) {
-        return;
-    }
-
-    auto &[dir_row, dfs_vector] = res.value();
-    auto row2                   = row;
-    auto operation_res          = dfs_vector.local_add(row2);
-    // load_manager_.finish_him(owner_id, dir_row);
-
-    if (operation_res) {
-        emit vectorRowRemoved(owner_id, dir_row, row);
     }
 }
 
@@ -1138,14 +1188,17 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         return;
     }
 
-    auto file_state =
-        Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = dir_row->state };
+    auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
+                                                .file_id  = file_id,
+                                                .state    = dir_row->state,
+                                                .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
 void DfsController::network_response_file_state(const ActorId     &owner_id,
                                                 const std::string &file_id,
                                                 Dfs::FileState     state,
+                                                const std::string &hash,
                                                 const Responder   &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
 
@@ -1155,6 +1208,7 @@ void DfsController::network_response_file_state(const ActorId     &owner_id,
 
     if (state == Dfs::FileState::Ready) {
         dir_row->state = state;
+        dir_row->hash  = hash;
         load_manager_.add_to_queue(owner_id, dir_row.value(), *responder.identifiers().begin());
     }
 }
@@ -1178,7 +1232,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row->calculate_hash();
+    auto hash              = dir_row->calculate_hash(owner_id);
     auto sign              = actor.value().get().key().sign(hash);
     if (!sign.has_value()) {
         return std::unexpected(false); // sign
@@ -1223,7 +1277,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     dir_row->size          = 0;
     dir_row->state         = Dfs::FileState::Removed;
     dir_row->last_modified = last_modified;
-    auto hash              = dir_row_new.calculate_hash();
+    auto hash              = dir_row_new.calculate_hash(owner_id);
     auto verify            = actor.value().key().verify(hash, sign);
     if (!verify) {
         eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);
@@ -1547,6 +1601,184 @@ Dfs::DfsSize DfsController::calculate_size() {
     m_sizeTaken    = dfs_size.local;
 
     return dfs_size;
+}
+
+std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> DfsController::encrypt_name(
+    const std::string                &visual_name,
+    const std::optional<std::string> &visual_folder,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
+    std::string                visual_name_new   = visual_name;
+    std::optional<std::string> visual_folder_new = visual_folder;
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::Unknown);
+            }
+
+            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder =
+                    actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Actor) {
+        if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+
+            auto encrypted_name =
+                sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder = sender->get().key().encrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                                    receiver.key().public_key());
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Key) {
+        if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+            auto encrypted_name =
+                Cryptography::symmetric_encrypt(ByteArray(visual_name_new).toBytes(), security_key->key);
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(encrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto encrypted_folder =
+                    Cryptography::symmetric_encrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                    security_key->key);
+
+                if (!encrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(encrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    return std::pair { visual_name_new, visual_folder_new };
+}
+
+std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError> DfsController::decrypt_name(
+    const std::string                &visual_name,
+    const std::optional<std::string> &visual_folder,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
+    std::string                visual_name_new   = visual_name;
+    std::optional<std::string> visual_folder_new = visual_folder;
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::Unknown);
+            }
+
+            auto decrypted_name = actor->get().key().decrypt_self(ByteArray(visual_name_new).toBytes());
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder =
+                    actor->get().key().decrypt_self(ByteArray(visual_folder_new.value()).toBytes());
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Actor) {
+        if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
+            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+
+            auto decrypted_name =
+                sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder = sender->get().key().decrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                                    receiver.key().public_key());
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    if (data_security == Dfs::DataSecurity::Key) {
+        if (auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
+            auto decrypted_name =
+                Cryptography::symmetric_decrypt(ByteArray(visual_name_new).toBytes(), security_key->key);
+            if (!decrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            visual_name_new = Utils::to_base64(decrypted_name.value());
+
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+                auto decrypted_folder =
+                    Cryptography::symmetric_decrypt(ByteArray(visual_folder_new.value()).toBytes(),
+                                                    security_key->key);
+
+                if (!decrypted_folder.has_value()) {
+                    return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+                }
+                visual_folder_new = Utils::to_base64(decrypted_folder.value());
+            }
+
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    return std::pair { visual_name_new, visual_folder_new };
 }
 
 std::uint64_t DfsController::calculateDataAmountStored(const std::string &folder) const {
