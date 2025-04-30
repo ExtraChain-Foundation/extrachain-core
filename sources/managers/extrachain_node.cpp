@@ -143,11 +143,11 @@ void ExtraChainNode::process() {
 
     timer_reward = new QTimer(this);
     connect(timer_reward, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_reward->start(60000);
+    timer_reward->start(6000);
 
     timer_info = new QTimer(this);
     connect(timer_info, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
-    timer_info->start(5000);
+    timer_info->start(10000);
 
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
@@ -687,9 +687,11 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} sections. Dfs: {} from {} bytes",
+    eLog("[Node] Dag{}: {} ({}) sections, status: {}. Dfs: {} from {} bytes",
          dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
          dag_->current_section(),
+         dag_->current_section().to_string(NumeralBase::Dec),
+         dag_->status(),
          m_dfs->sizeTaken(),
          m_dfs->totalDfsSize());
 }

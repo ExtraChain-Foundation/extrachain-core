@@ -450,11 +450,6 @@ namespace Dfs {
     namespace Reward {
         static const int       TOLERANCE                   = 100;
         static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
-        struct CoinReward {
-            ActorId        Actor;
-            BigNumberFloat Coin;
-            MSGPACK_DEFINE(Actor, Coin)
-        };
 
         enum TypeFunctioning {
             Base,
@@ -468,14 +463,13 @@ namespace Dfs {
             std::uint64_t   BytesReceived;
             BigNumber       BlocksStored;
             Transaction     transaction;
-
-            MSGPACK_DEFINE(DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction)
+            Transaction     convert;
         };
 
         BOOST_DESCRIBE_STRUCT(
             RequestReward,
             (),
-            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction))
+            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction, convert))
     } // namespace Reward
 
     namespace Tables {

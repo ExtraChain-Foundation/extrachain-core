@@ -200,20 +200,20 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
             emit transaction_cache_.add(section->id, section->timestamp, transaction);
 
 #ifdef IS_RC
-            if (transaction.type() == TransactionType::Reward
-                && accountId == node->accountController()->system_actor().id()) {
-                Transaction tx;
-                tx.setSender(accountId);
-                tx.setReceiver(accountId);
-                tx.setType(TransactionType::Conversion);
-                tx.setData(ActorId().to_string());
-                tx.setAmount(transaction.amount());
-                tx.setToken(
-                    ActorId("468faf2f1be6504a9a26f7f027"
-                            "f7e43380b0d77d"));
-                eLog("[Reward] Send conversion: {} coins", tx.amount());
-                node->sendTransaction(tx, node->accountController()->system_actor());
-            }
+            // if (transaction.type() == TransactionType::Reward
+            //     && accountId == node->accountController()->system_actor().id()) {
+            //     Transaction tx;
+            //     tx.setSender(accountId);
+            //     tx.setReceiver(accountId);
+            //     tx.setType(TransactionType::Conversion);
+            //     tx.setData(ActorId().to_string());
+            //     tx.setAmount(transaction.amount());
+            //     tx.setToken(
+            //         ActorId("468faf2f1be6504a9a26f7f027"
+            //                 "f7e43380b0d77d"));
+            //     eLog("[Reward] Send conversion: {} coins", tx.amount());
+            //     node->sendTransaction(tx, node->accountController()->system_actor());
+            // }
 #endif
         }
     }

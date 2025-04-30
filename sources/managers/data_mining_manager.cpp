@@ -98,14 +98,32 @@ void DataMiningManager::requestCoinReward() {
     }
     auto tx = tx_result.value();
 
+    Transaction tx_conv;
+    tx_conv.setSender(actor.id());
+    tx_conv.setReceiver(actor.id());
+    tx_conv.setType(TransactionType::Conversion);
+    tx_conv.setData(ActorId().to_string());
+    tx_conv.setAmount(transaction.amount());
+    tx_conv.setToken(
+        ActorId("468faf2f1be6504a9a26f7f027"
+                "f7e43380b0d77d"));
+
+    auto tx_result2 = node->dag()->prepare_transaction(tx_conv, actor);
+    if (!tx_result2.has_value()) {
+        eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
+        return;
+    }
+
     auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = Dfs::Reward::Base,
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored       = node->dag()->current_section(),
-                                                      .transaction        = tx };
+                                                      .transaction        = tx_result.value(),
+                                                      .convert            = tx_result2.value() };
 
-    node->dag()->add_transaction_sended(tx);
+    node->dag()->add_transaction_sended(tx_result.value());
+    node->dag()->add_transaction_sended(tx_result2.value());
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
@@ -198,6 +216,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 
         // eLog("[Reward] Add request: {}", requestReward);
         node->dag()->network_transaction(requestReward.transaction, responder);
+        node->dag()->network_transaction(requestReward.convert, responder);
     } else {
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
