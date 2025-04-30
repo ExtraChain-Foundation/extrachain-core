@@ -232,14 +232,15 @@ bool Transaction::operator<(const Transaction &other) const {
     if (m_token != other.m_token)
         return m_token < other.m_token;
 
-    if (m_prevBlock != other.m_prevBlock)
-        return m_prevBlock < other.m_prevBlock;
-
     if (m_data != other.m_data)
         return m_data < other.m_data;
 
     if (m_type != other.m_type)
         return static_cast<int>(m_type) < static_cast<int>(other.m_type);
+
+    if (prev_hashs_ != other.prev_hashs_) {
+        return prev_hashs_ < other.prev_hash();
+    }
 
     return std::lexicographical_compare(m_signature.begin(),
                                         m_signature.end(),
