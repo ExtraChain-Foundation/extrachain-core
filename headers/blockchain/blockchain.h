@@ -68,16 +68,8 @@ struct BlockchainLastInfo {
     BigNumber     last_block_id;
     std::string   last_hash;
     std::uint64_t zero_date;
-    bool          is_light = false;
 };
 BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_date))
-
-struct BlockchainSyncPackage {
-    BigNumber from;
-    BigNumber to;
-    bool      is_light = false;
-};
-BOOST_DESCRIBE_STRUCT(BlockchainSyncPackage, (), (from, to, is_light))
 
 class EXTRACHAIN_EXPORT Blockchain : public QObject {
     //    static_assert(is_same<T, Block>::value || is_same<T, GenesisBlock>::value,
@@ -96,7 +88,12 @@ private:
 
     TransactionCache transaction_cache_;
 
-    BlockchainStatus                                    status_       = BlockchainStatus::Started;
+    BlockchainStatus status_ =
+#ifdef IS_R
+        BlockchainStatus::Started;
+#else
+        BlockchainStatus::Ready;
+#endif
     BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
     BlockchainSyncStatus                                check_status_ = BlockchainSyncStatus::None;
     BigNumber                                           sync_last_index;
@@ -328,10 +325,7 @@ signals:
                              const Responder    &responder,
                              const NetworkPackageStorage,
                              bool resend);
-    void syncResponseFromNetwork(const BigNumber  from_block,
-                                 const BigNumber &to_block,
-                                 bool             is_light,
-                                 const Responder &responder);
+    void syncResponseFromNetwork(const BigNumber fromBlock, const Responder &responder);
     void syncResponseVectorFromNetwork(const std::string &blocks,
                                        const Responder   &responder,
                                        const NetworkPackageStorage);
@@ -374,10 +368,7 @@ public slots:
                                                             const NetworkPackageStorage,
                                                             bool resend);
 
-    void syncResponse(const BigNumber  from_block,
-                      const BigNumber &to_block,
-                      bool             is_light,
-                      const Responder &responder);
+    void syncResponse(const BigNumber &fromBlock, const Responder &responder);
     void syncResponseVector(const std::string           &blocks,
                             const Responder             &responder,
                             const NetworkPackageStorage &package_storage);

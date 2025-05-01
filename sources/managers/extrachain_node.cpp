@@ -162,7 +162,7 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    node_enabled = false;
+    node_enabled.store(false);
     eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
