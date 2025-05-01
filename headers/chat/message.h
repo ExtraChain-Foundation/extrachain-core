@@ -24,16 +24,35 @@
 
 namespace Chat {
     enum class MessageType {
-        Text,
-        Created,
-        Invite,
-        Join
+        Text,    // 0
+        Created, // 1
+        Invite,  // 2
+        Join,    // 3
+        Gif,     // 4
+        Image,   // 5
+        Video,   // 6
+        File,    // 7
+    };
+
+    class MessegeDelegateType : public QObject {
+        Q_OBJECT
+    public:
+        enum TypeDelegate {
+            Text,
+            Created,
+            Invite,
+            Join,
+            Gif,
+            Image,
+            Video,
+            File
+        };
+        Q_ENUM(TypeDelegate)
     };
 
     struct MessageData {
         std::optional<MessageType> type;
         std::optional<std::string> data;
-        // std::optional<std::string> data1;
     };
     BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data))
 

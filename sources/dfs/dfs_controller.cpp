@@ -319,6 +319,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     case Dfs::ServiceFolder::Chat:
         visual_path = Dfs::Basic::TEMPLATE_CHAT;
         break;
+    case Dfs::ServiceFolder::Base:
+        break;
     }
 
     return store_file(owner_id, author_id, file_path, visual_path, visual_name, data_security, security_data);
