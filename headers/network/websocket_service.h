@@ -74,7 +74,6 @@ private:
     void handshake();
 
     QWebSocket *m_ws = nullptr;
-    QTimer      m_timer;
 
     QTimer *m_pingTimer   = nullptr;
     int     m_failedPongs = 0;
