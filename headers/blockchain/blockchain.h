@@ -88,7 +88,12 @@ private:
 
     TransactionCache transaction_cache_;
 
-    BlockchainStatus                                    status_       = BlockchainStatus::Started;
+    BlockchainStatus status_ =
+#ifdef IS_R
+        BlockchainStatus::Started;
+#else
+        BlockchainStatus::Ready;
+#endif
     BlockchainSyncStatus                                sync_status_  = BlockchainSyncStatus::None;
     BlockchainSyncStatus                                check_status_ = BlockchainSyncStatus::None;
     BigNumber                                           sync_last_index;

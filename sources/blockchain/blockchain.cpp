@@ -328,6 +328,10 @@ BlockchainStatus Blockchain::status() {
 }
 
 void Blockchain::start_sync() {
+#ifndef IS_R
+    return;
+#endif
+
     // start timer, after end -> again request
     if (status_ == BlockchainStatus::Sync) {
         // eLog("BC 11 start_sync return");
@@ -354,6 +358,10 @@ void Blockchain::start_sync() {
 }
 
 void Blockchain::start_check() {
+#ifndef IS_R
+    return;
+#endif
+
     if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
         start_sync();
         // eLog("BC 12 start_check return");
@@ -395,7 +403,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
     auto zero_block = read_block_by_id(BigNumber(0));
     if (zero_block.has_value() && last_info.last_hash != "" && last_info.last_block_id != BigNumber(-1)
         && zero_block->getDate() < last_info.zero_date) {
-        removeAll(false, true);
+        emit removeAll(false, true);
     }
 
     int count = std::min(requests_count, 5);
