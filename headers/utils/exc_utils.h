@@ -257,6 +257,19 @@ namespace Config {
     const int NECESSARY_SAME_TX = 1;
 
     namespace DataStorage {
+        constexpr char DagCacheTable[] = "balance_cache";
+
+        // SQL statement to create the cache table
+        constexpr char DagCacheCreate[] = R"(
+CREATE TABLE IF NOT EXISTS balance_cache (
+    section_id TEXT,       -- Cache section ID
+    actor_id TEXT,         -- Actor identifier
+    token_id TEXT,         -- Token identifier
+    balance TEXT,          -- Balance as string (BigNumberFloat)
+    PRIMARY KEY(section_id, actor_id, token_id)
+);
+)";
+
         static const std::string BlockTable = "Block";
         static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
                                             + " ( "

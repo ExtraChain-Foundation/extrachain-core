@@ -1,27 +1,13 @@
-/*
- * ExtraChain Core
- * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
- *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #include "blockchain/dag.h"
 
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
+
+// Cache configuration constants
+constexpr int  CACHE_LAG_SECTIONS        = 15;
+constexpr int  DB_UPDATE_FREQUENCY       = 1;
+constexpr bool ALLOW_CACHE_RECALCULATION = true;
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
@@ -59,6 +45,9 @@ Dag::Dag(ExtraChainNode *node)
         auto network_id = section->transactions.begin()->sender();
         node->actorIndex()->set_network_id(network_id);
     }
+
+    // Initialize cache database
+    init_cache_db();
 
     eLog("[Dag] The One");
 }
@@ -149,6 +138,12 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
         current_section_ = transaction.section();
         update_range();
+
+        // Update memory cache immediately
+        update_memory_cache_for_transaction(transaction);
+
+        // Check if DB cache needs updating
+        check_and_update_db_cache();
     }
 
     responder.send_response(transaction_result,
@@ -188,6 +183,12 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
              transaction.section());
         return;
     }
+
+    // Update memory cache immediately
+    update_memory_cache_for_transaction(transaction);
+
+    // Check if DB cache needs updating
+    check_and_update_db_cache();
 
     const auto accounts = node->accountController()->accountsIds();
     for (const auto &accountId : accounts) {
@@ -503,25 +504,249 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
 void Dag::update_cache() {
     auto cache_id = calculate_last_cache_id(current_section_);
+
+    // If cache hasn't changed, no need to update
+    if (dag_cache.section == cache_id && !dag_cache.dirty) {
+        return;
+    }
+
+    // Account for safe lag between current section and cache
+    auto safe_cache_id = calculate_last_cache_id(current_section_ - CACHE_LAG_SECTIONS);
+
+    // Only update if we're moving forward
+    if (safe_cache_id <= dag_cache.section) {
+        return;
+    }
+
+    eLog("[Dag] Updating cache for section: {}", safe_cache_id);
+
+    // Update the in-memory cache
+    dag_cache.section   = safe_cache_id;
+    dag_cache.timestamp = Utils::current_date_ms();
+
+    // Clear previous balances
+    dag_cache.balances.clear();
+
+    // Collect unique actors and tokens from transactions
+    std::set<ActorId> unique_actors;
+    std::set<TokenId> unique_tokens;
+
+    // Scan all sections up to the cache section to find actors and tokens
+    for (BigNumber i = safe_cache_id; i >= first_saved_section_; i--) {
+        auto section = this->read_section(i);
+        if (!section.has_value() || section->transactions.empty()) {
+            continue;
+        }
+
+        for (const auto &tx : section->transactions) {
+            // Add sender and receiver to unique actors
+            if (!tx.sender().is_zero()) {
+                unique_actors.insert(tx.sender());
+            }
+            if (!tx.receiver().is_zero()) {
+                unique_actors.insert(tx.receiver());
+            }
+
+            // Add token to unique tokens
+            unique_tokens.insert(tx.token());
+
+            // If Conversion transaction, also add from_token
+            if (tx.type() == TransactionType::Conversion && tx.data().has_value()) {
+                auto from_token = TokenId::create(tx.data().value());
+                if (from_token.has_value()) {
+                    unique_tokens.insert(from_token.value());
+                }
+            }
+        }
+    }
+
+    eLog("[Dag] Found {} unique actors and {} unique tokens for caching",
+         unique_actors.size(),
+         unique_tokens.size());
+
+    // Calculate balances for relevant actor-token pairs
+    for (const auto &actor_id : unique_actors) {
+        for (const auto &token_id : unique_tokens) {
+            std::vector<ActorId> actor_vec = { actor_id };
+            auto balance_map               = calculate_actors_balance_internal(actor_vec, token_id, BigNumber(-1));
+
+            if (!balance_map.empty() && balance_map[actor_id] != BigNumberFloat(0)) {
+                ActorPair pair { actor_id, token_id };
+                dag_cache.balances[pair] = balance_map[actor_id];
+            }
+        }
+    }
+
+    dag_cache.dirty = true;
+    dag_cache.sections_since_update++;
+
+    // Check if we should persist to DB
+    check_and_update_db_cache();
+
+    eLog("[Dag] Cache updated for section: {} with {} balance entries", safe_cache_id, dag_cache.balances.size());
 }
 
 std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
                                                                           const TokenId              &token_id) {
+
+    std::unordered_map<ActorId, BigNumberFloat> balances;
+
+    // Initialize balances to zero
+    for (const auto &actor_id : actor_ids) {
+        balances[actor_id] = BigNumberFloat(0);
+    }
+
+    eLog("[Dag] Calculate balances for {} actors and token {}", actor_ids.size(), token_id);
+
+    if (current_section_ == BigNumber(-1)) {
+        return balances;
+    }
+
+    // Find the latest cache section before current
+    BigNumber cache_section = calculate_last_cache_id(current_section_);
+
+    // Check if we have this cache in memory
+    bool used_cache = false;
+    if (dag_cache.section == cache_section) {
+        used_cache = true;
+
+        // Get balances from memory cache
+        for (const auto &actor_id : actor_ids) {
+            ActorPair pair { actor_id, token_id };
+            auto      it = dag_cache.balances.find(pair);
+            if (it != dag_cache.balances.end()) {
+                balances[actor_id] = it->second;
+            }
+        }
+    }
+    // Try to get from DB if not in memory
+    else if (cache_db && cache_db->is_open()) {
+        for (const auto &actor_id : actor_ids) {
+            DbRow binds = { { "section_id", cache_section.to_string() },
+                            { "actor_id", actor_id.to_string() },
+                            { "token_id", token_id.to_string() } };
+
+            auto rows = cache_db->select(
+                "SELECT balance FROM balance_cache WHERE section_id = @section_id AND actor_id = @actor_id AND "
+                "token_id = @token_id",
+                "balance_cache",
+                binds);
+
+            if (!rows.empty() && rows[0].contains("balance")) {
+                auto balance = BigNumberFloat::create(rows[0]["balance"]);
+                if (balance.has_value()) {
+                    balances[actor_id] = balance.value();
+                    used_cache         = true;
+                }
+            }
+        }
+    }
+
+    // If couldn't use cache, handle based on mode
+    if (!used_cache) {
+        if (mode_ == DagMode::Light) {
+            // Light mode requires cache
+            // !!! Cache should be requested from network here
+            eLog("[Dag] Light mode missing cache for section {}", cache_section);
+            request_cache_from_network(cache_section);
+
+            // Return empty result, will retry when cache is available
+            return balances;
+        } else {
+            // Full mode can calculate from scratch
+            if (ALLOW_CACHE_RECALCULATION) {
+                eLog("[Dag] Recalculating cache from scratch for section {}", cache_section);
+                update_cache(); // Recalculate and store the cache
+
+                // Try again with the newly calculated cache
+                return calculate_actors_balance(actor_ids, token_id);
+            } else {
+                // Request from network instead of calculating
+                eLog("[Dag] Requesting cache from network for section {}", cache_section);
+                request_cache_from_network(cache_section);
+
+                // Fall back to full calculation just this once
+                return calculate_actors_balance_internal(actor_ids, token_id, BigNumber(-1));
+            }
+        }
+    }
+
+    // Process transactions after the cache section
+    for (BigNumber i = current_section_; i > cache_section; i--) {
+        auto section = this->read_section(i);
+        if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+            continue;
+        }
+
+        // Process each transaction in the section
+        for (auto &tx : section->transactions) {
+            process_transaction_for_balance(tx, actor_ids, token_id, balances);
+        }
+    }
+
+    return balances;
+}
+
+void Dag::process_transaction_for_balance(const Transaction                           &tx,
+                                          const std::vector<ActorId>                  &actor_ids,
+                                          const TokenId                               &token_id,
+                                          std::unordered_map<ActorId, BigNumberFloat> &balances) {
+
+    for (const auto &actor_id : actor_ids) {
+        if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
+            balances[actor_id] += tx.amount();
+            continue;
+        }
+
+        if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && tx.token() == token_id) {
+            balances[actor_id] += tx.amount();
+            continue;
+        }
+
+        if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
+            if (!tx.data().has_value()) {
+                continue;
+            }
+            auto from_token = ActorId::create(tx.data().value());
+            if (!from_token.has_value()) {
+                continue;
+            }
+
+            if (from_token.value() == token_id) {
+                balances[actor_id] -= tx.amount();
+            }
+
+            if (tx.token() == token_id) {
+                balances[actor_id] += tx.amount();
+            }
+            continue;
+        }
+
+        if (tx.receiver() == actor_id && tx.token() == token_id) {
+            balances[actor_id] += tx.amount();
+        }
+
+        if (tx.sender() == actor_id && tx.token() == token_id) {
+            balances[actor_id] -= tx.amount();
+        }
+    }
+}
+
+std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance_internal(
+    const std::vector<ActorId> &actor_ids,
+    const TokenId              &token_id,
+    const BigNumber            &start_section) {
+
     std::unordered_map<ActorId, BigNumberFloat> balances;
 
     for (const auto &actor_id : actor_ids) {
         balances[actor_id] = BigNumberFloat(0);
     }
 
-    eLog("calculate_actors_balance: {} for token {}", actor_ids, token_id);
-    if (current_section_ == -1) {
-        for (const auto &actor_id : actor_ids) {
-            balances[actor_id] = BigNumberFloat(0);
-        }
-        return balances;
-    }
+    // Start from the requested section or from current if -1
+    BigNumber begin_section = (start_section == BigNumber(-1)) ? current_section_ : start_section;
 
-    for (BigNumber i = current_section_ + 1; i >= first_saved_section_; i--) {
+    for (BigNumber i = begin_section; i >= first_saved_section_; i--) {
         auto section = this->read_section(i);
 
         if (!section.has_value()) {
@@ -532,71 +757,9 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
             continue;
         }
 
-        // if (txs->is_genesis()) {
-        //     if (ignore_genesis && currentBlock->id() != BigNumber(0)) {
-        //         // if not mega
-        //         continue;
-        //     }
-
-        //     // eLog("{} BAALANCE Genesis", i);
-        //     auto       genesis = blockIndex.getGenesisBlockById(i);
-        //     const auto rows    = genesis->dataRows();
-
-        //     for (const auto &[key, row] : rows) {
-        //         for (const auto &actor_id : actor_ids) {
-        //             if (key.actorId == actor_id && key.tokenId == token_id)
-        //                 balances[actor_id] += row.state;
-        //         }
-        //     }
-
-        //     return balances;
-        // }
-
-        // tx check
+        // Process each transaction in the section
         for (auto &tx : section->transactions) {
-            for (const auto &actor_id : actor_ids) {
-                if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                    continue;
-                }
-
-                if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
-                    && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                    continue;
-                }
-
-                if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-                    if (!tx.data().has_value()) {
-                        continue;
-                    }
-                    auto from_token = ActorId::create(tx.data().value());
-                    if (!from_token.has_value()) {
-                        continue;
-                    }
-
-                    if (from_token.value() == tx.token()) {
-                        continue;
-                    }
-
-                    if (from_token.value() == token_id) {
-                        balances[actor_id] -= tx.amount();
-                    }
-
-                    if (tx.token() == token_id) {
-                        balances[actor_id] += tx.amount();
-                    }
-                    continue;
-                }
-
-                if (tx.receiver() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                }
-
-                if (tx.sender() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] -= tx.amount();
-                }
-            }
+            process_transaction_for_balance(tx, actor_ids, token_id, balances);
         }
     }
 
@@ -645,6 +808,176 @@ std::optional<Transaction> Dag::search_transaction(const std::string &hash, int 
     }
 
     return std::nullopt;
+}
+
+bool Dag::init_cache_db() {
+    if (cache_db && cache_db->is_open()) {
+        return true;
+    }
+
+    std::string db_path = BlockchainConst::BLOCKCHAIN_FOLDER + "/balance_cache.db";
+    cache_db            = std::make_unique<DbConnector>(db_path);
+
+    if (!cache_db->open()) {
+        eLog("[Dag] Failed to open cache database");
+        return false;
+    }
+
+    // Create table if it doesn't exist
+    bool success = cache_db->query(Config::DataStorage::DagCacheCreate);
+
+    if (!success) {
+        eLog("[Dag] Failed to create cache table");
+        return false;
+    }
+
+    eLog("[Dag] Cache database initialized");
+    return true;
+}
+
+void Dag::update_memory_cache_for_transaction(const Transaction &transaction) {
+    // Skip if transaction doesn't affect balances
+    // if (transaction.type() == TransactionType::Unknown) {
+    //     return;
+    // }
+
+    // Get actors affected by this transaction
+    std::vector<ActorId> actors;
+    if (!transaction.sender().is_zero()) {
+        actors.push_back(transaction.sender());
+    }
+    if (!transaction.receiver().is_zero() && transaction.receiver() != transaction.sender()) {
+        actors.push_back(transaction.receiver());
+    }
+
+    if (actors.empty()) {
+        return;
+    }
+
+    // Get tokens affected by this transaction
+    std::vector<TokenId> tokens = { transaction.token() };
+
+    // Also handle from_token in conversion transactions
+    if (transaction.type() == TransactionType::Conversion && transaction.data().has_value()) {
+        auto from_token = TokenId::create(transaction.data().value());
+        if (from_token.has_value() && from_token.value() != transaction.token()) {
+            tokens.push_back(from_token.value());
+        }
+    }
+
+    // Mark cache as dirty
+    dag_cache.dirty = true;
+    dag_cache.sections_since_update++;
+
+    // Process the transaction for each actor-token pair
+    for (const auto &actor_id : actors) {
+        for (const auto &token_id : tokens) {
+            ActorPair pair { actor_id, token_id };
+
+            // Get current balance or initialize to 0
+            BigNumberFloat balance = BigNumberFloat(0);
+            auto           it      = dag_cache.balances.find(pair);
+            if (it != dag_cache.balances.end()) {
+                balance = it->second;
+            }
+
+            // Update balance based on transaction type
+            if (transaction.type() == TransactionType::Reward && transaction.sender() == actor_id
+                && transaction.token() == token_id) {
+                balance += transaction.amount();
+            } else if (transaction.type() == TransactionType::InitContract && transaction.sender() == actor_id
+                       && transaction.token() == token_id) {
+                balance += transaction.amount();
+            } else if (transaction.type() == TransactionType::Conversion && transaction.sender() == actor_id) {
+                if (transaction.data().has_value()) {
+                    auto from_token = TokenId::create(transaction.data().value());
+                    if (from_token.has_value()) {
+                        if (from_token.value() == token_id) {
+                            balance -= transaction.amount();
+                        }
+                        if (transaction.token() == token_id) {
+                            balance += transaction.amount();
+                        }
+                    }
+                }
+            } else {
+                if (transaction.receiver() == actor_id && transaction.token() == token_id) {
+                    balance += transaction.amount();
+                }
+                if (transaction.sender() == actor_id && transaction.token() == token_id) {
+                    balance -= transaction.amount();
+                }
+            }
+
+            // Update the cache with the new balance
+            dag_cache.balances[pair] = balance;
+        }
+    }
+}
+
+void Dag::check_and_update_db_cache() {
+    // Check if we need to update the DB cache
+    if (!dag_cache.dirty || dag_cache.sections_since_update < DB_UPDATE_FREQUENCY) {
+        return;
+    }
+
+    // Calculate safe section ID (with lag)
+    auto current_cache_id = calculate_last_cache_id(current_section_);
+    auto safe_cache_id    = calculate_last_cache_id(current_section_ - CACHE_LAG_SECTIONS);
+
+    // Don't update if safe cache ID is behind current cache
+    if (safe_cache_id <= dag_cache.section) {
+        return;
+    }
+
+    // Ensure cache is for the safe ID
+    if (dag_cache.section != safe_cache_id) {
+        // Full update needed
+        update_cache();
+        return;
+    }
+
+    // Initialize DB if needed
+    if (!init_cache_db()) {
+        eLog("[Dag] Failed to initialize cache database, skipping cache update");
+        return;
+    }
+
+    eLog("[Dag] Flushing cache to database for section {}", dag_cache.section);
+
+    // Begin transaction for faster batch inserts
+    cache_db->query("BEGIN TRANSACTION");
+
+    // Write all balances to DB
+    for (const auto &[pair, balance] : dag_cache.balances) {
+        DbRow data = { { "section_id", dag_cache.section.to_string() },
+                       { "actor_id", pair.actor_id.to_string() },
+                       { "token_id", pair.token_id.to_string() },
+                       { "balance", balance.to_string() } };
+
+        cache_db->replace(Config::DataStorage::DagCacheTable, data);
+    }
+
+    // Commit transaction
+    cache_db->query("COMMIT");
+
+    // Reset counters
+    dag_cache.dirty                 = false;
+    dag_cache.sections_since_update = 0;
+
+    eLog("[Dag] Cache flushed to database for section {}", dag_cache.section);
+
+    // !!! Cache is sent to network from here
+    // Each node distributes its cache to maintain decentralization
+}
+
+void Dag::request_cache_from_network(const BigNumber &section) {
+    // !!! Cache should be requested from network here
+    // In a p2p network, each client also serves as a server
+    eLog("[Dag] Requesting cache for section {} from network", section);
+
+    // This would typically involve creating a network message
+    // and sending it to peers, similar to how sections are requested
 }
 
 //

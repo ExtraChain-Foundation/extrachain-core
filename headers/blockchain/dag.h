@@ -1,22 +1,3 @@
-/*
- * ExtraChain Core
- * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
- *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #pragma once
 
 #include <boost/describe.hpp>
@@ -27,6 +8,7 @@
 #include "blockchain/transaction_cache.h"
 
 class ExtraChainNode;
+class DbConnector;
 
 struct Section {
     BigNumber             id;
@@ -65,8 +47,20 @@ struct DagCache {
     BigNumber                           section   = BigNumber(-1);
     std::uint64_t                       timestamp = 0;
     std::map<ActorPair, BigNumberFloat> balances;
+    bool                                dirty                 = false;
+    int                                 sections_since_update = 0;
 };
-BOOST_DESCRIBE_STRUCT(DagCache, (), (section, timestamp, balances))
+BOOST_DESCRIBE_STRUCT(DagCache, (), (section, timestamp, balances, dirty, sections_since_update))
+
+// Добавьте это объявление в структуру ActorPair или рядом с ней
+inline bool operator<(const ActorPair &lhs, const ActorPair &rhs) {
+    // Сначала сравниваем actor_id
+    if (lhs.actor_id != rhs.actor_id) {
+        return lhs.actor_id < rhs.actor_id;
+    }
+    // Если actor_id равны, сравниваем token_id
+    return lhs.token_id < rhs.token_id;
+}
 
 enum class BlockchainSyncStatus {
     None,
@@ -163,6 +157,7 @@ private:
     TransactionCache                             transaction_cache_;
     std::unordered_map<std::string, Transaction> sended_transactions;
     DagCache                                     dag_cache;
+    std::unique_ptr<DbConnector>                 cache_db;
 
     BigNumber current_section_     = BigNumber(-1);
     BigNumber first_saved_section_ = BigNumber(-1);
@@ -183,6 +178,19 @@ private:
     bool                  save_transaction(const Transaction &transaction);
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
     void                  update_cache();
+    void                  flush_cache_to_db();
+    bool                  init_cache_db();
+    void                  update_memory_cache_for_transaction(const Transaction &transaction);
+    void                  check_and_update_db_cache();
+    void                  process_transaction_for_balance(const Transaction                           &tx,
+                                                          const std::vector<ActorId>                  &actor_ids,
+                                                          const TokenId                               &token_id,
+                                                          std::unordered_map<ActorId, BigNumberFloat> &balances);
+    std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance_internal(
+        const std::vector<ActorId> &actor_ids,
+        const TokenId              &token_id,
+        const BigNumber            &start_section);
+    void request_cache_from_network(const BigNumber &section);
 
     friend class ExtraChainNode;
 };
