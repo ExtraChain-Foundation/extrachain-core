@@ -34,22 +34,6 @@ namespace Chat {
         File,    // 7
     };
 
-    class MessegeDelegateType : public QObject {
-        Q_OBJECT
-    public:
-        enum TypeDelegate {
-            Text,
-            Created,
-            Invite,
-            Join,
-            Gif,
-            Image,
-            Video,
-            File
-        };
-        Q_ENUM(TypeDelegate)
-    };
-
     struct MessageData {
         std::optional<MessageType> type;
         std::optional<std::string> data;
