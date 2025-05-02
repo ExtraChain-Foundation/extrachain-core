@@ -54,8 +54,8 @@ public:
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
-                                                                           const std::string &file_id,
-                                                                           bool               quick = false);
+                                                                            const std::string &file_id,
+                                                                            bool               quick = false);
 
     std::expected<Dfs::DirRow, ChatError> get_my_chats();
 
@@ -75,6 +75,21 @@ public:
     std::expected<bool, ChatError> add_new_message_joined(const ActorId     &owner_id,
                                                           const std::string &file_id,
                                                           const ActorId     &actor);
+    std::expected<bool, ChatError> add_gif_message(const ActorId           &owner_id,
+                                                   const std::string       &file_id,
+                                                   const Chat::MessageText &message_text);
+
+    std::expected<bool, ChatError> add_image_message(const ActorId           &owner_id,
+                                                     const std::string       &file_id,
+                                                     const Chat::MessageText &message_text);
+
+    std::expected<bool, ChatError> add_video_message(const ActorId           &owner_id,
+                                                     const std::string       &file_id,
+                                                     const Chat::MessageText &message_text);
+
+    std::expected<bool, ChatError> add_file_message(const ActorId           &owner_id,
+                                                    const std::string       &file_id,
+                                                    const Chat::MessageText &message_text);
 
     std::expected<bool, ChatError> remove_message(const ActorId     &owner_id,
                                                   const std::string &file_id,
