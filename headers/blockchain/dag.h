@@ -152,6 +152,8 @@ private:
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
     QTimer                                             *timer_sync;
 
+    std::set<Transaction> cached_txs_;
+
     void request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder);
     void send_sync_request();
 

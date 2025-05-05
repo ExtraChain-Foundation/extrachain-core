@@ -107,6 +107,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
     if (status_ != DagStatus::Ready) {
+        cached_txs_.insert(transaction);
         return {};
     }
 
@@ -788,6 +789,14 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         //     emit statusChanged(status_);
         start_check();
         return;
+    }
+
+    if (current_section_ == sync_last_index) {
+        int added = 0;
+        // while (added != cached_txs_.size()) {
+        cached_txs_.clear();
+        // }
+        // return;
     }
 
     request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
