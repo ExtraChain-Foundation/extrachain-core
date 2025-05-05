@@ -6,9 +6,9 @@
 #include "utils/bignumber.h"
 #include "blockchain/transaction.h"
 #include "blockchain/transaction_cache.h"
+#include "blockchain/dag_cache.h"
 
 class ExtraChainNode;
-class DbConnector;
 
 struct Section {
     BigNumber             id;
@@ -34,33 +34,9 @@ BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 struct SectionRange {
     std::string first;
     std::string last;
+    std::string last_cached; // Last section cached in database
 };
-BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last))
-
-struct ActorPair {
-    ActorId actor_id;
-    TokenId token_id;
-};
-BOOST_DESCRIBE_STRUCT(ActorPair, (), (actor_id, token_id))
-
-struct DagCache {
-    BigNumber                           section   = BigNumber(-1);
-    std::uint64_t                       timestamp = 0;
-    std::map<ActorPair, BigNumberFloat> balances;
-    bool                                dirty                 = false;
-    int                                 sections_since_update = 0;
-};
-BOOST_DESCRIBE_STRUCT(DagCache, (), (section, timestamp, balances, dirty, sections_since_update))
-
-// Добавьте это объявление в структуру ActorPair или рядом с ней
-inline bool operator<(const ActorPair &lhs, const ActorPair &rhs) {
-    // Сначала сравниваем actor_id
-    if (lhs.actor_id != rhs.actor_id) {
-        return lhs.actor_id < rhs.actor_id;
-    }
-    // Если actor_id равны, сравниваем token_id
-    return lhs.token_id < rhs.token_id;
-}
+BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
 enum class BlockchainSyncStatus {
     None,
@@ -112,6 +88,10 @@ public:
         return transaction_cache_;
     }
 
+    DagCache &cache() {
+        return cache_;
+    }
+
     std::string file_folder(const BigNumber &section) const;
     std::string file_path(const BigNumber &section) const;
 
@@ -136,8 +116,6 @@ public:
 
     std::optional<Section> read_section(const BigNumber &section_id) const;
 
-    BigNumber calculate_last_cache_id(const BigNumber &id);
-
     // sync
     void start_sync();
     void start_check();
@@ -156,8 +134,7 @@ private:
     ExtraChainNode                              *node;
     TransactionCache                             transaction_cache_;
     std::unordered_map<std::string, Transaction> sended_transactions;
-    DagCache                                     dag_cache;
-    std::unique_ptr<DbConnector>                 cache_db;
+    DagCache                                     cache_;
 
     BigNumber current_section_     = BigNumber(-1);
     BigNumber first_saved_section_ = BigNumber(-1);
@@ -178,19 +155,6 @@ private:
     bool                  save_transaction(const Transaction &transaction);
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
     void                  update_cache();
-    void                  flush_cache_to_db();
-    bool                  init_cache_db();
-    void                  update_memory_cache_for_transaction(const Transaction &transaction);
-    void                  check_and_update_db_cache();
-    void                  process_transaction_for_balance(const Transaction                           &tx,
-                                                          const std::vector<ActorId>                  &actor_ids,
-                                                          const TokenId                               &token_id,
-                                                          std::unordered_map<ActorId, BigNumberFloat> &balances);
-    std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance_internal(
-        const std::vector<ActorId> &actor_ids,
-        const TokenId              &token_id,
-        const BigNumber            &start_section);
-    void request_cache_from_network(const BigNumber &section);
 
     friend class ExtraChainNode;
 };

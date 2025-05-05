@@ -30,7 +30,8 @@ enum class TransactionType {
     Reward       = 3,
     Repeatable   = 4,
     Conversion   = 5,
-    Genesis      = 100
+    Genesis      = 100,
+    Unknown      = 101
 };
 MSGPACK_ADD_ENUM(TransactionType)
 
