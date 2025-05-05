@@ -1,22 +1,3 @@
-/*
- * ExtraChain Core
- * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
- *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #include "blockchain/dag.h"
 
 #include "managers/extrachain_node.h"
@@ -25,15 +6,17 @@
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
-    , transaction_cache_(node, node) {
+    , transaction_cache_(node, node)
+    , cache_(node) {
     QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
 
         auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
         if (section_range.has_value()) {
-            auto first_id_result   = BigNumber::create(section_range->first);
-            auto current_id_result = BigNumber::create(section_range->last);
+            auto first_id_result    = BigNumber::create(section_range->first);
+            auto current_id_result  = BigNumber::create(section_range->last);
+            auto last_cached_result = BigNumber::create(section_range->last_cached);
 
             if (!first_id_result.has_value() || !current_id_result.has_value()) {
                 return;
@@ -41,11 +24,21 @@ Dag::Dag(ExtraChainNode *node)
 
             current_section_     = current_id_result.value();
             first_saved_section_ = first_id_result.value();
-            eLog("[Dag] Current: {}, first: {}", current_section_, first_saved_section_);
+
+            if (last_cached_result.has_value()) {
+                cache_.set_section(last_cached_result.value());
+            }
+
+            eLog("[Dag] Current: {}, first: {}, last cached: {}",
+                 current_section_,
+                 first_saved_section_,
+                 cache_.section());
             file.close();
         }
     } else {
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        cache_.reset_db();
+        cache_.init_db();
     }
 
     if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
@@ -81,7 +74,7 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
     auto section = read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
-        return std::unexpected(TransactionError::Unknown);
+        return std::unexpected(TransactionError::NoLastBlock);
     }
 
     if (section.has_value()) {
@@ -223,6 +216,22 @@ void Dag::network_section(const Section &section) {
     //
 }
 
+std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
+                                                                          const TokenId              &token_id) {
+
+    // Use the read_section callback to provide access to sections
+    auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
+        return this->read_section(section_id);
+    };
+
+    // Use DagCache to calculate balances
+    return cache_.calculate_balances(actor_ids,
+                                     token_id,
+                                     current_section_,
+                                     first_saved_section_,
+                                     read_section_callback);
+}
+
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     // mutex
 
@@ -240,11 +249,6 @@ std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     }
 
     return std::nullopt;
-}
-
-BigNumber Dag::calculate_last_cache_id(const BigNumber &id) {
-    return id / Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS
-           * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
@@ -275,22 +279,60 @@ bool Dag::save_transaction(const Transaction &transaction) {
     auto section = this->read_section(transaction.section());
 
     if (!section.has_value()) {
-        // create new one
+        // Create new section
         Section section { .id           = transaction.section(),
                           .timestamp    = Utils::current_date_ms(),
                           .transactions = { transaction } };
 
         current_section_ = section.id;
+
+        // Check if cache needs updating
+        cache_.check_and_update_cache(current_section_);
+
+        // Update range file
         update_range();
 
-        if (calculate_last_cache_id(current_section_) != dag_cache.section) {
-            update_cache();
+        // Update first_saved_section_ if this is the first section or has a lower ID
+        if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
+            first_saved_section_ = transaction.section();
+            eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         }
 
         return write_section(section).has_value();
     }
 
+    // Add transaction to existing section
     section->transactions.insert(transaction);
+
+    // Check if cache needs updating
+    cache_.check_and_update_cache(current_section_);
+
+    // Every X sections, force a cache update for testing
+    // if (transaction.section() % 5 == 0) {
+    //     eLog("[Dag] Testing forced cache update at section {}", transaction.section());
+
+    //     // Create read_section_callback for cache
+    //     auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
+    //         return this->read_section(section_id);
+    //     };
+
+    //     // Force update to the current genesis section
+    //     BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
+    //     cache_.update_to_genesis_section(genesis_section,
+    //                                      current_section_,
+    //                                      first_saved_section_,
+    //                                      read_section_callback);
+    // }
+
+    // Update first_saved_section_ if this is the first section or has a lower ID
+    if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
+        first_saved_section_ = transaction.section();
+        eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+    }
+
+    // Update range file
+    update_range();
+
     return write_section(section.value()).has_value();
 }
 
@@ -502,105 +544,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 }
 
 void Dag::update_cache() {
-    auto cache_id = calculate_last_cache_id(current_section_);
-}
+    // Calculate safe section ID for caching
+    // auto safe_cache_id = cache_.calculate_cache_id(current_section_ - CACHE_LAG_SECTIONS);
 
-std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                          const TokenId              &token_id) {
-    std::unordered_map<ActorId, BigNumberFloat> balances;
+    // // Update cache to this section
+    // cache_.update_to_section(safe_cache_id, current_section_, first_saved_section_);
 
-    for (const auto &actor_id : actor_ids) {
-        balances[actor_id] = BigNumberFloat(0);
-    }
-
-    eLog("calculate_actors_balance: {} for token {}", actor_ids, token_id);
-    if (current_section_ == -1) {
-        for (const auto &actor_id : actor_ids) {
-            balances[actor_id] = BigNumberFloat(0);
-        }
-        return balances;
-    }
-
-    for (BigNumber i = current_section_ + 1; i >= first_saved_section_; i--) {
-        auto section = this->read_section(i);
-
-        if (!section.has_value()) {
-            continue;
-        }
-
-        if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
-            continue;
-        }
-
-        // if (txs->is_genesis()) {
-        //     if (ignore_genesis && currentBlock->id() != BigNumber(0)) {
-        //         // if not mega
-        //         continue;
-        //     }
-
-        //     // eLog("{} BAALANCE Genesis", i);
-        //     auto       genesis = blockIndex.getGenesisBlockById(i);
-        //     const auto rows    = genesis->dataRows();
-
-        //     for (const auto &[key, row] : rows) {
-        //         for (const auto &actor_id : actor_ids) {
-        //             if (key.actorId == actor_id && key.tokenId == token_id)
-        //                 balances[actor_id] += row.state;
-        //         }
-        //     }
-
-        //     return balances;
-        // }
-
-        // tx check
-        for (auto &tx : section->transactions) {
-            for (const auto &actor_id : actor_ids) {
-                if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                    continue;
-                }
-
-                if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id
-                    && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                    continue;
-                }
-
-                if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-                    if (!tx.data().has_value()) {
-                        continue;
-                    }
-                    auto from_token = ActorId::create(tx.data().value());
-                    if (!from_token.has_value()) {
-                        continue;
-                    }
-
-                    if (from_token.value() == tx.token()) {
-                        continue;
-                    }
-
-                    if (from_token.value() == token_id) {
-                        balances[actor_id] -= tx.amount();
-                    }
-
-                    if (tx.token() == token_id) {
-                        balances[actor_id] += tx.amount();
-                    }
-                    continue;
-                }
-
-                if (tx.receiver() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] += tx.amount();
-                }
-
-                if (tx.sender() == actor_id && tx.token() == token_id) {
-                    balances[actor_id] -= tx.amount();
-                }
-            }
-        }
-    }
-
-    return balances;
+    // // Update range to reflect new cache section
+    // update_range();
 }
 
 void Dag::add_transaction_sended(const Transaction &transaction) {
@@ -609,12 +560,28 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
 }
 
 void Dag::update_range() {
-    std::string json = Json::serialize(
-        SectionRange { .first = first_saved_section_.to_string(), .last = current_section_.to_string() });
+    std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
+                                                      .last        = current_section_.to_string(),
+                                                      .last_cached = cache_.section().to_string() });
+
+    eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
+         first_saved_section_,
+         current_section_,
+         cache_.section());
+
     QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
         file.write(json.data());
         file.close();
+
+        QFile check_file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+        if (check_file.open(QFile::ReadOnly)) {
+            auto content = check_file.readAll();
+            eLog("[Dag] Range file written: {}", content.toStdString());
+            check_file.close();
+        }
+    } else {
+        eLog("[Dag] Failed to open range file for writing");
     }
 }
 
@@ -838,7 +805,8 @@ void Dag::send_sync_request() {
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
-            if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+            eLog("----- {}", info);
+            if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
                 need_sync = true;
                 break;
             }
@@ -883,7 +851,7 @@ void Dag::send_sync_request() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+        if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
             nodes_by_block.emplace_back(id, info.last_block_id);
         }
     }

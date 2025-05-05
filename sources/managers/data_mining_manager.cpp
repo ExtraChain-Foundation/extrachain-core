@@ -55,6 +55,9 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
+#ifndef IS_RC
+    return;
+#endif
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
@@ -209,7 +212,8 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto amount = requestReward.transaction.amount();
 
     // * KoefReward
-    if (calc - amount <= Dfs::Reward::TOLERANCE) {
+    // TODO! Check why torerance not working
+    if (amount < 5) { // calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }

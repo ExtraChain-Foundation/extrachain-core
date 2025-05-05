@@ -1,22 +1,3 @@
-/*
- * ExtraChain Core
- * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
- *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #pragma once
 
 #include <boost/describe.hpp>
@@ -25,6 +6,7 @@
 #include "utils/bignumber.h"
 #include "blockchain/transaction.h"
 #include "blockchain/transaction_cache.h"
+#include "blockchain/dag_cache.h"
 
 class ExtraChainNode;
 
@@ -52,21 +34,9 @@ BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 struct SectionRange {
     std::string first;
     std::string last;
+    std::string last_cached;
 };
-BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last))
-
-struct ActorPair {
-    ActorId actor_id;
-    TokenId token_id;
-};
-BOOST_DESCRIBE_STRUCT(ActorPair, (), (actor_id, token_id))
-
-struct DagCache {
-    BigNumber                           section   = BigNumber(-1);
-    std::uint64_t                       timestamp = 0;
-    std::map<ActorPair, BigNumberFloat> balances;
-};
-BOOST_DESCRIBE_STRUCT(DagCache, (), (section, timestamp, balances))
+BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
 enum class BlockchainSyncStatus {
     None,
@@ -118,6 +88,14 @@ public:
         return transaction_cache_;
     }
 
+    DagCache &cache() {
+        return cache_;
+    }
+
+    BigNumber first_saved_section() {
+        return first_saved_section_;
+    }
+
     std::string file_folder(const BigNumber &section) const;
     std::string file_path(const BigNumber &section) const;
 
@@ -142,8 +120,6 @@ public:
 
     std::optional<Section> read_section(const BigNumber &section_id) const;
 
-    BigNumber calculate_last_cache_id(const BigNumber &id);
-
     // sync
     void start_sync();
     void start_check();
@@ -162,7 +138,7 @@ private:
     ExtraChainNode                              *node;
     TransactionCache                             transaction_cache_;
     std::unordered_map<std::string, Transaction> sended_transactions;
-    DagCache                                     dag_cache;
+    DagCache                                     cache_;
 
     BigNumber current_section_     = BigNumber(-1);
     BigNumber first_saved_section_ = BigNumber(-1);

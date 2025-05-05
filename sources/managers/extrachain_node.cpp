@@ -162,7 +162,7 @@ std::uint64_t ExtraChainNode::getBlockCount() const {
 }
 
 ExtraChainNode::~ExtraChainNode() {
-    node_enabled = false;
+    node_enabled.store(false);
     eLog("ExtraChainNode::~ExtraChainNode");
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
@@ -687,10 +687,10 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} ({}) sections, status: {}. Dfs: {} from {} bytes",
+    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {} from {} bytes",
          dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
-         dag_->current_section(),
          dag_->current_section().to_string(NumeralBase::Dec),
+         dag_->current_section(),
          dag_->status(),
          m_dfs->sizeTaken(),
          m_dfs->totalDfsSize());
