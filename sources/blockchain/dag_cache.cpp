@@ -428,6 +428,11 @@ bool DagCache::init_db() {
     return true;
 }
 
+void DagCache::reset_db() {
+    db_initialized_ = false;
+    db_.reset();
+}
+
 void DagCache::process_transaction_for_balance(const Transaction&                           tx,
                                                const std::vector<ActorId>&                  actor_ids,
                                                const TokenId&                               token_id,

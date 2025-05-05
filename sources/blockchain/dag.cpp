@@ -37,6 +37,8 @@ Dag::Dag(ExtraChainNode *node)
         }
     } else {
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        cache_.reset_db();
+        cache_.init_db();
     }
 
     if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
