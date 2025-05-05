@@ -14,23 +14,8 @@ class DbConnector;
 class Section;
 
 // Cache configuration constants
-constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and persistent cache
-
-/**
- * @brief Pair of actor and token for balance tracking
- */
-struct ActorPair {
-    ActorId actor_id;
-    TokenId token_id;
-
-    // Comparison operator for std::map
-    bool operator<(const ActorPair& other) const {
-        if (actor_id != other.actor_id)
-            return actor_id < other.actor_id;
-        return token_id < other.token_id;
-    }
-};
-BOOST_DESCRIBE_STRUCT(ActorPair, (), (actor_id, token_id))
+constexpr int CACHE_LAG_SECTIONS   = 15;  // Safe lag between current section and persistent cache
+constexpr int GENESIS_SECTION_SIZE = 100; // Every 100 sections is a genesis point for caching
 
 /**
  * @brief DagCache - Manages caching of actor balances for blockchain
@@ -58,7 +43,7 @@ public:
      * @return BigNumber The section ID
      */
     BigNumber section() const {
-        return section_;
+        return cached_section_;
     }
 
     /**
@@ -67,26 +52,33 @@ public:
      * @param section_id The new section ID
      */
     void set_section(const BigNumber& section_id) {
-        section_ = section_id;
+        cached_section_ = section_id;
     }
 
     /**
-     * @brief Get the balance for a specific actor-token pair
+     * @brief Get the balance for a specific actor-token pair from cache
      *
      * @param actor_id The actor ID
      * @param token_id The token ID
+     * @param section_id The section ID to get balance for
      * @return BigNumberFloat The balance
      */
-    BigNumberFloat get_balance(const ActorId& actor_id, const TokenId& token_id);
+    BigNumberFloat get_cached_balance(const ActorId&   actor_id,
+                                      const TokenId&   token_id,
+                                      const BigNumber& section_id);
 
     /**
-     * @brief Set the balance for a specific actor-token pair
+     * @brief Set the balance for a specific actor-token pair in cache
      *
      * @param actor_id The actor ID
      * @param token_id The token ID
      * @param balance The balance to set
+     * @param section_id The section ID to set balance for
      */
-    void set_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
+    void set_cached_balance(const ActorId&        actor_id,
+                            const TokenId&        token_id,
+                            const BigNumberFloat& balance,
+                            const BigNumber&      section_id);
 
     /**
      * @brief Update cache for a single transaction
@@ -94,19 +86,6 @@ public:
      * @param transaction The transaction to process
      */
     void update_for_transaction(const Transaction& transaction);
-
-    /**
-     * @brief Update cache to specified section
-     *
-     * @param section_id The target section ID
-     * @param current_section The current section of the blockchain
-     * @param first_saved_section The first saved section of the blockchain
-     * @return true If update was successful
-     * @return false If update failed
-     */
-    bool update_to_section(const BigNumber& section_id,
-                           const BigNumber& current_section,
-                           const BigNumber& first_saved_section);
 
     /**
      * @brief Calculate balances for actors using cache
@@ -126,55 +105,37 @@ public:
         std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
 
     /**
-     * @brief Flush cache to database
+     * @brief Calculate the genesis section ID for caching
      *
-     * @return true If flush was successful
-     * @return false If flush failed
+     * @param section_id Current section ID
+     * @return BigNumber Genesis section ID (multiple of GENESIS_SECTION_SIZE)
      */
-    bool flush_to_db();
+    BigNumber calculate_genesis_section(const BigNumber& section_id) const;
 
     /**
-     * @brief Load cache from database
-     *
-     * @return true If load was successful
-     * @return false If load failed
-     */
-    bool load_from_db();
-
-    /**
-     * @brief Request cache from network
-     *
-     * @param section_id Section ID to request
-     */
-    void request_from_network(const BigNumber& section_id);
-
-    /**
-     * @brief Calculate the section ID for cache boundaries
-     *
-     * @param id Section ID to align
-     * @return BigNumber Aligned cache section ID
-     */
-    BigNumber calculate_cache_id(const BigNumber& id) const;
-
-    /**
-     * @brief Check if database cache needs updating and update it
+     * @brief Check and update cache to latest safe section
      *
      * @param current_section Current section of the blockchain
      * @return true If cache was updated
      * @return false If no update was needed or failed
      */
-    bool check_and_update_db(const BigNumber& current_section);
+    bool check_and_update_cache(const BigNumber& current_section);
 
     /**
-     * @brief Force an update of the cache (for testing)
+     * @brief Update cache to a specific genesis section
      *
+     * @param genesis_section The genesis section to update to
      * @param current_section Current section of the blockchain
+     * @param first_saved_section First saved section in the blockchain
+     * @param read_section_callback Function to read sections
      * @return true If update was successful
      * @return false If update failed
      */
-    bool force_update_db(const BigNumber& current_section);
+    bool update_to_genesis_section(const BigNumber&                                        genesis_section,
+                                   const BigNumber&                                        current_section,
+                                   const BigNumber&                                        first_saved_section,
+                                   std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
 
- 
     /**
      * @brief Initialize database connection
      *
@@ -183,41 +144,53 @@ public:
      */
     bool init_db();
 
+    /**
+     * @brief Reset the database connection
+     */
     void reset_db();
 
 private:
-    ExtraChainNode*              node_;                    // Node reference
-    BigNumber                    section_ = BigNumber(-1); // Current section ID of cache
-    std::unique_ptr<DbConnector> db_;                      // Database connection
-    bool                         db_initialized_ = false;  // Whether DB is initialized
+    // Helper struct for hashing actor-token pairs in unordered_map
+    struct PairHash {
+        template <class T1, class T2>
+        std::size_t operator()(const std::pair<T1, T2>& p) const {
+            auto h1 = std::hash<std::string> {}(p.first.to_string());
+            auto h2 = std::hash<std::string> {}(p.second.to_string());
+            return h1 ^ (h2 << 1);
+        }
+    };
+
+    ExtraChainNode*              node_;                           // Node reference
+    BigNumber                    cached_section_ = BigNumber(-1); // Current cached section ID (genesis point)
+    std::unique_ptr<DbConnector> db_;                             // Database connection
+    bool                         db_initialized_ = false;         // Whether DB is initialized
 
     /**
-     * @brief Process a transaction for balance updates
+     * @brief Process transaction for balances
      *
-     * @param tx Transaction to process
-     * @param actor_ids Vector of actor IDs to update
-     * @param token_id Token ID
-     * @param balances Map of balances to update
+     * @param transaction Transaction to process
+     * @param actor_ids Set of actor IDs
+     * @param balances Map of actor-token balances to update
      */
-    void process_transaction_for_balance(const Transaction&                           tx,
-                                         const std::vector<ActorId>&                  actor_ids,
-                                         const TokenId&                               token_id,
-                                         std::unordered_map<ActorId, BigNumberFloat>& balances);
+    void process_transaction(const Transaction&       transaction,
+                             const std::set<ActorId>& actor_ids,
+                             std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash>& balances);
 
     /**
-     * @brief Calculate balances from scratch without using cache
+     * @brief Load cache state from database
      *
-     * @param actor_ids Vector of actor IDs
-     * @param token_id Token ID
-     * @param start_section Section to start calculation from
-     * @param first_saved_section First saved section of the blockchain
-     * @param read_section_callback Function to read a section
-     * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor balances
+     * @return true If loading was successful
+     * @return false If loading failed
      */
-    std::unordered_map<ActorId, BigNumberFloat> calculate_balances_internal(
-        const std::vector<ActorId>&                             actor_ids,
-        const TokenId&                                          token_id,
-        const BigNumber&                                        start_section,
-        const BigNumber&                                        first_saved_section,
-        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    bool load_from_db();
+};
+
+// Hash function for std::pair to use in unordered_map
+struct PairHash {
+    template <class T1, class T2>
+    std::size_t operator()(const std::pair<T1, T2>& p) const {
+        auto h1 = std::hash<std::string> {}(p.first.to_string());
+        auto h2 = std::hash<std::string> {}(p.second.to_string());
+        return h1 ^ (h2 << 1);
+    }
 };

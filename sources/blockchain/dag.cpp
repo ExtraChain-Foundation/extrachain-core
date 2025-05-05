@@ -279,21 +279,15 @@ bool Dag::save_transaction(const Transaction &transaction) {
     auto section = this->read_section(transaction.section());
 
     if (!section.has_value()) {
-        // create new one
+        // Create new section
         Section section { .id           = transaction.section(),
                           .timestamp    = Utils::current_date_ms(),
                           .transactions = { transaction } };
 
         current_section_ = section.id;
 
-        // Update cache for the transaction and check if DB needs updating
-        cache_.update_for_transaction(transaction);
-        cache_.check_and_update_db(current_section_);
-
-        if (transaction.section() % 5 == 0) { // Каждые 5 секций
-            eLog("[Dag] Testing forced cache update at section {}", transaction.section());
-            cache_.force_update_db(current_section_);
-        }
+        // Check if cache needs updating
+        cache_.check_and_update_cache(current_section_);
 
         // Update range file
         update_range();
@@ -301,15 +295,27 @@ bool Dag::save_transaction(const Transaction &transaction) {
         return write_section(section).has_value();
     }
 
+    // Add transaction to existing section
     section->transactions.insert(transaction);
 
-    // Update cache for the transaction and check if DB needs updating
-    cache_.update_for_transaction(transaction);
-    cache_.check_and_update_db(current_section_);
+    // Check if cache needs updating
+    cache_.check_and_update_cache(current_section_);
 
-    if (transaction.section() % 5 == 0) { // TODO!
+    // Every X sections, force a cache update for testing
+    if (transaction.section() % 5 == 0) {
         eLog("[Dag] Testing forced cache update at section {}", transaction.section());
-        cache_.force_update_db(current_section_);
+
+        // Create read_section_callback for cache
+        auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
+            return this->read_section(section_id);
+        };
+
+        // Force update to the current genesis section
+        BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
+        cache_.update_to_genesis_section(genesis_section,
+                                         current_section_,
+                                         first_saved_section_,
+                                         read_section_callback);
     }
 
     // Update range file
@@ -527,13 +533,13 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
 void Dag::update_cache() {
     // Calculate safe section ID for caching
-    auto safe_cache_id = cache_.calculate_cache_id(current_section_ - CACHE_LAG_SECTIONS);
+    // auto safe_cache_id = cache_.calculate_cache_id(current_section_ - CACHE_LAG_SECTIONS);
 
-    // Update cache to this section
-    cache_.update_to_section(safe_cache_id, current_section_, first_saved_section_);
+    // // Update cache to this section
+    // cache_.update_to_section(safe_cache_id, current_section_, first_saved_section_);
 
-    // Update range to reflect new cache section
-    update_range();
+    // // Update range to reflect new cache section
+    // update_range();
 }
 
 void Dag::add_transaction_sended(const Transaction &transaction) {
