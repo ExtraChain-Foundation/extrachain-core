@@ -80,8 +80,9 @@ void DagCache::update_for_transaction(const Transaction& transaction) {
 }
 
 BigNumber DagCache::calculate_genesis_section(const BigNumber& section_id) const {
-    // Calculate the genesis section (multiple of GENESIS_SECTION_SIZE)
-    return (section_id / GENESIS_SECTION_SIZE) * GENESIS_SECTION_SIZE;
+    // Calculate the genesis section (multiple of Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
+    return (section_id / Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
+           * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
@@ -211,7 +212,7 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
         return node_->dag()->read_section(section_id);
     };
 
-    // Update cache to safe section
+    // Update cache to safe section (genesis + lag)
     bool result = update_to_genesis_section(safe_section,
                                             current_section,
                                             node_->dag()->first_saved_section(),
@@ -344,7 +345,7 @@ void DagCache::process_transaction(
 
     for (const auto& actor_id : actor_ids) {
         // Reward transactions
-        if (tx.type() == TransactionType::Reward && tx.sender() == actor_id && !tx.token().is_zero()) {
+        if (tx.type() == TransactionType::Reward && tx.sender() == actor_id /*&& !tx.token().is_zero()*/) {
             auto key = std::make_pair(actor_id, tx.token());
             if (balances.find(key) == balances.end()) {
                 balances[key] = BigNumberFloat(0);

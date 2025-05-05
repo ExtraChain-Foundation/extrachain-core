@@ -14,8 +14,7 @@ class DbConnector;
 class Section;
 
 // Cache configuration constants
-constexpr int CACHE_LAG_SECTIONS   = 15;  // Safe lag between current section and persistent cache
-constexpr int GENESIS_SECTION_SIZE = 100; // Every 100 sections is a genesis point for caching
+constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and persistent cache
 
 /**
  * @brief DagCache - Manages caching of actor balances for blockchain
