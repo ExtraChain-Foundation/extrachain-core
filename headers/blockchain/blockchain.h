@@ -94,6 +94,7 @@ private:
     BigNumber                                           sync_last_index;
     int                                                 requests_count = 0;
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
+    std::uint64_t                                       last_block_added = 0;
 
     BlockchainMode mode_ = BlockchainMode::Full;
 
@@ -341,6 +342,7 @@ signals:
     void syncStart(BigNumber, BigNumber);
     void syncEnd();
     void syncProgress(BigNumber);
+    void blockSyncReady(BigNumber);
     void statusChanged(BlockchainStatus status);
     void syncStatusChanged(BlockchainSyncStatus);
     void resultTransactions(const std::unordered_map<ActorId, std::vector<Transaction>> &);
