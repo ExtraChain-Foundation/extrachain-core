@@ -292,6 +292,12 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Update range file
         update_range();
 
+        // Update first_saved_section_ if this is the first section or has a lower ID
+        if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
+            first_saved_section_ = transaction.section();
+            eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+        }
+
         return write_section(section).has_value();
     }
 
@@ -302,20 +308,26 @@ bool Dag::save_transaction(const Transaction &transaction) {
     cache_.check_and_update_cache(current_section_);
 
     // Every X sections, force a cache update for testing
-    if (transaction.section() % 5 == 0) {
-        eLog("[Dag] Testing forced cache update at section {}", transaction.section());
+    // if (transaction.section() % 5 == 0) {
+    //     eLog("[Dag] Testing forced cache update at section {}", transaction.section());
 
-        // Create read_section_callback for cache
-        auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
-            return this->read_section(section_id);
-        };
+    //     // Create read_section_callback for cache
+    //     auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
+    //         return this->read_section(section_id);
+    //     };
 
-        // Force update to the current genesis section
-        BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
-        cache_.update_to_genesis_section(genesis_section,
-                                         current_section_,
-                                         first_saved_section_,
-                                         read_section_callback);
+    //     // Force update to the current genesis section
+    //     BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
+    //     cache_.update_to_genesis_section(genesis_section,
+    //                                      current_section_,
+    //                                      first_saved_section_,
+    //                                      read_section_callback);
+    // }
+
+    // Update first_saved_section_ if this is the first section or has a lower ID
+    if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
+        first_saved_section_ = transaction.section();
+        eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
     }
 
     // Update range file
