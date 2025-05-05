@@ -52,10 +52,30 @@ namespace Dfs {
     class CollectionTemplate;
 
     enum class ServiceFolder {
+        Base,
         Collection,
         CollectionTemplate,
         Chat
     };
+
+    inline ServiceFolder toServiceFolder(int value) {
+        switch (value) {
+        case 0:
+            return ServiceFolder::Base;
+        case 1:
+            return ServiceFolder::Collection;
+        case 2:
+            return ServiceFolder::CollectionTemplate;
+        case 3:
+            return ServiceFolder::Chat;
+        default:
+            throw std::invalid_argument("Invalid integer for ServiceFolder");
+        }
+    }
+
+    inline int toInt(ServiceFolder folder) {
+        return static_cast<int>(folder);
+    }
 
     enum class NetworkStoreFile {
         Broadcast,

@@ -821,9 +821,7 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
 void NetworkManager::messageReceived(const std::string &message,
                                      const std::string &ip,
                                      const std::string &identifier) {
-
     // eLog("node_enabled {}", node_enabled.load());
-
     if (!node_enabled.load()) {
         return;
     }
