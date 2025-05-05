@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <map>
 #include <unordered_map>
 #include <set>
 #include <vector>
@@ -36,7 +35,7 @@ BOOST_DESCRIBE_STRUCT(ActorPair, (), (actor_id, token_id))
 /**
  * @brief DagCache - Manages caching of actor balances for blockchain
  *
- * This class handles in-memory and database caching of actor balances
+ * This class handles database caching of actor balances
  * to accelerate balance calculations and support light mode.
  */
 class DagCache {
@@ -78,7 +77,7 @@ public:
      * @param token_id The token ID
      * @return BigNumberFloat The balance
      */
-    BigNumberFloat get_balance(const ActorId& actor_id, const TokenId& token_id) const;
+    BigNumberFloat get_balance(const ActorId& actor_id, const TokenId& token_id);
 
     /**
      * @brief Set the balance for a specific actor-token pair
@@ -129,11 +128,10 @@ public:
     /**
      * @brief Flush cache to database
      *
-     * @param current_section Current section of the blockchain
      * @return true If flush was successful
      * @return false If flush failed
      */
-    bool flush_to_db(const BigNumber& current_section);
+    bool flush_to_db();
 
     /**
      * @brief Load cache from database
@@ -168,12 +166,15 @@ public:
     bool check_and_update_db(const BigNumber& current_section);
 
     /**
-     * @brief Clear all cached balances
+     * @brief Force an update of the cache (for testing)
+     *
+     * @param current_section Current section of the blockchain
+     * @return true If update was successful
+     * @return false If update failed
      */
-    void clear_balances() {
-        balances_.clear();
-    }
+    bool force_update_db(const BigNumber& current_section);
 
+ 
     /**
      * @brief Initialize database connection
      *
@@ -185,11 +186,10 @@ public:
     void reset_db();
 
 private:
-    ExtraChainNode*                     node_;                    // Node reference
-    BigNumber                           section_ = BigNumber(-1); // Current section ID of cache
-    std::map<ActorPair, BigNumberFloat> balances_;                // In-memory balance cache
-    std::unique_ptr<DbConnector>        db_;                      // Database connection
-    bool                                db_initialized_ = false;  // Whether DB is initialized
+    ExtraChainNode*              node_;                    // Node reference
+    BigNumber                    section_ = BigNumber(-1); // Current section ID of cache
+    std::unique_ptr<DbConnector> db_;                      // Database connection
+    bool                         db_initialized_ = false;  // Whether DB is initialized
 
     /**
      * @brief Process a transaction for balance updates

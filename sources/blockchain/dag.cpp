@@ -285,24 +285,35 @@ bool Dag::save_transaction(const Transaction &transaction) {
                           .transactions = { transaction } };
 
         current_section_ = section.id;
-        update_range();
 
-        // Update memory cache for the transaction
+        // Update cache for the transaction and check if DB needs updating
         cache_.update_for_transaction(transaction);
-
-        // Check if DB cache needs updating
         cache_.check_and_update_db(current_section_);
+
+        if (transaction.section() % 5 == 0) { // Каждые 5 секций
+            eLog("[Dag] Testing forced cache update at section {}", transaction.section());
+            cache_.force_update_db(current_section_);
+        }
+
+        // Update range file
+        update_range();
 
         return write_section(section).has_value();
     }
 
     section->transactions.insert(transaction);
 
-    // Update memory cache for the transaction
+    // Update cache for the transaction and check if DB needs updating
     cache_.update_for_transaction(transaction);
-
-    // Check if DB cache needs updating
     cache_.check_and_update_db(current_section_);
+
+    if (transaction.section() % 5 == 0) { // Каждые 5 секций
+        eLog("[Dag] Testing forced cache update at section {}", transaction.section());
+        cache_.force_update_db(current_section_);
+    }
+
+    // Update range file
+    update_range();
 
     return write_section(section.value()).has_value();
 }
@@ -535,10 +546,24 @@ void Dag::update_range() {
                                                       .last        = current_section_.to_string(),
                                                       .last_cached = cache_.section().to_string() });
 
+    eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
+         first_saved_section_,
+         current_section_,
+         cache_.section());
+
     QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
         file.write(json.data());
         file.close();
+
+        QFile check_file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+        if (check_file.open(QFile::ReadOnly)) {
+            auto content = check_file.readAll();
+            eLog("[Dag] Range file written: {}", content.toStdString());
+            check_file.close();
+        }
+    } else {
+        eLog("[Dag] Failed to open range file for writing");
     }
 }
 

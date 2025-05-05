@@ -16,26 +16,50 @@ DagCache::~DagCache() {
     }
 }
 
-BigNumberFloat DagCache::get_balance(const ActorId& actor_id, const TokenId& token_id) const {
-    ActorPair pair { actor_id, token_id };
-    auto      it = balances_.find(pair);
+BigNumberFloat DagCache::get_balance(const ActorId& actor_id, const TokenId& token_id) {
+    if (!init_db()) {
+        return BigNumberFloat(0);
+    }
 
-    if (it != balances_.end()) {
-        return it->second;
+    DbRow binds = { { "section_id", section_.to_string() },
+                    { "actor_id", actor_id.to_string() },
+                    { "token_id", token_id.to_string() } };
+
+    auto rows = db_->select(
+        "SELECT balance FROM balance_cache WHERE section_id = @section_id AND actor_id = @actor_id AND token_id = "
+        "@token_id",
+        "balance_cache",
+        binds);
+
+    if (!rows.empty() && rows[0].contains("balance")) {
+        auto balance = BigNumberFloat::create(rows[0]["balance"]);
+        if (balance.has_value()) {
+            return balance.value();
+        }
     }
 
     return BigNumberFloat(0);
 }
 
 void DagCache::set_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance) {
-    ActorPair pair { actor_id, token_id };
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize DB for set_balance");
+        return;
+    }
 
-    // Only store non-zero balances to save memory
-    if (balance != BigNumberFloat(0)) {
-        balances_[pair] = balance;
+    DbRow data = { { "section_id", section_.to_string() },
+                   { "actor_id", actor_id.to_string() },
+                   { "token_id", token_id.to_string() },
+                   { "balance", balance.to_string() } };
+
+    if (balance == BigNumberFloat(0)) {
+        // Remove zero balances to save space
+        DbRow where = { { "section_id", section_.to_string() },
+                        { "actor_id", actor_id.to_string() },
+                        { "token_id", token_id.to_string() } };
+        db_->delete_row("balance_cache", where);
     } else {
-        // Remove zero balances
-        balances_.erase(pair);
+        db_->replace("balance_cache", data);
     }
 }
 
@@ -68,6 +92,14 @@ void DagCache::update_for_transaction(const Transaction& transaction) {
             tokens.push_back(from_token.value());
         }
     }
+
+    // Initialize DB transaction
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize DB for update_for_transaction");
+        return;
+    }
+
+    db_->query("BEGIN TRANSACTION");
 
     // Process the transaction for each actor-token pair
     for (const auto& actor_id : actors) {
@@ -107,6 +139,11 @@ void DagCache::update_for_transaction(const Transaction& transaction) {
             set_balance(actor_id, token_id, balance);
         }
     }
+
+    // Commit transaction
+    db_->query("COMMIT");
+
+    eLog("[DagCache] Updated balances for transaction: {}", transaction.hash());
 }
 
 bool DagCache::update_to_section(const BigNumber& section_id,
@@ -118,9 +155,6 @@ bool DagCache::update_to_section(const BigNumber& section_id,
     }
 
     eLog("[DagCache] Updating cache to section: {}", section_id);
-
-    // Clear existing balances
-    balances_.clear();
 
     // Set new section ID
     section_ = section_id;
@@ -166,6 +200,18 @@ bool DagCache::update_to_section(const BigNumber& section_id,
          unique_actors.size(),
          unique_tokens.size());
 
+    // Initialize DB
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize DB for update_to_section");
+        return false;
+    }
+
+    // Clear existing entries for this section
+    db_->query("DELETE FROM balance_cache WHERE section_id = '" + section_id.to_string() + "'");
+
+    // Start a transaction for efficiency
+    db_->query("BEGIN TRANSACTION");
+
     // Calculate balances for actor-token pairs with transactions
     for (const auto& actor_id : unique_actors) {
         for (const auto& token_id : unique_tokens) {
@@ -177,12 +223,24 @@ bool DagCache::update_to_section(const BigNumber& section_id,
                                                            read_section_callback);
 
             if (!balance_map.empty() && balance_map[actor_id] != BigNumberFloat(0)) {
-                set_balance(actor_id, token_id, balance_map[actor_id]);
+                // Store non-zero balance
+                DbRow data = { { "section_id", section_id.to_string() },
+                               { "actor_id", actor_id.to_string() },
+                               { "token_id", token_id.to_string() },
+                               { "balance", balance_map[actor_id].to_string() } };
+
+                db_->replace("balance_cache", data);
             }
         }
     }
 
-    eLog("[DagCache] Cache updated to section {} with {} balance entries", section_id, balances_.size());
+    // Commit transaction
+    db_->query("COMMIT");
+
+    // Update SectionRange
+    node_->dag()->update_range();
+
+    eLog("[DagCache] Cache updated to section {}", section_id);
 
     return true;
 }
@@ -210,36 +268,15 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     // Find the latest cache section before current
     BigNumber cache_section = calculate_cache_id(current_section);
 
-    // Check if we have this cache in memory
+    // Check if we have this cache in the DB
     bool used_cache = false;
-    if (section_ == cache_section) {
+
+    if (section_ == cache_section && init_db()) {
         used_cache = true;
 
-        // Get balances from memory cache
+        // Get balances from DB
         for (const auto& actor_id : actor_ids) {
             balances[actor_id] = get_balance(actor_id, token_id);
-        }
-    }
-    // Try to get from DB if not in memory
-    else if (db_ && db_->is_open()) {
-        for (const auto& actor_id : actor_ids) {
-            DbRow binds = { { "section_id", cache_section.to_string() },
-                            { "actor_id", actor_id.to_string() },
-                            { "token_id", token_id.to_string() } };
-
-            auto rows = db_->select(
-                "SELECT balance FROM balance_cache WHERE section_id = @section_id AND actor_id = @actor_id AND "
-                "token_id = @token_id",
-                "balance_cache",
-                binds);
-
-            if (!rows.empty() && rows[0].contains("balance")) {
-                auto balance = BigNumberFloat::create(rows[0]["balance"]);
-                if (balance.has_value()) {
-                    balances[actor_id] = balance.value();
-                    used_cache         = true;
-                }
-            }
         }
     }
 
@@ -283,38 +320,24 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     return balances;
 }
 
-bool DagCache::flush_to_db(const BigNumber& current_section) {
-    // Initialize DB if needed
+bool DagCache::flush_to_db() {
+    // Since we now write directly to the DB, this is mostly a no-op
+    // Just make sure DB is initialized and update the range file
+
     if (!init_db()) {
-        eLog("[DagCache] Failed to initialize cache database, skipping cache update");
+        eLog("[DagCache] Failed to initialize cache database");
         return false;
     }
 
-    eLog("[DagCache] Flushing cache to database for section {}", section_);
-
-    // Begin transaction for faster batch inserts
-    db_->query("BEGIN TRANSACTION");
-
-    // Write all balances to DB
-    for (const auto& [pair, balance] : balances_) {
-        DbRow data = { { "section_id", section_.to_string() },
-                       { "actor_id", pair.actor_id.to_string() },
-                       { "token_id", pair.token_id.to_string() },
-                       { "balance", balance.to_string() } };
-
-        db_->replace(Config::DataStorage::DagCacheTable, data);
-    }
-
-    // Commit transaction
-    db_->query("COMMIT");
+    eLog("[DagCache] Cache flushed to database for section {}", section_);
 
     // TODO!
     section_ = current_section;
+
+    // Update range file to reflect cache section
     node_->dag()->update_range();
 
-    eLog("[DagCache] Cache flushed to database for section {}", section_);
-
-    // !!! Cache is sent to network from here?
+    // !!! Cache is sent to network from here
     // Each node distributes its cache to maintain decentralization
 
     return true;
@@ -343,26 +366,6 @@ bool DagCache::load_from_db() {
     section_ = max_section.value();
     eLog("[DagCache] Loaded last cached section: {}", section_);
 
-    // Load balances for the latest section
-    rows = db_->select("SELECT actor_id, token_id, balance FROM " + std::string(Config::DataStorage::DagCacheTable)
-                       + " WHERE section_id = '" + section_.to_string() + "'");
-
-    balances_.clear();
-
-    for (const auto& row : rows) {
-        if (row.contains("actor_id") && row.contains("token_id") && row.contains("balance")) {
-            auto actor_id = ActorId::create(row.at("actor_id"));
-            auto token_id = TokenId::create(row.at("token_id"));
-            auto balance  = BigNumberFloat::create(row.at("balance"));
-
-            if (actor_id.has_value() && token_id.has_value() && balance.has_value()) {
-                ActorPair pair { actor_id.value(), token_id.value() };
-                balances_[pair] = balance.value();
-            }
-        }
-    }
-
-    eLog("[DagCache] Loaded {} balance entries from database", balances_.size());
     return true;
 }
 
@@ -384,22 +387,43 @@ bool DagCache::check_and_update_db(const BigNumber& current_section) {
     // Calculate safe section ID (with lag)
     auto safe_cache_id = calculate_cache_id(current_section - CACHE_LAG_SECTIONS);
 
+    eLog("[DagCache] Checking cache update: current_section={}, section_={}, safe_cache_id={}",
+         current_section,
+         section_,
+         safe_cache_id);
+
     // TODO!
     // Don't update if safe cache ID is behind or equal to current cache
-    // if (/*section_ != BigNumber(-1) &&*/ safe_cache_id <= section_) {
-    //     return false;
-    // }
+    if (section_ != BigNumber(-1) && safe_cache_id <= section_) {
+        eLog("[DagCache] Skipping update: safe_cache_id <= section_");
+        return false;
+    }
 
     // Don't update if we'd be moving backwards
     if (section_ > safe_cache_id) {
+        eLog("[DagCache] Skipping update: section_ > safe_cache_id");
         return false;
     }
 
     eLog("[DagCache] Safe cache update needed: current={}, safe={}", section_, safe_cache_id);
 
-    // Set new section and flush to database
-    section_ = safe_cache_id;
-    return flush_to_db(current_section);
+    // Update to new safe section
+    return update_to_section(safe_cache_id, current_section, node_->dag()->first_saved_section());
+}
+
+bool DagCache::force_update_db(const BigNumber& current_section) {
+    eLog("[DagCache] FORCE updating cache to DB");
+    auto safe_cache_id = calculate_cache_id(current_section - CACHE_LAG_SECTIONS);
+
+    bool result = update_to_section(safe_cache_id, current_section, node_->dag()->first_saved_section());
+
+    if (result) {
+        eLog("[DagCache] FORCE update successful: section={}", section_);
+        return true;
+    } else {
+        eLog("[DagCache] FORCE update failed");
+        return false;
+    }
 }
 
 bool DagCache::init_db() {

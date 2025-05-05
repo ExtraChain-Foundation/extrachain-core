@@ -92,6 +92,10 @@ public:
         return cache_;
     }
 
+    BigNumber first_saved_section() {
+        return first_saved_section_;
+    }
+
     std::string file_folder(const BigNumber &section) const;
     std::string file_path(const BigNumber &section) const;
 
