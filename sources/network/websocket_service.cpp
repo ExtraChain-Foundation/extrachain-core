@@ -73,7 +73,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 auto encoded = Utils::to_base64(encrypted.toStdString());
                 auto written = m_ws->sendTextMessage(QString::fromStdString(encoded));
                 m_ws->flush();
-                eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
+                // eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
                 emit closeSocketSig();
             });
 

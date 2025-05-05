@@ -132,11 +132,11 @@ void ExtraChainNode::process() {
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
     m_dmm                = new DataMiningManager(this);
-    auto key             = actorIndex()->network_id().toQByteArray();
-    auto address         = "12.12.12.12";
-    auto port            = "1212";
-    m_tokenManager       = new TokenManager(this);
-    chat_manager_        = new ChatManager(this);
+    // auto key             = actorIndex()->network_id().toQByteArray();
+    // auto address         = "12.12.12.12";
+    // auto port            = "1212";
+    m_tokenManager = new TokenManager(this);
+    chat_manager_  = new ChatManager(this);
 
     auto thread = ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_transactionManager, thread);
