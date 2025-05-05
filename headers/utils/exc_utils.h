@@ -266,7 +266,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
     actor_id TEXT,         -- Actor identifier
     token_id TEXT,         -- Token identifier
     balance TEXT,          -- Balance as string (BigNumberFloat)
-    PRIMARY KEY(section_id, actor_id, token_id)
+    PRIMARY KEY(actor_id, token_id)
 );
 )";
 
@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         static const int BLOCK_CREATION_PERIOD = 5000;
 
         // How often to construct genesis block (in blocks)
-        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
+        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 30;
 
         // How often to prove pransactions
         static const int PROVE_TXS_INTERVAL = 2000;
