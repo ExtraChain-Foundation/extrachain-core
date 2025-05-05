@@ -308,9 +308,13 @@ bool DagCache::flush_to_db(const BigNumber& current_section) {
     // Commit transaction
     db_->query("COMMIT");
 
+    // TODO!
+    section_ = current_section;
+    node_->dag()->update_range();
+
     eLog("[DagCache] Cache flushed to database for section {}", section_);
 
-    // !!! Cache is sent to network from here
+    // !!! Cache is sent to network from here?
     // Each node distributes its cache to maintain decentralization
 
     return true;
@@ -380,10 +384,11 @@ bool DagCache::check_and_update_db(const BigNumber& current_section) {
     // Calculate safe section ID (with lag)
     auto safe_cache_id = calculate_cache_id(current_section - CACHE_LAG_SECTIONS);
 
+    // TODO!
     // Don't update if safe cache ID is behind or equal to current cache
-    if (section_ != BigNumber(-1) && safe_cache_id <= section_) {
-        return false;
-    }
+    // if (/*section_ != BigNumber(-1) &&*/ safe_cache_id <= section_) {
+    //     return false;
+    // }
 
     // Don't update if we'd be moving backwards
     if (section_ > safe_cache_id) {

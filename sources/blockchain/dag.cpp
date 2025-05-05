@@ -74,7 +74,7 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
     auto section = read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
-        return std::unexpected(TransactionError::Unknown);
+        return std::unexpected(TransactionError::NoLastBlock);
     }
 
     if (section.has_value()) {

@@ -34,7 +34,7 @@ BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 struct SectionRange {
     std::string first;
     std::string last;
-    std::string last_cached; // Last section cached in database
+    std::string last_cached;
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
