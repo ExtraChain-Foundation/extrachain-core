@@ -283,6 +283,8 @@ public:
 public slots:
     void removeConnection(const QString& identifier);
 
+    void checkPort(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
+
 signals:
     void finished(); // ThreadPool
     void connectToNode(const QString&    ip,
@@ -315,7 +317,7 @@ public slots:
     void connectToNodeSlot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           const bool        isConstant = false);
+                           bool isConstant = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type,

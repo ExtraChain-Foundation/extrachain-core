@@ -101,7 +101,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
-    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -312,6 +312,43 @@ void NetworkManager::removeConnection(const QString &identifier) {
     }
 }
 
+void NetworkManager::checkPort(const QString     ip,
+                               Network::Protocol protocol,
+                               const bool        request,
+                               const bool        isConstant) {
+    // if (active_connections_count() > Network::maxConnections) {
+    //     return;
+    // }
+
+    // int         timeoutMs = 1000;
+    QTcpSocket *socket = new QTcpSocket(this);
+
+    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+        socket->disconnectFromHost();
+        socket->deleteLater();
+        // emit portCheckResult(ip, port, true);
+        connectToNodeSlot(ip, protocol, request, isConstant);
+    });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+        socket->deleteLater();
+    });
+
+    // QTimer* timer = new QTimer(this);
+    // timer->setSingleShot(true);
+    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
+    //     if (socket->state() == QAbstractSocket::ConnectingState) {
+    //         socket->abort();
+    //         // emit portCheckResult(ip, wsPort, false);
+    //         socket->deleteLater();
+    //     }
+    //     timer->deleteLater();
+    // });
+
+    socket->connectToHost(QHostAddress(ip), wsPort);
+    // timer->start(timeoutMs);
+}
+
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
@@ -390,7 +427,11 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       const bool        isConstant) {
+                                       bool              isConstant) {
+    if (ip.toStdString() == first_node_) {
+        isConstant = true;
+    }
+
     if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -598,7 +639,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::BlockchainSync
+        || message_type == MessageType::BlockchainSyncLastInfo) { // if client
         priority = SocketService::Priority::High;
     }
 
