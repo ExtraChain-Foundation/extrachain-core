@@ -307,7 +307,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
     cache_.update_for_transaction(transaction);
     cache_.check_and_update_db(current_section_);
 
-    if (transaction.section() % 5 == 0) { // Каждые 5 секций
+    if (transaction.section() % 5 == 0) { // TODO!
         eLog("[Dag] Testing forced cache update at section {}", transaction.section());
         cache_.force_update_db(current_section_);
     }
@@ -787,7 +787,8 @@ void Dag::send_sync_request() {
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
-            if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+            eLog("----- {}", info);
+            if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
                 need_sync = true;
                 break;
             }
@@ -832,7 +833,7 @@ void Dag::send_sync_request() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        if (info.last_block_id >= 0 && !info.last_hash.empty()) {
+        if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
             nodes_by_block.emplace_back(id, info.last_block_id);
         }
     }

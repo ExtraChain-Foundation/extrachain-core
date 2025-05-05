@@ -276,7 +276,9 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
 
         // Get balances from DB
         for (const auto& actor_id : actor_ids) {
-            balances[actor_id] = get_balance(actor_id, token_id);
+            // TODO!
+            // balances[actor_id] = get_balance(actor_id, token_id);
+            balances[actor_id] = BigNumberFloat(0);
         }
     }
 
@@ -291,6 +293,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
             // Return empty result, will retry when cache is available
             return balances;
         } else {
+            // TODO! Redone this, because loop
             // Full mode can calculate from scratch
             eLog("[DagCache] Recalculating cache from scratch for section {}", cache_section);
             update_to_section(cache_section, current_section, first_saved_section);
@@ -334,8 +337,7 @@ bool DagCache::flush_to_db() {
     // Update range file to reflect cache section
     node_->dag()->update_range();
 
-    // !!! Cache is sent to network from here
-    // Each node distributes its cache to maintain decentralization
+    // !!! Cache is sent to network? Or only for request?
 
     return true;
 }
@@ -367,12 +369,8 @@ bool DagCache::load_from_db() {
 }
 
 void DagCache::request_from_network(const BigNumber& section_id) {
-    // !!! Cache should be requested from network here
-    // In a p2p network, each client also serves as a server
+    // !!! Cache should be requested
     eLog("[DagCache] Requesting cache for section {} from network", section_id);
-
-    // This would typically involve creating a network message
-    // and sending it to peers, similar to how sections are requested
 }
 
 BigNumber DagCache::calculate_cache_id(const BigNumber& id) const {
