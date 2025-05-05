@@ -331,9 +331,6 @@ bool DagCache::flush_to_db() {
 
     eLog("[DagCache] Cache flushed to database for section {}", section_);
 
-    // TODO!
-    section_ = current_section;
-
     // Update range file to reflect cache section
     node_->dag()->update_range();
 
@@ -392,7 +389,6 @@ bool DagCache::check_and_update_db(const BigNumber& current_section) {
          section_,
          safe_cache_id);
 
-    // TODO!
     // Don't update if safe cache ID is behind or equal to current cache
     if (section_ != BigNumber(-1) && safe_cache_id <= section_) {
         eLog("[DagCache] Skipping update: safe_cache_id <= section_");
@@ -407,8 +403,21 @@ bool DagCache::check_and_update_db(const BigNumber& current_section) {
 
     eLog("[DagCache] Safe cache update needed: current={}, safe={}", section_, safe_cache_id);
 
-    // Update to new safe section
-    return update_to_section(safe_cache_id, current_section, node_->dag()->first_saved_section());
+    BigNumber old_section = section_;
+    section_              = safe_cache_id;
+
+    node_->dag()->update_range();
+
+    // TODO! full cache update?
+    bool result = update_to_section(safe_cache_id, current_section, node_->dag()->first_saved_section());
+
+    if (!result) {
+        section_ = old_section;
+        node_->dag()->update_range();
+        return false;
+    }
+
+    return true;
 }
 
 bool DagCache::force_update_db(const BigNumber& current_section) {
