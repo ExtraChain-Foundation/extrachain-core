@@ -28,8 +28,8 @@ namespace Chat {
         Created, // 1
         Invite,  // 2
         Join,    // 3
-        Gif,     // 4
-        Image,   // 5
+        Image,   // 4
+        Gif,     // 5
         Video,   // 6
         File,    // 7
     };
