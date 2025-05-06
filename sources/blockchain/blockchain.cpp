@@ -128,7 +128,7 @@ void Blockchain::threadSyncResponse(const BigNumber &fromBlock, const Responder 
     BigNumber lastIndex = lastBlock->id();
     BigNumber diff      = lastIndex - fromBlock;
 
-    if (diff > BigNumber(110)) {
+    if (diff > BigNumber(101)) {
         Responder responderCopy = responder;
 
         QThreadPool::globalInstance()->start([this, fromBlock, responderCopy]() {
@@ -162,6 +162,9 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
     BigNumber from = fromBlock;
     if (from < 0)
         from = 0;
+
+    // Counter to track the number of blocks processed
+    int blocksProcessed = 0;
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
@@ -201,23 +204,27 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
         // blocks.push_back(block.value());
 
         if (blocks.size() >= 1000) {
-            auto ser = MessagePack::serialize(blocks);
-            auto res = qCompress(QByteArray::fromStdString(ser));
+            blocksProcessed++;
 
-            if (!node->network()->is_connection_exists(*responder.identifiers().begin())) {
-                eLog("[Blockchain] End sync from 0x{} ({}) / {}, because no this connection",
-                     fromBlock,
-                     fromBlock.to_string(NumeralBase::Dec),
-                     timestamp);
-                return;
+            // Check connection every 15 blocks, starting from the 15th block
+            if (blocksProcessed >= 15 && blocksProcessed % 15 == 0) {
+                if (!node->network()->is_connection_exists(*responder.identifiers().begin())) {
+                    eLog("[Blockchain] End sync from 0x{} ({}) / {}, because no this connection",
+                         fromBlock,
+                         fromBlock.to_string(NumeralBase::Dec),
+                         timestamp);
+                    return;
+                }
             }
 
+            auto ser = MessagePack::serialize(blocks);
+            auto res = qCompress(QByteArray::fromStdString(ser))
             responder.with_new_message_id().send_response(res.toStdString(),
                                                           MessageType::BlockchainSyncBlocks,
                                                           SendMode::Focused,
                                                           MessageStatus::Response);
             blocks.clear();
-            eLog("[Blockchain] Sended from {} to {}, at {}", from - 1000, from, timestamp);
+            // eLog("[Blockchain] Sended from {} to {}, at {}", from - 999, from, timestamp);
             QThread::msleep(100);
         }
 
