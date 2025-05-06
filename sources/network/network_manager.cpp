@@ -812,6 +812,20 @@ void NetworkManager::sendFromCache() {
     }
 }
 
+bool NetworkManager::is_connection_exists(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty())
+        return false;
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool NetworkManager::isActiveConnectionExists() {
     auto connectionsLocked = *m_connections;
     if (connectionsLocked->empty())

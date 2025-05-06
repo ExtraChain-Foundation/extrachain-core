@@ -121,8 +121,9 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
 
 void Blockchain::threadSyncResponse(const BigNumber &fromBlock, const Responder &responder) {
     auto lastBlock = read_last_block();
-    if (!lastBlock.has_value())
+    if (!lastBlock.has_value()) {
         return;
+    }
 
     BigNumber lastIndex = lastBlock->id();
     BigNumber diff      = lastIndex - fromBlock;
@@ -203,13 +204,21 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
             auto ser = MessagePack::serialize(blocks);
             auto res = qCompress(QByteArray::fromStdString(ser));
 
+            if (!node->network()->is_connection_exists(*responder.identifiers().begin())) {
+                eLog("[Blockchain] End sync from 0x{} ({}) / {}, because no this connection",
+                     fromBlock,
+                     fromBlock.to_string(NumeralBase::Dec),
+                     timestamp);
+                return;
+            }
+
             responder.with_new_message_id().send_response(res.toStdString(),
                                                           MessageType::BlockchainSyncBlocks,
                                                           SendMode::Focused,
                                                           MessageStatus::Response);
             blocks.clear();
             eLog("[Blockchain] Sended from {} to {}, at {}", from - 1000, from, timestamp);
-            QThread::sleep(200);
+            QThread::msleep(100);
         }
 
         // if (block->isGenesisBlock()) {

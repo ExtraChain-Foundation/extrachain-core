@@ -317,7 +317,7 @@ public slots:
     void connectToNodeSlot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           bool isConstant = false);
+                           bool              isConstant = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type,
@@ -343,6 +343,7 @@ public:
                      SendMode           send_mode,
                      const std::string& receiver_identifier);
     void sendFromCache();
+    bool is_connection_exists(const std::string& identifier);
     bool isActiveConnectionExists();
     int  active_connections_count();
 
