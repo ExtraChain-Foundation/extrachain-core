@@ -365,6 +365,7 @@ public slots:
                                                             const NetworkPackageStorage,
                                                             bool resend);
 
+    void threadSyncResponse(const BigNumber &fromBlock, const Responder &responder);
     void syncResponse(const BigNumber &fromBlock, const Responder &responder);
     void syncResponseVector(const std::string           &blocks,
                             const Responder             &responder,

@@ -1488,7 +1488,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         if (!new_block_result.value().isEmpty()) {
             // need verify:
-            node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
+            emit node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
         }
 
         break;
@@ -1503,7 +1503,10 @@ void NetworkManager::messageReceived(const std::string &message,
         }
 
         if (!sync_block_result.value().isEmpty()) {
-            node->blockchain()->addBlockFromNetwork(sync_block_result.value(), responder, package_data, false);
+            emit node->blockchain()->addBlockFromNetwork(sync_block_result.value(),
+                                                         responder,
+                                                         package_data,
+                                                         false);
         }
 
         break;

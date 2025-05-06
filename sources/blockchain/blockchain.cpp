@@ -119,7 +119,32 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
     }
 }
 
+void Blockchain::threadSyncResponse(const BigNumber &fromBlock, const Responder &responder) {
+    auto lastBlock = read_last_block();
+    if (!lastBlock.has_value())
+        return;
+
+    BigNumber lastIndex = lastBlock->id();
+    BigNumber diff      = lastIndex - fromBlock;
+
+    if (diff > BigNumber(110)) {
+        Responder responderCopy = responder;
+
+        QThreadPool::globalInstance()->start([this, fromBlock, responderCopy]() {
+            this->syncResponse(fromBlock, responderCopy);
+        });
+    } else {
+        syncResponse(fromBlock, responder);
+    }
+}
+
 void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &responder) {
+    std::uint64_t timestamp = Utils::current_date_ms();
+    eLog("[Blockchain] Start sync from 0x{} ({}) at {}",
+         fromBlock,
+         fromBlock.to_string(NumeralBase::Dec),
+         timestamp);
+
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
         return;
@@ -183,6 +208,7 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
                                     SendMode::Focused,
                                     MessageStatus::Response);
             blocks.clear();
+            QThread::sleep(200);
         }
 
         // if (block->isGenesisBlock()) {
@@ -219,6 +245,8 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
     // eLog("[Blockchain] Sync responce to {} sended", responder.identifiers());
 
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
+
+    eLog("[Blockchain] End sync from 0x{} ({}) / {}", fromBlock, fromBlock.to_string(NumeralBase::Dec), timestamp);
 }
 
 void Blockchain::syncResponseVector(const std::string           &blocks_,
@@ -272,8 +300,8 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         }
 
         // if (block.first % 10 == 0) {
-            // eLog("___________- {}", block.first.to_string(NumeralBase::Dec));
-            // emit blockSyncReady(block.first);
+        // eLog("___________- {}", block.first.to_string(NumeralBase::Dec));
+        // emit blockSyncReady(block.first);
         // }
     }
 
@@ -1014,6 +1042,15 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         return std::unexpected(BlockError::IncorrectBlockId);
     }
 
+    if (blockId < blockIndex.last_saved_id - 2) {
+        eLog("[Blockchain] Ignore block 0x{} ({}), too old, because our last saved: 0x{} ({})",
+             block.id(),
+             block.id().to_string(NumeralBase::Dec),
+             blockIndex.last_saved_id,
+             blockIndex.last_saved_id.to_string(NumeralBase::Dec));
+        return std::unexpected(BlockError::IncorrectBlockId);
+    }
+
     if (block.is_genesis() && !Blockchain::is_genesis_id(blockId)) {
         eLog("[Blockchain] Try to add: incorrect genesis");
         // eFatal("Incorrect genesis");
@@ -1043,7 +1080,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
         if (!block.is_genesis() && !prevBlock.has_value()) {
             // sync();
+            eLog("[Blockchain] Try to add block 0x{} ({}), but not prev block",
+                 block.id(),
+                 block.id().to_string(NumeralBase::Dec));
             remove_last_block();
+            status_ = BlockchainStatus::Maybe;
             start_sync();
             return std::unexpected(BlockError::NoPrevBlock);
         }
@@ -1053,6 +1094,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
                 "[Blockchain] New block id is greater than "
                 "last id, sync request");
             remove_last_block();
+            status_ = BlockchainStatus::Maybe;
             start_sync();
             return std::unexpected(BlockError::GreaterLast);
         }
@@ -1578,7 +1620,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const Responder            &responder,
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
-    TIMER_START(addBlockNetwork)
+    // TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
         // eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());

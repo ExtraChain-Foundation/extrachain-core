@@ -120,17 +120,21 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
-        // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
-        //      totalBytes.first,
-        //      node->dfs()->totalDfsSize());
+        eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
+             totalBytes.first,
+             node->dfs()->totalDfsSize());
         return BigNumberFloat(0);
     }
 
     auto lastBlock = node->blockchain()->read_last_block();
-    if (!lastBlock.has_value())
+    if (!lastBlock.has_value()) {
+        // eLog("[Reward] No last block");
         return BigNumberFloat(0);
-    if (lastBlock->isEmpty())
+    }
+    if (lastBlock->isEmpty()) {
+        // eLog("[Reward] No last block 2");
         return BigNumberFloat(0);
+    }
     auto lastIndex = lastBlock->id();
     if (lastIndex == BigNumber(0)) {
         lastIndex = BigNumber(1);
@@ -146,11 +150,17 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
                + (blocksStored / BigNumberFloat(lastIndex) * 100);
     res *= KoefReward;
 
-    // eLog(
-    //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Blocks ratio: {}/{}, Multiplier:
-    //     , " "Result: {}" "100", sizeTaken, totalDfsSize, totalBytesSecond, totalBytesFirst, blocksStored,
-    //     lastIndex,
-    //     res);
+    eLog(
+        "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Blocks ratio: {}/{}, Multiplier: , "
+        "Result: {}"
+        "100",
+        sizeTaken,
+        totalDfsSize,
+        totalBytesSecond,
+        totalBytesFirst,
+        blocksStored,
+        lastIndex,
+        res);
 
     return res;
 }
