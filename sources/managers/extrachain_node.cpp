@@ -800,9 +800,11 @@ void ExtraChainNode::connectSignals() {
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
 
+#ifdef IS_R
                 if (ip == this->m_networkManager->first_node()) {
                     m_blockchain->need_check();
                 }
+#endif
 
                 m_actorIndex->send_system_actor(responder);
 
