@@ -799,10 +799,14 @@ void ExtraChainNode::connectSignals() {
 
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
+
+                if (ip == this->m_networkManager->first_node()) {
+                    m_blockchain->need_check();
+                }
+
                 m_actorIndex->send_system_actor(responder);
 
-                m_networkManager->sendFromCache();
-                m_blockchain->need_check();
+                // m_networkManager->sendFromCache();
                 // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });

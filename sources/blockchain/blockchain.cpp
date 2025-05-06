@@ -203,11 +203,12 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
             auto ser = MessagePack::serialize(blocks);
             auto res = qCompress(QByteArray::fromStdString(ser));
 
-            responder.send_response(res.toStdString(),
-                                    MessageType::BlockchainSyncBlocks,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
+            responder.with_new_message_id().send_response(res.toStdString(),
+                                                          MessageType::BlockchainSyncBlocks,
+                                                          SendMode::Focused,
+                                                          MessageStatus::Response);
             blocks.clear();
+            eLog("[Blockchain] Sended from {} to {}, at {}", from - 1000, from, timestamp);
             QThread::sleep(200);
         }
 
@@ -401,7 +402,7 @@ void Blockchain::start_check() {
         return;
     }
 
-    if (Utils::current_date_ms() - last_block_added < 15000) {
+    if (Utils::current_date_ms() - last_block_added < 10000) {
         return;
     }
 
