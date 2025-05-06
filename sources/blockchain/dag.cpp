@@ -4,6 +4,8 @@
 #include "network/message_body.h"
 #include "network/network_manager.h"
 
+#include <QtConcurrent/QtConcurrent>
+
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
@@ -106,11 +108,13 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
+    // Если синхронизация в процессе, кешируем приходящие транзакции
     if (status_ != DagStatus::Ready) {
         cached_txs_.insert(transaction);
         return {};
     }
 
+    // Проверяем, не слишком ли "будущая" секция
     if (transaction.section() > current_section_ + 5) {
         TransactionResult transaction_result { .hash   = transaction.hash(),
                                                .result = TransactionProveError::SectionTooBig };
@@ -233,6 +237,24 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
                                      read_section_callback);
 }
 
+// Новый метод для обработки кешированных транзакций
+void Dag::process_cached_transactions() {
+    if (cached_txs_.empty()) {
+        return;
+    }
+
+    eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
+
+    // Копируем транзакции для обработки
+    std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
+    cached_txs_.clear();
+
+    for (const auto &tx : txs_to_process) {
+        Responder responder(node->network());
+        network_transaction(tx, responder);
+    }
+}
+
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     // mutex
 
@@ -307,23 +329,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     // Check if cache needs updating
     cache_.check_and_update_cache(current_section_);
-
-    // Every X sections, force a cache update for testing
-    // if (transaction.section() % 5 == 0) {
-    //     eLog("[Dag] Testing forced cache update at section {}", transaction.section());
-
-    //     // Create read_section_callback for cache
-    //     auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
-    //         return this->read_section(section_id);
-    //     };
-
-    //     // Force update to the current genesis section
-    //     BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
-    //     cache_.update_to_genesis_section(genesis_section,
-    //                                      current_section_,
-    //                                      first_saved_section_,
-    //                                      read_section_callback);
-    // }
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
@@ -644,7 +649,7 @@ void Dag::start_sync() {
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 
-    eLog("BC 10 start_sync");
+    eLog("[Dag] Starting sync in thread");
 }
 
 void Dag::start_check() {
@@ -712,15 +717,19 @@ void Dag::network_status_sync_response(const BlockchainLastInfo &last_info, cons
 }
 
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
-    auto range = SectionRange { .first = from.to_string(), .last = to.to_string() };
+    // Создаем и запускаем задачу в пуле потоков
+    QtConcurrent::run([this, from, to, responder]() {
+        auto range         = SectionRange { .first = from.to_string(), .last = to.to_string() };
+        auto responder_new = responder.with_new_message_id();
 
-    auto responder_new = responder.with_new_message_id();
-    node->network()->send_message(range,
-                                  MessageType::DagSections,
-                                  SendMode::Focused,
-                                  MessageStatus::Request,
-                                  responder_new);
-    eLog("[Dag] Request sections from {} to {}", range.first, range.last);
+        node->network()->send_message(range,
+                                      MessageType::DagSections,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder_new);
+
+        eLog("[Dag] Request sections from {} to {}", from.to_string(), to.to_string());
+    });
 }
 
 void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
@@ -766,40 +775,42 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
-        qUncompress(QByteArray::fromStdString(compressed)).toStdString());
-    if (!txs.has_value()) {
-        return;
-    }
+    // Создаем и запускаем задачу в пуле потоков
+    QtConcurrent::run([this, compressed, responder]() {
+        // Распаковка и обработка данных
+        const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
+            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
-    auto min = BigNumber(-1), max = BigNumber(-1);
-    for (const auto &tx : std::as_const(txs.value())) {
-        min = min != -1 ? std::min(tx.section(), min) : tx.section();
-        max = std::max(tx.section(), max);
-        save_transaction(tx);
-    }
+        if (!txs.has_value()) {
+            return;
+        }
 
-    eLog("[Dag] Save sections from {} to {}", min, max);
+        auto min = BigNumber(-1), max = BigNumber(-1);
+        for (const auto &tx : std::as_const(txs.value())) {
+            min = min != -1 ? std::min(tx.section(), min) : tx.section();
+            max = std::max(tx.section(), max);
+            save_transaction(tx);
+        }
 
-    // emit syncProgress(blockIndex.last_saved_id);
-    // eLog("-> {} {}", blockIndex.last_saved_id, sync_last_index - 1);
-    if (current_section_ >= sync_last_index - 1) {
-        eLog("-> START CHECK");
-        status_ = DagStatus::Maybe;
-        //     emit statusChanged(status_);
-        start_check();
-        return;
-    }
+        eLog("[Dag] Saved sections from {} to {}", min, max);
 
-    if (current_section_ == sync_last_index) {
-        int added = 0;
-        // while (added != cached_txs_.size()) {
-        cached_txs_.clear();
-        // }
-        // return;
-    }
+        if (current_section_ >= sync_last_index - 1) {
+            eLog("[Dag] Sync completed, processing cached transactions");
 
-    request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+            // Вызываем обработку кешированных транзакций в основном потоке
+            // QTimer::singleShot(0, this, [this]() {
+            status_ = DagStatus::Ready;
+            set_sync_status(BlockchainSyncStatus::None);
+            process_cached_transactions();
+            // });
+            return;
+        }
+
+        // Запрашиваем следующий пакет секций
+        // QTimer::singleShot(0, this, [this, responder]() {
+        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+        // });
+    });
 }
 
 void Dag::send_sync_request() {

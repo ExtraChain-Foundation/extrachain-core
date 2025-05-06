@@ -134,6 +134,8 @@ public:
         // syncStatusChanged(status);
     }
 
+    void process_cached_transactions();
+
 private:
     ExtraChainNode                              *node;
     TransactionCache                             transaction_cache_;
