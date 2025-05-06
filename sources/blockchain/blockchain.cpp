@@ -218,7 +218,7 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
             }
 
             auto ser = MessagePack::serialize(blocks);
-            auto res = qCompress(QByteArray::fromStdString(ser))
+            auto res = qCompress(QByteArray::fromStdString(ser));
             responder.with_new_message_id().send_response(res.toStdString(),
                                                           MessageType::BlockchainSyncBlocks,
                                                           SendMode::Focused,
