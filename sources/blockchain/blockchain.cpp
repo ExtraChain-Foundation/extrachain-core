@@ -1953,8 +1953,14 @@ TransactionProveError Blockchain::prove_transaction(const Transaction          &
 
 void Blockchain::process() {
     connect(this, &Blockchain::need_check, [this] {
+#ifdef IS_R
+        this->status_ = BlockchainStatus::Maybe;
+        this->start_sync();
+#else
         this->start_check();
+#endif
     });
+
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
     connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::threadSyncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);

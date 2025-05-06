@@ -804,6 +804,8 @@ void ExtraChainNode::connectSignals() {
                 if (ip == this->m_networkManager->first_node()) {
                     m_blockchain->need_check();
                 }
+#else
+                m_blockchain->need_check();
 #endif
 
                 m_actorIndex->send_system_actor(responder);

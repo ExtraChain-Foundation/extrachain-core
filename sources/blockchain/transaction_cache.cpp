@@ -54,6 +54,10 @@ void TransactionCache::cache() {
         return;
     }
 
+#ifndef IS_R
+    return;
+#endif
+
     eLog("[TransactionCache] Start first cache");
 
     auto ids = node->accountController()->accountsIds();
