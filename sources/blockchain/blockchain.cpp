@@ -1939,7 +1939,7 @@ void Blockchain::process() {
         this->start_check();
     });
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
-    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
+    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::threadSyncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
     connect(this, &Blockchain::network_status_sync_request_signal, this, &Blockchain::network_status_sync_request);
     connect(this,
