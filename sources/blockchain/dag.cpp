@@ -4,8 +4,6 @@
 #include "network/message_body.h"
 #include "network/network_manager.h"
 
-#include <QtConcurrent/QtConcurrent>
-
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
@@ -108,20 +106,30 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
-    // Если синхронизация в процессе, кешируем приходящие транзакции
     if (status_ != DagStatus::Ready) {
-        cached_txs_.insert(transaction);
+        const std::string &transaction_hash = transaction.hash();
+        bool               is_cache_duplicate =
+            std::any_of(cached_txs_.begin(), cached_txs_.end(), [&transaction_hash](const Transaction &tx) {
+                return tx.hash() == transaction_hash;
+            });
+
+        if (!is_cache_duplicate) {
+            cached_txs_.push_back(transaction);
+        }
         return {};
     }
 
-    // Проверяем, не слишком ли "будущая" секция
     if (transaction.section() > current_section_ + 5) {
         TransactionResult transaction_result { .hash   = transaction.hash(),
                                                .result = TransactionProveError::SectionTooBig };
-        responder.send_response(transaction_result,
-                                MessageType::DagTransactionResult,
-                                SendMode::Focused,
-                                MessageStatus::Response);
+
+        if (!responder.identifiers().empty()) {
+            responder.send_response(transaction_result,
+                                    MessageType::DagTransactionResult,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+        }
+
         return std::unexpected(false);
     }
 
@@ -149,10 +157,12 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         update_range();
     }
 
-    responder.send_response(transaction_result,
-                            MessageType::DagTransactionResult,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    if (!responder.identifiers().empty()) {
+        responder.send_response(transaction_result,
+                                MessageType::DagTransactionResult,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    }
 
     if (res != TransactionProveError::NoError) {
         return std::unexpected(false);
@@ -245,14 +255,18 @@ void Dag::process_cached_transactions() {
 
     eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
 
-    // Копируем транзакции для обработки
-    std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
-    cached_txs_.clear();
+    while (!cached_txs_.empty()) {
+        std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
+        cached_txs_.clear();
 
-    for (const auto &tx : txs_to_process) {
-        Responder responder(node->network());
-        network_transaction(tx, responder);
+        for (const auto &tx : txs_to_process) {
+            Responder responder(node->network());
+            network_transaction(tx, responder);
+        }
     }
+
+    status_ = DagStatus::Ready;
+    set_sync_status(BlockchainSyncStatus::None);
 }
 
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
@@ -717,8 +731,7 @@ void Dag::network_status_sync_response(const BlockchainLastInfo &last_info, cons
 }
 
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
-    // Создаем и запускаем задачу в пуле потоков
-    QtConcurrent::run([this, from, to, responder]() {
+    QThreadPool::globalInstance()->start([this, from, to, responder]() {
         auto range         = SectionRange { .first = from.to_string(), .last = to.to_string() };
         auto responder_new = responder.with_new_message_id();
 
@@ -775,9 +788,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    // Создаем и запускаем задачу в пуле потоков
-    QtConcurrent::run([this, compressed, responder]() {
-        // Распаковка и обработка данных
+    QThreadPool::globalInstance()->start([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -797,20 +808,53 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         if (current_section_ >= sync_last_index - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
 
-            // Вызываем обработку кешированных транзакций в основном потоке
             // QTimer::singleShot(0, this, [this]() {
-            status_ = DagStatus::Ready;
-            set_sync_status(BlockchainSyncStatus::None);
             process_cached_transactions();
             // });
             return;
         }
 
-        // Запрашиваем следующий пакет секций
         // QTimer::singleShot(0, this, [this, responder]() {
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
         // });
     });
+}
+
+void Dag::network_request_light(const Responder &responder) {
+
+    QThreadPool::globalInstance()->start([this, responder]() {
+        std::vector<Transaction> txs;
+
+        txs.reserve(30);
+
+        for (BigNumber i = cache_.section(); i <= current_section_; i++) {
+            auto section = this->read_section(i);
+            if (!section.has_value()) {
+                continue;
+            }
+
+            for (const auto &tx : section->transactions) {
+                txs.push_back(tx);
+            }
+        }
+
+        if (txs.empty()) {
+            return;
+        }
+
+        auto dag_light = DagLightPackage { .cache = "", .txs = txs };
+
+        node->network()->send_message(dag_light,
+                                      MessageType::DagLightData,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder);
+
+        eLog("[Dag] Request light");
+    });
+}
+
+void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
 }
 
 void Dag::send_sync_request() {

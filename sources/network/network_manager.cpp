@@ -1464,6 +1464,27 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DagLightData: {
+        if (status == MessageStatus::Request) {
+            auto range = MessagePack::deserialize<bool>(serialized);
+            if (!range.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_request_light(responder);
+        } else if (status == MessageStatus::Response) {
+            auto light = MessagePack::deserialize<DagLightPackage>(serialized);
+            if (!light.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_response_light(light.value(), responder);
+        }
+        break;
+    }
+
     case MessageType::CoinReward: {
         auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
         if (!reward_request_result.has_value()) {

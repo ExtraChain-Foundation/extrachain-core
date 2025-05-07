@@ -60,6 +60,12 @@ struct BlockchainLastInfo {
 };
 BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_date))
 
+struct DagLightPackage {
+    std::string              cache; //
+    std::vector<Transaction> txs;
+};
+BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, txs))
+
 class Dag {
 public:
     Dag(ExtraChainNode *node);
@@ -129,6 +135,9 @@ public:
     void network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder);
     void network_request_sections_response(const std::string &compressed, const Responder &responder);
 
+    void network_request_light(const Responder &responder);
+    void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
+
     void set_sync_status(BlockchainSyncStatus status) {
         sync_status_ = status;
         // syncStatusChanged(status);
@@ -154,7 +163,7 @@ private:
     std::unordered_map<std::string, BlockchainLastInfo> last_info_;
     QTimer                                             *timer_sync;
 
-    std::set<Transaction> cached_txs_;
+    std::vector<Transaction> cached_txs_; // TODO: move to mutex
 
     void request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder);
     void send_sync_request();

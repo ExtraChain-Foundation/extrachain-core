@@ -55,9 +55,9 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#ifndef IS_RC
-    return;
-#endif
+    // #ifndef IS_RC
+    // return;
+// #endif
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
@@ -167,8 +167,9 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
-    auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-               + (BigNumberFloat(1) / BigNumberFloat(1) * 100);
+    auto res =
+        sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+        + (BigNumberFloat(node->dag()->current_section()) / BigNumberFloat(node->dag()->current_section()) * 100);
     res *= KoefReward;
 
     // eLog(
@@ -199,9 +200,10 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     //     // return BigNumberFloat(0);
     // }
 
-    auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-                + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(1) * 100));
+    auto res =
+        (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+         + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+         + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(node->dag()->current_section()) * 100));
     res *= KoefReward;
     return res;
 }
@@ -212,8 +214,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto amount = requestReward.transaction.amount();
 
     // * KoefReward
-    // TODO! Check why torerance not working
-    if (amount < 5) { // calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }

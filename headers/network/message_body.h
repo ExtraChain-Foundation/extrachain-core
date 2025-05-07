@@ -39,6 +39,7 @@ enum class MessageType {
     DagTransaction       = 30,
     DagTransactionResult = 31,
     DagSections          = 32,
+    DagLightData         = 33,
 
     BlockchainSyncLastInfo = 39,
 

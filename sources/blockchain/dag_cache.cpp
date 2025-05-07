@@ -23,12 +23,10 @@ BigNumberFloat DagCache::get_cached_balance(const ActorId&   actor_id,
         return BigNumberFloat(0);
     }
 
-    DbRow binds = { { "section_id", section_id.to_string() },
-                    { "actor_id", actor_id.to_string() },
-                    { "token_id", token_id.to_string() } };
+    DbRow binds = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
 
     auto rows = db_->select(
-        "SELECT balance FROM balance_cache WHERE section_id = @section_id AND actor_id = @actor_id AND token_id = "
+        "SELECT balance FROM balance_cache WHERE actor_id = @actor_id AND token_id = "
         "@token_id",
         "balance_cache",
         binds);
@@ -52,16 +50,13 @@ void DagCache::set_cached_balance(const ActorId&        actor_id,
         return;
     }
 
-    DbRow data = { { "section_id", section_id.to_string() },
-                   { "actor_id", actor_id.to_string() },
+    DbRow data = { { "actor_id", actor_id.to_string() },
                    { "token_id", token_id.to_string() },
                    { "balance", balance.to_string() } };
 
     if (balance == BigNumberFloat(0)) {
         // Remove zero balances to save space
-        DbRow where = { { "section_id", section_id.to_string() },
-                        { "actor_id", actor_id.to_string() },
-                        { "token_id", token_id.to_string() } };
+        DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
         db_->delete_row("balance_cache", where);
     } else {
         db_->replace("balance_cache", data);
@@ -287,7 +282,7 @@ bool DagCache::update_to_genesis_section(
     db_->query("BEGIN TRANSACTION");
 
     // Clear existing entries for this section
-    db_->query("DELETE FROM balance_cache WHERE section_id = '" + genesis_section.to_string() + "'");
+    // db_->query("DELETE FROM balance_cache WHERE section_id = '" + genesis_section.to_string() + "'");
 
     // Calculate and store balances for each actor-token pair
     std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash> balances;
@@ -414,7 +409,7 @@ bool DagCache::init_db() {
         return true;
     }
 
-    std::string db_path = BlockchainConst::BLOCKCHAIN_FOLDER + "/balance_cache.db";
+    std::string db_path = BlockchainConst::BALANCE_CACHE;
     db_                 = std::make_unique<DbConnector>(db_path);
 
     if (!db_->open()) {

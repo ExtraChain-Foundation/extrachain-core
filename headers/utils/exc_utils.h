@@ -262,10 +262,9 @@ namespace Config {
         // SQL statement to create the cache table
         constexpr char DagCacheCreate[] = R"(
 CREATE TABLE IF NOT EXISTS balance_cache (
-    section_id TEXT,       -- Cache section ID
-    actor_id TEXT,         -- Actor identifier
-    token_id TEXT,         -- Token identifier
-    balance TEXT,          -- Balance as string (BigNumberFloat)
+    actor_id TEXT NOT NULL,
+    token_id TEXT NOT NULL,
+    balance TEXT NOT NULL,
     PRIMARY KEY(actor_id, token_id)
 );
 )";
@@ -895,6 +894,7 @@ namespace BlockchainConst {
     // Cache
     static const std::string BLOCKCHAIN_CACHE_FOLDER = BLOCKCHAIN_FOLDER + "/cache";
     static const std::string TRANSACTION_CACHE       = BLOCKCHAIN_FOLDER + "/cache/SelfTransactions.db";
+    static const std::string BALANCE_CACHE           = BLOCKCHAIN_FOLDER + "/cache/BalanceCache.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;
