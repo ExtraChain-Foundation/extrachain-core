@@ -365,6 +365,7 @@ void ExtraChainNode::start() {
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
+
         if (!dir_rows.has_value()) {
             return;
         }
@@ -385,6 +386,46 @@ void ExtraChainNode::start() {
 
             if (store.has_value()) {
                 auto removed_result = m_dfs->remove_stored_file(system_id, row.file_id);
+                if (!removed_result.has_value()) {
+                    eCritical("REMOVE ERROR: {}", removed_result.error());
+                }
+            }
+        }
+    });
+#endif
+
+    // Version compatibility: 0.19.2 (temp)
+#ifdef IS_RC
+    QThreadPool::globalInstance()->start([this]() {
+        auto main_id       = m_accountController->currentProfile().main_id();
+        auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
+
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id);
+
+        if (!dir_rows.has_value()) {
+            return;
+        }
+
+        for (const auto& row : dir_rows.value()) {
+            if (row.encryption || row.type != Dfs::FileType::File || row.state != Dfs::FileState::Ready) {
+                continue;
+            }
+
+            auto file_path = Dfs::Path::file_path(main_id, row.file_id);
+            if (!file_path.has_value()) {
+                continue;
+            }
+
+            auto store = m_dfs->store_file(main_id,
+                                           main_id,
+                                           file_path->native(),
+                                           row.folder.has_value() ? row.folder.value() : "",
+                                           row.name,
+                                           Dfs::DataSecurity::Self,
+                                           data_security);
+
+            if (store.has_value()) {
+                auto removed_result = m_dfs->remove_stored_file(main_id, row.file_id);
                 if (!removed_result.has_value()) {
                     eCritical("REMOVE ERROR: {}", removed_result.error());
                 }
