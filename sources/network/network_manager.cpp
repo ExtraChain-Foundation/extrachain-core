@@ -264,7 +264,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
                 if (active_connections_count() >= Network::maxConnections) {
                     eLog("shareConnections ignored by max connections limit");
-                    return;
+
+                    if (init_ip != first_node_) {
+                        return;
+                    }
                 }
 
                 for (const auto &[ip, identifier] : connections) {
@@ -433,7 +436,7 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
     }
 
     if (active_connections_count() >= Network::maxConnections) {
-        if (!removeOneConnection()) {
+        if (isConstant && !removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
         }
