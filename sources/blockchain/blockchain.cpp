@@ -115,11 +115,37 @@ void Blockchain::sync(const BigNumber &from, std::optional<Responder> responder)
                                       MessageType::BlockchainSync,
                                       SendMode::Focused,
                                       MessageStatus::Request,
-                                      responder.value());
+                                      responder.value().with_new_message_id());
+    }
+}
+
+void Blockchain::threadSyncResponse(const BigNumber &fromBlock, const Responder &responder) {
+    auto lastBlock = read_last_block();
+    if (!lastBlock.has_value()) {
+        return;
+    }
+
+    BigNumber lastIndex = lastBlock->id();
+    BigNumber diff      = lastIndex - fromBlock;
+
+    if (diff > BigNumber(101)) {
+        Responder responderCopy = responder;
+
+        QThreadPool::globalInstance()->start([this, fromBlock, responderCopy]() {
+            this->syncResponse(fromBlock, responderCopy);
+        });
+    } else {
+        syncResponse(fromBlock, responder);
     }
 }
 
 void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &responder) {
+    std::uint64_t timestamp = Utils::current_date_ms();
+    eLog("[Blockchain] Start sync from 0x{} ({}) at {}",
+         fromBlock,
+         fromBlock.to_string(NumeralBase::Dec),
+         timestamp);
+
     auto lastBlock = read_last_block();
     if (!lastBlock.has_value()) {
         return;
@@ -136,6 +162,9 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
     BigNumber from = fromBlock;
     if (from < 0)
         from = 0;
+
+    // Counter to track the number of blocks processed
+    int blocksProcessed = 0;
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
@@ -175,14 +204,28 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
         // blocks.push_back(block.value());
 
         if (blocks.size() >= 1000) {
+            blocksProcessed++;
+
+            // Check connection every 15 blocks, starting from the 15th block
+            if (blocksProcessed >= 15 && blocksProcessed % 15 == 0) {
+                if (!node->network()->is_connection_exists(*responder.identifiers().begin())) {
+                    eLog("[Blockchain] End sync from 0x{} ({}) / {}, because no this connection",
+                         fromBlock,
+                         fromBlock.to_string(NumeralBase::Dec),
+                         timestamp);
+                    return;
+                }
+            }
+
             auto ser = MessagePack::serialize(blocks);
             auto res = qCompress(QByteArray::fromStdString(ser));
-
-            responder.send_response(res.toStdString(),
-                                    MessageType::BlockchainSyncBlocks,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
+            responder.with_new_message_id().send_response(res.toStdString(),
+                                                          MessageType::BlockchainSyncBlocks,
+                                                          SendMode::Focused,
+                                                          MessageStatus::Response);
             blocks.clear();
+            // eLog("[Blockchain] Sended from {} to {}, at {}", from - 999, from, timestamp);
+            QThread::msleep(100);
         }
 
         // if (block->isGenesisBlock()) {
@@ -216,7 +259,11 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
                             SendMode::Focused,
                             MessageStatus::Response);
 
+    // eLog("[Blockchain] Sync responce to {} sended", responder.identifiers());
+
     // eLog("[Blockchain] Send for sync: from {} to {}", fromBlock, lastIndex);
+
+    eLog("[Blockchain] End sync from 0x{} ({}) / {}", fromBlock, fromBlock.to_string(NumeralBase::Dec), timestamp);
 }
 
 void Blockchain::syncResponseVector(const std::string           &blocks_,
@@ -258,6 +305,8 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         file.write(QByteArray::fromStdString(block.second));
         file.close();
 
+        // eLog("Sync block {}", block.first);
+
         if (mode_ == BlockchainMode::Light
             && (block.first != BigNumber(0) || blocks.size() == 1
                 || (blocks.size() > 1 && blocks[1].first == BigNumber(1)))) {
@@ -266,6 +315,11 @@ void Blockchain::syncResponseVector(const std::string           &blocks_,
         if (mode_ == BlockchainMode::Full) {
             blockIndex.update_last_id(block.first);
         }
+
+        // if (block.first % 10 == 0) {
+        // eLog("___________- {}", block.first.to_string(NumeralBase::Dec));
+        // emit blockSyncReady(block.first);
+        // }
     }
 
     // TODO: check all blocks
@@ -329,7 +383,7 @@ BlockchainStatus Blockchain::status() {
 
 void Blockchain::start_sync() {
     // start timer, after end -> again request
-    if (status_ == BlockchainStatus::Sync) {
+    if (status_ == BlockchainStatus::Sync || status_ == BlockchainStatus::Ready) {
         // eLog("BC 11 start_sync return");
         return;
     }
@@ -354,9 +408,17 @@ void Blockchain::start_sync() {
 }
 
 void Blockchain::start_check() {
+    if (check_status_ == BlockchainSyncStatus::LastInfo) {
+        return;
+    }
+
     if (status_ != BlockchainStatus::Ready || status_ == BlockchainStatus::Maybe) {
         start_sync();
         // eLog("BC 12 start_check return");
+        return;
+    }
+
+    if (Utils::current_date_ms() - last_block_added < 10000) {
         return;
     }
 
@@ -398,7 +460,7 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
         emit removeAll(false, true);
     }
 
-    int count = std::min(requests_count, 5);
+    int count = std::min(requests_count, 1);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -442,14 +504,14 @@ void Blockchain::send_request_blocks() {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
+                // eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_block_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
+                // eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
         }
@@ -997,6 +1059,15 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
         return std::unexpected(BlockError::IncorrectBlockId);
     }
 
+    if (blockId < blockIndex.last_saved_id - 2) {
+        eLog("[Blockchain] Ignore block 0x{} ({}), too old, because our last saved: 0x{} ({})",
+             block.id(),
+             block.id().to_string(NumeralBase::Dec),
+             blockIndex.last_saved_id,
+             blockIndex.last_saved_id.to_string(NumeralBase::Dec));
+        return std::unexpected(BlockError::IncorrectBlockId);
+    }
+
     if (block.is_genesis() && !Blockchain::is_genesis_id(blockId)) {
         eLog("[Blockchain] Try to add: incorrect genesis");
         // eFatal("Incorrect genesis");
@@ -1026,7 +1097,11 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
 
         if (!block.is_genesis() && !prevBlock.has_value()) {
             // sync();
+            eLog("[Blockchain] Try to add block 0x{} ({}), but not prev block",
+                 block.id(),
+                 block.id().to_string(NumeralBase::Dec));
             remove_last_block();
+            status_ = BlockchainStatus::Maybe;
             start_sync();
             return std::unexpected(BlockError::NoPrevBlock);
         }
@@ -1036,6 +1111,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
                 "[Blockchain] New block id is greater than "
                 "last id, sync request");
             remove_last_block();
+            status_ = BlockchainStatus::Maybe;
             start_sync();
             return std::unexpected(BlockError::GreaterLast);
         }
@@ -1131,6 +1207,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlock(const BlockVariant 
     }
 
     eLog("[Blockchain] Block {} is added, {}", blockId, blockType);
+    last_block_added = Utils::current_date_ms();
 
     emit blockAdded(newBlock);
 
@@ -1560,7 +1637,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const Responder            &responder,
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
-    TIMER_START(addBlockNetwork)
+    // TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
         // eLog("[Blockchain] Ignore add block {}, because blockhain sync", block.id());
@@ -1876,10 +1953,16 @@ TransactionProveError Blockchain::prove_transaction(const Transaction          &
 
 void Blockchain::process() {
     connect(this, &Blockchain::need_check, [this] {
+#ifdef IS_R
+        this->status_ = BlockchainStatus::Maybe;
+        this->start_sync();
+#else
         this->start_check();
+#endif
     });
+
     connect(this, &Blockchain::addBlockFromNetwork, this, &Blockchain::addBlockNetwork);
-    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::syncResponse);
+    connect(this, &Blockchain::syncResponseFromNetwork, this, &Blockchain::threadSyncResponse);
     connect(this, &Blockchain::syncResponseVectorFromNetwork, this, &Blockchain::syncResponseVector);
     connect(this, &Blockchain::network_status_sync_request_signal, this, &Blockchain::network_status_sync_request);
     connect(this,
@@ -1920,6 +2003,7 @@ void Blockchain::removeAllSlot(bool is_mega, bool is_exit) {
 }
 
 void Blockchain::timer_sync_tick() {
+    return;
     eLog("[Blockchain] Timer sync tick");
     timer_sync->stop();
     status_ = BlockchainStatus::Timered;

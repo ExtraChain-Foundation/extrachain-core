@@ -132,11 +132,11 @@ void ExtraChainNode::process() {
     m_transactionManager = new TransactionManager(this);
     m_dfs                = new DfsController(this);
     m_dmm                = new DataMiningManager(this);
-    auto key             = actorIndex()->network_id().toQByteArray();
-    auto address         = "12.12.12.12";
-    auto port            = "1212";
-    m_tokenManager       = new TokenManager(this);
-    chat_manager_        = new ChatManager(this);
+    // auto key             = actorIndex()->network_id().toQByteArray();
+    // auto address         = "12.12.12.12";
+    // auto port            = "1212";
+    m_tokenManager = new TokenManager(this);
+    chat_manager_  = new ChatManager(this);
 
     auto thread = ThreadPool::addThread(m_blockchain);
     ThreadPool::addThread(m_transactionManager, thread);
@@ -799,10 +799,18 @@ void ExtraChainNode::connectSignals() {
 
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
+
+#ifdef IS_R
+                if (ip == this->m_networkManager->first_node()) {
+                    m_blockchain->need_check();
+                }
+#else
+                m_blockchain->need_check();
+#endif
+
                 m_actorIndex->send_system_actor(responder);
 
-                m_networkManager->sendFromCache();
-                m_blockchain->need_check();
+                // m_networkManager->sendFromCache();
                 // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });

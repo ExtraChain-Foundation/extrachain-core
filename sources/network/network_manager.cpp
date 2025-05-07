@@ -101,7 +101,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
-    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -312,6 +312,43 @@ void NetworkManager::removeConnection(const QString &identifier) {
     }
 }
 
+void NetworkManager::checkPort(const QString     ip,
+                               Network::Protocol protocol,
+                               const bool        request,
+                               const bool        isConstant) {
+    // if (active_connections_count() > Network::maxConnections) {
+    //     return;
+    // }
+
+    // int         timeoutMs = 1000;
+    QTcpSocket *socket = new QTcpSocket(this);
+
+    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+        socket->disconnectFromHost();
+        socket->deleteLater();
+        // emit portCheckResult(ip, port, true);
+        connectToNodeSlot(ip, protocol, request, isConstant);
+    });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+        socket->deleteLater();
+    });
+
+    // QTimer* timer = new QTimer(this);
+    // timer->setSingleShot(true);
+    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
+    //     if (socket->state() == QAbstractSocket::ConnectingState) {
+    //         socket->abort();
+    //         // emit portCheckResult(ip, wsPort, false);
+    //         socket->deleteLater();
+    //     }
+    //     timer->deleteLater();
+    // });
+
+    socket->connectToHost(QHostAddress(ip), wsPort);
+    // timer->start(timeoutMs);
+}
+
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
 
@@ -390,7 +427,11 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       const bool        isConstant) {
+                                       bool              isConstant) {
+    if (ip.toStdString() == first_node_) {
+        isConstant = true;
+    }
+
     if (active_connections_count() >= Network::maxConnections) {
         if (!removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
@@ -598,7 +639,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::BlockchainSync
+        || message_type == MessageType::BlockchainSyncLastInfo) { // if client
         priority = SocketService::Priority::High;
     }
 
@@ -767,6 +810,20 @@ void NetworkManager::sendFromCache() {
                                  MessageType::Unknown,
                                  MessageStatus::NoStatus);
     }
+}
+
+bool NetworkManager::is_connection_exists(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty())
+        return false;
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool NetworkManager::isActiveConnectionExists() {
@@ -1445,7 +1502,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         if (!new_block_result.value().isEmpty()) {
             // need verify:
-            node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
+            emit node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
         }
 
         break;
@@ -1460,7 +1517,10 @@ void NetworkManager::messageReceived(const std::string &message,
         }
 
         if (!sync_block_result.value().isEmpty()) {
-            node->blockchain()->addBlockFromNetwork(sync_block_result.value(), responder, package_data, false);
+            emit node->blockchain()->addBlockFromNetwork(sync_block_result.value(),
+                                                         responder,
+                                                         package_data,
+                                                         false);
         }
 
         break;
