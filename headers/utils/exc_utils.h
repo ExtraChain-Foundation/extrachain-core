@@ -226,7 +226,7 @@ namespace Network {
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
         3
     #else
-        6
+        4
     #endif
 #else
         100
