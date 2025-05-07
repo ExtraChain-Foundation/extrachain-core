@@ -131,9 +131,9 @@ void Blockchain::threadSyncResponse(const BigNumber &fromBlock, const Responder 
     if (diff > BigNumber(101)) {
         Responder responderCopy = responder;
 
-        QThreadPool::globalInstance()->start([this, fromBlock, responderCopy]() {
-            this->syncResponse(fromBlock, responderCopy);
-        });
+        // QThreadPool::globalInstance()->start([this, fromBlock, responderCopy]() {
+        this->syncResponse(fromBlock, responderCopy);
+        // });
     } else {
         syncResponse(fromBlock, responder);
     }
@@ -168,7 +168,7 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
 
     // std::vector<BlockVariant> blocks;
     std::vector<std::pair<BigNumber, std::string>> blocks;
-    blocks.reserve(1000);
+    blocks.reserve(1001);
 
     if (fromBlock != 0) {
         auto zero_block = blockIndex.read_block_by_id(BigNumber(0));
@@ -203,7 +203,7 @@ void Blockchain::syncResponse(const BigNumber &fromBlock, const Responder &respo
         blocks.push_back({ block->id(), content });
         // blocks.push_back(block.value());
 
-        if (blocks.size() >= 1000) {
+        if (blocks.size() >= 1001) {
             blocksProcessed++;
 
             // Check connection every 15 blocks, starting from the 15th block
@@ -460,6 +460,10 @@ void Blockchain::network_status_sync_response(const BlockchainLastInfo &last_inf
         emit removeAll(false, true);
     }
 
+    int max = 1;
+// #ifndef IS_R
+//     max = 5;
+// #endif
     int count = std::min(requests_count, 1);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
