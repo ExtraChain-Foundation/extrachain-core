@@ -161,7 +161,7 @@ void TransactionManager::prove_transactions() {
     int index = 0;
 
     for (const Transaction &tx : std::as_const(tx_list)) {
-        eLog("prove_transactions: {} from {}", index++, tx_list.size() - 1);
+        eLog("[Blockchain] Start prove transaction #{} from {}", ++index, tx_list.size());
         TransactionProveError res = node->blockchain()->prove_transaction(tx, proved_transactions_);
 
         if (res == TransactionProveError::NoError) {
