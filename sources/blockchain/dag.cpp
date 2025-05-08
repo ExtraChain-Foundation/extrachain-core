@@ -807,25 +807,19 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         if (current_section_ >= sync_last_index - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
 
-            // QTimer::singleShot(0, this, [this]() {
             process_cached_transactions();
-            // });
             return;
         }
 
-        // QTimer::singleShot(0, this, [this, responder]() {
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
-        // });
     });
 }
 
 void Dag::network_request_light(const Responder &responder) {
-
     QThreadPool::globalInstance()->start([this, responder]() {
         std::vector<Transaction> txs;
 
-        txs.reserve(30);
-
+        txs.reserve(50);
         for (BigNumber i = cache_.section(); i <= current_section_; i++) {
             auto section = this->read_section(i);
             if (!section.has_value()) {
@@ -841,7 +835,7 @@ void Dag::network_request_light(const Responder &responder) {
             return;
         }
 
-        auto dag_light = DagLightPackage { .cache = "", .txs = txs };
+        auto dag_light = DagLightPackage { .cache = this->cache().read_cached_balances(), .txs = txs };
 
         node->network()->send_message(dag_light,
                                       MessageType::DagLightData,
@@ -854,6 +848,21 @@ void Dag::network_request_light(const Responder &responder) {
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
+    cache_.write_cached_balances(dag_light.cache);
+
+    auto min = BigNumber(-1), max = BigNumber(-1);
+    for (const auto &tx : std::as_const(dag_light.txs)) {
+        min = min != -1 ? std::min(tx.section(), min) : tx.section();
+        max = std::max(tx.section(), max);
+        save_transaction(tx);
+    }
+
+    // save last first, last, cache
+
+    eLog("[Dag] Saved sections from {} to {}", min, max);
+    eLog("[Dag] Light sync completed, processing cached transactions");
+
+    process_cached_transactions();
 }
 
 void Dag::send_sync_request() {

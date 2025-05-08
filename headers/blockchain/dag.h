@@ -62,7 +62,7 @@ struct BlockchainLastInfo {
 BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_date))
 
 struct DagLightPackage {
-    std::string              cache; //
+    Balances                 cache;
     std::vector<Transaction> txs;
 };
 BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, txs))
