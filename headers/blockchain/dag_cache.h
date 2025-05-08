@@ -57,9 +57,28 @@ public:
         cached_section_ = section_id;
     }
 
-    Balances read_cached_balances();
+    /**
+     * @brief Read all cached balances from the database
+     *
+     * Retrieves all actor-token balances stored in the cache database.
+     * Returns an empty map if database initialization fails.
+     *
+     * @return Balances Map of actor-token pairs to their balances
+     */
+    std::pair<BigNumber, Balances> read_cached_balances();
 
-    void write_cached_balances(const Balances& balances);
+    /**
+     * @brief Write all balances to the cache database
+     *
+     * Stores multiple actor-token balances in the database.
+     * Zero balances are removed from the database to save space.
+     * Uses a database transaction for efficiency when writing multiple entries.
+     * If section_id is provided, updates the cached section to that value.
+     *      * @param balances Map of actor-token pairs to their balances
+     * @param section_id Optional section ID to update the cache section to
+     */
+    void write_cached_balances(const Balances&                 balances,
+                               const std::optional<BigNumber>& section_id = std::nullopt);
 
     /**
      * @brief Read the balance for a specific actor-token pair from cache
@@ -100,7 +119,7 @@ public:
      * @brief Calculate the genesis section id for caching
      *
      * @param section_id Current section id
-     * @return BigNumber Genesis section id (multiple of GENESIS_SECTION_SIZE)
+     * @return BigNumber Genesis section id (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
      */
     BigNumber calculate_genesis_section(const BigNumber& section_id) const;
 
@@ -160,8 +179,15 @@ private:
     /**
      * @brief Process transaction for balances
      *
+     * Updates balances for actors based on the given transaction.
+     * Handles different transaction types:
+     * - Reward: Increases sender's balance
+     * - InitContract: Increases sender's balance
+     * - Conversion: Transfers from one token to another
+     * - Regular: Transfers from sender to receiver
+     *
      * @param transaction Transaction to process
-     * @param actor_ids Set of actor IDs
+     * @param actor_ids Set of actor ids to track
      * @param balances Map of actor-token balances to update
      */
     void process_transaction(const Transaction&       transaction,

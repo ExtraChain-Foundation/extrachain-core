@@ -14,10 +14,17 @@ DagCache::~DagCache() {
     }
 }
 
-Balances DagCache::read_cached_balances() {
+std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     Balances balances;
 
+    // Check if database is initialized
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize db for read_cached_balances");
+        return { BigNumber(-1), balances }; // TODO: expected
+    }
+
     const auto rows = db_->select("SELECT * FROM balance_cache");
+    auto cache_section = cached_section_;
 
     for (const auto& row : rows) {
         auto actor_id = ActorId::create(row.at("actor_id"));
@@ -31,10 +38,46 @@ Balances DagCache::read_cached_balances() {
         balances[{ actor_id.value(), token_id.value() }] = balance.value();
     }
 
-    return balances;
+    return { cache_section, balances };
 }
 
-void DagCache::write_cached_balances(const Balances& balances) {
+void DagCache::write_cached_balances(const Balances& balances, const std::optional<BigNumber>& section_id) {
+    // Check if database is initialized
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize db for write_cached_balances");
+        return;
+    }
+
+    // Start a transaction for efficiency
+    db_->query("BEGIN TRANSACTION");
+
+    // Write each balance to the database
+    for (const auto& [key, balance] : balances) {
+        const ActorId& actor_id = key.first;
+        const TokenId& token_id = key.second;
+
+        // Skip zero balances to save space (consistent with write_cached_balance)
+        if (balance == BigNumberFloat(0)) {
+            DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
+            db_->delete_row("balance_cache", where);
+        } else {
+            DbRow data = { { "actor_id", actor_id.to_string() },
+                           { "token_id", token_id.to_string() },
+                           { "balance", balance.to_string() } };
+            db_->replace("balance_cache", data);
+        }
+    }
+
+    // Commit transaction
+    db_->query("COMMIT");
+
+    // Update cached section if provided
+    if (section_id.has_value()) {
+        set_section(section_id.value());
+        eLog("[DagCache] Updated cache section to {}", section_id.value());
+    }
+
+    eLog("[DagCache] Wrote {} balances to cache", balances.size());
 }
 
 BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const TokenId& token_id) {

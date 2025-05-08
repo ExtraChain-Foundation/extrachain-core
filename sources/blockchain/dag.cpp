@@ -819,8 +819,10 @@ void Dag::network_request_light(const Responder &responder) {
     QThreadPool::globalInstance()->start([this, responder]() {
         std::vector<Transaction> txs;
 
+        auto [cache_section, cache] = this->cache().read_cached_balances();
+
         txs.reserve(50);
-        for (BigNumber i = cache_.section(); i <= current_section_; i++) {
+        for (BigNumber i = cache_section; i <= current_section_; i++) {
             auto section = this->read_section(i);
             if (!section.has_value()) {
                 continue;
@@ -832,37 +834,47 @@ void Dag::network_request_light(const Responder &responder) {
         }
 
         if (txs.empty()) {
+            eLog("[Dag] No transactions to send in light mode");
             return;
         }
 
-        auto dag_light = DagLightPackage { .cache = this->cache().read_cached_balances(), .txs = txs };
+        auto dag_light = DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs };
 
         node->network()->send_message(dag_light,
                                       MessageType::DagLightData,
                                       SendMode::Focused,
-                                      MessageStatus::Request,
+                                      MessageStatus::Response,
                                       responder);
 
-        eLog("[Dag] Request light");
+        eLog("[Dag] Sent light data: cache section {}, transactions count: {}", cache_section, txs.size());
     });
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
-    cache_.write_cached_balances(dag_light.cache);
+    QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+        cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
-    auto min = BigNumber(-1), max = BigNumber(-1);
-    for (const auto &tx : std::as_const(dag_light.txs)) {
-        min = min != -1 ? std::min(tx.section(), min) : tx.section();
-        max = std::max(tx.section(), max);
-        save_transaction(tx);
-    }
+        auto min = BigNumber(-1), max = BigNumber(-1);
+        for (const auto &tx : std::as_const(dag_light.txs)) {
+            min = min != -1 ? std::min(tx.section(), min) : tx.section();
+            max = std::max(tx.section(), max);
+            save_transaction(tx);
+        }
 
-    // save last first, last, cache
+        if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
+            first_saved_section_ = min;
+            eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+        }
 
-    eLog("[Dag] Saved sections from {} to {}", min, max);
-    eLog("[Dag] Light sync completed, processing cached transactions");
+        update_range();
 
-    process_cached_transactions();
+        eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
+             dag_light.cache_section,
+             min,
+             max);
+
+        process_cached_transactions();
+    });
 }
 
 void Dag::send_sync_request() {

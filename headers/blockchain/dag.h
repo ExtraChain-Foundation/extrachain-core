@@ -63,9 +63,10 @@ BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_da
 
 struct DagLightPackage {
     Balances                 cache;
+    BigNumber                cache_section;
     std::vector<Transaction> txs;
 };
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, txs))
+BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs))
 
 class Dag {
 public:
