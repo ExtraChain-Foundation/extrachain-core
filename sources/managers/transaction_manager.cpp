@@ -126,10 +126,12 @@ void TransactionManager::make_block() {
 
     auto blockVariant = BlockVariant(block);
     node->blockchain()->signBlock(blockVariant);
-    eLog("[TransactionManager] Send block: {}", blockVariant.id());
 
     node->blockchain()->addBlock(blockVariant);
+    eLog("[Blockchain] Adding block: {}", blockVariant.id());
+
     node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
+    eLog("[Blockchain] Sending block: {}", blockVariant.id());
 }
 
 void TransactionManager::timer_block_tick() {

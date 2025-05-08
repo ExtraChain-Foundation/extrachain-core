@@ -1637,10 +1637,6 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const Responder            &responder,
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
-#ifndef IS_R
-    return std::unexpected(BlockError::BlockchainBusy);
-#endif
-
     // TIMER_START(addBlockNetwork)
     if (status_ == BlockchainStatus::Sync && block.id() != BigNumber(0)) {
         //
