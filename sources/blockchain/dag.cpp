@@ -564,17 +564,6 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     return TransactionProveError::NoError;
 }
 
-void Dag::update_cache() {
-    // Calculate safe section ID for caching
-    // auto safe_cache_id = cache_.calculate_cache_id(current_section_ - CACHE_LAG_SECTIONS);
-
-    // // Update cache to this section
-    // cache_.update_to_section(safe_cache_id, current_section_, first_saved_section_);
-
-    // // Update range to reflect new cache section
-    // update_range();
-}
-
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions.insert({ transaction.hash(), transaction });

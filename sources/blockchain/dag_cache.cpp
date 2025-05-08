@@ -23,8 +23,8 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
         return { BigNumber(-1), balances }; // TODO: expected
     }
 
-    const auto rows = db_->select("SELECT * FROM balance_cache");
-    auto cache_section = cached_section_;
+    const auto rows          = db_->select("SELECT * FROM balance_cache");
+    auto       cache_section = cached_section_;
 
     for (const auto& row : rows) {
         auto actor_id = ActorId::create(row.at("actor_id"));
@@ -183,6 +183,8 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
                                           current_section,
                                           first_saved_section,
                                           read_section_callback);
+            } else {
+                eLog("[DagCache] Failed to update cache to genesis section {}", genesis_section);
             }
         }
     }
