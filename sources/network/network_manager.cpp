@@ -2012,6 +2012,10 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
             country = "United Kingdom";
         }
 
+        if (country == "United States of America") {
+            country = "United States";
+        }
+
         eLog("Country: {}", country);
         cache.insert(ip, country);
         return { ip, country };
