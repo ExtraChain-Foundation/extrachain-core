@@ -128,6 +128,7 @@ void TransactionManager::make_block() {
     node->blockchain()->signBlock(blockVariant);
     eLog("[TransactionManager] Send block: {}", blockVariant.id());
 
+    node->blockchain()->addBlock(blockVariant);
     node->network()->send_message(blockVariant, MessageType::BlockchainNewBlock, SendMode::Broadcast);
 }
 

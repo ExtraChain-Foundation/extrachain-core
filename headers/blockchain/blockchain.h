@@ -78,6 +78,7 @@ class EXTRACHAIN_EXPORT Blockchain : public QObject {
     Q_OBJECT
 
     friend class ExtraChainNode;
+    friend class TransactionManager;
 
 private:
     ExtraChainNode *node;
