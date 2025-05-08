@@ -1638,7 +1638,7 @@ std::expected<BlockVariant, BlockError> Blockchain::addBlockNetwork(const BlockV
                                                                     const NetworkPackageStorage package,
                                                                     bool                        resend) {
 #ifndef IS_R
-    return;
+    return std::unexpected(BlockError::BlockchainBusy);
 #endif
 
     // TIMER_START(addBlockNetwork)
