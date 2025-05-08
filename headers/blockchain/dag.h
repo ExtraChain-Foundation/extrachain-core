@@ -48,6 +48,7 @@ enum class DagStatus {
     // Process,
     Started,
     Ready,
+    Final,
     Sync,
     Maybe,
     Timered,

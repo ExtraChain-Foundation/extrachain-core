@@ -106,7 +106,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
-    if (status_ != DagStatus::Ready) {
+    if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
         const std::string &transaction_hash = transaction.hash();
         bool               is_cache_duplicate =
             std::any_of(cached_txs_.begin(), cached_txs_.end(), [&transaction_hash](const Transaction &tx) {
@@ -247,13 +247,14 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
                                      read_section_callback);
 }
 
-// Новый метод для обработки кешированных транзакций
 void Dag::process_cached_transactions() {
     if (cached_txs_.empty()) {
         return;
     }
 
     eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
+
+    status_ = DagStatus::Final;
 
     while (!cached_txs_.empty()) {
         std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
@@ -731,18 +732,16 @@ void Dag::network_status_sync_response(const BlockchainLastInfo &last_info, cons
 }
 
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, from, to, responder]() {
-        auto range         = SectionRange { .first = from.to_string(), .last = to.to_string() };
-        auto responder_new = responder.with_new_message_id();
+    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
+    auto responder_new = responder.with_new_message_id();
 
-        node->network()->send_message(range,
-                                      MessageType::DagSections,
-                                      SendMode::Focused,
-                                      MessageStatus::Request,
-                                      responder_new);
+    node->network()->send_message(range,
+                                  MessageType::DagSections,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
+                                  responder_new);
 
-        eLog("[Dag] Request sections from {} to {}", from.to_string(), to.to_string());
-    });
+    eLog("[Dag] Request sections from {} to {}", from.to_string(), to.to_string());
 }
 
 void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {

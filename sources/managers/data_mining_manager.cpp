@@ -151,25 +151,18 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
         return BigNumberFloat(0);
     }
 
-    // auto lastBlock = node->blockchain()->read_last_block();
-    // if (!lastBlock.has_value())
-    //     return BigNumberFloat(0);
-    // if (lastBlock->isEmpty())
-    //     return BigNumberFloat(0);
-    // auto lastIndex = lastBlock->id();
-    // if (lastIndex == BigNumber(0)) {
-    //     lastIndex = BigNumber(1);
-    //     // return BigNumberFloat(0);
-    // }
+    auto current_section = BigNumberFloat(node->dag()->current_section());
+    if (current_section == BigNumberFloat(0)) {
+        current_section = BigNumberFloat(1);
+    }
 
     auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
     auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
-    auto res =
-        sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-        + (BigNumberFloat(node->dag()->current_section()) / BigNumberFloat(node->dag()->current_section()) * 100);
+    auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+               + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
     res *= KoefReward;
 
     // eLog(
@@ -200,10 +193,14 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     //     // return BigNumberFloat(0);
     // }
 
-    auto res =
-        (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-         + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-         + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(node->dag()->current_section()) * 100));
+    auto current_section = BigNumberFloat(node->dag()->current_section());
+    if (current_section == BigNumberFloat(0)) {
+        current_section = BigNumberFloat(1);
+    }
+
+    auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+                + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+                + BigNumberFloat { requestReward.BlocksStored } / current_section * 100);
     res *= KoefReward;
     return res;
 }
