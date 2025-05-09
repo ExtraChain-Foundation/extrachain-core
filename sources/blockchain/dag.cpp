@@ -76,12 +76,12 @@ Dag::Dag(ExtraChainNode *node)
 
 std::string Dag::file_folder(const BigNumber &section) const {
     BigNumber file_section = section / Config::DataStorage::SECTION_SIZE;
-    auto      path         = std::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, file_section.to_string());
+    auto      path         = fmt::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, file_section.to_string());
     return path;
 }
 
 std::string Dag::file_path(const BigNumber &section) const {
-    auto path = std::format("{}/{}", this->file_folder(section), section.to_string());
+    auto path = fmt::format("{}/{}", this->file_folder(section), section.to_string());
     return path;
 }
 
