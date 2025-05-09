@@ -58,17 +58,17 @@ Dag::Dag(ExtraChainNode *node)
     mode_ = DagMode::Light;
 #endif
 
-    if (mode_ == DagMode::Light) {
-        clear_dag();
-        cache_.reset_db();
-        cache_.init_db();
-    }
-
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
         auto network_id = section->transactions.begin()->sender();
         node->actorIndex()->set_network_id(network_id);
+    }
+
+    if (mode_ == DagMode::Light) {
+        clear_dag();
+        cache_.reset_db();
+        cache_.init_db();
     }
 
     eLog("[Dag] Constructor: done");
