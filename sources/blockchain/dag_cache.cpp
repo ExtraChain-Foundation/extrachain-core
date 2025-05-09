@@ -276,15 +276,15 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Then, find the nearest genesis section (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
     BigNumber safe_genesis_section = calculate_genesis_section(safe_section_with_lag);
 
-    eLog("[DagCache] Checking cache update: current={}, with_lag={}, cached={}, safe_genesis={}",
-         current_section,
-         safe_section_with_lag,
-         cached_section_,
-         safe_genesis_section);
+    // eLog("[DagCache] Checking cache update: current={}, with_lag={}, cached={}, safe_genesis={}",
+    //      current_section,
+    //      safe_section_with_lag,
+    //      cached_section_,
+    //      safe_genesis_section);
 
     // Don't update if already at or ahead of safe section
     if (cached_section_ != BigNumber(-1) && safe_genesis_section <= cached_section_) {
-        eLog("[DagCache] No cache update needed: safe_genesis_section <= cached_section_");
+        // eLog("[DagCache] No cache update needed: safe_genesis_section <= cached_section_");
         return false;
     }
 
@@ -298,7 +298,7 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     // is less than CACHE_LAG_SECTIONS (to prevent frequent updates)
     if (cached_section_ != BigNumber(-1)
         && (safe_genesis_section - cached_section_) < BigNumber(CACHE_LAG_SECTIONS)) {
-        eLog("[DagCache] Skipping cache update: not enough new sections since last update");
+        // eLog("[DagCache] Skipping cache update: not enough new sections since last update");
         return false;
     }
 

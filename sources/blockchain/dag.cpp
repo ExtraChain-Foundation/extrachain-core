@@ -586,10 +586,10 @@ void Dag::update_range() {
                                                       .last        = current_section_.to_string(),
                                                       .last_cached = cache_.section().to_string() });
 
-    eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
-         first_saved_section_,
-         current_section_,
-         cache_.section());
+    // eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
+    //      first_saved_section_,
+    //      current_section_,
+    //      cache_.section());
 
     QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
@@ -599,7 +599,7 @@ void Dag::update_range() {
         QFile check_file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
         if (check_file.open(QFile::ReadOnly)) {
             auto content = check_file.readAll();
-            eLog("[Dag] Range file written: {}", content.toStdString());
+            // eLog("[Dag] Range file written: {}", content.toStdString());
             check_file.close();
         }
     } else {
