@@ -345,8 +345,17 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Update range file
         update_range();
 
+        if (mode_ == DagMode::Light && transaction.section() == BigNumber(0)) {
+            auto network_id = transaction.sender();
+            node->actorIndex()->set_network_id(network_id);
+        }
+
         // Update first_saved_section_ if this is the first section or has a lower ID
         if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
+            if (mode_ == DagMode::Light && transaction.section() == BigNumber(0)) {
+                return write_section(section).has_value();
+            }
+
             first_saved_section_ = transaction.section();
             eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         }
@@ -362,7 +371,10 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
-        first_saved_section_ = transaction.section();
+        if (mode_ == DagMode::Full || mode_ == DagMode::Light && transaction.section() != BigNumber(0)) {
+            first_saved_section_ = transaction.section();
+        }
+
         eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
     }
 
@@ -834,6 +846,14 @@ void Dag::network_request_light(const Responder &responder) {
         }
 
         txs.reserve(50);
+
+        auto section = this->read_section(BigNumber(0));
+        if (section.has_value()) {
+            for (const auto &tx : section->transactions) {
+                txs.push_back(tx);
+            }
+        }
+
         for (BigNumber i = cache_section; i <= current_section_; i++) {
             auto section = this->read_section(i);
             if (!section.has_value()) {
@@ -873,10 +893,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
             save_transaction(tx);
         }
 
-        if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
-            first_saved_section_ = min;
-            eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
-        }
+        // if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
+        //     first_saved_section_ = min;
+        //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+        // }
 
         update_range();
 
@@ -1026,6 +1046,8 @@ void Dag::send_sync_request() {
 }
 
 void Dag::clear_dag() {
+    current_section_     = BigNumber(-1);
+    first_saved_section_ = BigNumber(-1);
     QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
         .remove();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/0")).removeRecursively();

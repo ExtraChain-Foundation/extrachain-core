@@ -216,7 +216,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     }
 
     // Process transactions after the balance_start_section up to current_section
-    eLog("[DagCache] Processing transactions from section {} to {}", balance_start_section, current_section);
+    // eLog("[DagCache] Processing transactions from section {} to {}", balance_start_section, current_section);
 
     for (BigNumber i = balance_start_section; i <= current_section; i++) {
         auto section = read_section_callback(i);
