@@ -36,6 +36,7 @@
 #include "blockchain/private_profile.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
+#include "blockchain/dag.h"
 
 #include <atomic>
 
@@ -249,6 +250,8 @@ signals:
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     void selfTxAdded(const BigNumber& section, std::uint64_t timestamp, const Transaction& tx);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
+
+    void dagStatus(DagStatus);
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

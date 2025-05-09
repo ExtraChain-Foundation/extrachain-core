@@ -27,6 +27,9 @@ Dag::Dag(ExtraChainNode *node)
 
             if (last_cached_result.has_value()) {
                 cache_.set_section(last_cached_result.value());
+                clear_dag();
+                cache_.reset_db();
+                cache_.init_db();
             }
 
             eLog("[Dag] Current: {}, first: {}, last cached: {}",
@@ -36,16 +39,27 @@ Dag::Dag(ExtraChainNode *node)
             file.close();
         }
     } else {
-        QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        // QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        clear_dag();
         cache_.reset_db();
         cache_.init_db();
-        transaction_cache_.make_files();
     }
+
+    transaction_cache_.make_files();
 
     // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
     //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     //     transaction_cache_.make_files();
     // }
+
+    auto settings = Utils::read_settings();
+    if (settings.blockchain_mode.has_value()) {
+        mode_ = settings.blockchain_mode.value();
+    }
+
+#ifdef IS_RC
+    mode_ = DagMode::Light;
+#endif
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
@@ -249,10 +263,6 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
 }
 
 void Dag::process_cached_transactions() {
-    if (cached_txs_.empty()) {
-        return;
-    }
-
     eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
 
     status_ = DagStatus::Final;
@@ -268,6 +278,7 @@ void Dag::process_cached_transactions() {
     }
 
     status_ = DagStatus::Ready;
+    emit node->dagStatus(status_);
     set_sync_status(BlockchainSyncStatus::None);
 }
 
@@ -643,7 +654,7 @@ void Dag::start_sync() {
 
     if (status_ != DagStatus::Sync) {
         status_ = DagStatus::Sync;
-        // emit statusChanged(status_);
+        emit node->dagStatus(status_);
     }
 
     last_info_.clear();
@@ -810,6 +821,9 @@ void Dag::network_request_light(const Responder &responder) {
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
+        if (cache_section == BigNumber(-1)) {
+            cache_section = BigNumber(0);
+        }
 
         txs.reserve(50);
         for (BigNumber i = cache_section; i <= current_section_; i++) {
@@ -867,6 +881,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
     });
 }
 
+void Dag::set_sync_status(BlockchainSyncStatus status) {
+    sync_status_ = status;
+}
+
 void Dag::send_sync_request() {
     auto section = this->read_section(current_section_);
 
@@ -910,8 +928,7 @@ void Dag::send_sync_request() {
     if (!need_sync) {
         set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
-        status_       = DagStatus::Ready;
-        // emit statusChanged(status_);
+        process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -935,8 +952,7 @@ void Dag::send_sync_request() {
         eLog("BC 3");
         set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
-        status_       = DagStatus::Ready;
-        // emit statusChanged(status_);
+        process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -985,9 +1001,30 @@ void Dag::send_sync_request() {
 
     eLog("sync_last_index {}", sync_last_index);
     // sync(sync_index, responder);
-    request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+    if (mode_ == DagMode::Full) {
+        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+    } else {
+        auto responder_new = responder.with_new_message_id();
+        node->network()->send_message(true,
+                                      MessageType::DagLightData,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder_new);
+    }
     // request from to
     check_status_ = BlockchainSyncStatus::None;
     // emit syncStart(sync_index, sync_last_index);
     eLog("syncStart");
+}
+
+void Dag::clear_dag() {
+    QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
+        .remove();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/0")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/1")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/2")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/3")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
 }

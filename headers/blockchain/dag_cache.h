@@ -101,8 +101,18 @@ public:
     /**
      * @brief Calculate balances for actors using cache
      *
-     * @param actor_ids Vector of actor ids
-     * @param token_id Token id
+     * This method calculates balances for specified actors and token by:
+     * 1. First checking if there's a valid cache available
+     * 2. If cache exists, using it as the starting point
+     * 3. If no cache exists:
+     *    - In light mode: request from network and return empty balances
+     *    - In full mode: recalculate cache up to a safe section (with lag)
+     * 4. Processing all transactions from the cached section to the current section
+     *      * The method respects the cache lag settings, ensuring consistency between
+     * cache updates and balance calculations.
+     *
+     * @param actor_ids Vector of actor ids to calculate balances for
+     * @param token_id Token id to calculate balances for
      * @param current_section Current section of the blockchain
      * @param first_saved_section First saved section of the blockchain
      * @param read_section_callback Function to read a section
@@ -126,9 +136,17 @@ public:
     /**
      * @brief Check and update cache to latest safe section
      *
+     *      * This method determines if the cache should be updated based on the current section
+     * and the cache lag settings. The cache is only updated when:
+     * 1. The current section is at least CACHE_LAG_SECTIONS ahead of the last cached section
+     * 2. The safe section (current - lag) maps to a genesis section that's ahead of our cached section
+     * 3. The distance between the current cached section and the new safe section is sufficient
+     *      * This prevents frequent cache updates and ensures we only cache "mature" sections
+     * that are unlikely to change.
+     *
      * @param current_section Current section of the blockchain
      * @return true If cache was updated
-     * @return false If no update was needed or failed
+     * @return false If no update was needed or update failed
      */
     bool check_and_update_cache(const BigNumber& current_section);
 

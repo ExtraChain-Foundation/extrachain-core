@@ -2,13 +2,13 @@
 
 #include <boost/describe.hpp>
 
-#include "network/network_manager.h"
 #include "utils/bignumber.h"
 #include "blockchain/transaction.h"
 #include "blockchain/transaction_cache.h"
 #include "blockchain/dag_cache.h"
 
 class ExtraChainNode;
+class Responder;
 
 /**
  * @brief Represents a section (block) in the blockchain
@@ -375,10 +375,7 @@ public:
      *
      * @param status The new sync status
      */
-    void set_sync_status(BlockchainSyncStatus status) {
-        sync_status_ = status;
-        // syncStatusChanged(status);
-    }
+    void set_sync_status(BlockchainSyncStatus status);
 
     /**
      * @brief Process transactions that were cached during synchronization
@@ -452,6 +449,8 @@ private:
      * @return TransactionProveError Error code or NoError if valid
      */
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
+
+    void clear_dag();
 
     friend class ExtraChainNode;
 };
