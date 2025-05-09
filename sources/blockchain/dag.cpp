@@ -373,11 +373,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 }
 
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions) {
-    // temp
-    // if (tx.type() == TransactionType::Repeatable) {
-    //     return TransactionProveError::NoError;
-    // }
-
+    // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != BigNumber(0)) {
             return TransactionProveError::GenesisOnlyZeroSection;
@@ -390,14 +386,13 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::NoError;
     }
 
+    // Verify previous section exists
     auto section = this->read_section(BigNumber(tx.section() - 1));
     if (section.has_value()) {
-        // TODO: check
+        // TODO: Additional section validation could be added here
     }
 
-    // eLog("[Blockchain] Transaction prove started: {}",
-    // tx);
-    // TODO: temp, remove
+    // Validate transaction amount
     if (tx.amount() == 0) {
         return TransactionProveError::AmountZero;
     }
@@ -406,10 +401,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::AmountLessZero;
     }
 
+    // Get sender and receiver IDs
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
     const ActorId &mainActorId    = node->accountController()->system_actor().id();
 
+    // Check if transaction involves the node's own accounts
     const auto accounts = node->accountController()->accountsIds();
     for (const auto &accountId : accounts) {
         if (targetSender == accountId || targetReceiver == accountId) {
@@ -417,17 +414,20 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         }
     }
 
+    // Verify transaction hash integrity
     auto tx_copy = tx;
     tx_copy.calculate_hash();
     if (tx.hash() != tx_copy.hash()) {
         return TransactionProveError::WrongHash;
     }
 
+    // Check for duplicate transaction
     auto tx_result = search_transaction(tx_copy.hash());
     if (tx_result.has_value()) {
         return TransactionProveError::Duplicate;
     }
 
+    // Validate sender
     if (targetSender.is_zero()) {
         return TransactionProveError::SenderZero;
     }
@@ -438,6 +438,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::SenderNotExists;
     }
 
+    // Special handling for Burn transactions
     if (tx.type() == TransactionType::Burn) {
         if (!tx.receiver().is_zero()) {
             return TransactionProveError::BurnIncorrectReceiver;
@@ -451,6 +452,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::NoError;
     }
 
+    // Validate receiver
     if (targetReceiver.is_zero()) {
         return TransactionProveError::ReceiverZero;
     }
@@ -461,25 +463,21 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::ReceiverNotExists;
     }
 
+    // Check sender-receiver relationship based on transaction type
     if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::InitContract
         || tx.type() == TransactionType::Conversion) {
+        // These transaction types require sender and receiver to be the same
         if (targetSender != targetReceiver) {
             return TransactionProveError::NotIdenticalSenderReceiver;
         }
     } else {
+        // Regular transactions require different sender and receiver
         if (targetSender == targetReceiver) {
             return TransactionProveError::IdenticalSenderReceiver;
         }
     }
 
-    // auto block = read_last_block();
-    // if (!block.has_value()) {
-    //     return TransactionProveError::EmptyBlockchain;
-    // }
-    // if (block->isEmpty()) {
-    //     return TransactionProveError::EmptyBlockchain;
-    // }
-
+    // Verify signature
     if (tx.signature().empty()) {
         return TransactionProveError::MissingSignature;
     }
@@ -489,6 +487,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::InvalidSignature;
     }
 
+    // Special transaction types that don't require balance check
     if (tx.type() == TransactionType::Reward) {
         return TransactionProveError::NoError;
     }
@@ -496,21 +495,18 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // special conditions: receiver is null - coins burning,
     // contract creation
     // TODO: InitContract: check duplicate
+    // Validate InitContract transactions
     if (tx.type() == TransactionType::InitContract) {
         auto count = tx.amount();
         if (count < 0 || count >= Token::MAX_TOKEN_COUNT) {
             return TransactionProveError::InvalidTokenCount;
         }
-
         return TransactionProveError::NoError;
     }
 
+    // Validate Conversion transactions
     if (tx.type() == TransactionType::Conversion) {
-        return TransactionProveError::NoError;
-    }
-
-    TokenId token = tx.token();
-    if (tx.type() == TransactionType::Conversion) {
+        // Check conversion token information
         if (!tx.data().has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
@@ -519,59 +515,68 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
             return TransactionProveError::ConversionIncorrectFromToken;
         }
 
-        token = from_token.value();
+        TokenId token = from_token.value();
 
         if (from_token == tx.token()) {
             return TransactionProveError::ConversionEqualToken;
         }
+
+        return TransactionProveError::NoError;
     }
 
-    return TransactionProveError::NoError;
+    // Balance validation for regular transactions
+    TokenId token = tx.token();
 
-    BigNumberFloat transactionAmount = tx.amount();
-    BigNumberFloat senderBalance     = BigNumberFloat(); // calculate_actor_balance(targetSender, token);
+    // Calculate sender's current balance from all previous sections
+    std::vector<ActorId> actor_ids         = { targetSender };
+    BigNumberFloat       senderBalance     = calculate_actors_balance(actor_ids, token)[targetSender];
+    BigNumberFloat       transactionAmount = tx.amount();
 
-    // tx check
+    // Apply all transactions in the current section to the balance
     for (const Transaction &tx_check : std::as_const(transactions)) {
         if (tx.hash() == tx_check.hash()) {
-            continue;
+            continue; // Skip the current transaction itself
         }
 
         if (tx_check.token() != token) {
-            continue;
+            continue; // Skip transactions with different tokens
         }
 
-        if (tx_check.type() == TransactionType::Reward && tx_check.sender() == tx_check.receiver()
-            && tx_check.token() == token) {
+        // Rewards and contract initializations increase balance
+        if (tx_check.type() == TransactionType::Reward && tx_check.sender() == targetSender) {
             senderBalance += tx_check.amount();
             continue;
         }
 
-        if (tx_check.type() == TransactionType::InitContract && tx_check.sender() == tx_check.receiver()
-            && tx_check.token() == token) {
+        if (tx_check.type() == TransactionType::InitContract && tx_check.sender() == targetSender) {
             senderBalance += tx_check.amount();
             continue;
         }
 
-        if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == tx_check.receiver()) {
-            if (tx_check.data() == token.to_string()) {
-                senderBalance -= tx_check.amount();
-            }
-            if (tx_check.token() == token) {
-                senderBalance += tx_check.amount();
+        // Conversions can both increase and decrease balance
+        if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == targetSender) {
+            if (tx_check.data().has_value()) {
+                auto from_token = TokenId::create(tx_check.data().value());
+                if (from_token.has_value() && from_token.value() == token) {
+                    senderBalance -= tx_check.amount();
+                }
+                if (tx_check.token() == token) {
+                    senderBalance += tx_check.amount();
+                }
             }
             continue;
         }
 
+        // Regular transactions
         if (tx_check.sender() == targetSender && tx_check.token() == token) {
             senderBalance -= tx_check.amount();
         }
-
-        if (tx_check.receiver() == targetReceiver && tx_check.token() == token) {
+        if (tx_check.receiver() == targetSender && tx_check.token() == token) {
             senderBalance += tx_check.amount();
         }
     }
 
+    // Check if the sender has sufficient balance
     if (senderBalance < transactionAmount) {
         return TransactionProveError::SenderBalanceBelowZero;
     }

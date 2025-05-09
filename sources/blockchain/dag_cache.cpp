@@ -264,9 +264,9 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
     if (current_section < BigNumber(CACHE_LAG_SECTIONS)) {
         // If we don't have enough sections yet, don't cache anything
-        eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
-             current_section,
-             CACHE_LAG_SECTIONS);
+        // eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
+        //      current_section,
+        //      CACHE_LAG_SECTIONS);
         return false;
     }
 

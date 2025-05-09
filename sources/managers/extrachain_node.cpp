@@ -143,7 +143,7 @@ void ExtraChainNode::process() {
 
     timer_reward = new QTimer(this);
     connect(timer_reward, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_reward->start(6000);
+    timer_reward->start(MINING_TIMER_TICK);
 
     timer_info = new QTimer(this);
     connect(timer_info, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
