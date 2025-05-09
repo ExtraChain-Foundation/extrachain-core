@@ -27,9 +27,6 @@ Dag::Dag(ExtraChainNode *node)
 
             if (last_cached_result.has_value()) {
                 cache_.set_section(last_cached_result.value());
-                clear_dag();
-                cache_.reset_db();
-                cache_.init_db();
             }
 
             eLog("[Dag] Current: {}, first: {}, last cached: {}",
@@ -60,6 +57,12 @@ Dag::Dag(ExtraChainNode *node)
 #ifdef IS_RC
     mode_ = DagMode::Light;
 #endif
+
+    if (mode_ == DagMode::Light) {
+        clear_dag();
+        cache_.reset_db();
+        cache_.init_db();
+    }
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
