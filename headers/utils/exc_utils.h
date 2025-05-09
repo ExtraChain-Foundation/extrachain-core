@@ -221,8 +221,19 @@ namespace Network {
     Q_NAMESPACE
 
     static bool    isStartedServer = true;
-    static quint16 maxConnections  = 100;
-    static bool    networkDebug    = false;
+    static quint16 maxConnections =
+#ifdef IS_RC
+    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+        3
+    #else
+        4
+    #endif
+#else
+        100
+#endif
+
+        ;
+    static bool networkDebug = false;
 
     enum class Protocol {
         Undefined = 0,

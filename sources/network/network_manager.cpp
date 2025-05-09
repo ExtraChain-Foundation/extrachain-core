@@ -100,7 +100,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
-    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -263,7 +263,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
                 if (active_connections_count() >= Network::maxConnections) {
                     eLog("shareConnections ignored by max connections limit");
-                    return;
+
+                    if (init_ip != first_node_) {
+                        return;
+                    }
                 }
 
                 for (const auto &[ip, identifier] : connections) {
@@ -309,6 +312,43 @@ void NetworkManager::removeConnection(const QString &identifier) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
+}
+
+void NetworkManager::checkPort(const QString     ip,
+                               Network::Protocol protocol,
+                               const bool        request,
+                               const bool        isConstant) {
+    // if (active_connections_count() > Network::maxConnections) {
+    //     return;
+    // }
+
+    // int         timeoutMs = 1000;
+    QTcpSocket *socket = new QTcpSocket(this);
+
+    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+        socket->disconnectFromHost();
+        socket->deleteLater();
+        // emit portCheckResult(ip, port, true);
+        connectToNodeSlot(ip, protocol, request, isConstant);
+    });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+        socket->deleteLater();
+    });
+
+    // QTimer* timer = new QTimer(this);
+    // timer->setSingleShot(true);
+    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
+    //     if (socket->state() == QAbstractSocket::ConnectingState) {
+    //         socket->abort();
+    //         // emit portCheckResult(ip, wsPort, false);
+    //         socket->deleteLater();
+    //     }
+    //     timer->deleteLater();
+    // });
+
+    socket->connectToHost(QHostAddress(ip), wsPort);
+    // timer->start(timeoutMs);
 }
 
 NetworkManager::~NetworkManager() {
@@ -389,9 +429,13 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       const bool        isConstant) {
+                                       bool              isConstant) {
+    if (ip.toStdString() == first_node_) {
+        isConstant = true;
+    }
+
     if (active_connections_count() >= Network::maxConnections) {
-        if (!removeOneConnection()) {
+        if (isConstant && !removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
         }
@@ -597,7 +641,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::BlockchainSync
+        || message_type == MessageType::BlockchainSyncLastInfo) { // if client
         priority = SocketService::Priority::High;
     }
 
@@ -766,6 +812,20 @@ void NetworkManager::sendFromCache() {
                                  MessageType::Unknown,
                                  MessageStatus::NoStatus);
     }
+}
+
+bool NetworkManager::is_connection_exists(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty())
+        return false;
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool NetworkManager::isActiveConnectionExists() {
@@ -1917,6 +1977,10 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
 
         if (country.contains("United Kingdom")) {
             country = "United Kingdom";
+        }
+
+        if (country == "United States of America") {
+            country = "United States";
         }
 
         eLog("Country: {}", country);

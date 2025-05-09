@@ -81,11 +81,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
-    if (search_result.has_value()) {
-        return std::unexpected(Dfs::DfsError::DirDuplicate);
-    }
+    // auto search_result =
+    //     Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
+    // if (search_result.has_value()) {
+    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
+    // }
 
     auto fpath_result = FsPath::create(file_path);
     if (!fpath_result.has_value()) {
