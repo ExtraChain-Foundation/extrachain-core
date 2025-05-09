@@ -167,13 +167,13 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
         // Get cached balances from DB
         for (const auto& actor_id : actor_ids) {
             balances[actor_id] = read_cached_balance(actor_id, token_id);
-            eLog("[DagCache] Found cached balance for actor {}: {}", actor_id, balances[actor_id]);
+            // eLog("[DagCache] Found cached balance for actor {}: {}", actor_id, balances[actor_id]);
         }
     } else {
         // No usable cache found
         if (node_->dag()->mode() == DagMode::Light) {
             // Light mode requires cache from network if not available
-            eLog("[DagCache] Light mode missing cache - requesting from network");
+            // eLog("[DagCache] Light mode missing cache - requesting from network");
             // Request cache from network here (future implementation)
             return balances; // Return empty balances, will retry when cache is available
         } else {

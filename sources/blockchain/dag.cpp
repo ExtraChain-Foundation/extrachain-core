@@ -71,7 +71,7 @@ Dag::Dag(ExtraChainNode *node)
         node->actorIndex()->set_network_id(network_id);
     }
 
-    eLog("[Dag] The One");
+    eLog("[Dag] Constructor: done");
 }
 
 std::string Dag::file_folder(const BigNumber &section) const {
@@ -199,12 +199,10 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
     this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
-        eLog("[Dag] Our transaction not approved: {} / {}", transaction.section(), transaction.hash());
+        eLog("[Dag] Our transaction not approved: {} / {}, {}", transaction.section(), transaction.hash(), result);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
-        current_section_ = transaction.section();
-        update_range();
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -226,6 +224,10 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
             emit transaction_cache_.add(section->id, section->timestamp, transaction);
 
 #ifdef IS_RC
+            if (transaction.type() == TransactionType::Repeatable) {
+                node->selfTxRepeatableAdded(transaction.section(), section->timestamp, transaction);
+            }
+
             // if (transaction.type() == TransactionType::Reward
             //     && accountId == node->accountController()->system_actor().id()) {
             //     Transaction tx;
@@ -684,8 +686,6 @@ void Dag::start_sync() {
                                   MessageType::BlockchainSyncLastInfo,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
-
-    eLog("[Dag] Starting sync in thread");
 }
 
 void Dag::start_check() {

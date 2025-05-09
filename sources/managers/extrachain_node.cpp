@@ -128,11 +128,12 @@ void ExtraChainNode::process() {
     dag_                = new Dag(this);
     m_dfs               = new DfsController(this);
     m_dmm               = new DataMiningManager(this);
+    m_tokenManager      = new TokenManager(this);
+    chat_manager_       = new ChatManager(this);
+
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
     // auto port            = "1212";
-    m_tokenManager      = new TokenManager(this);
-    chat_manager_       = new ChatManager(this);
 
     // auto thread = ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_transactionManager, thread);
@@ -518,6 +519,9 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
     transaction.setAmount(BigNumberFloat(1000));
+#ifdef QT_DEBUG
+    transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
+#endif
     transaction.setToken(token_id); // TODO: get token_id from json
     transaction.setData(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);

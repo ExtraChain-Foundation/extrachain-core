@@ -263,6 +263,7 @@ private slots:
     void timer_reward_request();
     void timer_info_print();
 
+public:
     void selfTxRepeatableAdded(const BigNumber& block_id, uint64_t block_date, const Transaction& transaction);
 
 public slots:
