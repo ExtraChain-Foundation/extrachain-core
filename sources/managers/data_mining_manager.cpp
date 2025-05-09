@@ -151,16 +151,10 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
         return BigNumberFloat(0);
     }
 
-    // auto lastBlock = node->blockchain()->read_last_block();
-    // if (!lastBlock.has_value())
-    //     return BigNumberFloat(0);
-    // if (lastBlock->isEmpty())
-    //     return BigNumberFloat(0);
-    // auto lastIndex = lastBlock->id();
-    // if (lastIndex == BigNumber(0)) {
-    //     lastIndex = BigNumber(1);
-    //     // return BigNumberFloat(0);
-    // }
+    auto current_section = BigNumberFloat(node->dag()->current_section());
+    if (current_section == BigNumberFloat(0)) {
+        current_section = BigNumberFloat(1);
+    }
 
     auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
     auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
@@ -168,7 +162,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
     auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
-               + (BigNumberFloat(1) / BigNumberFloat(1) * 100);
+               + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
     res *= KoefReward;
 
     // eLog(
@@ -199,9 +193,14 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     //     // return BigNumberFloat(0);
     // }
 
+    auto current_section = BigNumberFloat(node->dag()->current_section());
+    if (current_section == BigNumberFloat(0)) {
+        current_section = BigNumberFloat(1);
+    }
+
     auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
                 + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + (BigNumberFloat { requestReward.BlocksStored } / BigNumberFloat(1) * 100));
+                + BigNumberFloat { requestReward.BlocksStored } / current_section * 100);
     res *= KoefReward;
     return res;
 }
@@ -212,8 +211,7 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto amount = requestReward.transaction.amount();
 
     // * KoefReward
-    // TODO! Check why torerance not working
-    if (amount < 5) { // calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return;
         }

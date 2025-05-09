@@ -27,6 +27,9 @@ Dag::Dag(ExtraChainNode *node)
 
             if (last_cached_result.has_value()) {
                 cache_.set_section(last_cached_result.value());
+                clear_dag();
+                cache_.reset_db();
+                cache_.init_db();
             }
 
             eLog("[Dag] Current: {}, first: {}, last cached: {}",
@@ -36,15 +39,27 @@ Dag::Dag(ExtraChainNode *node)
             file.close();
         }
     } else {
-        QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        // QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        clear_dag();
         cache_.reset_db();
         cache_.init_db();
     }
 
-    if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
-        QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-        transaction_cache_.make_files();
+    transaction_cache_.make_files();
+
+    // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
+    //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    //     transaction_cache_.make_files();
+    // }
+
+    auto settings = Utils::read_settings();
+    if (settings.blockchain_mode.has_value()) {
+        mode_ = settings.blockchain_mode.value();
     }
+
+#ifdef IS_RC
+    mode_ = DagMode::Light;
+#endif
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
@@ -106,17 +121,30 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
-    if (status_ != DagStatus::Ready) {
+    if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
+        const std::string &transaction_hash = transaction.hash();
+        bool               is_cache_duplicate =
+            std::any_of(cached_txs_.begin(), cached_txs_.end(), [&transaction_hash](const Transaction &tx) {
+                return tx.hash() == transaction_hash;
+            });
+
+        if (!is_cache_duplicate) {
+            cached_txs_.push_back(transaction);
+        }
         return {};
     }
 
     if (transaction.section() > current_section_ + 5) {
         TransactionResult transaction_result { .hash   = transaction.hash(),
                                                .result = TransactionProveError::SectionTooBig };
-        responder.send_response(transaction_result,
-                                MessageType::DagTransactionResult,
-                                SendMode::Focused,
-                                MessageStatus::Response);
+
+        if (!responder.identifiers().empty()) {
+            responder.send_response(transaction_result,
+                                    MessageType::DagTransactionResult,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+        }
+
         return std::unexpected(false);
     }
 
@@ -144,10 +172,12 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         update_range();
     }
 
-    responder.send_response(transaction_result,
-                            MessageType::DagTransactionResult,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    if (!responder.identifiers().empty()) {
+        responder.send_response(transaction_result,
+                                MessageType::DagTransactionResult,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    }
 
     if (res != TransactionProveError::NoError) {
         return std::unexpected(false);
@@ -232,6 +262,26 @@ std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const 
                                      read_section_callback);
 }
 
+void Dag::process_cached_transactions() {
+    eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
+
+    status_ = DagStatus::Final;
+
+    while (!cached_txs_.empty()) {
+        std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
+        cached_txs_.clear();
+
+        for (const auto &tx : txs_to_process) {
+            Responder responder(node->network());
+            network_transaction(tx, responder);
+        }
+    }
+
+    status_ = DagStatus::Ready;
+    emit node->dagStatus(status_);
+    set_sync_status(BlockchainSyncStatus::None);
+}
+
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     // mutex
 
@@ -306,23 +356,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     // Check if cache needs updating
     cache_.check_and_update_cache(current_section_);
-
-    // Every X sections, force a cache update for testing
-    // if (transaction.section() % 5 == 0) {
-    //     eLog("[Dag] Testing forced cache update at section {}", transaction.section());
-
-    //     // Create read_section_callback for cache
-    //     auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
-    //         return this->read_section(section_id);
-    //     };
-
-    //     // Force update to the current genesis section
-    //     BigNumber genesis_section = cache_.calculate_genesis_section(current_section_);
-    //     cache_.update_to_genesis_section(genesis_section,
-    //                                      current_section_,
-    //                                      first_saved_section_,
-    //                                      read_section_callback);
-    // }
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
@@ -543,17 +576,6 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     return TransactionProveError::NoError;
 }
 
-void Dag::update_cache() {
-    // Calculate safe section ID for caching
-    // auto safe_cache_id = cache_.calculate_cache_id(current_section_ - CACHE_LAG_SECTIONS);
-
-    // // Update cache to this section
-    // cache_.update_to_section(safe_cache_id, current_section_, first_saved_section_);
-
-    // // Update range to reflect new cache section
-    // update_range();
-}
-
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions.insert({ transaction.hash(), transaction });
@@ -564,10 +586,10 @@ void Dag::update_range() {
                                                       .last        = current_section_.to_string(),
                                                       .last_cached = cache_.section().to_string() });
 
-    eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
-         first_saved_section_,
-         current_section_,
-         cache_.section());
+    // eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
+    //      first_saved_section_,
+    //      current_section_,
+    //      cache_.section());
 
     QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
@@ -577,7 +599,7 @@ void Dag::update_range() {
         QFile check_file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
         if (check_file.open(QFile::ReadOnly)) {
             auto content = check_file.readAll();
-            eLog("[Dag] Range file written: {}", content.toStdString());
+            // eLog("[Dag] Range file written: {}", content.toStdString());
             check_file.close();
         }
     } else {
@@ -632,7 +654,7 @@ void Dag::start_sync() {
 
     if (status_ != DagStatus::Sync) {
         status_ = DagStatus::Sync;
-        // emit statusChanged(status_);
+        emit node->dagStatus(status_);
     }
 
     last_info_.clear();
@@ -643,7 +665,7 @@ void Dag::start_sync() {
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 
-    eLog("BC 10 start_sync");
+    eLog("[Dag] Starting sync in thread");
 }
 
 void Dag::start_check() {
@@ -711,14 +733,15 @@ void Dag::network_status_sync_response(const BlockchainLastInfo &last_info, cons
 }
 
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
-    auto range = SectionRange { .first = from.to_string(), .last = to.to_string() };
-
+    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
+
     node->network()->send_message(range,
                                   MessageType::DagSections,
                                   SendMode::Focused,
                                   MessageStatus::Request,
                                   responder_new);
+
     eLog("[Dag] Request sections from {} to {}", range.first, range.last);
 }
 
@@ -728,8 +751,8 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
-    if (to <= from) {
-        eLog("[Dag] Send sections error: {} <= {}", to, from);
+    if (to < from) {
+        eLog("[Dag] Send sections error: {} < {}", to, from);
         return;
     }
 
@@ -765,32 +788,101 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
-        qUncompress(QByteArray::fromStdString(compressed)).toStdString());
-    if (!txs.has_value()) {
-        return;
-    }
+    QThreadPool::globalInstance()->start([this, compressed, responder]() {
+        const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
+            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
-    auto min = BigNumber(-1), max = BigNumber(-1);
-    for (const auto &tx : std::as_const(txs.value())) {
-        min = min != -1 ? std::min(tx.section(), min) : tx.section();
-        max = std::max(tx.section(), max);
-        save_transaction(tx);
-    }
+        if (!txs.has_value()) {
+            return;
+        }
 
-    eLog("[Dag] Save sections from {} to {}", min, max);
+        auto min = BigNumber(-1), max = BigNumber(-1);
+        for (const auto &tx : std::as_const(txs.value())) {
+            min = min != -1 ? std::min(tx.section(), min) : tx.section();
+            max = std::max(tx.section(), max);
+            save_transaction(tx);
+        }
 
-    // emit syncProgress(blockIndex.last_saved_id);
-    // eLog("-> {} {}", blockIndex.last_saved_id, sync_last_index - 1);
-    if (current_section_ >= sync_last_index - 1) {
-        eLog("-> START CHECK");
-        status_ = DagStatus::Maybe;
-        //     emit statusChanged(status_);
-        start_check();
-        return;
-    }
+        eLog("[Dag] Saved sections from {} to {}", min, max);
 
-    request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+        if (current_section_ >= sync_last_index - 1) {
+            eLog("[Dag] Sync completed, processing cached transactions");
+
+            process_cached_transactions();
+            return;
+        }
+
+        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+    });
+}
+
+void Dag::network_request_light(const Responder &responder) {
+    QThreadPool::globalInstance()->start([this, responder]() {
+        std::vector<Transaction> txs;
+
+        auto [cache_section, cache] = this->cache().read_cached_balances();
+        if (cache_section == BigNumber(-1)) {
+            cache_section = BigNumber(0);
+        }
+
+        txs.reserve(50);
+        for (BigNumber i = cache_section; i <= current_section_; i++) {
+            auto section = this->read_section(i);
+            if (!section.has_value()) {
+                continue;
+            }
+
+            for (const auto &tx : section->transactions) {
+                txs.push_back(tx);
+            }
+        }
+
+        if (txs.empty()) {
+            eLog("[Dag] No transactions to send in light mode");
+            return;
+        }
+
+        auto dag_light = DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs };
+
+        node->network()->send_message(dag_light,
+                                      MessageType::DagLightData,
+                                      SendMode::Focused,
+                                      MessageStatus::Response,
+                                      responder);
+
+        eLog("[Dag] Sent light data: cache section {}, transactions count: {}", cache_section, txs.size());
+    });
+}
+
+void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
+    QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+        cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
+
+        auto min = BigNumber(-1), max = BigNumber(-1);
+        for (const auto &tx : std::as_const(dag_light.txs)) {
+            min = min != -1 ? std::min(tx.section(), min) : tx.section();
+            max = std::max(tx.section(), max);
+            save_transaction(tx);
+        }
+
+        if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
+            first_saved_section_ = min;
+            eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+        }
+
+        update_range();
+
+        eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
+             dag_light.cache_section,
+             min,
+             max);
+
+        process_cached_transactions();
+    });
+}
+
+void Dag::set_sync_status(BlockchainSyncStatus status) {
+    sync_status_ = status;
 }
 
 void Dag::send_sync_request() {
@@ -836,8 +928,7 @@ void Dag::send_sync_request() {
     if (!need_sync) {
         set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
-        status_       = DagStatus::Ready;
-        // emit statusChanged(status_);
+        process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -861,8 +952,7 @@ void Dag::send_sync_request() {
         eLog("BC 3");
         set_sync_status(BlockchainSyncStatus::None);
         check_status_ = BlockchainSyncStatus::None;
-        status_       = DagStatus::Ready;
-        // emit statusChanged(status_);
+        process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -911,9 +1001,30 @@ void Dag::send_sync_request() {
 
     eLog("sync_last_index {}", sync_last_index);
     // sync(sync_index, responder);
-    request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+    if (mode_ == DagMode::Full) {
+        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+    } else {
+        auto responder_new = responder.with_new_message_id();
+        node->network()->send_message(true,
+                                      MessageType::DagLightData,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder_new);
+    }
     // request from to
     check_status_ = BlockchainSyncStatus::None;
     // emit syncStart(sync_index, sync_last_index);
     eLog("syncStart");
+}
+
+void Dag::clear_dag() {
+    QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
+        .remove();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/0")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/1")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/2")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/3")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
+    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
 }

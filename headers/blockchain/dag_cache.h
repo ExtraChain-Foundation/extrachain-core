@@ -16,12 +16,15 @@ class Section;
 // Cache configuration constants
 constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and persistent cache
 
+using Balances = std::map<std::pair<ActorId, TokenId>, BigNumberFloat>;
+
 /**
  * @brief DagCache - Manages caching of actor balances for blockchain
  *
  * This class handles database caching of actor balances
  * to accelerate balance calculations and support light mode.
  */
+
 class DagCache {
 public:
     /**
@@ -37,60 +40,79 @@ public:
     ~DagCache();
 
     /**
-     * @brief Get the current section ID of the cache
+     * @brief Get the current section id of the cache
      *
-     * @return BigNumber The section ID
+     * @return BigNumber The section id
      */
     BigNumber section() const {
         return cached_section_;
     }
 
     /**
-     * @brief Set the current section ID of the cache
+     * @brief Set the current section id of the cache
      *
-     * @param section_id The new section ID
+     * @param section_id The new section id
      */
     void set_section(const BigNumber& section_id) {
         cached_section_ = section_id;
     }
 
     /**
-     * @brief Get the balance for a specific actor-token pair from cache
+     * @brief Read all cached balances from the database
      *
-     * @param actor_id The actor ID
-     * @param token_id The token ID
-     * @param section_id The section ID to get balance for
+     * Retrieves all actor-token balances stored in the cache database.
+     * Returns an empty map if database initialization fails.
+     *
+     * @return Balances Map of actor-token pairs to their balances
+     */
+    std::pair<BigNumber, Balances> read_cached_balances();
+
+    /**
+     * @brief Write all balances to the cache database
+     *
+     * Stores multiple actor-token balances in the database.
+     * Zero balances are removed from the database to save space.
+     * Uses a database transaction for efficiency when writing multiple entries.
+     * If section_id is provided, updates the cached section to that value.
+     *      * @param balances Map of actor-token pairs to their balances
+     * @param section_id Optional section ID to update the cache section to
+     */
+    void write_cached_balances(const Balances&                 balances,
+                               const std::optional<BigNumber>& section_id = std::nullopt);
+
+    /**
+     * @brief Read the balance for a specific actor-token pair from cache
+     *
+     * @param actor_id The actor id
+     * @param token_id The token id
      * @return BigNumberFloat The balance
      */
-    BigNumberFloat get_cached_balance(const ActorId&   actor_id,
-                                      const TokenId&   token_id,
-                                      const BigNumber& section_id);
+    BigNumberFloat read_cached_balance(const ActorId& actor_id, const TokenId& token_id);
 
     /**
-     * @brief Set the balance for a specific actor-token pair in cache
+     * @brief White the balance for a specific actor-token pair in cache
      *
-     * @param actor_id The actor ID
-     * @param token_id The token ID
+     * @param actor_id The actor id
+     * @param token_id The token id
      * @param balance The balance to set
-     * @param section_id The section ID to set balance for
      */
-    void set_cached_balance(const ActorId&        actor_id,
-                            const TokenId&        token_id,
-                            const BigNumberFloat& balance,
-                            const BigNumber&      section_id);
-
-    /**
-     * @brief Update cache for a single transaction
-     *
-     * @param transaction The transaction to process
-     */
-    void update_for_transaction(const Transaction& transaction);
+    void write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
 
     /**
      * @brief Calculate balances for actors using cache
      *
-     * @param actor_ids Vector of actor IDs
-     * @param token_id Token ID
+     * This method calculates balances for specified actors and token by:
+     * 1. First checking if there's a valid cache available
+     * 2. If cache exists, using it as the starting point
+     * 3. If no cache exists:
+     *    - In light mode: request from network and return empty balances
+     *    - In full mode: recalculate cache up to a safe section (with lag)
+     * 4. Processing all transactions from the cached section to the current section
+     *      * The method respects the cache lag settings, ensuring consistency between
+     * cache updates and balance calculations.
+     *
+     * @param actor_ids Vector of actor ids to calculate balances for
+     * @param token_id Token id to calculate balances for
      * @param current_section Current section of the blockchain
      * @param first_saved_section First saved section of the blockchain
      * @param read_section_callback Function to read a section
@@ -104,19 +126,27 @@ public:
         std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
 
     /**
-     * @brief Calculate the genesis section ID for caching
+     * @brief Calculate the genesis section id for caching
      *
-     * @param section_id Current section ID
-     * @return BigNumber Genesis section ID (multiple of GENESIS_SECTION_SIZE)
+     * @param section_id Current section id
+     * @return BigNumber Genesis section id (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
      */
     BigNumber calculate_genesis_section(const BigNumber& section_id) const;
 
     /**
      * @brief Check and update cache to latest safe section
      *
+     *      * This method determines if the cache should be updated based on the current section
+     * and the cache lag settings. The cache is only updated when:
+     * 1. The current section is at least CACHE_LAG_SECTIONS ahead of the last cached section
+     * 2. The safe section (current - lag) maps to a genesis section that's ahead of our cached section
+     * 3. The distance between the current cached section and the new safe section is sufficient
+     *      * This prevents frequent cache updates and ensures we only cache "mature" sections
+     * that are unlikely to change.
+     *
      * @param current_section Current section of the blockchain
      * @return true If cache was updated
-     * @return false If no update was needed or failed
+     * @return false If no update was needed or update failed
      */
     bool check_and_update_cache(const BigNumber& current_section);
 
@@ -160,28 +190,27 @@ private:
     };
 
     ExtraChainNode*              node_;                           // Node reference
-    BigNumber                    cached_section_ = BigNumber(-1); // Current cached section ID (genesis point)
+    BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized
 
     /**
      * @brief Process transaction for balances
      *
+     * Updates balances for actors based on the given transaction.
+     * Handles different transaction types:
+     * - Reward: Increases sender's balance
+     * - InitContract: Increases sender's balance
+     * - Conversion: Transfers from one token to another
+     * - Regular: Transfers from sender to receiver
+     *
      * @param transaction Transaction to process
-     * @param actor_ids Set of actor IDs
+     * @param actor_ids Set of actor ids to track
      * @param balances Map of actor-token balances to update
      */
     void process_transaction(const Transaction&       transaction,
                              const std::set<ActorId>& actor_ids,
                              std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash>& balances);
-
-    /**
-     * @brief Load cache state from database
-     *
-     * @return true If loading was successful
-     * @return false If loading failed
-     */
-    bool load_from_db();
 };
 
 // Hash function for std::pair to use in unordered_map
