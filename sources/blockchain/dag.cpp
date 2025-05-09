@@ -1058,3 +1058,14 @@ void Dag::clear_dag() {
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
 }
+
+std::set<std::string> Section::prev_hashs() {
+    std::set<std::string> hashs;
+
+    for (const auto &tx : transactions) {
+        const auto &prev_hashes = tx.prev_hash();
+        hashs.insert(prev_hashes.begin(), prev_hashes.end());
+    }
+
+    return hashs;
+}

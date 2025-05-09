@@ -26,13 +26,7 @@ struct Section {
      *
      * @return std::set<std::string> Set of previous transaction hashes
      */
-    std::set<std::string> prev_hashs() {
-        std::set<std::string> hashs;
-        for (const auto &tx : transactions) {
-            hashs.insert_range(tx.prev_hash());
-        }
-        return hashs;
-    }
+    std::set<std::string> prev_hashs();
 };
 BOOST_DESCRIBE_STRUCT(Section, (), (timestamp, transactions))
 
