@@ -39,12 +39,13 @@ Dag::Dag(ExtraChainNode *node)
         QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
         cache_.reset_db();
         cache_.init_db();
-    }
-
-    if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
-        QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
         transaction_cache_.make_files();
     }
+
+    // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
+    //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    //     transaction_cache_.make_files();
+    // }
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
@@ -730,7 +731,7 @@ void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Res
                                   MessageStatus::Request,
                                   responder_new);
 
-    eLog("[Dag] Request sections from {} to {}", from.to_string(), to.to_string());
+    eLog("[Dag] Request sections from {} to {}", range.first, range.last);
 }
 
 void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
@@ -739,8 +740,8 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
-    if (to <= from) {
-        eLog("[Dag] Send sections error: {} <= {}", to, from);
+    if (to < from) {
+        eLog("[Dag] Send sections error: {} < {}", to, from);
         return;
     }
 
