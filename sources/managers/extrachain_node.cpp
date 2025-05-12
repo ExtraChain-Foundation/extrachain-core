@@ -46,17 +46,6 @@
     #include <signal.h>
 #endif
 
-struct TokensDataRow {
-    TokenId        token_id;
-    std::string    name;
-    std::string    ticker;
-    BigNumberFloat count;
-    ActorId        owner;
-    std::string    color;
-    std::string    smart;
-};
-BOOST_DESCRIBE_STRUCT(TokensDataRow, (), (token_id, name, ticker, count, owner, name, color, smart))
-
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
                                              bool     allowRunRestApiServer,
@@ -213,8 +202,6 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
         dag_->set_status(DagStatus::Ready);
     }
 
-    create_network_need_dfs_creation = true;
-
     eSuccess("[Node] New network created");
     return true;
 }
@@ -281,13 +268,75 @@ bool ExtraChainNode::create_subscription_template() {
                                      .add_fields({ Dfs::Field::Integer("type").not_null(),
                                                    Dfs::Field::Integer("date_start").not_null(),
                                                    Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
-                                                   Dfs::Field::String("block_id").not_null(),
+                                                   Dfs::Field::String("section_id").not_null(),
                                                    Dfs::Field::String("transaction_hash").not_null() });
 
     auto system_actor_id = accountController()->system_actor().id();
     auto template_res    = dfs()->store_template(system_actor_id, subscription_template);
     if (!template_res.has_value()) {
         eCritical("Can't create subscription template, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_token_template() {
+    auto network_id      = m_actorIndex->network_id();
+    auto tokens_template = Dfs::CollectionTemplate::create("TokensCache")
+                               .value()
+                               .add_fields({ Dfs::Field::ActorId("token_id").not_null().unique(),
+                                             Dfs::Field::String("name").not_null().unique().length(3, 20),
+                                             Dfs::Field::String("ticker").not_null().unique().length(2, 5),
+                                             Dfs::Field::String("count").not_null(),
+                                             Dfs::Field::ActorId("owner_id").not_null(),
+                                             Dfs::Field::String("color").not_null(),
+                                             Dfs::Field::String("smart"),
+                                             Dfs::Field::String("section_id").not_null(),
+                                             Dfs::Field::String("tx_hash").not_null() });
+
+    auto template_res = m_dfs->store_template(network_id, tokens_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_token_vector() {
+    auto network_id = actorIndex()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "TokensCache");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto store_res =
+        m_dfs->store_vector(network_id, network_id, "TokensCache", network_id, search_result->file_id);
+    if (!store_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", store_res.error());
+        return false;
+    }
+
+    auto tokens_row = TokenData { .token_id   = TokenId(),
+                                  .owner_id   = network_id,
+                                  .name       = "ExtraCoin",
+                                  .ticker     = "EXC",
+                                  .count      = BigNumberFloat(0),
+                                  .color      = "#808080",
+                                  .smart      = "",
+                                  .section_id = BigNumber(0),
+                                  .tx_hash    = "" };
+
+    auto res = m_dfs->add_vector_row(store_res->actor_id, store_res->file_id, tokens_row);
+    if (!res) {
         return false;
     }
 
@@ -316,48 +365,6 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     }
 
     return true;
-}
-
-void ExtraChainNode::create_new_network_dfs() {
-    // temp while no cached local new store file
-    create_network_need_dfs_creation = false;
-
-    auto network_id      = m_actorIndex->network_id();
-    auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
-        { Dfs::Field::ActorId("token_id").not_null().unique(),
-          Dfs::Field::String("name").not_null().unique().length(3, 20),
-          Dfs::Field::String("ticker").not_null().unique().length(2, 5),
-          Dfs::Field::String("count").not_null(),
-          Dfs::Field::ActorId("owner").not_null(),
-          Dfs::Field::String("color").not_null(),
-          Dfs::Field::String("smart") });
-
-    auto template_res = m_dfs->store_template(network_id, tokens_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create token cache database, because {}", template_res.error());
-        return;
-    }
-
-    return;
-
-    auto store_res =
-        m_dfs->store_collection(network_id, network_id, "Tokens", template_res->actor_id, template_res->file_id);
-    if (!store_res.has_value()) {
-        eCritical("Can't create token cache database, because {}", store_res.error());
-        Utils::wipeDataFiles();
-        return;
-    }
-
-    auto tokens_row = TokensDataRow { .token_id = ActorId(),
-                                      .name     = "ExtraChain",
-                                      .ticker   = "EXC",
-                                      .count    = BigNumberFloat(0),
-                                      .owner    = network_id,
-                                      .color    = "#111111",
-                                      .smart    = "" };
-    m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
-
-    eSuccess("[Node] New network dfs created");
 }
 
 void ExtraChainNode::start() {
@@ -534,9 +541,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     return true;
 }
 
-void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
-                                           uint64_t           block_date,
-                                           const Transaction& transaction) {
+void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
     if (!subscription_row.has_value()) {
         return;
     }
@@ -548,8 +553,8 @@ void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
 
     auto row = subscription_row.value();
 
-    row.block_id         = block_id;
-    row.date_start       = block_date;
+    row.section_id       = transaction.section();
+    row.date_start       = transaction.timestamp();
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
@@ -741,6 +746,10 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->totalDfsSize());
 }
 
+void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
+    m_tokenManager->final_token_creation(transaction);
+}
+
 std::string ExtraChainNode::generate_network_identifier() {
     std::string network_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
@@ -825,10 +834,6 @@ void ExtraChainNode::connectSignals() {
             [this](const std::string ip, const std::string identifier) {
                 eLog("[WS] Start sync...");
 
-                if (create_network_need_dfs_creation) {
-                    create_new_network_dfs();
-                }
-
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
                 m_actorIndex->send_system_actor(responder);
@@ -842,39 +847,6 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->system_actor().id());
     });
-
-    // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
-    //         &Blockchain::updateBlockchain);
-    connect(m_tokenManager,
-            &TokenManager::sendTransactionCreateToken,
-            this,
-            [this](const ActorId& actorId, const Transaction& tx) {
-                QTimer* timer = new QTimer();
-                timer->setSingleShot(true);
-
-                connect(timer, &QTimer::timeout, this, [=, this]() {
-                    auto actor = this->m_accountController->currentProfile().get_actor(actorId);
-                    if (!actor.has_value()) {
-                        return;
-                    }
-                    this->sendTransaction(tx, actor.value());
-                    timer->deleteLater();
-                });
-
-                timer->start(2000);
-            });
-
-    connect(m_tokenManager,
-            &TokenManager::sendToken,
-            this,
-            [=, this](const ActorId& actor_id, const QString& json_path) {
-                m_dfs->store_file(actor_id,
-                                  actor_id,
-                                  json_path.toStdString(),
-                                  "contract",
-                                  "token-description.json",
-                                  Dfs::DataSecurity::Public);
-            });
 
     // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
 }
@@ -892,7 +864,6 @@ void ExtraChainNode::prepareFolders() {
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
-    QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     generate_network_identifier();
 }

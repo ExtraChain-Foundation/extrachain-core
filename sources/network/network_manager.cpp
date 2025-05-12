@@ -1571,7 +1571,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
             node->dag()->network_status_sync_request(responder);
         } else if (status == MessageStatus::Response) {
-            auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
+            auto last_info_result = MessagePack::deserialize<DagLastInfo>(serialized);
             if (!last_info_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
                 break;

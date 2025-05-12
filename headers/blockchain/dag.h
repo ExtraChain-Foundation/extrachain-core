@@ -18,7 +18,6 @@ class Responder;
  */
 struct Section {
     BigNumber             id;
-    std::uint64_t         timestamp;
     std::set<Transaction> transactions;
 
     /**
@@ -27,8 +26,12 @@ struct Section {
      * @return std::set<std::string> Set of previous transaction hashes
      */
     std::set<std::string> prev_hashs();
+
+    std::set<std::string> hashs();
+
+    std::uint64_t middle();
 };
-BOOST_DESCRIBE_STRUCT(Section, (), (timestamp, transactions))
+BOOST_DESCRIBE_STRUCT(Section, (), (transactions))
 
 /**
  * @brief Represents the result of a transaction validation
@@ -81,12 +84,12 @@ enum class DagStatus {
  * Contains the ID of the last block, its previous hashes,
  * and the timestamp of the genesis block
  */
-struct BlockchainLastInfo {
-    BigNumber             last_block_id;
+struct DagLastInfo {
+    BigNumber             last_section_id;
     std::set<std::string> last_hash;
     std::uint64_t         zero_date;
 };
-BOOST_DESCRIBE_STRUCT(BlockchainLastInfo, (), (last_block_id, last_hash, zero_date))
+BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
 
 /**
  * @brief Package of data for light mode synchronization
@@ -326,7 +329,7 @@ public:
      * @param last_info The blockchain info received
      * @param responder The responder that sent the info
      */
-    void network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder);
+    void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
 
     /**
      * @brief Request specific sections from the network
@@ -394,8 +397,8 @@ private:
     BlockchainSyncStatus check_status_ = BlockchainSyncStatus::None; // Current check status
     BigNumber            sync_last_index;                            // Last section index to sync
     int                  requests_count = 0;                         // Number of outstanding requests
-    std::unordered_map<std::string, BlockchainLastInfo> last_info_;  // Last blockchain info from peers
-    QTimer                                             *timer_sync;  // Timer for sync operations
+    std::unordered_map<std::string, DagLastInfo> last_info_;         // Last blockchain info from peers
+    QTimer                                      *timer_sync;         // Timer for sync operations
 
     std::vector<Transaction> cached_txs_; // Transactions cached during synchronization
 

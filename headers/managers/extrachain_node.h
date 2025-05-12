@@ -81,10 +81,10 @@ struct SubscriptionRow {
     int           type       = 0;
     std::uint64_t date_start = 0; // block date
     bool          auto_renew = false;
-    BigNumber     block_id;
+    BigNumber     section_id;
     std::string   transaction_hash;
 };
-BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, block_id, transaction_hash))
+BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
@@ -125,10 +125,9 @@ private:
     QTimer*            timer_reward        = nullptr;
     QTimer*            timer_info          = nullptr;
 
-    bool                        started                          = false;
-    bool                        isClientApplication              = false;
-    bool                        allowRunRestApiServer            = false;
-    bool                        create_network_need_dfs_creation = false;
+    bool                        started               = false;
+    bool                        isClientApplication   = false;
+    bool                        allowRunRestApiServer = false;
     std::uint64_t               blockCount;
     std::vector<BigNumber>      resiveCounts;
     VpnFunctionClearType        m_vpnClearFunc = nullptr;
@@ -143,8 +142,12 @@ public:
     bool create_usernames_vector();
     bool create_chat_templates();
     bool create_subscription_template();
+    bool create_token_template();
+    bool create_token_vector();
+
+    // not only for the one
     bool create_subscription_vector(const std::string& file_name);
-    void create_new_network_dfs();
+
     void start();
 
     bool isClientApp() {
@@ -248,7 +251,7 @@ signals:
     void vpnDisconnect();
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
-    void selfTxAdded(const BigNumber& section, std::uint64_t timestamp, const Transaction& tx);
+    void selfTxAdded(const Transaction& tx);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
@@ -264,7 +267,8 @@ private slots:
     void timer_info_print();
 
 public:
-    void selfTxRepeatableAdded(const BigNumber& block_id, uint64_t block_date, const Transaction& transaction);
+    void selfTxInitContractAdded(const Transaction& transaction);
+    void selfTxRepeatableAdded(const Transaction& transaction);
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);

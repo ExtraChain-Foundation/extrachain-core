@@ -118,7 +118,7 @@ void Transaction::setToken(const ActorId &value) {
 void Transaction::calculate_hash() {
     auto hashData = m_section.to_string() + std::to_string(std::to_underlying(m_type)) + m_sender.to_string()
                     + m_receiver.to_string() + m_token.to_string() + m_amount.to_string(NumeralBase::Hex)
-                    + (m_data.has_value() ? m_data.value() : "");
+                    + std::to_string(timestamp_) + (m_data.has_value() ? m_data.value() : "");
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;
