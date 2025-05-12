@@ -168,18 +168,6 @@ public:
         this->prev_hashs_.insert(hash);
     }
 
-    MSGPACK_DEFINE(m_section,
-                   m_type,
-                   m_sender,
-                   m_receiver,
-                   m_token,
-                   m_amount,
-                   timestamp_,
-                   m_data,
-                   prev_hashs_,
-                   m_hash,
-                   m_signature)
-
     BOOST_DESCRIBE_CLASS(Transaction,
                          (),
                          (),

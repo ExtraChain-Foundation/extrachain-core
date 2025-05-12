@@ -1534,7 +1534,7 @@ void NetworkManager::messageReceived(const std::string &message,
         } else if (status == MessageStatus::Response) {
             auto light = MessagePack::deserialize<DagLightPackage>(serialized);
             if (!light.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync light", type);
                 break;
             }
 

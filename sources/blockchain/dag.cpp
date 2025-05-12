@@ -99,12 +99,12 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
         tx.set_prev_hashs(section->hashs());
     }
 
+    tx.set_timestamp(Utils::current_date_ms());
+
     auto sign_res = tx.sign(signer);
     if (!sign_res) {
         return std::unexpected(TransactionError::Unknown);
     }
-
-    tx.set_timestamp(Utils::current_date_ms());
 
     return tx;
 }

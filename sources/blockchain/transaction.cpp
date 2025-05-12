@@ -24,6 +24,7 @@ Transaction::Transaction() {
     this->m_receiver  = ActorId();
     this->m_token     = ActorId();
     this->m_amount    = BigNumberFloat(0);
+    this->timestamp_  = 0;
     this->m_data      = std::nullopt;
     this->m_section   = BigNumber(0);
     this->m_hash      = "";
@@ -53,6 +54,7 @@ Transaction::Transaction(const Transaction &other) {
     this->m_sender    = other.m_sender;
     this->m_receiver  = other.m_receiver;
     this->m_amount    = other.m_amount;
+    this->timestamp_  = other.timestamp_;
     this->m_data      = other.m_data;
     this->m_token     = other.m_token;
     this->m_section   = other.m_section;
@@ -67,6 +69,7 @@ Transaction::Transaction(Transaction &&other) noexcept {
     m_sender    = std::move(other.m_sender);
     m_receiver  = std::move(other.m_receiver);
     m_amount    = std::move(other.m_amount);
+    timestamp_  = other.timestamp_;
     m_data      = std::move(other.m_data);
     m_token     = std::move(other.m_token);
     m_section   = std::move(other.m_section);
@@ -256,11 +259,12 @@ bool Transaction::operator==(const Transaction &transaction) const {
         return false;
     if (this->m_receiver != transaction.receiver())
         return false;
-    if (this->m_amount != transaction.amount())
+    if (this->m_amount != transaction.amount()) {
         eLog("________ {} {}",
              this->amount().to_string(NumeralBase::Dec),
              transaction.amount().to_string(NumeralBase::Dec));
-    return false;
+        // return false;
+    }
     if (this->m_data != transaction.data())
         return false;
     if (this->m_token != transaction.token())
@@ -272,6 +276,9 @@ bool Transaction::operator==(const Transaction &transaction) const {
     if (this->prev_hashs_ != transaction.prev_hash()) {
         return false;
     }
+    if (this->timestamp_ != transaction.timestamp()) {
+        return false;
+    }
     //    if (this->signature != transaction.getSignature())
     //        return false;
     return true;
@@ -281,6 +288,7 @@ void Transaction::operator=(const Transaction &other) {
     this->m_sender    = other.m_sender;
     this->m_receiver  = other.m_receiver;
     this->m_amount    = other.m_amount;
+    this->timestamp_  = other.timestamp_;
     this->m_data      = other.m_data;
     this->m_token     = other.m_token;
     this->m_section   = other.m_section;
@@ -295,6 +303,7 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
         m_sender    = std::move(other.m_sender);
         m_receiver  = std::move(other.m_receiver);
         m_amount    = std::move(other.m_amount);
+        timestamp_  = std::move(other.timestamp_);
         m_data      = std::move(other.m_data);
         m_token     = std::move(other.m_token);
         m_section   = std::move(other.m_section);
