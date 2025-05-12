@@ -128,13 +128,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
 
     std::vector<TransactionInfo> transactions;
     for (const auto &map : selected) {
-        std::string block_id = map.at("block");
-
-        auto map2       = map;
-        map2["section"] = map.at("block");
-        map2.erase("block");
-
-        auto tx = Utils::from_dbrow<Transaction>(map2);
+        auto tx = Utils::from_dbrow<Transaction>(map);
         if (!tx.has_value()) {
             continue;
         }
