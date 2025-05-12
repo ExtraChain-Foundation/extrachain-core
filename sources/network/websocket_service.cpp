@@ -347,7 +347,7 @@ void WebSocketService::tryDequeueMessage() {
 
     if (!canSendMore()) {
         waiting_buffer_space_ = true;
-        emit needToTryDequeue();
+        QTimer::singleShot(10, this, &WebSocketService::needToTryDequeue);
         return;
     }
 

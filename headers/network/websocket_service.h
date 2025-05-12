@@ -67,6 +67,7 @@ private slots:
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
     void sendMessageInternalSlot(const QByteArray &data);
+    void tryDequeueMessage();
 
 private:
     void connections();
@@ -78,7 +79,6 @@ private:
     QTimer *m_pingTimer   = nullptr;
     int     m_failedPongs = 0;
 
-    void tryDequeueMessage();
     bool canSendMore() const;
 
     QQueue<QByteArray> m_messageCache;

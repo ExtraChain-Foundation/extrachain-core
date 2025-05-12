@@ -180,7 +180,7 @@ void ExtraChainNode::cleanUp() {
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
-    if (!QDir("profiles/profile").isEmpty()) {
+    if (!AccountController::profilesList().empty()) {
         eLog("Cannot create a new network: existing profile data found");
         return false;
     }
