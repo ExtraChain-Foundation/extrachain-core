@@ -22,7 +22,6 @@
 #include "extrachain_global.h"
 
 #include "blockchain/actor.h"
-#include "blockchain/block_variant.h"
 #include "managers/extrachain_node.h"
 
 class ExtraChainNode;
@@ -107,13 +106,6 @@ public:
 
     std::expected<Actor<KeyPublic>, ActorIndexError> get_actor(const ActorId &id,
                                                                ActorGetType   get_type = ActorGetType::Request);
-
-    /**
-     * @brief Validates block digital signature
-     * @param block
-     * @return true if block is valid
-     */
-    bool validateBlock(const BlockVariant &block);
 
     /**
      * @brief getById

@@ -24,12 +24,14 @@
 #include "utils/bignumber_float.h"
 
 enum class TransactionType {
-    Regular      = 0,
-    Burn         = 1,
+    Genesis      = 0,
+    Regular      = 1,
     InitContract = 2,
-    Reward       = 3,
-    Repeatable   = 4,
-    Conversion   = 5
+    Repeatable   = 3,
+    Reward       = 4,
+    Burn         = 5,
+    Conversion   = 6,
+    Unknown      = 100
 };
 MSGPACK_ADD_ENUM(TransactionType)
 
@@ -71,21 +73,26 @@ enum class TransactionProveError {
     BurnIncorrectReceiver,
     ConversionIncorrectFromToken,
     ConversionIncorrectBalance,
-    ConversionEqualToken
+    ConversionEqualToken,
+    NoSectionAdded,
+    GenesisOnlyZeroSection,
+    SectionTooBig
 };
 // FORMAT_ENUM(TransactionProveError)
 
 class EXTRACHAIN_EXPORT Transaction {
 private:
-    ActorId         m_sender;                               // sender address
-    ActorId         m_receiver;                             // receiver address
-    BigNumberFloat  m_amount;                               // coin amount
-    std::string     m_data;                                 // additional payload field
-    ActorId         m_token;                                // token contract address
-    BigNumber       m_prevBlock;                            // last block id at the moment of tx creation
-    std::string     m_hash;                                 // hash from all fields
-    Signature       m_signature = Signature();              // digital signature
-    TransactionType m_type      = TransactionType::Regular; // transaction type
+    ActorId                    m_sender;                               // sender address
+    ActorId                    m_receiver;                             // receiver address
+    BigNumberFloat             m_amount;                               // coin amount
+    std::optional<std::string> m_data;                                 // additional payload field
+    ActorId                    m_token;                                // token contract address
+    BigNumber                  m_section = BigNumber("-1");            // section id at the moment of tx creation
+    std::string                m_hash;                                 // hash from all fields
+    Signature                  m_signature = Signature();              // digital signature
+    TransactionType            m_type      = TransactionType::Regular; // transaction type
+    std::uint64_t              timestamp_;
+    std::set<std::string>      prev_hashs_;
 
 public:
     // Construct empty transaction
@@ -108,18 +115,25 @@ public:
 
     // void setSenderBalance(BigNumber balance);
     // void setReceiverBalance(BigNumber balance);
-    void setPrevBlock(const BigNumber &value);
+    void set_section(const BigNumber &value);
     void setSignature(const Signature &value);
     void setHash(const std::string &value);
 
-    ActorId        sender() const;
-    ActorId        receiver() const;
-    BigNumberFloat amount() const;
-    BigNumber      prevBlock() const;
-    std::string    data() const;
-    std::string    hash() const;
-    ActorId        token() const;
-    Signature      signature() const;
+    ActorId                    sender() const;
+    ActorId                    receiver() const;
+    BigNumberFloat             amount() const;
+    BigNumber                  section() const;
+    std::optional<std::string> data() const;
+    std::string                hash() const;
+    ActorId                    token() const;
+    TransactionType            type() const;
+    std::uint64_t              timestamp() const {
+        return timestamp_;
+    }
+    std::set<std::string> prev_hash() const {
+        return prev_hashs_;
+    }
+    Signature signature() const;
 
     /**
      * Calculates hash of this block and writes hash to "hash" variable.
@@ -136,30 +150,43 @@ public:
     void         operator=(const Transaction &transaction);
     Transaction &operator=(Transaction &&other) noexcept;
 
-    void            setToken(const ActorId &value);
-    void            setData(const std::string &value);
-    void            setAmount(const BigNumberFloat &value);
-    void            setSender(const ActorId &value);
-    void            setReceiver(const ActorId &value);
-    bool            isRewardTransaction() const;
-    bool            isConversionTransaction() const;
-    TransactionType type() const;
-    virtual void    setType(TransactionType newType);
+    void setToken(const ActorId &value);
+    void setData(const std::string &value);
+    void setAmount(const BigNumberFloat &value);
+    void setSender(const ActorId &value);
+    void setReceiver(const ActorId &value);
+    bool isRewardTransaction() const;
+    bool isConversionTransaction() const;
+    void setType(TransactionType newType);
+    void set_timestamp(std::uint64_t new_timestamp) {
+        this->timestamp_ = new_timestamp;
+    }
+    void set_prev_hashs(const std::set<std::string> &prev_hashs) {
+        this->prev_hashs_ = prev_hashs;
+    }
+    void insert_prev_hash(const std::string hash) {
+        this->prev_hashs_.insert(hash);
+    }
 
-    MSGPACK_DEFINE(m_sender, m_receiver, m_amount, m_data, m_token, m_prevBlock, m_hash, m_signature, m_type)
-
-    BOOST_DESCRIBE_CLASS(
-        Transaction,
-        (),
-        (),
-        (),
-        (m_sender, m_receiver, m_amount, m_data, m_token, m_prevBlock, m_hash, m_signature, m_type))
+    BOOST_DESCRIBE_CLASS(Transaction,
+                         (),
+                         (),
+                         (),
+                         (m_section,
+                          m_type,
+                          m_sender,
+                          m_receiver,
+                          m_token,
+                          m_amount,
+                          timestamp_,
+                          m_data,
+                          prev_hashs_,
+                          m_hash,
+                          m_signature))
 };
 
 struct TransactionInfo {
-    BigNumber                  block_id;
-    uint64_t                   block_date;
     TransactionAmountOperation operation = TransactionAmountOperation::Plus;
     Transaction                transaction;
 };
-BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (block_id, block_date, operation, transaction))
+BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (operation, transaction))

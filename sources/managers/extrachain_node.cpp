@@ -24,11 +24,9 @@
 #include <QJsonObject>
 #include <sodium/core.h>
 
+#include "blockchain/dag.h"
 #include "extrachain_version.h"
 #include "blockchain/actor.h"
-#include "blockchain/block.h"
-#include "blockchain/block_variant.h"
-#include "blockchain/blockchain.h"
 #include "dfs/dfs_controller.h"
 // #include "dfs/permission_manager.h"
 #include "blockchain/actor_index.h"
@@ -37,7 +35,6 @@
 #include "managers/account_controller.h"
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
-#include "managers/transaction_manager.h"
 #include "managers/token_manager.h"
 #include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
@@ -48,17 +45,6 @@
 #ifdef Q_OS_LINUX
     #include <signal.h>
 #endif
-
-struct TokensDataRow {
-    TokenId        token_id;
-    std::string    name;
-    std::string    ticker;
-    BigNumberFloat count;
-    ActorId        owner;
-    std::string    color;
-    std::string    smart;
-};
-BOOST_DESCRIBE_STRUCT(TokensDataRow, (), (token_id, name, ticker, count, owner, name, color, smart))
 
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
@@ -125,21 +111,21 @@ void ExtraChainNode::process() {
 #endif
 
     prepareFolders();
-    m_actorIndex         = new ActorIndex(this);
-    m_accountController  = new AccountController(this);
-    m_networkManager     = new NetworkManager(this);
-    m_blockchain         = new Blockchain(this);
-    m_transactionManager = new TransactionManager(this);
-    m_dfs                = new DfsController(this);
-    m_dmm                = new DataMiningManager(this);
+    m_actorIndex        = new ActorIndex(this);
+    m_accountController = new AccountController(this);
+    m_networkManager    = new NetworkManager(this);
+    dag_                = new Dag(this);
+    m_dfs               = new DfsController(this);
+    m_dmm               = new DataMiningManager(this);
+    m_tokenManager      = new TokenManager(this);
+    chat_manager_       = new ChatManager(this);
+
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
     // auto port            = "1212";
-    m_tokenManager = new TokenManager(this);
-    chat_manager_  = new ChatManager(this);
 
-    auto thread = ThreadPool::addThread(m_blockchain);
-    ThreadPool::addThread(m_transactionManager, thread);
+    // auto thread = ThreadPool::addThread(m_blockchain);
+    // ThreadPool::addThread(m_transactionManager, thread);
 
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
@@ -147,7 +133,11 @@ void ExtraChainNode::process() {
 
     timer_reward = new QTimer(this);
     connect(timer_reward, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_reward->start(60000);
+    timer_reward->start(MINING_TIMER_TICK);
+
+    timer_info = new QTimer(this);
+    connect(timer_info, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
+    timer_info->start(10000);
 
     m_initPublicIPAndCountry = m_networkManager->getPublicIPAndCountry();
 
@@ -170,6 +160,7 @@ ExtraChainNode::~ExtraChainNode() {
 }
 
 void ExtraChainNode::cleanUp() {
+    delete dag_;
     m_networkManager->deleteLater();
     // m_blockchain->deleteLater();
     // m_transactionManager->deleteLater();
@@ -178,7 +169,7 @@ void ExtraChainNode::cleanUp() {
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
-    if (!QDir("profiles/profile").isEmpty()) {
+    if (!AccountController::profilesList().empty()) {
         eLog("Cannot create a new network: existing profile data found");
         return false;
     }
@@ -189,19 +180,27 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    if (m_blockchain->getRecords() <= 0) {
-        auto& first      = m_accountController->system_actor();
-        auto  firstBlock = m_blockchain->create_zero_genesis_block(first);
-        if (!firstBlock.has_value())
-            return false;
+    if (dag_->current_section() < 0) {
+        Transaction tx;
+        tx.setSender(first.id());
+        tx.setReceiver(first.id());
+        tx.setType(TransactionType::Genesis);
 
-        Responder responder(this->m_networkManager);
-        auto      block = m_blockchain->addBlock(firstBlock.value());
-        // network()->send_message(block.value(), MessageType::BlockchainNewBlock, SendMode::Broadcast);
-        blockchain()->status_ = BlockchainStatus::Ready;
+        auto prepared_tx = dag_->prepare_transaction(tx, first);
+        if (!prepared_tx.has_value()) {
+            eCritical("[Node] Can't prepare transaction for new network");
+            std::exit(-10);
+        }
+
+        dag_->first_saved_section_ = BigNumber(0);
+        auto save_result           = dag_->save_transaction(prepared_tx.value());
+        if (!save_result) {
+            eCritical("[Node] Can't save transaction for new network");
+            std::exit(-11);
+        }
+
+        dag_->set_status(DagStatus::Ready);
     }
-
-    create_network_need_dfs_creation = true;
 
     eSuccess("[Node] New network created");
     return true;
@@ -269,13 +268,75 @@ bool ExtraChainNode::create_subscription_template() {
                                      .add_fields({ Dfs::Field::Integer("type").not_null(),
                                                    Dfs::Field::Integer("date_start").not_null(),
                                                    Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
-                                                   Dfs::Field::String("block_id").not_null(),
+                                                   Dfs::Field::String("section_id").not_null(),
                                                    Dfs::Field::String("transaction_hash").not_null() });
 
     auto system_actor_id = accountController()->system_actor().id();
     auto template_res    = dfs()->store_template(system_actor_id, subscription_template);
     if (!template_res.has_value()) {
         eCritical("Can't create subscription template, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_token_template() {
+    auto network_id      = m_actorIndex->network_id();
+    auto tokens_template = Dfs::CollectionTemplate::create("TokensCache")
+                               .value()
+                               .add_fields({ Dfs::Field::ActorId("token_id").not_null().unique(),
+                                             Dfs::Field::String("name").not_null().unique().length(3, 20),
+                                             Dfs::Field::String("ticker").not_null().unique().length(2, 5),
+                                             Dfs::Field::String("count").not_null(),
+                                             Dfs::Field::ActorId("owner_id").not_null(),
+                                             Dfs::Field::String("color").not_null(),
+                                             Dfs::Field::String("smart"),
+                                             Dfs::Field::String("section_id").not_null(),
+                                             Dfs::Field::String("tx_hash").not_null() });
+
+    auto template_res = m_dfs->store_template(network_id, tokens_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_token_vector() {
+    auto network_id = actorIndex()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "TokensCache");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto store_res =
+        m_dfs->store_vector(network_id, network_id, "TokensCache", network_id, search_result->file_id);
+    if (!store_res.has_value()) {
+        eCritical("Can't create token cache database, because {}", store_res.error());
+        return false;
+    }
+
+    auto tokens_row = TokenData { .token_id   = TokenId(),
+                                  .owner_id   = network_id,
+                                  .name       = "ExtraCoin",
+                                  .ticker     = "EXC",
+                                  .count      = BigNumberFloat(0),
+                                  .color      = "#808080",
+                                  .smart      = "",
+                                  .section_id = BigNumber(0),
+                                  .tx_hash    = "" };
+
+    auto res = m_dfs->add_vector_row(store_res->actor_id, store_res->file_id, tokens_row);
+    if (!res) {
         return false;
     }
 
@@ -306,55 +367,13 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     return true;
 }
 
-void ExtraChainNode::create_new_network_dfs() {
-    // temp while no cached local new store file
-    create_network_need_dfs_creation = false;
-
-    auto network_id      = m_actorIndex->network_id();
-    auto tokens_template = Dfs::CollectionTemplate::create("Tokens").value().add_fields(
-        { Dfs::Field::ActorId("token_id").not_null().unique(),
-          Dfs::Field::String("name").not_null().unique().length(3, 20),
-          Dfs::Field::String("ticker").not_null().unique().length(2, 5),
-          Dfs::Field::String("count").not_null(),
-          Dfs::Field::ActorId("owner").not_null(),
-          Dfs::Field::String("color").not_null(),
-          Dfs::Field::String("smart") });
-
-    auto template_res = m_dfs->store_template(network_id, tokens_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create token cache database, because {}", template_res.error());
-        return;
-    }
-
-    return;
-
-    auto store_res =
-        m_dfs->store_collection(network_id, network_id, "Tokens", template_res->actor_id, template_res->file_id);
-    if (!store_res.has_value()) {
-        eCritical("Can't create token cache database, because {}", store_res.error());
-        Utils::wipeDataFiles();
-        return;
-    }
-
-    auto tokens_row = TokensDataRow { .token_id = ActorId(),
-                                      .name     = "ExtraChain",
-                                      .ticker   = "EXC",
-                                      .count    = BigNumberFloat(0),
-                                      .owner    = network_id,
-                                      .color    = "#111111",
-                                      .smart    = "" };
-    m_dfs->add_collection_row(store_res->actor_id, store_res->file_id, tokens_row);
-
-    eSuccess("[Node] New network dfs created");
-}
-
 void ExtraChainNode::start() {
     if (!started) {
         QTimer::singleShot(10, this, &ExtraChainNode::ready);
         // emit startNetwork();
         started = true;
 
-        emit m_blockchain->transaction_cache().make_cache();
+        // emit m_blockchain->transaction_cache().make_cache();
     }
 
     // Version compatibility: 0.17.0 (temp)
@@ -365,6 +384,7 @@ void ExtraChainNode::start() {
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
+
         if (!dir_rows.has_value()) {
             return;
         }
@@ -392,28 +412,50 @@ void ExtraChainNode::start() {
         }
     });
 #endif
+
+    // Version compatibility: 0.19.2 (temp)
+#ifdef IS_RC
+    QThreadPool::globalInstance()->start([this]() {
+        auto main_id       = m_accountController->currentProfile().main_id();
+        auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
+
+        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id);
+
+        if (!dir_rows.has_value()) {
+            return;
+        }
+
+        for (const auto& row : dir_rows.value()) {
+            if (row.encryption || row.type != Dfs::FileType::File || row.state != Dfs::FileState::Ready) {
+                continue;
+            }
+
+            auto file_path = Dfs::Path::file_path(main_id, row.file_id);
+            if (!file_path.has_value()) {
+                continue;
+            }
+
+            auto store = m_dfs->store_file(main_id,
+                                           main_id,
+                                           file_path->native(),
+                                           row.folder.has_value() ? row.folder.value() : "",
+                                           row.name,
+                                           Dfs::DataSecurity::Self,
+                                           data_security);
+
+            if (store.has_value()) {
+                auto removed_result = m_dfs->remove_stored_file(main_id, row.file_id);
+                if (!removed_result.has_value()) {
+                    eCritical("REMOVE ERROR: {}", removed_result.error());
+                }
+            }
+        }
+    });
+#endif
 }
 
-// void ExtraChainNode::connectResolveManager() {
-//    connect(networkManager, &NetworkManager::MsgReceived, resolveManager,
-//    &ResolveManager::resolveMessage); connect(resolveManager, &ResolveManager::coinRequest, this,
-//    &ExtraChainNode::coinResponse); connect(dfs->networkManager(), &DfsNetworkManager::newMessage,
-//    resolveManager,
-//            &ResolveManager::resolveMessage);
-// TODO: move
-//    connect(resolveManager, &ResolveManager::sendMsg, m_networkManager, &networkManager::sendMessage);
-
-// connect(this, &ExtraChainNode::sendMsg, m_resolveManager, &ResolveManager::registrateMsg);
-// connect(m_txManager, &TransactionManager::SendBlock, m_resolveManager, &ResolveManager::registrateMsg);
-// connect(m_blockchain, &Blockchain::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
-//    connect(dfs, &Dfs::newSender, resolveManager, &ResolveManager::registrateMsg);
-// }
-
-void ExtraChainNode::connectTransactionManager() {
-}
-
-Blockchain* ExtraChainNode::blockchain() {
-    return m_blockchain;
+Dag* ExtraChainNode::dag() {
+    return dag_;
 }
 
 NetworkManager* ExtraChainNode::network() {
@@ -439,19 +481,20 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
 
     eLog("Attempting to create {} from user {}", tx, actor.id().to_string());
 
-    // 1) set prev block id
-    auto lastRealBlock = m_blockchain->read_last_block();
-    if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-        eWarning("Can not create: {}. There is no last block in blockchain", tx);
-        return std::unexpected(TransactionError::NoLastBlock);
-    }
-    tx.setPrevBlock(lastRealBlock->id());
+    // TODO: local check tx
+    // // 1) set prev block id
+    // auto lastRealBlock = m_blockchain->read_last_block();
+    // if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
+    //     eWarning("Can not create: {}. There is no last block in blockchain", tx);
+    //     return std::unexpected(TransactionError::NoLastBlock);
+    // }
+    // tx.setPrevBlock(lastRealBlock->id());
 
-    // 2) check coin availability
-    if (blockchain()->calculate_actor_balance(actor.id(), tx.token()) < tx.amount()) {
-        eWarning("Can not create: {}. There is not enough coins/tokens in wallet", tx);
-        return std::unexpected(TransactionError::InsufficientFunds);
-    }
+    // // 2) check coin availability
+    // if (blockchain()->calculate_actor_balance(actor.id(), tx.token()) < tx.amount()) {
+    //     eWarning("Can not create: {}. There is not enough coins/tokens in wallet", tx);
+    //     return std::unexpected(TransactionError::InsufficientFunds);
+    // }
 
     // 3) sign transaction
     tx.sign(actor);
@@ -483,6 +526,9 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
     transaction.setAmount(BigNumberFloat(1000));
+#ifdef QT_DEBUG
+    transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
+#endif
     transaction.setToken(token_id); // TODO: get token_id from json
     transaction.setData(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
@@ -495,9 +541,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     return true;
 }
 
-void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
-                                           uint64_t           block_date,
-                                           const Transaction& transaction) {
+void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
     if (!subscription_row.has_value()) {
         return;
     }
@@ -509,8 +553,8 @@ void ExtraChainNode::selfTxRepeatableAdded(const BigNumber&   block_id,
 
     auto row = subscription_row.value();
 
-    row.block_id         = block_id;
-    row.date_start       = block_date;
+    row.section_id       = transaction.section();
+    row.date_start       = transaction.timestamp();
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
@@ -640,8 +684,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         // add sent tx balances
 
         tx.setToken(token);
-        //        if (actorIndex->m_firstId != nullptr)
-        //            if (actor.getId() == BigNumber(*actorIndex->m_firstId))
+        //        if (actorIndex->network_id() != nullptr)
+        //            if (actor.getId() == BigNumber(*actorIndex->network_id()))
         //                tx.setSenderBalance(BigNumber(0));
         return this->createTransaction(tx);
     } else {
@@ -652,23 +696,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(Transaction              transaction,
+std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(const Transaction&       transaction,
                                                                              const Actor<KeyPrivate>& signer) {
-    auto lastRealBlock = m_blockchain->read_last_block();
-
-    if (!lastRealBlock.has_value() || (lastRealBlock.has_value() && lastRealBlock->isEmpty())) {
-        return std::unexpected(TransactionError::NoLastBlock);
-    }
-
-    BigNumber lastBlockId = lastRealBlock->id();
-    transaction.setPrevBlock(lastBlockId);
-    transaction.sign(signer);
-    // !sign -> the конец
-
-    eLog("[Blockchain] Send {}", transaction);
-    network()->send_message(transaction, MessageType::BlockchainTransaction, SendMode::Broadcast);
-
-    return transaction;
+    auto transaction_result = dag_->send_transaction(transaction, signer);
+    return transaction_result;
 }
 
 std::string ExtraChainNode::transactionErrorDescription(const TransactionError& error) {
@@ -705,6 +736,20 @@ void ExtraChainNode::timer_reward_request() {
     dataMiningManager()->requestCoinReward();
 }
 
+void ExtraChainNode::timer_info_print() {
+    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {} from {} bytes",
+         dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
+         dag_->current_section().to_string(NumeralBase::Dec),
+         dag_->current_section(),
+         dag_->status(),
+         m_dfs->sizeTaken(),
+         m_dfs->totalDfsSize());
+}
+
+void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
+    m_tokenManager->final_token_creation(transaction);
+}
+
 std::string ExtraChainNode::generate_network_identifier() {
     std::string network_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
@@ -731,10 +776,10 @@ std::string ExtraChainNode::network_identifier() {
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
     if (os.isEmpty() || actorId.isEmpty() || token.isEmpty())
         return;
-    auto firstId = m_actorIndex->network_id();
-    if (firstId.is_zero())
+    auto network_id = m_actorIndex->network_id();
+    if (network_id.is_zero())
         return;
-    auto first = m_actorIndex->getActor(firstId);
+    auto first = m_actorIndex->getActor(network_id);
     if (first.empty())
         return;
     auto& mainKey   = m_accountController->system_actor().key();
@@ -747,9 +792,6 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     //                                            } };
 
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
-}
-
-void ExtraChainNode::connectContractManager() {
 }
 
 void ExtraChainNode::connectActorIndex() {
@@ -773,8 +815,7 @@ void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, []() {
         eInfo("Node successfully started");
     });
-    connectTransactionManager();
-    connectContractManager();
+
     //    connectAccountController();
     connectActorIndex();
     dfsConnection();
@@ -793,24 +834,12 @@ void ExtraChainNode::connectSignals() {
             [this](const std::string ip, const std::string identifier) {
                 eLog("[WS] Start sync...");
 
-                if (create_network_need_dfs_creation) {
-                    create_new_network_dfs();
-                }
-
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
-
-#ifdef IS_R
-                if (ip == this->m_networkManager->first_node()) {
-                    m_blockchain->need_check();
-                }
-#else
-                m_blockchain->need_check();
-#endif
-
                 m_actorIndex->send_system_actor(responder);
 
-                // m_networkManager->sendFromCache();
+                m_networkManager->sendFromCache();
+                dag_->start_check();
                 // m_blockchain->sync(BigNumber(), responder);
                 m_dfs->sync(identifier);
             });
@@ -818,44 +847,8 @@ void ExtraChainNode::connectSignals() {
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->system_actor().id());
     });
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        m_dfs->sendCountRequestMsg(m_accountController->system_actor().id());
-    });
 
-    // connect(m_accountController, &AccountController::loadWallets, m_blockchain,
-    //         &Blockchain::updateBlockchain);
-    connect(m_tokenManager,
-            &TokenManager::sendTransactionCreateToken,
-            this,
-            [this](const ActorId& actorId, const Transaction& tx) {
-                QTimer* timer = new QTimer();
-                timer->setSingleShot(true);
-
-                connect(timer, &QTimer::timeout, this, [=, this]() {
-                    auto actor = this->m_accountController->currentProfile().get_actor(actorId);
-                    if (!actor.has_value()) {
-                        return;
-                    }
-                    this->sendTransaction(tx, actor.value());
-                    timer->deleteLater();
-                });
-
-                timer->start(2000);
-            });
-
-    connect(m_tokenManager,
-            &TokenManager::sendToken,
-            this,
-            [=, this](const ActorId& actor_id, const QString& json_path) {
-                m_dfs->store_file(actor_id,
-                                  actor_id,
-                                  json_path.toStdString(),
-                                  "contract",
-                                  "token-description.json",
-                                  Dfs::DataSecurity::Public);
-            });
-
-    connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
+    // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -864,48 +857,25 @@ void ExtraChainNode::prepareFolders() {
 
     // Version compatibility: 0.15.0
     if (QDir("keystore").exists()) {
-        QDir().rename("keystore", "profiles");
-    }
-
-    // Version compatibility: 0.15.2
-    if (QDir("blockchain/index").exists()) {
-        QDir().rename("blockchain/index/blocks", "blocks");
-        QDir().rename("blockchain/index/actors", "actors");
-        QDir("blockchain").removeRecursively();
-
-        QFile file("blocks/last_id");
-        if (file.open(QFile::ReadOnly)) {
-            auto data = file.readAll();
-            auto last = BigNumber::create(data.toStdString());
-            if (last.has_value()) {
-                auto  range = BlockRange { .first = "0", .last = last.value().to_string() };
-                auto  json  = Json::serialize(range);
-                QFile range_file("blocks/range");
-                range_file.open(QFile::WriteOnly);
-                range_file.write(json.c_str());
-                range_file.close();
-            }
-            file.remove();
-        }
+        QDir().rename("keystore", QString::fromStdString(Profiles::folder));
     }
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
-    QDir().mkpath(QString::fromStdString(Token::FOLDER_TOKENS));
 
     generate_network_identifier();
 }
 
 void ExtraChainNode::calculateBlockCount() {
-    ActorId              actorId = m_accountController->system_actor().id();
-    DfsP::RequestDfsSize msg { .actorId = actorId };
+    // ActorId              actorId = m_accountController->system_actor().id();
+    // DfsP::RequestDfsSize msg { .actorId = actorId };
 
-    m_networkManager->send_message(msg,
-                                   MessageType::RequestBlockCount,
-                                   SendMode::Neighbours,
-                                   MessageStatus::Request);
+    // m_networkManager->send_message(msg,
+    //                                MessageType::RequestBlockCount,
+    //                                SendMode::Neighbours,
+    //                                MessageStatus::Request);
 }
 
 AccountController* ExtraChainNode::accountController() const {
@@ -918,10 +888,6 @@ ActorIndex* ExtraChainNode::actorIndex() const {
 
 DfsController* ExtraChainNode::dfs() const {
     return m_dfs;
-}
-
-TransactionManager* ExtraChainNode::transactionManager() const {
-    return m_transactionManager;
 }
 
 DataMiningManager* ExtraChainNode::dataMiningManager() const {

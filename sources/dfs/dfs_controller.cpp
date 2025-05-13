@@ -81,11 +81,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
-    if (search_result.has_value()) {
-        return std::unexpected(Dfs::DfsError::DirDuplicate);
-    }
+    // auto search_result =
+    //     Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
+    // if (search_result.has_value()) {
+    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
+    // }
 
     auto fpath_result = FsPath::create(file_path);
     if (!fpath_result.has_value()) {
@@ -318,6 +318,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         break;
     case Dfs::ServiceFolder::Chat:
         visual_path = Dfs::Basic::TEMPLATE_CHAT;
+        break;
+    case Dfs::ServiceFolder::Contracts:
+        visual_path = Dfs::Basic::TEMPLATE_CONTRACTS;
         break;
     case Dfs::ServiceFolder::Base:
         break;
@@ -1490,79 +1493,6 @@ void DfsController::increaseSizeTaken(uintmax_t value) {
     m_sizeTaken += value;
 }
 
-void DfsController::exportFile(const std::string &pathTo,
-                               const std::string &pathFrom,
-                               const std::string &nameFile) {
-    ActorId actorId;
-
-    if (!std::filesystem::exists(pathTo)) {
-        std::filesystem::create_directories(pathTo);
-    }
-
-    if (pathFrom.find('/') != std::string::npos) {
-        size_t pos = pathFrom.rfind('/');
-        actorId    = pathFrom.substr(pos + 1, pathFrom.size());
-    } else {
-        actorId                               = pathFrom;
-        std::filesystem::path actorFolderPath = DfsB::DFS_FOLDER + "/" + actorId.to_string();
-        exportFile(pathTo, actorFolderPath.string(), nameFile);
-    }
-
-    if (actorId.is_zero()) {
-        eLog("[Dfs] Path or actorId hadn't been found. Please check in parameters");
-        return;
-    }
-
-    if (!nameFile.empty()) {
-        std::string pathFile      = pathFrom + "/" + nameFile;
-        const bool  fileFromExist = std::filesystem::exists(pathFile);
-        const bool  folderToExist = std::filesystem::exists(pathTo);
-        if (fileFromExist && folderToExist) {
-            std::filesystem::copy(pathFile, pathTo);
-            auto dirRowsExp = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
-            // TODO: error
-            auto dirRows = Dfs::Tables::ActorDirFile::get_dir_rows(actorId).value();
-            auto it      = std::find_if(dirRows.begin(), dirRows.end(), [&](Dfs::DirRow &dirRow) {
-                transform(dirRow.file_id.begin(), dirRow.file_id.end(), dirRow.file_id.begin(), ::tolower);
-                auto lowerNameFile = nameFile;
-                transform(lowerNameFile.begin(), lowerNameFile.end(), lowerNameFile.begin(), ::tolower);
-                if (dirRow.file_id == lowerNameFile) {
-                    if (!std::filesystem::exists(pathTo + "/" + dirRow.visual_path())) {
-                        std::filesystem::rename(pathTo + "/" + nameFile, pathTo + "/" + dirRow.visual_path());
-                    } else {
-                        const auto pathFile = std::filesystem::path(pathTo + "/" + dirRow.visual_path());
-                        for (int index = 2; index < 100; index++) {
-                            std::string possibleNewFile = pathTo + "/" + pathFile.stem().string() + "_"
-                                                          + std::to_string(index) + pathFile.extension().string();
-                            if (!std::filesystem::exists(possibleNewFile)) {
-                                std::filesystem::rename(pathTo + "/" + nameFile, possibleNewFile);
-                                break;
-                            }
-                        }
-                    }
-                    eLog("File {} of actor {} extracted", dirRow.visual_path(), actorId);
-                    return true;
-                }
-                return false;
-            });
-        }
-        // } else {
-        //     const std::string nameDirectory = pathTo + "/" + actorId.to_string();
-        //     std::filesystem::create_directories(nameDirectory);
-        //     if (pathFrom.find('/') != std::string::npos) {
-        //         for (std::filesystem::directory_entry const &entry :
-        //         std::filesystem::directory_iterator(pathFrom)) {
-        //             if (entry.path().extension() != DfsF::Extension
-        //                 && entry.path().extension() != DfsF::ExtensionJournal
-        //                 && entry.path().filename() != DfsB::fsMapName) {
-        //                 auto copyTo = (pathTo + "/" + actorId.to_string());
-        //                 exportFile(copyTo, pathFrom, entry.path().filename().string());
-        //             }
-        //         }
-        //     }
-    }
-}
-
 std::expected<void, ExportFileError> DfsController::export_file(const ActorId     &owner_id,
                                                                 const std::string &file_id,
                                                                 const FsPath      &output_folder) {
@@ -1895,21 +1825,6 @@ void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, 
     const auto            dfsSize = calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);
-}
-
-void DfsController::sendCountRequestMsg(const ActorId &actorId) const {
-    DfsP::RequestDfsSize msg { .actorId = actorId };
-    node->network()->send_message(msg,
-                                  MessageType::RequestBlockCount,
-                                  SendMode::Neighbours,
-                                  MessageStatus::Request);
-}
-
-void DfsController::sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                                        BigNumber                              dfsCount,
-                                        const Responder                       &responder) const {
-    DfsP::ResponseBlockCount response { .actorId = msg.actorId, .blockCount = dfsCount };
-    responder.send_response(response, MessageType::ResponseBlockCount, SendMode::Focused, MessageStatus::Response);
 }
 
 float DfsController::percentVerified(std::vector<Dfs::Packets::VerifyFileMessage> &fileList) {

@@ -79,24 +79,6 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::get_actor(const Act
     }
 }
 
-bool ActorIndex::validateBlock(const BlockVariant &block) {
-    auto signatures = block.signatures();
-
-    for (const auto &[actorId, signature] : signatures) {
-        Actor<KeyPublic> actor = this->getActor(actorId);
-
-        if (actor.empty()) {
-            eWarning("Can not validate block {}. There no actor {} in local storage", block.id(), actorId);
-            continue;
-        }
-
-        if (!block.verify(actor))
-            return false;
-    }
-
-    return true;
-}
-
 void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &responder) {
     // receive id
     // create response message
@@ -237,12 +219,12 @@ std::string ActorIndex::actorPath(const ActorId &id) const {
 void ActorIndex::set_network_id(const ActorId &value) {
     if (!network_id_.is_zero()) {
         if (network_id() != value) {
-            eFatal("Another FirstId: {} != {}", network_id(), value);
+            eFatal("Another network id: {} != {}", network_id(), value);
         }
         return;
     }
 
-    eLog("[ActorIndex] Save first id: {}", value);
+    eLog("[ActorIndex] Save network id: {}", value);
     network_id_ = value;
 }
 

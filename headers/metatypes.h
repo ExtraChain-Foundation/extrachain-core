@@ -19,16 +19,12 @@
 
 #pragma once
 
-#include "blockchain/blockchain.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 
 Q_DECLARE_METATYPE(BigNumber)
 Q_DECLARE_METATYPE(QHostAddress)
 Q_DECLARE_METATYPE(ActorId)
-Q_DECLARE_METATYPE(Block)
-Q_DECLARE_METATYPE(GenesisBlock)
-Q_DECLARE_METATYPE(BlockVariant)
 Q_DECLARE_METATYPE(Actor<KeyPublic>)
 Q_DECLARE_METATYPE(Transaction)
 Q_DECLARE_METATYPE(SearchEnum::BlockParam)
@@ -42,9 +38,6 @@ Q_DECLARE_METATYPE(Responder)
 
 void registerMetaTypes() {
     qRegisterMetaType<BigNumber>();
-    qRegisterMetaType<Block>();
-    qRegisterMetaType<GenesisBlock>();
-    qRegisterMetaType<BlockVariant>();
     qRegisterMetaType<QHostAddress>();
     qRegisterMetaType<ActorId>();
     qRegisterMetaType<Actor<KeyPublic>>();

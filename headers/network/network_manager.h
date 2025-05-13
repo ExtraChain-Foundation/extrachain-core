@@ -182,13 +182,12 @@ public:
     }
 
     Responder with_new_message_id() const {
-        Responder   responder = *this;
-        std::string randomId  = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                                     + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                                   .substr(0, 15); // temp
-        responder.message_id_ = randomId;
+        Responder responder   = *this;
+        responder.message_id_ = generate_message_id();
         return responder;
     }
+
+    Responder& operator=(const Responder&) = default;
 
 private:
     std::string send_response_impl(const std::string& data_serialized,

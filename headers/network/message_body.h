@@ -34,17 +34,14 @@ enum class MessageType {
     ActorAll   = 4,
     Actors     = 15,
 
-    BlockchainNewBlock     = 30,
-    BlockchainSyncBlock    = 31,
-    BlockchainTransaction  = 32,
-    BlockchainCoinReward   = 35,
-    BlockchainRequestBlock = 36,
-    BlockchainSync         = 37,
-    BlockchainLastSaved    = 38,
+    CoinReward = 19,
 
-    BlockchainSyncLastInfo = 40, // last id, last hash
+    DagTransaction       = 30,
+    DagTransactionResult = 31,
+    DagSections          = 32,
+    DagLightData         = 33,
 
-    BlockchainSyncBlocks = 49,
+    BlockchainSyncLastInfo = 39,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
@@ -77,8 +74,6 @@ enum class MessageType {
     RequestDfsSize  = 90,
     ResponseDfsSize = 91,
     // DfsState = 92,
-    RequestBlockCount  = 93,
-    ResponseBlockCount = 94,
 
     NewListConnections    = 100,
     GetListConnections    = 101,
@@ -187,6 +182,13 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
+inline std::string generate_message_id() {
+    std::string message_id = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
+                                                   + std::to_string(QRandomGenerator::global()->bounded(100000)))
+                                 .substr(0, 15);
+    return message_id;
+}
+
 inline MessageBody make_init_message(const std::string& data,
                                      SendMode           send_type,
                                      MessageType        type,
@@ -197,14 +199,10 @@ inline MessageBody make_init_message(const std::string& data,
         eFatal("make message error: incorrect message id size");
     }
 
-    std::string randomId = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                                 + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                               .substr(0, 15); // temp
-
     MessageBody message = { .send_type      = send_type,
                             .message_type   = type,
                             .status         = status,
-                            .message_id     = !to_message_id.empty() ? to_message_id : randomId,
+                            .message_id     = !to_message_id.empty() ? to_message_id : generate_message_id(),
                             .sender_id      = sender,
                             .init_sender_id = sender,
                             .data           = data };
