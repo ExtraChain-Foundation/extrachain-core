@@ -220,6 +220,10 @@ bool Transaction::isSigned() const {
 }
 
 bool Transaction::operator<(const Transaction &other) const {
+    if (timestamp_ != other.timestamp_) {
+        return timestamp_ < other.timestamp_;
+    }
+
     if (m_hash != other.m_hash)
         return m_hash < other.m_hash;
 
@@ -242,7 +246,7 @@ bool Transaction::operator<(const Transaction &other) const {
         return static_cast<int>(m_type) < static_cast<int>(other.m_type);
 
     if (prev_hashs_ != other.prev_hashs_) {
-        return prev_hashs_ < other.prev_hash();
+        return prev_hashs_ < other.prev_hashs_;
     }
 
     return std::lexicographical_compare(m_signature.begin(),
