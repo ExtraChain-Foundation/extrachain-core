@@ -76,7 +76,7 @@ void TransactionCache::cache() {
     eLog("[TransactionCache] Finish first cache");
 }
 
-void TransactionCache::adding(const BigNumber &section, uint64_t section_date, const Transaction &transaction) {
+void TransactionCache::adding(const Transaction &transaction) {
     // TODO: remove
     if (transaction.token() != ActorId("468faf2f1be6504a9a26f7f027f7e43380b0d77d")) {
         return;
@@ -85,10 +85,7 @@ void TransactionCache::adding(const BigNumber &section, uint64_t section_date, c
     make_files();
 
     auto map = Utils::to_dbrow(transaction);
-    map.erase("section");
     map.erase("prev_hashs");
-    map["block"] = section.to_string();
-    map["date"]  = std::to_string(section_date);
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
@@ -96,7 +93,7 @@ void TransactionCache::adding(const BigNumber &section, uint64_t section_date, c
     db.close();
 
     if (res) {
-        emit node->selfTxAdded(section, section_date, transaction);
+        emit node->selfTxAdded(transaction);
     }
 }
 
@@ -116,8 +113,9 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
     db.open();
 
     const auto query = fmt::format(
-        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' AND date < '{}' {} ORDER by "
-        "date DESC LIMIT 50;",
+        "SELECT * FROM {} WHERE (sender = '{}' OR receiver = '{}') AND token = '{}' AND timestamp < '{}' {} ORDER "
+        "by "
+        "timestamp DESC LIMIT 50;",
         Config::DataStorage::TX_CACHE_TABLE,
         actor_id.to_string(),
         actor_id.to_string(),
@@ -130,15 +128,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
 
     std::vector<TransactionInfo> transactions;
     for (const auto &map : selected) {
-        std::string block_id   = map.at("block");
-        std::string block_date = map.at("date");
-
-        auto map2       = map;
-        map2["section"] = map.at("block");
-        map2.erase("block");
-        map2.erase("date");
-
-        auto tx = Utils::from_dbrow<Transaction>(map2);
+        auto tx = Utils::from_dbrow<Transaction>(map);
         if (!tx.has_value()) {
             continue;
         }
@@ -149,11 +139,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
             operation = TransactionAmountOperation::Minus;
         }
 
-        auto transaction_info = TransactionInfo { .block_id    = BigNumber(block_id),
-                                                  .block_date  = std::stoull(map.at("date")),
-                                                  .operation   = operation,
-                                                  .transaction = tx.value() };
-
+        auto transaction_info = TransactionInfo { .operation = operation, .transaction = tx.value() };
         transactions.push_back(transaction_info);
     }
 

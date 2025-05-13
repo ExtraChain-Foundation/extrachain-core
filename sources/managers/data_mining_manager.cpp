@@ -99,7 +99,6 @@ void DataMiningManager::requestCoinReward() {
         eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
         return;
     }
-    auto tx = tx_result.value();
 
     Transaction tx_conv;
     tx_conv.setSender(actor.id());
@@ -137,6 +136,10 @@ void DataMiningManager::requestCoinReward() {
     auto des             = MessagePack::deserialize<Dfs::Reward::RequestReward>(data_serialized);
 
     eLog("[Reward] Sended {}", requestReward);
+
+    // if (requestReward.transaction != des->transaction) {
+        // eFatal("Reward error");
+    // }
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {

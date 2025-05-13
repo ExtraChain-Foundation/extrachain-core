@@ -356,8 +356,8 @@ CREATE TABLE IF NOT EXISTS balance_cache (
                                                       "amount       TEXT  NOT NULL, "
                                                       "data         TEXT          , "
                                                       "token        TEXT  NOT NULL, "
-                                                      "date         TEXT  NOT NULL, "
-                                                      "block        TEXT  NOT NULL, "
+                                                      "timestamp    TEXT  NOT NULL, "
+                                                      "section      TEXT  NOT NULL, "
                                                       "hash         TEXT  NOT NULL UNIQUE, "
                                                       "signature    TEXT  NOT NULL "
                                                       ");";
@@ -493,33 +493,6 @@ namespace Json {
         return json_convert::from_json<T>(parsed);
     }
 } // namespace Json
-
-namespace Token {
-    static const auto        MAX_TOKEN_COUNT  = BigNumberFloat("1000000000000");
-    static const std::string FOLDER_TOKENS    = "tokens";
-    static const std::string DB_TOKENS        = "tokens";
-    static const std::string TOKEN_TABLE_NAME = "tokens";
-    static const std::string DB_TOKENS_PATH   = fmt::format("{}/{}", FOLDER_TOKENS, DB_TOKENS);
-    static const std::string TOKEN_TABLE_CREATE =
-        "CREATE TABLE IF NOT EXISTS tokens("
-        "actorId       TEXT  PRIMARY KEY NOT NULL, "
-        "name          TEXT  NOT NULL, "
-        "ticker        TEXT  NOT NULL, "
-        "count         TEXT  NOT NULL, "
-        "owner         TEXT  NOT NULL, "
-        "color         TEXT  NOT NULL, "
-        "smart         TEXT  NOT NULL);";
-    namespace Fields {
-        static const std::string              actorId = "actorId";
-        static const std::string              name    = "name";
-        static const std::string              ticker  = "ticker";
-        static const std::string              count   = "count";
-        static const std::string              owner   = "owner";
-        static const std::string              color   = "color";
-        static const std::string              smart   = "smart";
-        static const std::vector<std::string> fields  = { name, ticker, count, owner, color, smart };
-    } // namespace Fields
-} // namespace Token
 
 namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
@@ -913,6 +886,8 @@ namespace BlockchainConst {
     enum class DataRowType {
         Universal,
     };
+
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 

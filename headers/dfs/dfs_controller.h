@@ -55,6 +55,7 @@ namespace Dfs {
         Base,
         Collection,
         CollectionTemplate,
+        Contracts,
         Chat
     };
 

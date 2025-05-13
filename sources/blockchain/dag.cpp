@@ -96,10 +96,10 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
     }
 
     if (section.has_value()) {
-        for (const auto &prev_tx : section->transactions) {
-            tx.insert_prev_hash(prev_tx.hash());
-        }
+        tx.set_prev_hashs(section->hashs());
     }
+
+    tx.set_timestamp(Utils::current_date_ms());
 
     auto sign_res = tx.sign(signer);
     if (!sign_res) {
@@ -221,11 +221,15 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
                 continue;
             }
 
-            emit transaction_cache_.add(section->id, section->timestamp, transaction);
+            emit transaction_cache_.add(transaction);
+
+            if (transaction.type() == TransactionType::InitContract) {
+                node->selfTxInitContractAdded(transaction);
+            }
 
 #ifdef IS_RC
             if (transaction.type() == TransactionType::Repeatable) {
-                node->selfTxRepeatableAdded(transaction.section(), section->timestamp, transaction);
+                node->selfTxRepeatableAdded(transaction);
             }
 
             // if (transaction.type() == TransactionType::Reward
@@ -335,9 +339,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     if (!section.has_value()) {
         // Create new section
-        Section section { .id           = transaction.section(),
-                          .timestamp    = Utils::current_date_ms(),
-                          .transactions = { transaction } };
+        Section section { .id = transaction.section(), .transactions = { transaction } };
 
         current_section_ = section.id;
 
@@ -391,6 +393,22 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != BigNumber(0)) {
             return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        if (tx.amount() != 0) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        return TransactionProveError::NoError;
+    }
+
+    if (tx.type() == TransactionType::Balance) {
+        if (tx.section() != BigNumber(1)) {
+            return TransactionProveError::BalanceOnlyFirstSection;
         }
 
         if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
@@ -478,8 +496,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Check sender-receiver relationship based on transaction type
-    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::InitContract
-        || tx.type() == TransactionType::Conversion) {
+    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
         // These transaction types require sender and receiver to be the same
         if (targetSender != targetReceiver) {
             return TransactionProveError::NotIdenticalSenderReceiver;
@@ -512,7 +529,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Validate InitContract transactions
     if (tx.type() == TransactionType::InitContract) {
         auto count = tx.amount();
-        if (count < 0 || count >= Token::MAX_TOKEN_COUNT) {
+        if (count < 0 || count >= BlockchainConst::MAX_TOKEN_COUNT) {
             return TransactionProveError::InvalidTokenCount;
         }
         return TransactionProveError::NoError;
@@ -707,13 +724,15 @@ void Dag::start_check() {
 }
 
 void Dag::network_status_sync_request(const Responder &responder) {
-    auto      block      = this->read_section(current_section_);
-    BigNumber block_id   = block.has_value() ? block->id : BigNumber(-1);
-    auto      hashs      = block.has_value() ? block->prev_hashs() : std::set<std::string> {};
-    auto      zero_block = this->read_section(BigNumber(0));
-    auto      last_info  = BlockchainLastInfo { .last_block_id = block_id,
-                                                .last_hash     = hashs,
-                                                .zero_date = zero_block.has_value() ? zero_block->timestamp : 0 };
+    auto          section        = this->read_section(current_section_);
+    BigNumber     section_id     = section.has_value() ? section->id : BigNumber(-1);
+    auto          hashs          = section.has_value() ? section->hashs() : std::set<std::string> {};
+    auto          zero_section   = this->read_section(BigNumber(0));
+    std::uint64_t zero_timestamp = zero_section->transactions.size() == 1 ? zero_section->middle() : 0;
+
+    auto last_info = DagLastInfo { .last_section_id = section_id,
+                                   .last_hash       = hashs,
+                                   .zero_date       = zero_section.has_value() ? zero_timestamp : 0 };
     // eLog("network_status_sync_request, send: {}", last_info);
     responder.send_response(last_info,
                             MessageType::BlockchainSyncLastInfo,
@@ -721,15 +740,15 @@ void Dag::network_status_sync_request(const Responder &responder) {
                             MessageStatus::Response);
 }
 
-void Dag::network_status_sync_response(const BlockchainLastInfo &last_info, const Responder &responder) {
+void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
     if (sync_status_ != BlockchainSyncStatus::LastInfo && check_status_ != BlockchainSyncStatus::LastInfo) {
         return;
     }
     // min(connections size, 5)
 
-    auto zero_block = read_section(BigNumber(0));
-    if (zero_block.has_value() && !last_info.last_hash.empty() && last_info.last_block_id != BigNumber(-1)
-        && zero_block->timestamp < last_info.zero_date) {
+    auto zero_section = read_section(BigNumber(0));
+    if (zero_section.has_value() && !last_info.last_hash.empty() && last_info.last_section_id != BigNumber(-1)
+        && zero_section->middle() < last_info.zero_date) {
         // TODO: need to remove
         // removeAll(false, true);
     }
@@ -926,7 +945,7 @@ void Dag::send_sync_request() {
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
             eLog("----- {}", info);
-            if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
+            if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
                 need_sync = true;
                 break;
             }
@@ -936,14 +955,14 @@ void Dag::send_sync_request() {
         const auto my_hash  = section->prev_hashs();
 
         for (const auto &[_, info] : last_info_) {
-            if (info.last_block_id > my_index) {
+            if (info.last_section_id > my_index) {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
                 eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
-            if (info.last_block_id == my_index && info.last_hash != my_hash) {
+            if (info.last_section_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
@@ -970,8 +989,8 @@ void Dag::send_sync_request() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        if (info.last_block_id >= 0 && (info.last_block_id == BigNumber(0) || !info.last_hash.empty())) {
-            nodes_by_block.emplace_back(id, info.last_block_id);
+        if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
+            nodes_by_block.emplace_back(id, info.last_section_id);
         }
     }
 
@@ -1068,4 +1087,24 @@ std::set<std::string> Section::prev_hashs() {
     }
 
     return hashs;
+}
+
+std::set<std::string> Section::hashs() {
+    std::set<std::string> hashs;
+
+    for (const auto &tx : transactions) {
+        hashs.insert(tx.hash());
+    }
+
+    return hashs;
+}
+
+std::uint64_t Section::middle() {
+    std::uint64_t sum = 0;
+
+    for (const auto &tx : transactions) {
+        sum += tx.timestamp();
+    }
+
+    return sum / transactions.size();
 }
