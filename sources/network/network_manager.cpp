@@ -1489,7 +1489,6 @@ void NetworkManager::messageReceived(const std::string &message,
                 }
                 break;
             }
-        */
 
                case MessageStatus::Response: {
                    auto serialized_messages_result =
