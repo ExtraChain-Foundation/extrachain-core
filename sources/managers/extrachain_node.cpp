@@ -525,14 +525,14 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat(1000));
+    transaction.setAmount(BigNumberFloat(500));
 #ifdef QT_DEBUG
     transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
     transaction.setToken(token_id); // TODO: get token_id from json
     transaction.setData(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
-    this->sendTransaction(transaction, m_accountController->system_actor());
+    this->send_transaction(transaction, m_accountController->system_actor());
     // transaction.setHash()
 
     auto row =
@@ -696,8 +696,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(const Transaction&       transaction,
-                                                                             const Actor<KeyPrivate>& signer) {
+std::expected<Transaction, TransactionError> ExtraChainNode::send_transaction(const Transaction&       transaction,
+                                                                              const Actor<KeyPrivate>& signer) {
     auto transaction_result = dag_->send_transaction(transaction, signer);
     return transaction_result;
 }

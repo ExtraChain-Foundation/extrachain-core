@@ -395,6 +395,22 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
             return TransactionProveError::GenesisOnlyZeroSection;
         }
 
+        if (tx.amount() != 0) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        return TransactionProveError::NoError;
+    }
+
+    if (tx.type() == TransactionType::Balance) {
+        if (tx.section() != BigNumber(1)) {
+            return TransactionProveError::BalanceOnlyFirstSection;
+        }
+
         if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
             return TransactionProveError::GenesisOnlyZeroSection;
         }
@@ -480,8 +496,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Check sender-receiver relationship based on transaction type
-    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::InitContract
-        || tx.type() == TransactionType::Conversion) {
+    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
         // These transaction types require sender and receiver to be the same
         if (targetSender != targetReceiver) {
             return TransactionProveError::NotIdenticalSenderReceiver;

@@ -43,7 +43,7 @@ std::unordered_map<ActorId, std::string> TokenManager::read_tokens() {
     return map;
 }
 
-bool TokenManager::token_exists(const std::string &nameToken, const std::string &tickerToken) {
+bool TokenManager::token_exists(const std::string &name, const std::string &ticker) {
     // TODO!: Need to check vector
     return false;
 }
@@ -56,6 +56,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
                                                                       const std::string    &predefine_token_id) {
     if (!node->network()->isActiveConnectionExists()) {
         eLog("[TokenManager] No connections");
+        return std::unexpected(CreateTokenError::NoConnections);
     }
 
     if (token_count < 0 || token_count >= BlockchainConst::MAX_TOKEN_COUNT) {
@@ -107,24 +108,29 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
                                   .name     = token_name,
                                   .ticker   = ticker,
                                   .count    = token_count,
-                                  .color    = color,
-                                  .smart    = "" };
+                                  .color    = color };
+
+    auto token_data_short = TokenDataShort { .name = token_name, .ticker = ticker, .color = color };
+
+    auto owner_actor = node->accountController()->currentProfile().get_actor(owner_id);
+    if (!owner_actor.has_value()) {
+        return std::unexpected(CreateTokenError::InvalidOwnerId);
+    }
 
     Transaction tx;
     tx.setSender(owner_id);
-    tx.setReceiver(owner_id);
+    tx.setReceiver(token_actor.id());
     tx.setAmount(token_count);
     tx.setToken(token_actor.id());
     tx.setType(TransactionType::InitContract);
+    tx.setData(Json::serialize(token_data_short));
 
-    auto tx_res = node->sendTransaction(tx, token_actor);
+    auto tx_res = node->send_transaction(tx, owner_actor.value());
     if (!tx_res.has_value()) {
         return std::unexpected(CreateTokenError::InvalidTx);
     }
 
     cache_creation_.insert({ tx_res->hash(), token_data });
-
-    // after transaction we must add to db
     return token_data;
 }
 

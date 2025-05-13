@@ -31,6 +31,7 @@ enum class TransactionType {
     Reward       = 4,
     Burn         = 5,
     Conversion   = 6,
+    Balance      = 99,
     Unknown      = 100
 };
 MSGPACK_ADD_ENUM(TransactionType)
@@ -76,7 +77,8 @@ enum class TransactionProveError {
     ConversionEqualToken,
     NoSectionAdded,
     GenesisOnlyZeroSection,
-    SectionTooBig
+    SectionTooBig,
+    BalanceOnlyFirstSection
 };
 // FORMAT_ENUM(TransactionProveError)
 

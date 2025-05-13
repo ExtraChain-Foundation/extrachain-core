@@ -887,7 +887,7 @@ namespace BlockchainConst {
         Universal,
     };
 
-    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 
