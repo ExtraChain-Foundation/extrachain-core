@@ -41,6 +41,7 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
+#include "utils/thread_pool_boost.h"
 
 #ifdef Q_OS_LINUX
     #include <signal.h>
@@ -110,6 +111,8 @@ void ExtraChainNode::process() {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    ThreadPoolBoost::instance(4);
+
     prepareFolders();
     m_actorIndex        = new ActorIndex(this);
     m_accountController = new AccountController(this);
@@ -157,6 +160,8 @@ ExtraChainNode::~ExtraChainNode() {
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
     }
+
+    ThreadPoolBoost::terminate();
 }
 
 void ExtraChainNode::cleanUp() {

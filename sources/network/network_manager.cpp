@@ -28,6 +28,7 @@
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
 #include "dfs/dirs_manager.h"
+#include "utils/thread_pool_boost.h"
 
 #include <filesystem>
 #include <fstream>
@@ -1175,28 +1176,28 @@ void NetworkManager::messageReceived(const std::string &message,
     case MessageType::ActorCount:
         break;
 
-        // case MessageType::DfsDirData: {
-        //     if (status == MessageStatus::Request) {
-        //         auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
-        //         if (!dir_actor_id_result.has_value()) {
-        //             eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type,
-        //             status); break;
-        //         }
-        //         node->dfs()->sendDirData(dir_actor_id_result.value(), 0, messageId);
-        //     } else if (status == MessageStatus::Response) {
-        //         auto dir_data_result =
-        //             MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
-        //         if (!dir_data_result.has_value()) {
-        //             eWarning("[NetworkManager] {} deserialization failed for directory data in {} state",
-        //                      type,
-        //                      status);
-        //             break;
-        //         }
-        //         const auto &[owner_id, dir_rows] = dir_data_result.value();
-        //         node->dfs()->addDirData(owner_id, dir_rows);
-        //     }
-        //     break;
-        // }
+               // case MessageType::DfsDirData: {
+               //     if (status == MessageStatus::Request) {
+               //         auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
+               //         if (!dir_actor_id_result.has_value()) {
+               //             eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type,
+               //             status); break;
+               //         }
+               //         node->dfs()->sendDirData(dir_actor_id_result.value(), 0, messageId);
+               //     } else if (status == MessageStatus::Response) {
+               //         auto dir_data_result =
+               //             MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+               //         if (!dir_data_result.has_value()) {
+               //             eWarning("[NetworkManager] {} deserialization failed for directory data in {} state",
+               //                      type,
+               //                      status);
+               //             break;
+               //         }
+               //         const auto &[owner_id, dir_rows] = dir_data_result.value();
+               //         node->dfs()->addDirData(owner_id, dir_rows);
+               //     }
+               //     break;
+               // }
 
     case MessageType::DfsSyncDirs: {
         if (status == MessageStatus::Request) {
@@ -1221,32 +1222,32 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
         }
-        node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), responder);
+        ThreadPoolBoost::instance()->post([this, dirs_rows_result, responder](){node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), responder);});
 
         break;
     }
 
     case MessageType::DfsSyncDirRows: {
-        if (status == MessageStatus::Request) {
-            auto dirs_row_result = MessagePack::deserialize<Dfs::DirsFile::DirsRow>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for dirs row", type);
-                break;
-            }
+        ThreadPoolBoost::instance()->post([this, status, serialized, type, responder]{
+            if (status == MessageStatus::Request) {
+                auto dirs_row_result = MessagePack::deserialize<Dfs::DirsFile::DirsRow>(serialized);
+                if (!dirs_row_result.has_value()) {
+                    eWarning("[NetworkManager] {} deserialization failed for dirs row", type);
+                    return;
+                }
 
-            node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
-        } else if (status == MessageStatus::Response) {
-            auto dirs_row_result =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
-            if (!dirs_row_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
-                break;
-            }
-            auto &[owner_id, dir_rows] = dirs_row_result.value();
+                node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
+            } else if (status == MessageStatus::Response) {
+                auto dirs_row_result =
+                    MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+                if (!dirs_row_result.has_value()) {
+                    eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
+                    return;
+                }
+                auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
-        }
-
+                node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
+            }});
         break;
     }
 
@@ -1255,22 +1256,24 @@ void NetworkManager::messageReceived(const std::string &message,
         if (!res.has_value()) {
             break;
         }
-        node->dfs()->dirs_manager().network_request_all(responder);
+        ThreadPoolBoost::instance()->post([this, responder]{node->dfs()->dirs_manager().network_request_all(responder);});
         break;
     }
 
     case MessageType::DfsStoreFile: {
-        auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
-        if (!file_link_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
-            break;
-        }
+        ThreadPoolBoost::instance()->post([this, package_data, serialized, type]{
+            auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
+            if (!file_link_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
+                return;
+            }
 
-        file_link_result->dir_row.state = Dfs::FileState::Known;
-        node->dfs()->network_store_file(file_link_result->owner_id,
-                                        file_link_result->dir_row,
-                                        Dfs::NetworkStoreFile::Broadcast);
-        sendBrodcastMessageFurther(package_data);
+            file_link_result->dir_row.state = Dfs::FileState::Known;
+            node->dfs()->network_store_file(file_link_result->owner_id,
+                                            file_link_result->dir_row,
+                                            Dfs::NetworkStoreFile::Broadcast);
+            sendBrodcastMessageFurther(package_data);
+        });
 
         break;
     }
@@ -1283,148 +1286,167 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        node->dfs()->download_manager().network_fragment(fragment_data_result.value());
+        ThreadPoolBoost::instance()->post([this, fragment_data_result, package_data, type](){
+            node->dfs()->download_manager().network_fragment(fragment_data_result.value());
 
-        if (type == MessageType::DfsStoreFragment) {
-            sendBrodcastMessageFurther(package_data);
-        }
+            if (type == MessageType::DfsStoreFragment) {
+                sendBrodcastMessageFurther(package_data);
+            }
+        });
+
         break;
     }
 
     case MessageType::DfsFileState: {
-        if (status == MessageStatus::Request) {
-            auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
-            if (!link_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for request file state", type);
-                break;
+        ThreadPoolBoost::instance()->post([this, status, serialized, type, responder](){
+            if (status == MessageStatus::Request) {
+                auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+                if (!link_result.has_value()) {
+                    eWarning("[NetworkManager] {} deserialization failed for request file state", type);
+                    return;
+                }
+
+                node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, responder);
+            } else if (status == MessageStatus::Response) {
+                auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+                if (!file_state_result.has_value()) {
+                    eWarning("[NetworkManager] {} deserialization failed for response file state", type);
+                    return;
+                }
+
+                node->dfs()->network_response_file_state(file_state_result->owner_id,
+                                                         file_state_result->file_id,
+                                                         file_state_result->state,
+                                                         file_state_result->hash,
+                                                         responder);
             }
-
-            node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, responder);
-        } else if (status == MessageStatus::Response) {
-            auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
-            if (!file_state_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for response file state", type);
-                break;
-            }
-
-            node->dfs()->network_response_file_state(file_state_result->owner_id,
-                                                     file_state_result->file_id,
-                                                     file_state_result->state,
-                                                     file_state_result->hash,
-                                                     responder);
-        }
-
+        });
         break;
     }
 
     case MessageType::DfsFileRequest: {
-        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
-        if (!link_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for file request", type);
-            break;
-        }
+        ThreadPoolBoost::instance()->post([this, serialized, type, responder](){
+            auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+            if (!link_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for file request", type);
+                return;
+            }
 
-        node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
-                                                              link_result->file_id,
-                                                              responder);
+            node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
+                                                                  link_result->file_id,
+                                                                  responder);
+        });
+
         break;
     }
 
     case MessageType::DfsFileRemove: {
-        auto file_remove = MessagePack::deserialize<Dfs::Packets::RemoveFile>(serialized);
-        if (!file_remove.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for file remove", type);
-            break;
-        }
+        ThreadPoolBoost::instance()->post([this, serialized, type, package_data](){
+            auto file_remove = MessagePack::deserialize<Dfs::Packets::RemoveFile>(serialized);
+            if (!file_remove.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for file remove", type);
+                return;
+            }
 
-        node->dfs()->network_remove_stored_file(file_remove->owner_id,
-                                                file_remove->file_id,
-                                                file_remove->sign,
-                                                file_remove->last_modified);
-        // if sign not verify only -> not broadrcast
-        sendBrodcastMessageFurther(package_data);
+            node->dfs()->network_remove_stored_file(file_remove->owner_id,
+                                                    file_remove->file_id,
+                                                    file_remove->sign,
+                                                    file_remove->last_modified);
+            // if sign not verify only -> not broadrcast
+            sendBrodcastMessageFurther(package_data);
+        });
         break;
     }
 
     case MessageType::DfsCollectionRequest: {
-        auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
-        if (!db_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection request", type);
-            break;
-        }
-        const auto &[actor_id, file_id] = db_request_result.value();
-        node->dfs()->network_request_collection(actor_id, file_id, responder);
+        ThreadPoolBoost::instance()->post([this, serialized, type, responder](){
+            auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
+            if (!db_request_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for collection request", type);
+                return;
+            }
+            const auto &[actor_id, file_id] = db_request_result.value();
+            node->dfs()->network_request_collection(actor_id, file_id, responder);
+        });
 
         break;
     }
 
     case MessageType::DfsCollectionHistory: {
-        auto db_history_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
-                serialized);
-        if (!db_history_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection history", type);
-            break;
-        }
-        const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
-        node->dfs()->network_response_historical_collection(actor_id, file_id, historical_rows);
+        ThreadPoolBoost::instance()->post([this, serialized, type](){
+            auto db_history_result =
+                MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<HistoricalCollectionRow>>>(
+                    serialized);
+            if (!db_history_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for collection history", type);
+                return;
+            }
+            const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
+            node->dfs()->network_response_historical_collection(actor_id, file_id, historical_rows);
+        });
         break;
     }
 
     case MessageType::DfsCollectionContent: {
-        auto db_content_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection content", type);
-            break;
-        }
-        const auto &[actor_id, file_id, db_rows] = db_content_result.value();
-        node->dfs()->network_response_content_collection(actor_id, file_id, db_rows);
+        ThreadPoolBoost::instance()->post([this, serialized, type](){
+            auto db_content_result =
+                MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
+            if (!db_content_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for collection content", type);
+                return;
+            }
+            const auto &[actor_id, file_id, db_rows] = db_content_result.value();
+            node->dfs()->network_response_content_collection(actor_id, file_id, db_rows);
+        });
         break;
     }
 
     case MessageType::DfsCollectionRowChange: {
-        auto db_add_result =
-            MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
-        if (!db_add_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for collection change", type);
-            break;
-        }
-        const auto &[actor_id, file_id, historical_row] = db_add_result.value();
-        node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
+        ThreadPoolBoost::instance()->post([this, serialized, type, responder](){
+            auto db_add_result =
+                MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
+            if (!db_add_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for collection change", type);
+                return;
+            }
+            const auto &[actor_id, file_id, historical_row] = db_add_result.value();
+            node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
+        });
         break;
     }
 
     case MessageType::DfsVectorCreation:
     case MessageType::DfsVectorContent: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for vector content", type);
-            break;
-        }
+        ThreadPoolBoost::instance()->post([this, serialized, type, package_data](){
+            auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
+            if (!db_content_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for vector content", type);
+                return;
+            }
 
-        node->dfs()->network_response_content_vector(db_content_result.value());
+            node->dfs()->network_response_content_vector(db_content_result.value());
 
-        if (type == MessageType::DfsVectorCreation) {
-            sendBrodcastMessageFurther(package_data);
-        }
-
+            if (type == MessageType::DfsVectorCreation) {
+                sendBrodcastMessageFurther(package_data);
+            }
+        });
         break;
     }
 
     case MessageType::DfsVectorAdd: {
-        auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
-        if (!db_content_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for vector add", type);
-            break;
-        }
+        ThreadPoolBoost::instance()->post([this, serialized, type, package_data](){
+            auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
+            if (!db_content_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for vector add", type);
+                return;
+            }
 
-        node->dfs()->network_vector_add(db_content_result->owner_id,
-                                        db_content_result->file_id,
-                                        db_content_result->row);
+            node->dfs()->network_vector_add(db_content_result->owner_id,
+                                            db_content_result->file_id,
+                                            db_content_result->row);
 
-        sendBrodcastMessageFurther(package_data);
-
+            sendBrodcastMessageFurther(package_data);
+        });
         break;
     }
 
@@ -1448,6 +1470,26 @@ void NetworkManager::messageReceived(const std::string &message,
                    node->dfs()->verifyFiles(verify_files_result.value(), messageId);
                    break;
                }
+
+                case MessageStatus::Response: {
+                    auto serialized_messages_result =
+            MessagePack::deserialize<std::vector<std::string>>(serialized); if
+            (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
+            list of serialized messages in {} state", type, status); break;
+                    }
+                    auto verify_files_result =
+                        MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+                    if (!verify_files_result.has_value()) {
+                        eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
+            state", type, status); break;
+                    }
+                    float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
+                    break;
+                }
+                }
+                break;
+            }
+        */
 
                case MessageStatus::Response: {
                    auto serialized_messages_result =

@@ -104,6 +104,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
@@ -152,6 +153,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/exc_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
