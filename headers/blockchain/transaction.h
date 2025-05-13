@@ -78,7 +78,8 @@ enum class TransactionProveError {
     NoSectionAdded,
     GenesisOnlyZeroSection,
     SectionTooBig,
-    BalanceOnlyFirstSection
+    BalanceOnlyFirstSection,
+    TooSectionDiff
 };
 // FORMAT_ENUM(TransactionProveError)
 

@@ -1810,8 +1810,11 @@ LoadManager &DfsController::download_manager() {
 }
 
 void DfsController::sync(const std::string &identifier) {
-    load_manager_.check_all_files(identifier);
-    dirs_manager_.temp_sync_all(identifier);
+    auto i = identifier;
+    QThreadPool::globalInstance()->start([this, identifier = i] {
+        load_manager_.check_all_files(identifier);
+        dirs_manager_.temp_sync_all(identifier);
+    });
     // dirs_manager_.sync(identifier);
 }
 

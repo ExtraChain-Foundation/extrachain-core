@@ -397,4 +397,5 @@ signals:
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
+    void messageReceivedSignal(const std::string& message, const std::string& ip, const std::string& identifier);
 };

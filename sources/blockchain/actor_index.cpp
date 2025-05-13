@@ -102,14 +102,17 @@ void ActorIndex::network_actors_all_request(const ActorId &ignoredActorId, const
     if (node->accountController()->empty())
         return;
 
-    auto result = allActors();
-    result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
-    if (!result.empty()) {
-        responder.send_response(result, MessageType::ActorAll, SendMode::Focused, MessageStatus::Response);
-    } else {
-        // send empty response
-    }
-    return;
+    auto resp = responder;
+    auto ig   = ignoredActorId;
+    QThreadPool::globalInstance()->start([this, responder = resp, ignoredActorId = ig] {
+        auto result = allActors();
+        result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
+        if (!result.empty()) {
+            responder.send_response(result, MessageType::ActorAll, SendMode::Focused, MessageStatus::Response);
+        } else {
+            // send empty response
+        }
+    });
 }
 
 void ActorIndex::getAllActors(ActorId id, bool isUser) {

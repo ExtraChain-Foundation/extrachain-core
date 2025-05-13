@@ -102,6 +102,8 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
 
+    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::messageReceived);
+
     /*
     QTimer::singleShot(20000, [this]() {
         std::string a = Network::currentIdentifier().toStdString();
@@ -637,11 +639,13 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment) {
+    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
+        || message_type == MessageType::DfsSyncDirRows) {
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) { // if client
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::DagLightData) { // if client
         priority = SocketService::Priority::High;
     }
 
@@ -672,6 +676,12 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         }
     }
 
+    if (serialized_message.size() > 1000) {
+        eLog("Too big {} {}", serialized_message.size(), non_serialized_message.message_type);
+    }
+
+    TIMER_START(kkk)
+
     for (const auto &service : *connections_locked) {
         if (!service->is_active()) {
             continue;
@@ -689,6 +699,11 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                 break;
             }
         }
+    }
+
+    auto k = kkk.elapsed();
+    if (k > 0) {
+        eLog("_____ {}", k);
     }
 }
 
@@ -991,6 +1006,10 @@ void NetworkManager::messageReceived(const std::string &message,
 #endif
 
     calculateTraffic->addBytesReceived(ip, message.size());
+
+    if (type == MessageType::DagLightData) {
+        eLog("DagLight {}", status);
+    }
 
     // try {
     switch (type) {
