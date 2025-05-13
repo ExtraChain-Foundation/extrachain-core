@@ -1880,7 +1880,12 @@ LoadManager &DfsController::download_manager() {
 }
 
 void DfsController::sync(const std::string &identifier) {
-    load_manager_.check_all_files(identifier);
+    static bool already_checked = false;
+    if (!already_checked)
+    {
+        load_manager_.check_all_files(identifier);
+        already_checked = true;
+    }
     dirs_manager_.temp_sync_all(identifier);
     // dirs_manager_.sync(identifier);
 }
