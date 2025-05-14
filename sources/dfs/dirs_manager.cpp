@@ -203,27 +203,39 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    auto actors = node->actorIndex()->allActors();
+        TIMER_START(Dirnetwork_request_all)
+        auto actors = node->actorIndex()->allActors();
 
-    auto network_id = node->actorIndex()->network_id();
-    auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-    std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-        return actor == network_id || actor == raccoon_id;
-    });
+        auto network_id = node->actorIndex()->network_id();
+        auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
+        std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+            return actor == network_id || actor == raccoon_id;
+        });
 
-    actors.insert(actors.begin(), network_id);
-    actors.insert(actors.begin(), raccoon_id);
+        actors.insert(actors.begin(), network_id);
+        actors.insert(actors.begin(), raccoon_id);
 
-    for (const auto& actor : actors) {
-        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
+        for (const auto& actor : actors) {
+            auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
 
-        if (!dir_rows.has_value()) {
-            return;
+            if (!dir_rows.has_value()) {
+                continue;
+            }
+
+            if (dir_rows->empty()) {
+                continue;
+            }
+
+            responder.send_response(std::make_pair(actor, dir_rows.value()),
+                                    MessageType::DfsSyncDirRows,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+
+            QThread::msleep(2);
+
+            if (!node) {
+                return;
+            }
         }
-
-        responder.send_response(std::make_pair(actor, dir_rows.value()),
-                                MessageType::DfsSyncDirRows,
-                                SendMode::Focused,
-                                MessageStatus::Response);
-    }
+        TIMER_END(Dirnetwork_request_all)
 }

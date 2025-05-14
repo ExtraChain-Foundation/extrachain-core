@@ -43,6 +43,7 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     transaction_cache_.make_files();
+    cache_.init_db();
 
     // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
     //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
@@ -422,6 +423,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     auto section = this->read_section(BigNumber(tx.section() - 1));
     if (section.has_value()) {
         // TODO: Additional section validation could be added here
+    }
+
+    if (current_section_ - tx.section() > 15) {
+        return TransactionProveError::TooSectionDiff;
     }
 
     // Validate transaction amount
@@ -857,6 +862,8 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
 void Dag::network_request_light(const Responder &responder) {
     QThreadPool::globalInstance()->start([this, responder]() {
+        QElapsedTimer timer;
+        timer.start();
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
@@ -864,7 +871,7 @@ void Dag::network_request_light(const Responder &responder) {
             cache_section = BigNumber(0);
         }
 
-        txs.reserve(50);
+        txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
@@ -897,12 +904,15 @@ void Dag::network_request_light(const Responder &responder) {
                                       MessageStatus::Response,
                                       responder);
 
+        eLog("DONE SENDING {}", timer.elapsed());
         eLog("[Dag] Sent light data: cache section {}, transactions count: {}", cache_section, txs.size());
     });
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
+    eLog("network_response_light");
     QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+        TIMER_START(network_response_light)
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         auto min = BigNumber(-1), max = BigNumber(-1);
@@ -925,6 +935,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
              max);
 
         process_cached_transactions();
+        TIMER_END(network_response_light)
     });
 }
 
@@ -944,7 +955,7 @@ void Dag::send_sync_request() {
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
-            eLog("----- {}", info);
+            // eLog("----- {}", info);
             if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
                 need_sync = true;
                 break;

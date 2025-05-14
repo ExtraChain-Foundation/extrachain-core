@@ -426,6 +426,7 @@ private:
      */
     std::optional<bool> write_section(const Section &section);
 
+public:
     /**
      * @brief Save a transaction to storage
      *
