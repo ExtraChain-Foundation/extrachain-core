@@ -44,7 +44,7 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
     db.close();
 
     if (records > 0) {
-        synch.setActors(allActors());
+        synch.set_actors(allActors());
     }
 }
 
@@ -194,7 +194,7 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &r
 
 void ActorIndex::request_actors_hash(const Responder &responder) {
     TIMER_START(request_actors_hash)
-    std::vector<uint8_t> sync_request = synch.createSyncRequest();
+    std::vector<uint8_t> sync_request = synch.create_sync_request();
     TIMER_END(request_actors_hash)
 
     responder.with_new_message_id().send_response(sync_request,
@@ -205,7 +205,7 @@ void ActorIndex::request_actors_hash(const Responder &responder) {
 
 void ActorIndex::network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder) {
     TIMER_START(network_actors_hash_request)
-    std::vector<ActorId> actor_ids = synch.processSyncRequest(bits);
+    std::vector<ActorId> actor_ids = synch.process_sync_request(bits);
     TIMER_END(network_actors_hash_request)
 
     eLog("hhhh actor_ids {}", actor_ids.size());
@@ -375,7 +375,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
         return std::unexpected(ActorSaveError::Undefined);
     }
 
-    synch.applyReceivedIds({ actor.id() });
+    synch.apply_received_ids({ actor.id() });
     emit actorSaved(actor.id());
     return {};
 }

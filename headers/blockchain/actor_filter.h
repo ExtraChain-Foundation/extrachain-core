@@ -26,15 +26,27 @@
 
 #include "blockchain/actor_id.h"
 
+/**
+ * @class ActorSynchronizer
+ * @brief Manages efficient synchronization of actor IDs between nodes in a distributed system
+ *
+ * ActorSynchronizer implements a bucket-based reconciliation algorithm that allows
+ * two nodes to identify and exchange only the differing actor IDs, minimizing
+ * network traffic during synchronization processes.
+ */
 class ActorSynchronizer {
 private:
-    std::vector<ActorId> localActors;
+    std::vector<ActorId> local_actors_;
 
-    // Количество корзин (256 = 1 байт для индекса корзины)
+    /// Number of buckets (256 = 1 byte for bucket index)
     static constexpr size_t BUCKET_COUNT = 256;
 
-    // Хеш-функция для актора (FNV-1a 64-бит)
-    static uint64_t hashActor(const std::string& str) {
+    /**
+     * @brief Computes hash for an actor string using FNV-1a 64-bit algorithm
+     * @param str Actor string to hash
+     * @return 64-bit hash value
+     */
+    static uint64_t hash_actor(const std::string& str) {
         const uint64_t FNV_PRIME        = 1099511628211ULL;
         const uint64_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
 
@@ -46,37 +58,56 @@ private:
         return hash;
     }
 
-    // Получение индекса корзины для актора
-    static uint8_t getBucketIndex(const std::string& actorStr) {
-        uint64_t hash = hashActor(actorStr);
+    /**
+     * @brief Determines the bucket index for a given actor string
+     * @param actorStr Actor string to categorize
+     * @return 8-bit bucket index (0-255)
+     */
+    static uint8_t get_bucket_index(const std::string& actor_str) {
+        uint64_t hash = hash_actor(actor_str);
         return static_cast<uint8_t>(hash % BUCKET_COUNT);
     }
 
-    // Вычисление хеша содержимого корзины
-    static uint64_t computeBucketHash(const std::vector<std::string>& bucketItems) {
-        // Если корзина пуста
-        if (bucketItems.empty()) {
+    /**
+     * @brief Calculates a hash for the contents of a bucket
+     * @param bucketItems Vector of actor strings in the bucket
+     * @return 64-bit hash representing the bucket contents
+     * 
+     * The function produces a deterministic hash by:
+     * 1. Sorting items for consistent ordering
+     * 2. Removing duplicates
+     * 3. Concatenating and hashing the combined string
+     * Returns 0 for empty buckets.
+     */
+    static uint64_t compute_bucket_hash(const std::vector<std::string>& bucket_items) {
+        // If bucket is empty
+        if (bucket_items.empty()) {
             return 0;
         }
 
-        // Сортируем для стабильного хеширования
-        std::vector<std::string> sortedItems = bucketItems;
-        std::sort(sortedItems.begin(), sortedItems.end());
+        // Sort for stable hashing
+        std::vector<std::string> sorted_items = bucket_items;
+        std::sort(sorted_items.begin(), sorted_items.end());
 
-        // Удаляем дубликаты
-        auto last = std::unique(sortedItems.begin(), sortedItems.end());
-        sortedItems.erase(last, sortedItems.end());
+        // Remove duplicates
+        auto last = std::unique(sorted_items.begin(), sorted_items.end());
+        sorted_items.erase(last, sorted_items.end());
 
-        // Объединяем все элементы и хешируем
+        // Combine all elements and hash
         std::string combined;
-        for (const auto& item : sortedItems) {
+        for (const auto& item : sorted_items) {
             combined += item;
         }
 
-        return hashActor(combined);
+        return hash_actor(combined);
     }
 
-    // Структура для хранения хешей корзин
+    /**
+     * @struct BucketHashes
+     * @brief Container for storing hash values of all buckets
+     * 
+     * Initializes all hash values to zero by default.
+     */
     struct BucketHashes {
         uint64_t hashes[BUCKET_COUNT];
 
@@ -85,82 +116,108 @@ private:
         }
     };
 
-    // Создание хешей корзин из вектора акторов
-    BucketHashes createBucketHashes() const {
-        // Распределяем акторы по корзинам
+    /**
+     * @brief Creates hash values for all buckets based on current local actors
+     * @return BucketHashes structure containing hash values for all buckets
+     * 
+     * This function distributes all local actors into their respective buckets
+     * and computes a hash value for each bucket's contents.
+     */
+    BucketHashes create_bucket_hashes() const {
+        // Distribute actors into buckets
         std::unordered_map<uint8_t, std::vector<std::string>> buckets;
 
-        for (const auto& actor : localActors) {
-            std::string actorStr    = actor.to_string();
-            uint8_t     bucketIndex = getBucketIndex(actorStr);
-            buckets[bucketIndex].push_back(actorStr);
+        for (const auto& actor : local_actors_) {
+            std::string actor_str    = actor.to_string();
+            uint8_t     bucket_index = get_bucket_index(actor_str);
+            buckets[bucket_index].push_back(actor_str);
         }
 
-        // Вычисляем хеш для каждой корзины
+        // Compute hash for each bucket
         BucketHashes result;
 
         for (size_t i = 0; i < BUCKET_COUNT; i++) {
             auto it = buckets.find(static_cast<uint8_t>(i));
             if (it != buckets.end()) {
-                result.hashes[i] = computeBucketHash(it->second);
+                result.hashes[i] = compute_bucket_hash(it->second);
             }
         }
 
         return result;
     }
 
-    // Сериализация хешей корзин для отправки
-    static std::vector<uint8_t> serializeBucketHashes(const BucketHashes& hashes) {
+    /**
+     * @brief Serializes bucket hashes for network transmission
+     * @param hashes BucketHashes structure to serialize
+     * @return Vector of bytes containing serialized data
+     */
+    static std::vector<uint8_t> serialize_bucket_hashes(const BucketHashes& hashes) {
         std::vector<uint8_t> result(sizeof(hashes.hashes));
         memcpy(result.data(), hashes.hashes, sizeof(hashes.hashes));
         return result;
     }
 
-    // Десериализация хешей корзин
-    static BucketHashes deserializeBucketHashes(const std::vector<uint8_t>& data) {
+    /**
+     * @brief Deserializes bucket hashes from received data
+     * @param data Vector of bytes containing serialized bucket hashes
+     * @return BucketHashes structure populated from the data
+     */
+    static BucketHashes deserialize_bucket_hashes(const std::vector<uint8_t>& data) {
         BucketHashes result;
         memcpy(result.hashes, data.data(), std::min(sizeof(result.hashes), data.size()));
         return result;
     }
 
-    // Найти индексы корзин, которые различаются
-    static std::vector<uint8_t> findDifferentBuckets(const BucketHashes& localHashes,
-                                                     const BucketHashes& remoteHashes) {
-        std::vector<uint8_t> differentBuckets;
+    /**
+     * @brief Identifies buckets with different hash values between local and remote
+     * @param local_hashes Local bucket hashes
+     * @param remote_hashes Remote bucket hashes
+     * @return Vector of bucket indices that differ between local and remote
+     */
+    static std::vector<uint8_t> find_different_buckets(const BucketHashes& local_hashes,
+                                                     const BucketHashes& remote_hashes) {
+        std::vector<uint8_t> different_buckets;
 
         for (size_t i = 0; i < BUCKET_COUNT; i++) {
-            if (localHashes.hashes[i] != remoteHashes.hashes[i]) {
-                differentBuckets.push_back(static_cast<uint8_t>(i));
+            if (local_hashes.hashes[i] != remote_hashes.hashes[i]) {
+                different_buckets.push_back(static_cast<uint8_t>(i));
             }
         }
 
-        return differentBuckets;
+        return different_buckets;
     }
 
-    // Получить акторы из указанных корзин
-    std::vector<ActorId> getActorsFromBuckets(const std::vector<uint8_t>& bucketIndices) const {
+    /**
+     * @brief Retrieves all actors from specified buckets
+     * @param bucket_indices Vector of bucket indices to retrieve actors from
+     * @return Vector of unique ActorId objects from the specified buckets
+     * 
+     * This function collects all actors that belong to the specified buckets
+     * while ensuring that no duplicates are included in the result.
+     */
+    std::vector<ActorId> get_actors_from_buckets(const std::vector<uint8_t>& bucket_indices) const {
         std::vector<ActorId> result;
 
-        // Создаем набор индексов для быстрой проверки
-        std::unordered_set<uint8_t> indices(bucketIndices.begin(), bucketIndices.end());
+        // Create a set of indices for fast checking
+        std::unordered_set<uint8_t> indices(bucket_indices.begin(), bucket_indices.end());
 
-        // Множество для отслеживания уже добавленных акторов (устраняем дубликаты)
-        std::unordered_set<std::string> addedActors;
+        // Set for tracking already added actors (remove duplicates)
+        std::unordered_set<std::string> added_actors;
 
-        // Проверяем каждый актор
-        for (const auto& actor : localActors) {
-            std::string actorStr = actor.to_string();
+        // Check each actor
+        for (const auto& actor : local_actors_) {
+            std::string actor_str = actor.to_string();
 
-            // Пропускаем, если актор уже был добавлен
-            if (addedActors.find(actorStr) != addedActors.end()) {
+            // Skip if actor was already added
+            if (added_actors.find(actor_str) != added_actors.end()) {
                 continue;
             }
 
-            uint8_t bucketIndex = getBucketIndex(actorStr);
+            uint8_t bucket_index = get_bucket_index(actor_str);
 
-            if (indices.find(bucketIndex) != indices.end()) {
+            if (indices.find(bucket_index) != indices.end()) {
                 result.push_back(actor);
-                addedActors.insert(actorStr);
+                added_actors.insert(actor_str);
             }
         }
 
@@ -168,51 +225,78 @@ private:
     }
 
 public:
+    /**
+     * @brief Default constructor
+     */
     ActorSynchronizer() {
     }
 
-    void setActors(const std::vector<ActorId>& actors) {
-        localActors = actors;
+    /**
+     * @brief Sets the collection of local actors to be synchronized
+     * @param actors Vector of ActorId objects to set as local actors
+     */
+    void set_actors(const std::vector<ActorId>& actors) {
+        local_actors_ = actors;
     }
 
-    // Создание запроса на синхронизацию (для отправки другой стороне)
-    std::vector<uint8_t> createSyncRequest() {
-        // Создаем хеши корзин для локальных акторов
-        auto bucketHashes = createBucketHashes();
+    /**
+     * @brief Creates a synchronization request for sending to another node
+     * @return Vector of bytes containing serialized bucket hashes
+     * 
+     * This function generates hash values for all buckets of local actors
+     * and serializes them for transmission to a remote node.
+     */
+    std::vector<uint8_t> create_sync_request() {
+        // Create bucket hashes for local actors
+        auto bucket_hashes = create_bucket_hashes();
 
-        // Сериализуем хеши корзин для отправки
-        return serializeBucketHashes(bucketHashes);
+        // Serialize bucket hashes for transmission
+        return serialize_bucket_hashes(bucket_hashes);
     }
 
-    // Обработка полученного запроса (возвращает ID, которые следует отправить)
-    std::vector<ActorId> processSyncRequest(const std::vector<uint8_t>& requestData) {
-        // Десериализуем полученные хеши корзин
-        auto remoteBucketHashes = deserializeBucketHashes(requestData);
+    /**
+     * @brief Processes a received synchronization request
+     * @param request_data Vector of bytes containing serialized bucket hashes from remote node
+     * @return Vector of ActorId objects that should be sent to the remote node
+     * 
+     * This function compares the received bucket hashes with local bucket hashes
+     * and returns the actors from buckets that differ, which should be sent
+     * to the requesting node.
+     */
+    std::vector<ActorId> process_sync_request(const std::vector<uint8_t>& request_data) {
+        // Deserialize received bucket hashes
+        auto remote_bucket_hashes = deserialize_bucket_hashes(request_data);
 
-        // Создаем хеши локальных корзин
-        auto localBucketHashes = createBucketHashes();
+        // Create hashes for local buckets
+        auto local_bucket_hashes = create_bucket_hashes();
 
-        // Находим различающиеся корзины
-        auto differentBuckets = findDifferentBuckets(localBucketHashes, remoteBucketHashes);
+        // Find differing buckets
+        auto different_buckets = find_different_buckets(local_bucket_hashes, remote_bucket_hashes);
 
-        // Получаем акторы из различающихся корзин
-        return getActorsFromBuckets(differentBuckets);
+        // Get actors from different buckets
+        return get_actors_from_buckets(different_buckets);
     }
 
-    // Применение полученных ID (обновление локального множества)
-    void applyReceivedIds(const std::vector<ActorId>& receivedIds) {
-        // Множество для быстрой проверки уже имеющихся акторов
-        std::unordered_set<std::string> existingActors;
-        for (const auto& actor : localActors) {
-            existingActors.insert(actor.to_string());
+    /**
+     * @brief Updates local actor collection with received actor IDs
+     * @param received_ids Vector of ActorId objects received from a remote node
+     * 
+     * This function adds the received actor IDs to the local collection,
+     * ensuring that no duplicates are added.
+     */
+    void apply_received_ids(const std::vector<ActorId>& received_ids) {
+        // Set for fast checking of existing actors
+        std::unordered_set<std::string> existing_actors;
+        for (const auto& actor : local_actors_) {
+            existing_actors.insert(actor.to_string());
         }
 
-        // Добавляем только уникальные акторы
-        for (const auto& actor : receivedIds) {
-            std::string actorStr = actor.to_string();
-            if (existingActors.find(actorStr) == existingActors.end()) {
-                localActors.push_back(actor);
-                existingActors.insert(actorStr);
+        // Add only unique actors
+        for (const auto& actor : received_ids) {
+            std::string actor_str = actor.to_string();
+            if (existing_actors.find(actor_str) == existing_actors.end()) {
+                local_actors_.push_back(actor);
+                existing_actors.insert(actor_str);
             }
         }
     }
