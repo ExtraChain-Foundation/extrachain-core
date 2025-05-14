@@ -22,6 +22,7 @@
 #include <QDir>
 
 #include "network/network_manager.h"
+#include "utils/thread_pool_boost.h"
 
 ActorId ActorIndex::network_id() {
     return network_id_;
@@ -40,6 +41,11 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
 
     records = db.count("Actors");
     eLog("[ActorIndex] Count: {}", records);
+    db.close();
+
+    if (records > 0) {
+        synch.set_actors(allActors());
+    }
 }
 
 Actor<KeyPublic> ActorIndex::getActor(const ActorId &id) {
@@ -186,6 +192,65 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &r
                             MessageStatus::Response);
 }
 
+void ActorIndex::request_actors_hash(const Responder &responder) {
+    TIMER_START(request_actors_hash)
+    std::vector<uint8_t> sync_request = synch.create_sync_request();
+    TIMER_END(request_actors_hash)
+
+    responder.with_new_message_id().send_response(sync_request,
+                                                  MessageType::ActorsHash,
+                                                  SendMode::Focused,
+                                                  MessageStatus::Request);
+}
+
+void ActorIndex::network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder) {
+    TIMER_START(network_actors_hash_request)
+    std::vector<ActorId> actor_ids = synch.process_sync_request(bits);
+    TIMER_END(network_actors_hash_request)
+
+    eLog("hhhh actor_ids {}", actor_ids.size());
+
+    if (actor_ids.empty()) {
+        return;
+    }
+
+    auto r = responder;
+    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids] {
+        std::vector<Actor<KeyPublic>> actors;
+        auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
+        actors.reserve(min_size);
+
+        for (const auto &actor_id : actor_ids) {
+            auto actor = get_actor(actor_id);
+            if (!actor.has_value()) {
+                continue;
+            }
+
+            actors.push_back(actor.value());
+
+            if (actors.size() > 99) {
+                eLog("[ActorIndex] Send {} actors", actors.size());
+                responder.with_new_message_id().send_response(actors,
+                                                              MessageType::Actors,
+                                                              SendMode::Focused,
+                                                              MessageStatus::Response);
+                actors.clear();
+                QThread::msleep(2);
+            }
+        }
+
+        if (actors.empty()) {
+            return;
+        }
+
+        eLog("[ActorIndex] Send {} actors", actors.size());
+        responder.with_new_message_id().send_response(actors,
+                                                      MessageType::Actors,
+                                                      SendMode::Focused,
+                                                      MessageStatus::Response);
+    });
+}
+
 bool ActorIndex::exists(const ActorId &actor_id) {
     auto actor = this->get_actor(actor_id, ActorGetType::NoRequest);
     return actor.has_value();
@@ -310,6 +375,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
         return std::unexpected(ActorSaveError::Undefined);
     }
 
+    synch.apply_received_ids({ actor.id() });
     emit actorSaved(actor.id());
     return {};
 }

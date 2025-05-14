@@ -60,6 +60,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_id.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_filter.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h

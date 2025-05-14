@@ -846,7 +846,7 @@ void ExtraChainNode::connectSignals() {
 
                 m_networkManager->sendFromCache();
                 dag_->start_check();
-                // m_blockchain->sync(BigNumber(), responder);
+                m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
 

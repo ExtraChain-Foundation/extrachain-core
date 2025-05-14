@@ -23,6 +23,7 @@
 
 #include "blockchain/actor.h"
 #include "managers/extrachain_node.h"
+#include "blockchain/actor_filter.h"
 
 class ExtraChainNode;
 class Responder;
@@ -58,6 +59,8 @@ private:
     const std::string folderPath        = fmt::format("{}/", BlockchainConst::ACTORS_FOLDER);
     int16_t           SECTION_NAME_SIZE = 2;
     ActorId           network_id_;
+
+    ActorSynchronizer synch;
 
 public:
     /**
@@ -138,6 +141,9 @@ public:
     void network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder);
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const Responder &responder);
+
+    void request_actors_hash(const Responder &responder);
+    void network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder);
 
 signals:
     void newActorSaved(ActorId actor_id);

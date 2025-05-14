@@ -1,8 +1,27 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 #include "blockchain/dag.h"
 
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
+#include "utils/thread_pool_boost.h"
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
@@ -832,7 +851,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, compressed, responder]() {
+    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -861,7 +880,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, responder]() {
+    ThreadPoolBoost::instance()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
         std::vector<Transaction> txs;
@@ -911,7 +930,8 @@ void Dag::network_request_light(const Responder &responder) {
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
     eLog("network_response_light");
-    QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+
+    ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
         TIMER_START(network_response_light)
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
