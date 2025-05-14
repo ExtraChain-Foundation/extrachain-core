@@ -1130,7 +1130,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::ActorAll: {
-        qFatal("!!!");
+        break;
         if (status == MessageStatus::Request) {
             auto ignored_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
             if (!ignored_actor_id_result.has_value()) {
@@ -1155,7 +1155,6 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::Actors: {
         if (status == MessageStatus::Request) {
-            qFatal("!!!");
             auto ignored_actor_id_result = MessagePack::deserialize<std::set<ActorId>>(serialized);
             if (!ignored_actor_id_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for ignored ActorId in {} state",
