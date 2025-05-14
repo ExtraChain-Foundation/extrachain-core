@@ -1566,9 +1566,9 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        // if (res.has_value()) {
-        sendBrodcastMessageFurther(package_data);
-        // }
+        if (res.has_value()) {
+            sendBrodcastMessageFurther(package_data);
+        }
         break;
     }
 
@@ -1640,7 +1640,11 @@ void NetworkManager::messageReceived(const std::string &message,
         const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::Request: {
-            node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
+            auto res = node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
+
+            if (res) {
+                sendBrodcastMessageFurther(package_data);
+            }
             break;
         }
         default:

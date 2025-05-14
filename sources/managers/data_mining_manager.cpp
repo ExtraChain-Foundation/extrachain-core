@@ -129,7 +129,7 @@ void DataMiningManager::requestCoinReward() {
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
-                                  SendMode::Neighbours,
+                                  SendMode::Broadcast,
                                   MessageStatus::Request);
 
     auto data_serialized = MessagePack::serialize(requestReward);
@@ -138,7 +138,7 @@ void DataMiningManager::requestCoinReward() {
     eLog("[Reward] Sended {}", requestReward);
 
     // if (requestReward.transaction != des->transaction) {
-        // eFatal("Reward error");
+    // eFatal("Reward error");
     // }
 }
 
@@ -208,7 +208,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     return res;
 }
 
-void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward,
+bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward,
                                                     const Responder                  &responder) {
     auto calc   = calculateRewardAmount(requestReward);
     auto amount = requestReward.transaction.amount();
@@ -216,13 +216,20 @@ void DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     // * KoefReward
     if (calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
-            return;
+            return false;
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        node->dag()->network_transaction(requestReward.transaction, responder);
-        node->dag()->network_transaction(requestReward.convert, responder);
+        auto res1 = node->dag()->network_transaction(requestReward.transaction, responder);
+        auto res2 = node->dag()->network_transaction(requestReward.convert, responder);
+
+        if (!res1.has_value() || !res2.has_value()) {
+            return false;
+        }
+
+        return true;
     } else {
+        return false;
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
 }
