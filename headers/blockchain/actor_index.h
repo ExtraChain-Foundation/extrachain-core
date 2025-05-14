@@ -23,7 +23,7 @@
 
 #include "blockchain/actor.h"
 #include "managers/extrachain_node.h"
-#include "utils/bloom_filter.h"
+#include "blockchain/actor_filter.h"
 
 class ExtraChainNode;
 class Responder;
@@ -142,8 +142,8 @@ public:
     void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const Responder &responder);
 
-    void request_bloom(const Responder &responder);
-    void network_actors_bloom_request(const std::vector<uint8_t> &bits, const Responder &responder);
+    void request_actors_hash(const Responder &responder);
+    void network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder);
 
 signals:
     void newActorSaved(ActorId actor_id);

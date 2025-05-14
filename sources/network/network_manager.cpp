@@ -1176,8 +1176,7 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::ActorsBloom: {
-
+    case MessageType::ActorsHash: {
         if (status == MessageStatus::Request) {
             auto bits = MessagePack::deserialize<std::vector<uint8_t>>(serialized);
             if (!bits.has_value()) {
@@ -1185,7 +1184,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_bloom_request(bits.value(), responder);
+            node->actorIndex()->network_actors_hash_request(bits.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
             if (!actors_list_result.has_value()) {

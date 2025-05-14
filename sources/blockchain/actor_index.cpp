@@ -192,21 +192,21 @@ void ActorIndex::getActorCount(const QByteArray &requestHash, const Responder &r
                             MessageStatus::Response);
 }
 
-void ActorIndex::request_bloom(const Responder &responder) {
-    TIMER_START(request_bloom)
+void ActorIndex::request_actors_hash(const Responder &responder) {
+    TIMER_START(request_actors_hash)
     std::vector<uint8_t> sync_request = synch.createSyncRequest();
-    TIMER_END(request_bloom)
+    TIMER_END(request_actors_hash)
 
     responder.with_new_message_id().send_response(sync_request,
-                                                  MessageType::ActorsBloom,
+                                                  MessageType::ActorsHash,
                                                   SendMode::Focused,
                                                   MessageStatus::Request);
 }
 
-void ActorIndex::network_actors_bloom_request(const std::vector<uint8_t> &bits, const Responder &responder) {
-    TIMER_START(network_actors_bloom_request)
+void ActorIndex::network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder) {
+    TIMER_START(network_actors_hash_request)
     std::vector<ActorId> actor_ids = synch.processSyncRequest(bits);
-    TIMER_END(network_actors_bloom_request)
+    TIMER_END(network_actors_hash_request)
 
     eLog("hhhh actor_ids {}", actor_ids.size());
 
