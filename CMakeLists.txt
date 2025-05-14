@@ -105,6 +105,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/vpn_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bloom_filter.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h

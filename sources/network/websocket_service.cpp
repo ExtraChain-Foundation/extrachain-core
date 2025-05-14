@@ -363,6 +363,8 @@ void WebSocketService::tryDequeueMessage() {
         data = low_queue_.dequeue();
     }
 
+    locker.unlock();
+
     if (!data.isEmpty()) {
         emit sendMessageInternal(data);
 

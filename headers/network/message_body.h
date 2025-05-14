@@ -27,12 +27,13 @@
 #include "utils/exc_utils.h"
 
 enum class MessageType {
-    Custom     = 0,
-    NewActor   = 1,
-    Actor      = 2,
-    ActorCount = 3,
-    ActorAll   = 4,
-    Actors     = 15,
+    Custom      = 0,
+    NewActor    = 1,
+    Actor       = 2,
+    ActorCount  = 3,
+    ActorAll    = 4,
+    Actors      = 15,
+    ActorsBloom = 16,
 
     CoinReward = 19,
 

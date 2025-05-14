@@ -3,6 +3,7 @@
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
+#include "utils/thread_pool_boost.h"
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
@@ -827,7 +828,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, compressed, responder]() {
+    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -856,7 +857,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, responder]() {
+    ThreadPoolBoost::instance()->post([this, responder]() {
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
@@ -902,7 +903,7 @@ void Dag::network_request_light(const Responder &responder) {
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+    ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         auto min = BigNumber(-1), max = BigNumber(-1);

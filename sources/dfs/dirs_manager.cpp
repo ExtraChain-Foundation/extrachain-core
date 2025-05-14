@@ -225,5 +225,11 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
+
+        QThread::msleep(2);
+
+        if (!node) {
+            return;
+        }
     }
 }
