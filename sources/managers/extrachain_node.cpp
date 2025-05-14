@@ -749,10 +749,11 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag: {} sections, last: 0x{}, status: {}", //. Dfs: {:.2f} from {:.2f} KB",
+    eLog("[Node] Dag: {} sections, last: 0x{}, status: {}, last cache: {}", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
-         dag_->status()/*,
+         dag_->status(),
+         dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 }

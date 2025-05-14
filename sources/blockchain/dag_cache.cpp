@@ -180,7 +180,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     if (cached_section_ != BigNumber(-1) && init_db()) {
         // We have some cache, which may be at an earlier point than the genesis_section
         use_cache             = true;
-        balance_start_section = cached_section_;
+        balance_start_section = cached_section_ + 1;
 
         // Get cached balances from DB
         for (const auto& actor_id : actor_ids) {
@@ -444,6 +444,7 @@ bool DagCache::update_to_genesis_section(
     cached_section_ = genesis_section;
 
     eLog("[DagCache] Cache updated to section {}", cached_section_);
+    node_->dag()->update_range();
 
     return true;
 }
