@@ -563,7 +563,13 @@ void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
+
+    // temp for old vector
+    auto section = row_map["section_id"];
+    row_map.erase("section_id");
+    row_map.insert({ "block_id", section });
+
+    auto res = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
         emit subscriptionAdded(row.owner_id, row.file_id);

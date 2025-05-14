@@ -821,6 +821,10 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
+    if (from < first_saved_section_) {
+        return;
+    }
+
     if (to < from) {
         eLog("[Dag] Send sections error: {} < {}", to, from);
         return;
@@ -997,14 +1001,12 @@ void Dag::send_sync_request() {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_section_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
         }
@@ -1084,7 +1086,7 @@ void Dag::send_sync_request() {
         return;
     }
 
-    eLog("sync_last_index {}", sync_last_index);
+    eLog("sync_last_index: 0x{} / {} sections", sync_last_index, sync_last_index.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
