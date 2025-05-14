@@ -211,7 +211,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions.find(hash) == sended_transactions.end()) {
-        eLog("[Dag] Ignore transaction result: {}", hash);
+        // eLog("[Dag] Ignore transaction result: {}", hash);
         return;
     }
 
@@ -463,10 +463,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     const ActorId &mainActorId    = node->accountController()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
-    const auto accounts = node->accountController()->accountsIds();
-    for (const auto &accountId : accounts) {
-        if (targetSender == accountId || targetReceiver == accountId) {
-            return TransactionProveError::SelfPleasure;
+    if (tx.type() != TransactionType::Repeatable) {
+        const auto accounts = node->accountController()->accountsIds();
+        for (const auto &accountId : accounts) {
+            if (targetSender == accountId || targetReceiver == accountId) {
+                return TransactionProveError::SelfPleasure;
+            }
         }
     }
 
