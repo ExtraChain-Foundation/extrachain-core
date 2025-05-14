@@ -211,7 +211,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions.find(hash) == sended_transactions.end()) {
-        // eLog("[Dag] Ignore transaction result: {}", hash);
+        eLog("[Dag] Ignore transaction result: {}", hash);
         return;
     }
 
@@ -732,6 +732,13 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
+    // temp
+    static bool first = false;
+    if (first) {
+        return;
+    }
+    first = true;
+
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
         // eLog("BC 12 start_check return");

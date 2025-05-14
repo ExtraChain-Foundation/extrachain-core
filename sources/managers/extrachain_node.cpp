@@ -530,7 +530,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat(500));
+    transaction.setAmount(BigNumberFloat("500", NumeralBase::Dec));
 #ifdef QT_DEBUG
     transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
@@ -743,13 +743,13 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {} from {} bytes",
+    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {:.2f} from {:.2f} KB",
          dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
-         m_dfs->sizeTaken(),
-         m_dfs->totalDfsSize());
+         m_dfs->sizeTaken() / 1024.0,
+         m_dfs->totalDfsSize() / 1024.0);
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
@@ -845,7 +845,7 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
-                dag_->start_check();
+                // dag_->start_check();
                 m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });

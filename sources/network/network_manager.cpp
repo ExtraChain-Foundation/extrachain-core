@@ -677,7 +677,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         }
     }
 
-    if (serialized_message.size() > 1000) {
+    if (serialized_message.size() > 10000) {
         eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
 
