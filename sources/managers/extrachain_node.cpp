@@ -743,13 +743,12 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {:.2f} from {:.2f} KB",
-         dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
+    eLog("[Node] Dag: {} sections, last: 0x{}, status: {}", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
-         dag_->status(),
+         dag_->status()/*,
          m_dfs->sizeTaken() / 1024.0,
-         m_dfs->totalDfsSize() / 1024.0);
+         m_dfs->totalDfsSize() / 1024.0*/);
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
@@ -845,7 +844,7 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
-                // dag_->start_check();
+                dag_->start_check();
                 m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });

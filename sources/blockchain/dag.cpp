@@ -247,7 +247,6 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
                 node->selfTxInitContractAdded(transaction);
             }
 
-#ifdef IS_RC
             if (transaction.type() == TransactionType::Repeatable) {
                 node->selfTxRepeatableAdded(transaction);
             }
@@ -266,7 +265,6 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
             //     eLog("[Reward] Send conversion: {} coins", tx.amount());
             //     node->sendTransaction(tx, node->accountController()->system_actor());
             // }
-#endif
         }
     }
 }
@@ -395,7 +393,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
-        if (mode_ == DagMode::Full || mode_ == DagMode::Light && transaction.section() != BigNumber(0)) {
+        if (mode_ == DagMode::Full || (mode_ == DagMode::Light && transaction.section() != BigNumber(0))) {
             first_saved_section_ = transaction.section();
         }
 
@@ -733,11 +731,11 @@ void Dag::start_sync() {
 
 void Dag::start_check() {
     // temp
-    static bool first = false;
-    if (first) {
-        return;
-    }
-    first = true;
+#ifndef IS_RC
+    // if (status_ == DagStatus::Ready) {
+    //     return;
+    // }
+#endif
 
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
