@@ -457,6 +457,18 @@ public:
     bool save_transaction(const Transaction &transaction);
 
     /**
+     * @brief Save multiple transactions to storage in batch
+     *      * Groups transactions by section and processes each section once,
+     * creating new sections or adding to existing sections as needed.
+     * Maintains the same behavior as save_transaction but optimizes
+     * by reducing I/O operations when multiple transactions belong
+     * to the same section.
+     * @param transactions Vector of transactions to save
+     * @return bool True if all transactions were saved successfully, false otherwise
+     */
+    bool save_transactions(const std::vector<Transaction> &transactions);
+
+    /**
      * @brief Validate a transaction
      *
      * Checks if a transaction meets all validation rules.

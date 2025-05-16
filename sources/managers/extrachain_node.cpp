@@ -217,6 +217,9 @@ bool ExtraChainNode::create_new_dag() {
     }
 
     dag_->set_status(DagStatus::Ready);
+
+    m_actorIndex->set_network_id(actor.id());
+
     return true;
 }
 
