@@ -16,6 +16,7 @@
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #pragma once
 
 #include <memory>
@@ -62,18 +63,14 @@ public:
      *
      * @return BigNumber The section id
      */
-    BigNumber section() const {
-        return cached_section_;
-    }
+    BigNumber section() const;
 
     /**
      * @brief Set the current section id of the cache
      *
      * @param section_id The new section id
      */
-    void set_section(const BigNumber& section_id) {
-        cached_section_ = section_id;
-    }
+    void set_section(const BigNumber& section_id);
 
     /**
      * @brief Read all cached balances from the database

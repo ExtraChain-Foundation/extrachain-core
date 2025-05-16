@@ -403,7 +403,7 @@ std::vector<ActorId> ActorIndex::allActors() {
 
     DbConnector db(folderPath + "actors");
     db.open();
-    auto actors = db.select("SELECT id FROM Actors");
+    auto actors = db.select("SELECT id FROM Actors ORDER by id");
     for (auto &actor : actors) {
         result.push_back(ActorId(actor["id"]));
     }

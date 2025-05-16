@@ -16,6 +16,7 @@
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+
 #include "blockchain/dag.h"
 
 #include "managers/extrachain_node.h"
@@ -562,10 +563,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Validate Conversion transactions
     if (tx.type() == TransactionType::Conversion) {
         // Check conversion token information
-        if (!tx.data().has_value()) {
+        if (!tx.meta().has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
-        auto from_token = TokenId::create(tx.data().value());
+        auto from_token = TokenId::create(tx.meta().value());
         if (!from_token.has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
@@ -610,8 +611,8 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
         // Conversions can both increase and decrease balance
         if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == targetSender) {
-            if (tx_check.data().has_value()) {
-                auto from_token = TokenId::create(tx_check.data().value());
+            if (tx_check.meta().has_value()) {
+                auto from_token = TokenId::create(tx_check.meta().value());
                 if (from_token.has_value() && from_token.value() == token) {
                     senderBalance -= tx_check.amount();
                 }
@@ -940,7 +941,7 @@ void Dag::network_request_light(const Responder &responder) {
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
-    eLog("network_response_light");
+    // eLog("network_response_light {}", dag_light);
 
     ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
         TIMER_START(network_response_light)
@@ -1122,7 +1123,7 @@ std::set<std::string> Section::prev_hashs() {
     std::set<std::string> hashs;
 
     for (const auto &tx : transactions) {
-        const auto &prev_hashes = tx.prev_hash();
+        const auto &prev_hashes = tx.prev_hashs();
         hashs.insert(prev_hashes.begin(), prev_hashes.end());
     }
 

@@ -373,7 +373,7 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
         //     return;
         // }
         // use list for first uploaded
-        node->dfs()->uploaded(owner_id, dir_row.value());
+        emit node->dfs()->uploaded(owner_id, dir_row.value());
     });
 
     sender.detach();

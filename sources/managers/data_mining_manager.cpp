@@ -104,7 +104,7 @@ void DataMiningManager::requestCoinReward() {
     tx_conv.setSender(actor.id());
     tx_conv.setReceiver(actor.id());
     tx_conv.setType(TransactionType::Conversion);
-    tx_conv.setData(ActorId().to_string());
+    tx_conv.set_meta(ActorId().to_string());
     tx_conv.setAmount(transaction.amount());
     tx_conv.setToken(
         ActorId("468faf2f1be6504a9a26f7f027"

@@ -16,11 +16,11 @@
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-#ifndef THREAD_POOL_BOOST_H
-#define THREAD_POOL_BOOST_H
+
+#pragma once
 
 #ifdef _WIN32
-    #    include <winsock2.h>
+    #include <winsock2.h>
 #endif
 
 #include <boost/asio/thread_pool.hpp>
@@ -31,35 +31,26 @@ class ThreadPoolBoost {
 public:
     ThreadPoolBoost() = delete;
 
-    static std::shared_ptr<ThreadPoolBoost>
-    instance(size_t threadsCount = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance(size_t threadsCount = 1);
 
-    static void
-    terminate();
+    static void terminate();
 
-    template<BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
-    auto
-    post(NullaryToken&& nullary_token)
-    {
+    template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
+    auto post(NullaryToken&& nullary_token) {
         return boost::asio::post(*m_thread_pool, nullary_token);
     }
 
-    template<BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
-    auto
-    dispatch(NullaryToken&& nullary_token)
-    {
+    template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
+    auto dispatch(NullaryToken&& nullary_token) {
         return boost::asio::dispatch(*m_thread_pool, nullary_token);
     }
 
-    void
-    join();
+    void join();
+
 private:
     ThreadPoolBoost(size_t threads_count);
 
-    static void
-    initialize(boost::asio::thread_pool& thread_pool, const size_t threads_count);
+    static void initialize(boost::asio::thread_pool& thread_pool, const size_t threads_count);
 
     std::unique_ptr<boost::asio::thread_pool> m_thread_pool;
 };
-
-#endif // THREAD_POOL_BOOST_H

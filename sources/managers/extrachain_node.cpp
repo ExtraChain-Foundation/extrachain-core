@@ -535,7 +535,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
     transaction.setToken(token_id); // TODO: get token_id from json
-    transaction.setData(std::to_string(type));
+    transaction.set_meta(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
     this->send_transaction(transaction, m_accountController->system_actor());
     // transaction.setHash()

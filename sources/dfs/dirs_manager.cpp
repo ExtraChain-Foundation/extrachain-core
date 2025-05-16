@@ -203,7 +203,6 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    TIMER_START(Dirnetwork_request_all)
     auto actors = node->actorIndex()->allActors();
 
     auto network_id = node->actorIndex()->network_id();
@@ -231,11 +230,10 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 SendMode::Focused,
                                 MessageStatus::Response);
 
-        QThread::msleep(2);
+        QThread::msleep(3);
 
         if (!node) {
             return;
         }
     }
-    TIMER_END(Dirnetwork_request_all)
 }
