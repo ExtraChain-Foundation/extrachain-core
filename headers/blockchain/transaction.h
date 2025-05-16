@@ -78,7 +78,8 @@ enum class TransactionProveError {
     NoSectionAdded,
     GenesisOnlyZeroSection,
     SectionTooBig,
-    BalanceOnlyFirstSection
+    BalanceOnlyFirstSection,
+    TooSectionDiff
 };
 // FORMAT_ENUM(TransactionProveError)
 
@@ -87,7 +88,7 @@ private:
     ActorId                    m_sender;                               // sender address
     ActorId                    m_receiver;                             // receiver address
     BigNumberFloat             m_amount;                               // coin amount
-    std::optional<std::string> m_data;                                 // additional payload field
+    std::optional<std::string> meta_;                                 // additional payload field
     ActorId                    m_token;                                // token contract address
     BigNumber                  m_section = BigNumber("-1");            // section id at the moment of tx creation
     std::string                m_hash;                                 // hash from all fields
@@ -125,16 +126,12 @@ public:
     ActorId                    receiver() const;
     BigNumberFloat             amount() const;
     BigNumber                  section() const;
-    std::optional<std::string> data() const;
+    std::optional<std::string> meta() const;
     std::string                hash() const;
     ActorId                    token() const;
     TransactionType            type() const;
-    std::uint64_t              timestamp() const {
-        return timestamp_;
-    }
-    std::set<std::string> prev_hash() const {
-        return prev_hashs_;
-    }
+    std::uint64_t              timestamp() const;
+    std::set<std::string> prev_hashs() const;
     Signature signature() const;
 
     /**
@@ -153,7 +150,7 @@ public:
     Transaction &operator=(Transaction &&other) noexcept;
 
     void setToken(const ActorId &value);
-    void setData(const std::string &value);
+    void set_meta(const std::string &value);
     void setAmount(const BigNumberFloat &value);
     void setSender(const ActorId &value);
     void setReceiver(const ActorId &value);
@@ -181,7 +178,7 @@ public:
                           m_token,
                           m_amount,
                           timestamp_,
-                          m_data,
+                          meta_,
                           prev_hashs_,
                           m_hash,
                           m_signature))

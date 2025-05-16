@@ -1,3 +1,22 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "blockchain/dag_cache.h"
 #include "blockchain/dag.h"
 #include "managers/extrachain_node.h"
@@ -12,6 +31,14 @@ DagCache::~DagCache() {
     if (db_ && db_->is_open()) {
         db_->close();
     }
+}
+
+BigNumber DagCache::section() const {
+    return cached_section_;
+}
+
+void DagCache::set_section(const BigNumber& section_id) {
+    cached_section_ = section_id;
 }
 
 std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
@@ -151,7 +178,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     }
 
     // Find the latest genesis section before current section
-    BigNumber genesis_section = calculate_genesis_section(current_section);
+    // BigNumber genesis_section = calculate_genesis_section(current_section);
 
     // The cached_section_ may be earlier than genesis_section due to lag
     // We need to use the actual cached_section_ for balance calculations
@@ -162,7 +189,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
     if (cached_section_ != BigNumber(-1) && init_db()) {
         // We have some cache, which may be at an earlier point than the genesis_section
         use_cache             = true;
-        balance_start_section = cached_section_;
+        balance_start_section = cached_section_ + 1;
 
         // Get cached balances from DB
         for (const auto& actor_id : actor_ids) {
@@ -234,8 +261,8 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
                     } else if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id) {
                         balances[actor_id] += tx.amount();
                     } else if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-                        if (tx.data().has_value()) {
-                            auto from_token = TokenId::create(tx.data().value());
+                        if (tx.meta().has_value()) {
+                            auto from_token = TokenId::create(tx.meta().value());
                             if (from_token.has_value() && from_token.value() == token_id) {
                                 balances[actor_id] -= tx.amount();
                             }
@@ -364,8 +391,8 @@ bool DagCache::update_to_genesis_section(
             unique_tokens.insert(tx.token());
 
             // If Conversion transaction, also add from_token
-            if (tx.type() == TransactionType::Conversion && tx.data().has_value()) {
-                auto from_token = TokenId::create(tx.data().value());
+            if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
+                auto from_token = TokenId::create(tx.meta().value());
                 if (from_token.has_value()) {
                     unique_tokens.insert(from_token.value());
                 }
@@ -426,6 +453,7 @@ bool DagCache::update_to_genesis_section(
     cached_section_ = genesis_section;
 
     eLog("[DagCache] Cache updated to section {}", cached_section_);
+    node_->dag()->update_range();
 
     return true;
 }
@@ -459,8 +487,8 @@ void DagCache::process_transaction(
         }
         // Token conversion
         else if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-            if (tx.data().has_value()) {
-                auto from_token = TokenId::create(tx.data().value());
+            if (tx.meta().has_value()) {
+                auto from_token = TokenId::create(tx.meta().value());
                 if (from_token.has_value()) {
                     // Deduct from source token
                     auto from_key = std::make_pair(actor_id, from_token.value());

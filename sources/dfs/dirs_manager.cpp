@@ -218,12 +218,22 @@ void DirsManager::network_request_all(const Responder& responder) {
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
 
         if (!dir_rows.has_value()) {
-            return;
+            continue;
+        }
+
+        if (dir_rows->empty()) {
+            continue;
         }
 
         responder.send_response(std::make_pair(actor, dir_rows.value()),
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
+
+        QThread::msleep(3);
+
+        if (!node) {
+            return;
+        }
     }
 }

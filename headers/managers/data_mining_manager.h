@@ -61,7 +61,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward, const Responder &responder);
+    bool network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward, const Responder &responder);
 
 private:
 };

@@ -123,7 +123,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
     tx.setAmount(token_count);
     tx.setToken(token_actor.id());
     tx.setType(TransactionType::InitContract);
-    tx.setData(Json::serialize(token_data_short));
+    tx.set_meta(Json::serialize(token_data_short));
 
     auto tx_res = node->send_transaction(tx, owner_actor.value());
     if (!tx_res.has_value()) {

@@ -100,6 +100,8 @@ private:
 
     std::queue<LoadInfo> download_queue;
 
+    QMutex mutex;
+
 public:
     std::unordered_map<Dfs::FileLink, LoadInfo> active_downloads;
 

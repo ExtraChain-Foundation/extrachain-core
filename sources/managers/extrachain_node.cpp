@@ -530,12 +530,12 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat(500));
+    transaction.setAmount(BigNumberFloat("500", NumeralBase::Dec));
 #ifdef QT_DEBUG
     transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
     transaction.setToken(token_id); // TODO: get token_id from json
-    transaction.setData(std::to_string(type));
+    transaction.set_meta(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
     this->send_transaction(transaction, m_accountController->system_actor());
     // transaction.setHash()
@@ -563,7 +563,13 @@ void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
+
+    // temp for old vector
+    auto section = row_map["section_id"];
+    row_map.erase("section_id");
+    row_map.insert({ "block_id", section });
+
+    auto res = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
         emit subscriptionAdded(row.owner_id, row.file_id);
@@ -727,6 +733,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {
+    return;
     if (m_accountController->count() > 0 && m_networkManager->connections()->size() > 0) {
         ActorId actorId = m_accountController->system_actor().id();
 
@@ -742,13 +749,13 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {} from {} bytes",
-         dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
+    eLog("[Node] Dag: {} sections, last: 0x{}, status: {}, last cache: {}", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
-         m_dfs->sizeTaken(),
-         m_dfs->totalDfsSize());
+         dag_->cache().section()/*,
+         m_dfs->sizeTaken() / 1024.0,
+         m_dfs->totalDfsSize() / 1024.0*/);
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
@@ -845,7 +852,7 @@ void ExtraChainNode::connectSignals() {
 
                 m_networkManager->sendFromCache();
                 dag_->start_check();
-                // m_blockchain->sync(BigNumber(), responder);
+                m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
 
