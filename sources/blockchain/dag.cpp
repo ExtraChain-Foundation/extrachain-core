@@ -1,8 +1,28 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
 #include "blockchain/dag.h"
 
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
+#include "utils/thread_pool_boost.h"
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
@@ -43,6 +63,7 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     transaction_cache_.make_files();
+    cache_.init_db();
 
     // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
     //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
@@ -227,7 +248,6 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
                 node->selfTxInitContractAdded(transaction);
             }
 
-#ifdef IS_RC
             if (transaction.type() == TransactionType::Repeatable) {
                 node->selfTxRepeatableAdded(transaction);
             }
@@ -246,7 +266,6 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
             //     eLog("[Reward] Send conversion: {} coins", tx.amount());
             //     node->sendTransaction(tx, node->accountController()->system_actor());
             // }
-#endif
         }
     }
 }
@@ -375,7 +394,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
     // Update first_saved_section_ if this is the first section or has a lower ID
     if (first_saved_section_ == BigNumber(-1) && transaction.section() >= BigNumber(0)) {
-        if (mode_ == DagMode::Full || mode_ == DagMode::Light && transaction.section() != BigNumber(0)) {
+        if (mode_ == DagMode::Full || (mode_ == DagMode::Light && transaction.section() != BigNumber(0))) {
             first_saved_section_ = transaction.section();
         }
 
@@ -395,6 +414,22 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
             return TransactionProveError::GenesisOnlyZeroSection;
         }
 
+        if (tx.amount() != 0) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
+            return TransactionProveError::GenesisOnlyZeroSection;
+        }
+
+        return TransactionProveError::NoError;
+    }
+
+    if (tx.type() == TransactionType::Balance) {
+        if (tx.section() != BigNumber(1)) {
+            return TransactionProveError::BalanceOnlyFirstSection;
+        }
+
         if (!node->network_id().is_zero() && tx.sender() != tx.receiver() && tx.sender() != node->network_id()) {
             return TransactionProveError::GenesisOnlyZeroSection;
         }
@@ -406,6 +441,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     auto section = this->read_section(BigNumber(tx.section() - 1));
     if (section.has_value()) {
         // TODO: Additional section validation could be added here
+    }
+
+    if (current_section_ - tx.section() > 15) {
+        return TransactionProveError::TooSectionDiff;
     }
 
     // Validate transaction amount
@@ -423,10 +462,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     const ActorId &mainActorId    = node->accountController()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
-    const auto accounts = node->accountController()->accountsIds();
-    for (const auto &accountId : accounts) {
-        if (targetSender == accountId || targetReceiver == accountId) {
-            return TransactionProveError::SelfPleasure;
+    if (tx.type() != TransactionType::Repeatable) {
+        const auto accounts = node->accountController()->accountsIds();
+        for (const auto &accountId : accounts) {
+            if (targetSender == accountId || targetReceiver == accountId) {
+                return TransactionProveError::SelfPleasure;
+            }
         }
     }
 
@@ -480,8 +521,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Check sender-receiver relationship based on transaction type
-    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::InitContract
-        || tx.type() == TransactionType::Conversion) {
+    if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
         // These transaction types require sender and receiver to be the same
         if (targetSender != targetReceiver) {
             return TransactionProveError::NotIdenticalSenderReceiver;
@@ -523,10 +563,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Validate Conversion transactions
     if (tx.type() == TransactionType::Conversion) {
         // Check conversion token information
-        if (!tx.data().has_value()) {
+        if (!tx.meta().has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
-        auto from_token = TokenId::create(tx.data().value());
+        auto from_token = TokenId::create(tx.meta().value());
         if (!from_token.has_value()) {
             return TransactionProveError::ConversionIncorrectFromToken;
         }
@@ -571,8 +611,8 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
         // Conversions can both increase and decrease balance
         if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == targetSender) {
-            if (tx_check.data().has_value()) {
-                auto from_token = TokenId::create(tx_check.data().value());
+            if (tx_check.meta().has_value()) {
+                auto from_token = TokenId::create(tx_check.meta().value());
                 if (from_token.has_value() && from_token.value() == token) {
                     senderBalance -= tx_check.amount();
                 }
@@ -691,6 +731,13 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
+    // temp
+#ifndef IS_RC
+    // if (status_ == DagStatus::Ready) {
+    //     return;
+    // }
+#endif
+
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
         // eLog("BC 12 start_check return");
@@ -775,6 +822,10 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
+    if (from < first_saved_section_) {
+        return;
+    }
+
     if (to < from) {
         eLog("[Dag] Send sections error: {} < {}", to, from);
         return;
@@ -812,7 +863,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, compressed, responder]() {
+    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -841,7 +892,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, responder]() {
+    ThreadPoolBoost::instance()->post([this, responder]() {
+        QElapsedTimer timer;
+        timer.start();
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
@@ -849,7 +902,7 @@ void Dag::network_request_light(const Responder &responder) {
             cache_section = BigNumber(0);
         }
 
-        txs.reserve(50);
+        txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
@@ -882,12 +935,16 @@ void Dag::network_request_light(const Responder &responder) {
                                       MessageStatus::Response,
                                       responder);
 
+        eLog("DONE SENDING {}", timer.elapsed());
         eLog("[Dag] Sent light data: cache section {}, transactions count: {}", cache_section, txs.size());
     });
 }
 
 void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
-    QThreadPool::globalInstance()->start([this, responder, dag_light]() {
+    // eLog("network_response_light {}", dag_light);
+
+    ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
+        TIMER_START(network_response_light)
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         auto min = BigNumber(-1), max = BigNumber(-1);
@@ -910,6 +967,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
              max);
 
         process_cached_transactions();
+        TIMER_END(network_response_light)
     });
 }
 
@@ -929,7 +987,7 @@ void Dag::send_sync_request() {
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
-            eLog("----- {}", info);
+            // eLog("----- {}", info);
             if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
                 need_sync = true;
                 break;
@@ -944,14 +1002,12 @@ void Dag::send_sync_request() {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
             if (info.last_section_id == my_index && info.last_hash != my_hash) {
                 need_sync = true;
                 // remove_last_block();
                 // blockIndex.removeById(my_index);
-                eLog("[Blockchain] Sync: remove block {}", my_index);
                 break;
             }
         }
@@ -1031,7 +1087,7 @@ void Dag::send_sync_request() {
         return;
     }
 
-    eLog("sync_last_index {}", sync_last_index);
+    eLog("sync_last_index: 0x{} / {} sections", sync_last_index, sync_last_index.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
@@ -1050,6 +1106,7 @@ void Dag::send_sync_request() {
 }
 
 void Dag::clear_dag() {
+#ifdef IS_RC
     current_section_     = BigNumber(-1);
     first_saved_section_ = BigNumber(-1);
     QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
@@ -1061,13 +1118,15 @@ void Dag::clear_dag() {
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
+    QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).remove();
+#endif
 }
 
 std::set<std::string> Section::prev_hashs() {
     std::set<std::string> hashs;
 
     for (const auto &tx : transactions) {
-        const auto &prev_hashes = tx.prev_hash();
+        const auto &prev_hashes = tx.prev_hashs();
         hashs.insert(prev_hashes.begin(), prev_hashes.end());
     }
 

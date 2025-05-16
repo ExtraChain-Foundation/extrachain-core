@@ -139,6 +139,7 @@ public:
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);
+    bool create_new_dag();
     bool create_usernames_vector();
     bool create_chat_templates();
     bool create_subscription_template();
@@ -187,8 +188,8 @@ public:
                                                                        BigNumberFloat amount,
                                                                        ActorId        token);
 
-    std::expected<Transaction, TransactionError> sendTransaction(const Transaction&       transaction,
-                                                                 const Actor<KeyPrivate>& signer);
+    std::expected<Transaction, TransactionError> send_transaction(const Transaction&       transaction,
+                                                                  const Actor<KeyPrivate>& signer);
 
     std::string transactionErrorDescription(const TransactionError& error);
 

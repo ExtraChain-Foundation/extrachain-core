@@ -354,7 +354,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
                                                       "sender       TEXT  NOT NULL, "
                                                       "receiver     TEXT  NOT NULL, "
                                                       "amount       TEXT  NOT NULL, "
-                                                      "data         TEXT          , "
+                                                      "meta         TEXT          , "
                                                       "token        TEXT  NOT NULL, "
                                                       "timestamp    TEXT  NOT NULL, "
                                                       "section      TEXT  NOT NULL, "
@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         static const int BLOCK_CREATION_PERIOD = 5000;
 
         // How often to construct genesis block (in blocks)
-        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 30;
+        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 20;
 
         // How often to prove pransactions
         static const int PROVE_TXS_INTERVAL = 2000;
@@ -887,7 +887,7 @@ namespace BlockchainConst {
         Universal,
     };
 
-    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 

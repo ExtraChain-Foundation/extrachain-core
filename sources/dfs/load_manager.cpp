@@ -116,7 +116,9 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
     // check real status
     load_info.dir_row.state = Dfs::FileState::Known;
+    mutex.lock();
     active_downloads.insert({ file_link, load_info });
+    mutex.unlock();
     // download_queue.push(load_info);
 
     // temp: request file
@@ -291,7 +293,9 @@ void LoadManager::move_to_queue_end(const Dfs::FileLink& file_link) {
     eWarning("Moving stalled download to queue end: {}", file_link);
 
     auto info = it->second;
+    mutex.lock();
     active_downloads.erase(it);
+    mutex.unlock();
     download_queue.push(info);
 
     // Try to start next download
@@ -369,7 +373,7 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
         //     return;
         // }
         // use list for first uploaded
-        node->dfs()->uploaded(owner_id, dir_row.value());
+        emit node->dfs()->uploaded(owner_id, dir_row.value());
     });
 
     sender.detach();
@@ -415,7 +419,10 @@ void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_da
             eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
             return;
         }
+
+        mutex.lock();
         active_downloads.erase(file_link);
+        mutex.unlock();
         eLog("[Fragment] Last fragment (downloaded) for {}", file_link);
 
         finish_him(file_link.owner_id, active_download.dir_row);

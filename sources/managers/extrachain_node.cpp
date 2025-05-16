@@ -41,6 +41,7 @@
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
+#include "utils/thread_pool_boost.h"
 
 #ifdef Q_OS_LINUX
     #include <signal.h>
@@ -110,6 +111,8 @@ void ExtraChainNode::process() {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    ThreadPoolBoost::instance(4);
+
     prepareFolders();
     m_actorIndex        = new ActorIndex(this);
     m_accountController = new AccountController(this);
@@ -157,6 +160,8 @@ ExtraChainNode::~ExtraChainNode() {
     if (m_vpnClearFunc) {
         m_vpnClearFunc();
     }
+
+    ThreadPoolBoost::terminate();
 }
 
 void ExtraChainNode::cleanUp() {
@@ -180,29 +185,38 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    if (dag_->current_section() < 0) {
-        Transaction tx;
-        tx.setSender(first.id());
-        tx.setReceiver(first.id());
-        tx.setType(TransactionType::Genesis);
-
-        auto prepared_tx = dag_->prepare_transaction(tx, first);
-        if (!prepared_tx.has_value()) {
-            eCritical("[Node] Can't prepare transaction for new network");
-            std::exit(-10);
-        }
-
-        dag_->first_saved_section_ = BigNumber(0);
-        auto save_result           = dag_->save_transaction(prepared_tx.value());
-        if (!save_result) {
-            eCritical("[Node] Can't save transaction for new network");
-            std::exit(-11);
-        }
-
-        dag_->set_status(DagStatus::Ready);
-    }
+    create_new_dag();
 
     eSuccess("[Node] New network created");
+    return true;
+}
+
+bool ExtraChainNode::create_new_dag() {
+    if (dag_->current_section() >= 0) {
+        return false;
+    }
+
+    auto actor = m_accountController->system_actor();
+
+    Transaction tx;
+    tx.setSender(actor.id());
+    tx.setReceiver(actor.id());
+    tx.setType(TransactionType::Genesis);
+
+    auto prepared_tx = dag_->prepare_transaction(tx, actor);
+    if (!prepared_tx.has_value()) {
+        eCritical("[Node] Can't prepare transaction for new network");
+        std::exit(-10);
+    }
+
+    dag_->first_saved_section_ = BigNumber(0);
+    auto save_result           = dag_->save_transaction(prepared_tx.value());
+    if (!save_result) {
+        eCritical("[Node] Can't save transaction for new network");
+        std::exit(-11);
+    }
+
+    dag_->set_status(DagStatus::Ready);
     return true;
 }
 
@@ -525,14 +539,14 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.setSender(system_id);
     transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat(1000));
+    transaction.setAmount(BigNumberFloat("500", NumeralBase::Dec));
 #ifdef QT_DEBUG
     transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
     transaction.setToken(token_id); // TODO: get token_id from json
-    transaction.setData(std::to_string(type));
+    transaction.set_meta(std::to_string(type));
     transaction.setType(TransactionType::Repeatable);
-    this->sendTransaction(transaction, m_accountController->system_actor());
+    this->send_transaction(transaction, m_accountController->system_actor());
     // transaction.setHash()
 
     auto row =
@@ -558,7 +572,13 @@ void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-    auto res     = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
+
+    // temp for old vector
+    auto section = row_map["section_id"];
+    row_map.erase("section_id");
+    row_map.insert({ "block_id", section });
+
+    auto res = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
         emit subscriptionAdded(row.owner_id, row.file_id);
@@ -696,8 +716,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
     return std::unexpected(TransactionError::Unknown);
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::sendTransaction(const Transaction&       transaction,
-                                                                             const Actor<KeyPrivate>& signer) {
+std::expected<Transaction, TransactionError> ExtraChainNode::send_transaction(const Transaction&       transaction,
+                                                                              const Actor<KeyPrivate>& signer) {
     auto transaction_result = dag_->send_transaction(transaction, signer);
     return transaction_result;
 }
@@ -722,6 +742,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
 }
 
 void ExtraChainNode::getAllActorsTimerCall() {
+    return;
     if (m_accountController->count() > 0 && m_networkManager->connections()->size() > 0) {
         ActorId actorId = m_accountController->system_actor().id();
 
@@ -737,13 +758,13 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Node] Dag{}: {} sections, last: 0x{}, status: {}. Dfs: {} from {} bytes",
-         dag_->status() != DagStatus::Ready ? fmt::format(" ({})", dag_->status()) : "",
+    eLog("[Node] Dag: {} sections, last: 0x{}, status: {}, last cache: {}", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
-         m_dfs->sizeTaken(),
-         m_dfs->totalDfsSize());
+         dag_->cache().section()/*,
+         m_dfs->sizeTaken() / 1024.0,
+         m_dfs->totalDfsSize() / 1024.0*/);
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
@@ -840,7 +861,7 @@ void ExtraChainNode::connectSignals() {
 
                 m_networkManager->sendFromCache();
                 dag_->start_check();
-                // m_blockchain->sync(BigNumber(), responder);
+                m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
 

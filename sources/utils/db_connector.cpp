@@ -232,7 +232,7 @@ std::vector<DbRow> DbConnector::select_all(std::string table, int limit) {
 
 std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::string table_name, DbRow binds) {
     if (!is_open()) {
-        qFatal("[DBConnector] Database not open");
+        eFatal("[DBConnector] Database {} not open", m_file);
     }
 
     dbmutex.lock();

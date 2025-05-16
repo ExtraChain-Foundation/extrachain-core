@@ -51,11 +51,21 @@ struct TokenData {
 };
 BOOST_DESCRIBE_STRUCT(TokenData, (), (token_id, owner_id, count, name, ticker, color, smart, section_id, tx_hash))
 
+struct TokenDataShort { // for data in transaction
+    std::string                name;
+    std::string                ticker;
+    std::string                color;
+    std::optional<std::string> smart;
+};
+BOOST_DESCRIBE_STRUCT(TokenDataShort, (), (name, ticker, color, smart))
+
 enum class CreateTokenError {
+    NoConnections,
     InvalidAmount,
     InvalidName,
     ExistToken,
-    InvalidTx
+    InvalidTx,
+    InvalidOwnerId
 };
 
 class TokenManager : public QObject {
@@ -65,7 +75,9 @@ public:
     TokenManager(ExtraChainNode *node);
     ~TokenManager() = default;
 
-    bool token_exists(const std::string &nameToken, const std::string &tickerToken);
+    bool token_exists(const std::string &name, const std::string &ticker);
+    bool name_exists(const std::string &name);
+    bool ticker_exists(const std::string &ticker);
 
     static std::unordered_map<ActorId, std::string> read_tokens();
 

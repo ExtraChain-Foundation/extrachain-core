@@ -1149,7 +1149,7 @@ void DfsController::network_response_content_vector(
 
     auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
-    auto res_handle = dfs_vector.handle_package(dfs_vector_content);
+    bool res_handle = dfs_vector.handle_package(dfs_vector_content);
     load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
 }
 
@@ -1810,7 +1810,11 @@ LoadManager &DfsController::download_manager() {
 }
 
 void DfsController::sync(const std::string &identifier) {
-    load_manager_.check_all_files(identifier);
+    static bool already_checked = false;
+    if (!already_checked) {
+        load_manager_.check_all_files(identifier);
+        already_checked = true;
+    }
     dirs_manager_.temp_sync_all(identifier);
     // dirs_manager_.sync(identifier);
 }
