@@ -24,8 +24,8 @@
 #include "dfs/dfs_controller.h"
 #include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
-
 #include "blockchain/actor_index.h"
+#include "utils/thread_pool_boost.h"
 
 DirsManager::DirsManager(ExtraChainNode* node)
     : node(node) {
@@ -203,37 +203,39 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    auto actors = node->actorIndex()->allActors();
+    ThreadPoolBoost::instance()->post([this, responder] {
+        auto actors = node->actorIndex()->allActors();
 
-    auto network_id = node->actorIndex()->network_id();
-    auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-    std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-        return actor == network_id || actor == raccoon_id;
+        auto network_id = node->actorIndex()->network_id();
+        auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
+        std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+            return actor == network_id || actor == raccoon_id;
+        });
+
+        actors.insert(actors.begin(), network_id);
+        actors.insert(actors.begin(), raccoon_id);
+
+        for (const auto& actor : actors) {
+            auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
+
+            if (!dir_rows.has_value()) {
+                continue;
+            }
+
+            if (dir_rows->empty()) {
+                continue;
+            }
+
+            responder.send_response(std::make_pair(actor, dir_rows.value()),
+                                    MessageType::DfsSyncDirRows,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+
+            QThread::msleep(3);
+
+            if (!node) {
+                return;
+            }
+        }
     });
-
-    actors.insert(actors.begin(), network_id);
-    actors.insert(actors.begin(), raccoon_id);
-
-    for (const auto& actor : actors) {
-        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
-
-        if (!dir_rows.has_value()) {
-            continue;
-        }
-
-        if (dir_rows->empty()) {
-            continue;
-        }
-
-        responder.send_response(std::make_pair(actor, dir_rows.value()),
-                                MessageType::DfsSyncDirRows,
-                                SendMode::Focused,
-                                MessageStatus::Response);
-
-        QThread::msleep(3);
-
-        if (!node) {
-            return;
-        }
-    }
 }
