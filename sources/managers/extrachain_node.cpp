@@ -185,29 +185,38 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_actorIndex->set_network_id(first.id());
     m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    if (dag_->current_section() < 0) {
-        Transaction tx;
-        tx.setSender(first.id());
-        tx.setReceiver(first.id());
-        tx.setType(TransactionType::Genesis);
-
-        auto prepared_tx = dag_->prepare_transaction(tx, first);
-        if (!prepared_tx.has_value()) {
-            eCritical("[Node] Can't prepare transaction for new network");
-            std::exit(-10);
-        }
-
-        dag_->first_saved_section_ = BigNumber(0);
-        auto save_result           = dag_->save_transaction(prepared_tx.value());
-        if (!save_result) {
-            eCritical("[Node] Can't save transaction for new network");
-            std::exit(-11);
-        }
-
-        dag_->set_status(DagStatus::Ready);
-    }
+    create_new_dag();
 
     eSuccess("[Node] New network created");
+    return true;
+}
+
+bool ExtraChainNode::create_new_dag() {
+    if (dag_->current_section() >= 0) {
+        return false;
+    }
+
+    auto actor = m_accountController->system_actor();
+
+    Transaction tx;
+    tx.setSender(actor.id());
+    tx.setReceiver(actor.id());
+    tx.setType(TransactionType::Genesis);
+
+    auto prepared_tx = dag_->prepare_transaction(tx, actor);
+    if (!prepared_tx.has_value()) {
+        eCritical("[Node] Can't prepare transaction for new network");
+        std::exit(-10);
+    }
+
+    dag_->first_saved_section_ = BigNumber(0);
+    auto save_result           = dag_->save_transaction(prepared_tx.value());
+    if (!save_result) {
+        eCritical("[Node] Can't save transaction for new network");
+        std::exit(-11);
+    }
+
+    dag_->set_status(DagStatus::Ready);
     return true;
 }
 

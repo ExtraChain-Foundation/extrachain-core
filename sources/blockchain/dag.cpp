@@ -1106,6 +1106,7 @@ void Dag::send_sync_request() {
 }
 
 void Dag::clear_dag() {
+#ifdef IS_RC
     current_section_     = BigNumber(-1);
     first_saved_section_ = BigNumber(-1);
     QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
@@ -1117,6 +1118,8 @@ void Dag::clear_dag() {
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
     QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
+    QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).remove();
+#endif
 }
 
 std::set<std::string> Section::prev_hashs() {
