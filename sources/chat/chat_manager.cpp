@@ -362,7 +362,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
                                                                  const Chat::MessageText& message_text) {
     // ... checks for file ...
 
-    auto message_data = Chat::MessageData { .data = message_text.text };
+    auto message_data = Chat::MessageData { .data = message_text.text, .reply_id = message_text.reply_id };
     // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     // TODO: with id exists check
