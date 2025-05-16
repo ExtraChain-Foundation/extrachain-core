@@ -407,6 +407,71 @@ bool Dag::save_transaction(const Transaction &transaction) {
     return write_section(section.value()).has_value();
 }
 
+bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
+    if (transactions.empty()) {
+        return true;
+    }
+
+    std::map<BigNumber, std::vector<Transaction>> section_transactions;
+    for (const auto &transaction : transactions) {
+        section_transactions[transaction.section()].push_back(transaction);
+    }
+
+    bool all_saved = true;
+
+    for (const auto &[section_id, section_txs] : section_transactions) {
+        auto section = this->read_section(section_id);
+
+        if (!section.has_value()) {
+            Section new_section { .id = section_id, .transactions = {} };
+
+            for (const auto &tx : section_txs) {
+                new_section.transactions.insert(tx);
+            }
+
+            current_section_ = section_id;
+            cache_.check_and_update_cache(current_section_);
+
+            update_range();
+
+            if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
+                auto network_id = section_txs[0].sender(); // Берем ID из первой транзакции
+                node->actorIndex()->set_network_id(network_id);
+            }
+
+            if (first_saved_section_ == BigNumber(-1) && section_id >= BigNumber(0)) {
+                if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
+                    all_saved &= write_section(new_section).has_value();
+                    continue;
+                }
+                first_saved_section_ = section_id;
+                eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+            }
+
+            all_saved &= write_section(new_section).has_value();
+        } else {
+            for (const auto &tx : section_txs) {
+                section->transactions.insert(tx);
+            }
+
+            cache_.check_and_update_cache(current_section_);
+
+            if (first_saved_section_ == BigNumber(-1) && section_id >= BigNumber(0)) {
+                if (mode_ == DagMode::Full || (mode_ == DagMode::Light && section_id != BigNumber(0))) {
+                    first_saved_section_ = section_id;
+                }
+                eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
+            }
+
+            update_range();
+
+            all_saved &= write_section(section.value()).has_value();
+        }
+    }
+
+    return all_saved;
+}
+
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
@@ -733,9 +798,9 @@ void Dag::start_sync() {
 void Dag::start_check() {
     // temp
 #ifndef IS_RC
-    // if (status_ == DagStatus::Ready) {
-    //     return;
-    // }
+    if (status_ == DagStatus::Ready) {
+        return;
+    }
 #endif
 
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
@@ -947,12 +1012,13 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         TIMER_START(network_response_light)
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
-        auto min = BigNumber(-1), max = BigNumber(-1);
-        for (const auto &tx : std::as_const(dag_light.txs)) {
-            min = min != -1 ? std::min(tx.section(), min) : tx.section();
-            max = std::max(tx.section(), max);
-            save_transaction(tx);
-        }
+        // auto min = BigNumber(-1), max = BigNumber(-1);
+        // for (const auto &tx : std::as_const(dag_light.txs)) {
+        //     min = min != -1 ? std::min(tx.section(), min) : tx.section();
+        //     max = std::max(tx.section(), max);
+        //     save_transaction(tx);
+        // }
+        save_transactions(dag_light.txs);
 
         // if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
         //     first_saved_section_ = min;
@@ -963,8 +1029,8 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
         eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
              dag_light.cache_section,
-             min,
-             max);
+             first_saved_section_,
+             current_section_);
 
         process_cached_transactions();
         TIMER_END(network_response_light)
