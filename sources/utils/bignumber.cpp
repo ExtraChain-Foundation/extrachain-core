@@ -257,6 +257,14 @@ std::string BigNumber::to_string(NumeralBase numSystem) const {
     }
 }
 
+std::optional<int> BigNumber::to_int() const {
+    if (m_data <= std::numeric_limits<int>::max() && m_data >= std::numeric_limits<int>::min()) {
+        return static_cast<int>(m_data);
+    } else {
+        return std::nullopt;
+    }
+}
+
 BigNumber BigNumber::pow(unsigned long number) {
     auto res = boost::multiprecision::pow(m_data, number);
     return BigNumber(res);

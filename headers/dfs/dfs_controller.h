@@ -55,6 +55,7 @@ namespace Dfs {
         Base,
         Collection,
         CollectionTemplate,
+        Contracts,
         Chat
     };
 
@@ -374,12 +375,11 @@ public:
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
 
     // Unique file ID: hash+msec+salt
-    std::string   create_file_id(std::filesystem::path file);
-    std::string   create_file_id_from(const std::string &data);
-    std::uint64_t sizeTaken() const;
-    std::uint64_t totalDfsSize() const;
-    void          increaseSizeTaken(uintmax_t value);
-    void exportFile(const std::string &pathTo, const std::string &pathFrom, const std::string &nameFile = "");
+    std::string                          create_file_id(std::filesystem::path file);
+    std::string                          create_file_id_from(const std::string &data);
+    std::uint64_t                        sizeTaken() const;
+    std::uint64_t                        totalDfsSize() const;
+    void                                 increaseSizeTaken(uintmax_t value);
     std::expected<void, ExportFileError> export_file(const ActorId     &owner_id,
                                                      const std::string &file_id,
                                                      const FsPath      &output_folder);
@@ -421,10 +421,6 @@ private:
 public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
-    void  sendCountRequestMsg(const ActorId &actorId) const;
-    void  sendCountReponseMsg(const Dfs::Packets::RequestBlockCount &msg,
-                              BigNumber                              dfsCount,
-                              const Responder                       &responder) const;
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
     void  loadVPNLocalizationFiles();
 

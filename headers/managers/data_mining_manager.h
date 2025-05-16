@@ -25,8 +25,9 @@
 #include "dfs/dfs_controller.h"
 #include "utils/bignumber_float.h"
 #include "managers/extrachain_node.h"
-#include "utils/db_connector.h"
 #include "dfs/dfs_utils.h"
+
+static const int MINING_TIMER_TICK = 60000;
 
 class DataMiningManager : public QObject {
     Q_OBJECT
@@ -60,7 +61,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    void network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward);
+    bool network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward, const Responder &responder);
 
 private:
 };

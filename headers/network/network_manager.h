@@ -182,13 +182,12 @@ public:
     }
 
     Responder with_new_message_id() const {
-        Responder   responder = *this;
-        std::string randomId  = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                                     + std::to_string(QRandomGenerator::global()->bounded(100000)))
-                                   .substr(0, 15); // temp
-        responder.message_id_ = randomId;
+        Responder responder   = *this;
+        responder.message_id_ = generate_message_id();
         return responder;
     }
+
+    Responder& operator=(const Responder&) = default;
 
 private:
     std::string send_response_impl(const std::string& data_serialized,
@@ -283,6 +282,8 @@ public:
 public slots:
     void removeConnection(const QString& identifier);
 
+    void checkPort(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
+
 signals:
     void finished(); // ThreadPool
     void connectToNode(const QString&    ip,
@@ -315,7 +316,7 @@ public slots:
     void connectToNodeSlot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           const bool        isConstant = false);
+                           bool              isConstant = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type,
@@ -341,6 +342,7 @@ public:
                      SendMode           send_mode,
                      const std::string& receiver_identifier);
     void sendFromCache();
+    bool is_connection_exists(const std::string& identifier);
     bool isActiveConnectionExists();
     int  active_connections_count();
 
@@ -395,4 +397,5 @@ signals:
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
     void messageCountReceived(BigNumber count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
+    void messageReceivedSignal(const std::string& message, const std::string& ip, const std::string& identifier);
 };

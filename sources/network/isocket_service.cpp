@@ -88,7 +88,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
     //      handshake,
-    //      node->actorIndex()->firstId(),
+    //      node->actorIndex()->network_id(),
     //      ip_);
 
     identifier_  = QString::fromStdString(handshake.identifier);
@@ -108,7 +108,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         return false;
     }
 
-    // 2. First id/network checks
+    // 2. Network id check
     ActorId json_network_id         = ActorId(handshake.network_id);
     ActorId our_network_id          = node->actorIndex()->network_id();
     bool    is_network_ids_contains = our_network_id == json_network_id;

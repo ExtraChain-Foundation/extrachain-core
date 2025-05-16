@@ -17,18 +17,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/blockchain.h"
 #include "blockchain/actor_index.h"
+#include "blockchain/dag.h"
 #include "dfs/dfs_controller.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
-#include "managers/transaction_manager.h"
 #include "network/upnpconnection.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
 #include "dfs/historical_collection.h"
 #include "dfs/dirs_manager.h"
+#include "utils/thread_pool_boost.h"
 
 #include <filesystem>
 #include <fstream>
@@ -101,7 +101,9 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     process();
 
-    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::connectToNodeSlot);
+    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
+
+    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::messageReceived);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -264,7 +266,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
                 if (active_connections_count() >= Network::maxConnections) {
                     eLog("shareConnections ignored by max connections limit");
-                    return;
+
+                    if (init_ip != first_node_) {
+                        return;
+                    }
                 }
 
                 for (const auto &[ip, identifier] : connections) {
@@ -310,6 +315,43 @@ void NetworkManager::removeConnection(const QString &identifier) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
+}
+
+void NetworkManager::checkPort(const QString     ip,
+                               Network::Protocol protocol,
+                               const bool        request,
+                               const bool        isConstant) {
+    // if (active_connections_count() > Network::maxConnections) {
+    //     return;
+    // }
+
+    // int         timeoutMs = 1000;
+    QTcpSocket *socket = new QTcpSocket(this);
+
+    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+        socket->disconnectFromHost();
+        socket->deleteLater();
+        // emit portCheckResult(ip, port, true);
+        connectToNodeSlot(ip, protocol, request, isConstant);
+    });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+        socket->deleteLater();
+    });
+
+    // QTimer* timer = new QTimer(this);
+    // timer->setSingleShot(true);
+    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
+    //     if (socket->state() == QAbstractSocket::ConnectingState) {
+    //         socket->abort();
+    //         // emit portCheckResult(ip, wsPort, false);
+    //         socket->deleteLater();
+    //     }
+    //     timer->deleteLater();
+    // });
+
+    socket->connectToHost(QHostAddress(ip), wsPort);
+    // timer->start(timeoutMs);
 }
 
 NetworkManager::~NetworkManager() {
@@ -390,9 +432,13 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       const bool        isConstant) {
+                                       bool              isConstant) {
+    if (ip.toStdString() == first_node_) {
+        isConstant = true;
+    }
+
     if (active_connections_count() >= Network::maxConnections) {
-        if (!removeOneConnection()) {
+        if (isConstant && !removeOneConnection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
         }
@@ -594,11 +640,14 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment) {
+    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
+        || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
         priority = SocketService::Priority::Low;
     }
 
-    if (message_type == MessageType::Custom || message_type == MessageType::NewActor) {
+    if (message_type == MessageType::Custom || message_type == MessageType::NewActor
+        || message_type == MessageType::DagLightData
+        || message_type == MessageType::BlockchainSyncLastInfo) { // if client
         priority = SocketService::Priority::High;
     }
 
@@ -629,6 +678,14 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         }
     }
 
+    if (serialized_message.size() > 10000
+        && (non_serialized_message.message_type != MessageType::DfsStoreFragment
+            && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
+        eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
+    }
+
+    TIMER_START(kkk)
+
     for (const auto &service : *connections_locked) {
         if (!service->is_active()) {
             continue;
@@ -646,6 +703,11 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                 break;
             }
         }
+    }
+
+    auto k = kkk.elapsed();
+    if (k > 0) {
+        eLog("_____ {}", k);
     }
 }
 
@@ -767,6 +829,20 @@ void NetworkManager::sendFromCache() {
                                  MessageType::Unknown,
                                  MessageStatus::NoStatus);
     }
+}
+
+bool NetworkManager::is_connection_exists(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty())
+        return false;
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool NetworkManager::isActiveConnectionExists() {
@@ -935,6 +1011,10 @@ void NetworkManager::messageReceived(const std::string &message,
 
     calculateTraffic->addBytesReceived(ip, message.size());
 
+    if (type == MessageType::DagLightData) {
+        eLog("DagLight {}", status);
+    }
+
     // try {
     switch (type) {
     case MessageType::Custom: {
@@ -1037,29 +1117,6 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::ResponseBlockCount: {
-        const auto block_count_result = MessagePack::deserialize<DfsP::ResponseBlockCount>(serialized);
-        if (!block_count_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for response block count", type);
-            return;
-        }
-
-        BigNumber count = block_count_result.value().blockCount;
-        emit      messageCountReceived(count);
-        break;
-    }
-
-    case MessageType::RequestBlockCount: {
-        const auto block_request_result = MessagePack::deserialize<DfsP::RequestBlockCount>(serialized);
-        if (!block_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for request block count", type);
-            return;
-        }
-        BigNumber dfs_block_count = node->blockchain()->getBlockCount();
-        node->dfs()->sendCountReponseMsg(block_request_result.value(), dfs_block_count, responder);
-        break;
-    }
-
     case MessageType::NewActor: {
         auto new_actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
         if (!new_actor_result.has_value()) {
@@ -1074,6 +1131,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::Actor: {
+        break;
         if (status == MessageStatus::Request) {
             auto actor_id_result = MessagePack::deserialize<ActorId>(serialized);
             if (!actor_id_result.has_value()) {
@@ -1093,6 +1151,7 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::ActorAll: {
+        break;
         if (status == MessageStatus::Request) {
             auto ignored_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
             if (!ignored_actor_id_result.has_value()) {
@@ -1125,11 +1184,32 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_request(ignored_actor_id_result.value(), responder);
+            // node->actorIndex()->network_actors_request(ignored_actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
             if (!actors_list_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
+                break;
+            }
+
+            node->actorIndex()->network_actors_response(actors_list_result.value());
+        }
+        break;
+    }
+
+    case MessageType::ActorsHash: {
+        if (status == MessageStatus::Request) {
+            auto bits = MessagePack::deserialize<std::vector<uint8_t>>(serialized);
+            if (!bits.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed in {} state", type, status);
+                break;
+            }
+
+            node->actorIndex()->network_actors_hash_request(bits.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
+            if (!actors_list_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed {} state", type, status);
                 break;
             }
 
@@ -1187,6 +1267,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
         }
+
         node->dfs()->dirs_manager().network_response_from_last_modified(dirs_rows_result.value(), responder);
 
         break;
@@ -1197,7 +1278,7 @@ void NetworkManager::messageReceived(const std::string &message,
             auto dirs_row_result = MessagePack::deserialize<Dfs::DirsFile::DirsRow>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dirs row", type);
-                break;
+                return;
             }
 
             node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
@@ -1206,13 +1287,12 @@ void NetworkManager::messageReceived(const std::string &message,
                 MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
-                break;
+                return;
             }
             auto &[owner_id, dir_rows] = dirs_row_result.value();
 
             node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
         }
-
         break;
     }
 
@@ -1221,6 +1301,7 @@ void NetworkManager::messageReceived(const std::string &message,
         if (!res.has_value()) {
             break;
         }
+
         node->dfs()->dirs_manager().network_request_all(responder);
         break;
     }
@@ -1229,7 +1310,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto file_link_result = MessagePack::deserialize<Dfs::FileData>(serialized);
         if (!file_link_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for DirRow", type);
-            break;
+            return;
         }
 
         file_link_result->dir_row.state = Dfs::FileState::Known;
@@ -1249,11 +1330,14 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
+        // TIMER_START(FRAG)
         node->dfs()->download_manager().network_fragment(fragment_data_result.value());
+        // TIMER_END(FRAG)
 
         if (type == MessageType::DfsStoreFragment) {
             sendBrodcastMessageFurther(package_data);
         }
+
         break;
     }
 
@@ -1262,7 +1346,7 @@ void NetworkManager::messageReceived(const std::string &message,
             auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
             if (!link_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for request file state", type);
-                break;
+                return;
             }
 
             node->dfs()->network_request_file_state(link_result->owner_id, link_result->file_id, responder);
@@ -1270,7 +1354,7 @@ void NetworkManager::messageReceived(const std::string &message,
             auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
             if (!file_state_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for response file state", type);
-                break;
+                return;
             }
 
             node->dfs()->network_response_file_state(file_state_result->owner_id,
@@ -1279,7 +1363,6 @@ void NetworkManager::messageReceived(const std::string &message,
                                                      file_state_result->hash,
                                                      responder);
         }
-
         break;
     }
 
@@ -1287,12 +1370,13 @@ void NetworkManager::messageReceived(const std::string &message,
         auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
         if (!link_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file request", type);
-            break;
+            return;
         }
 
         node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
                                                               link_result->file_id,
                                                               responder);
+
         break;
     }
 
@@ -1300,7 +1384,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto file_remove = MessagePack::deserialize<Dfs::Packets::RemoveFile>(serialized);
         if (!file_remove.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file remove", type);
-            break;
+            return;
         }
 
         node->dfs()->network_remove_stored_file(file_remove->owner_id,
@@ -1316,7 +1400,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto db_request_result = MessagePack::deserialize<std::pair<ActorId, std::string>>(serialized);
         if (!db_request_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for collection request", type);
-            break;
+            return;
         }
         const auto &[actor_id, file_id] = db_request_result.value();
         node->dfs()->network_request_collection(actor_id, file_id, responder);
@@ -1330,7 +1414,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 serialized);
         if (!db_history_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for collection history", type);
-            break;
+            return;
         }
         const auto &[actor_id, file_id, historical_rows] = db_history_result.value();
         node->dfs()->network_response_historical_collection(actor_id, file_id, historical_rows);
@@ -1342,7 +1426,7 @@ void NetworkManager::messageReceived(const std::string &message,
             MessagePack::deserialize<std::tuple<ActorId, std::string, std::vector<DbRow>>>(serialized);
         if (!db_content_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for collection content", type);
-            break;
+            return;
         }
         const auto &[actor_id, file_id, db_rows] = db_content_result.value();
         node->dfs()->network_response_content_collection(actor_id, file_id, db_rows);
@@ -1354,7 +1438,7 @@ void NetworkManager::messageReceived(const std::string &message,
             MessagePack::deserialize<std::tuple<ActorId, std::string, HistoricalCollectionRow>>(serialized);
         if (!db_add_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for collection change", type);
-            break;
+            return;
         }
         const auto &[actor_id, file_id, historical_row] = db_add_result.value();
         node->dfs()->network_change_collection(actor_id, file_id, historical_row, responder);
@@ -1366,7 +1450,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::DfsVectorContentPackage>(serialized);
         if (!db_content_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for vector content", type);
-            break;
+            return;
         }
 
         node->dfs()->network_response_content_vector(db_content_result.value());
@@ -1374,7 +1458,6 @@ void NetworkManager::messageReceived(const std::string &message,
         if (type == MessageType::DfsVectorCreation) {
             sendBrodcastMessageFurther(package_data);
         }
-
         break;
     }
 
@@ -1382,7 +1465,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto db_content_result = MessagePack::deserialize<Dfs::Packets::VectorRowAdd>(serialized);
         if (!db_content_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for vector add", type);
-            break;
+            return;
         }
 
         node->dfs()->network_vector_add(db_content_result->owner_id,
@@ -1390,7 +1473,6 @@ void NetworkManager::messageReceived(const std::string &message,
                                         db_content_result->row);
 
         sendBrodcastMessageFurther(package_data);
-
         break;
     }
 
@@ -1415,6 +1497,25 @@ void NetworkManager::messageReceived(const std::string &message,
                    break;
                }
 
+                case MessageStatus::Response: {
+                    auto serialized_messages_result =
+            MessagePack::deserialize<std::vector<std::string>>(serialized); if
+            (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
+            list of serialized messages in {} state", type, status); break;
+                    }
+                    auto verify_files_result =
+                        MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+                    if (!verify_files_result.has_value()) {
+                        eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
+            state", type, status); break;
+                    }
+                    float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
+                    break;
+                }
+                }
+                break;
+            }
+
                case MessageStatus::Response: {
                    auto serialized_messages_result =
            MessagePack::deserialize<std::vector<std::string>>(serialized); if
@@ -1435,83 +1536,99 @@ void NetworkManager::messageReceived(const std::string &message,
            }
        */
 
-    case MessageType::BlockchainNewBlock: {
-        auto new_block_result = MessagePack::deserialize<BlockVariant>(serialized);
-
-        if (!new_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new block", type);
-            break;
-        }
-
-        if (!new_block_result.value().isEmpty()) {
-            // need verify:
-            node->blockchain()->addBlockFromNetwork(new_block_result.value(), responder, package_data, true);
-        }
-
-        break;
-    }
-
-    case MessageType::BlockchainSyncBlock: {
-        auto sync_block_result = MessagePack::deserialize<BlockVariant>(serialized);
-
-        if (!sync_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for new block", type);
-            break;
-        }
-
-        if (!sync_block_result.value().isEmpty()) {
-            node->blockchain()->addBlockFromNetwork(sync_block_result.value(), responder, package_data, false);
-        }
-
-        break;
-    }
-
-    case MessageType::BlockchainTransaction: {
-        // eLog("BlockchainTransaction");
+    case MessageType::DagTransaction: {
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction", type);
             break;
         }
-        node->transactionManager()->network_add_transaction_signal(transaction_result.value());
-        sendBrodcastMessageFurther(package_data);
+
+        auto res = node->dag()->network_transaction(transaction_result.value(), responder);
+
+        if (res.has_value()) {
+            sendBrodcastMessageFurther(package_data);
+        }
         break;
     }
 
-    case MessageType::BlockchainRequestBlock: {
-        eLog("BlockchainRequestBlock");
-        auto block_request_result = MessagePack::deserialize<std::pair<BlockType, BigNumber>>(serialized);
-        if (!block_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for block request", type);
+    case MessageType::DagTransactionResult: {
+        auto transaction_result = MessagePack::deserialize<TransactionResult>(serialized);
+        if (!transaction_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for transaction result", type);
             break;
         }
-        const auto &[block_type, block_number] = block_request_result.value();
-        if (block_type == BlockType::Data)
-            node->blockchain()->sendBlockByNumber(block_number);
-        else if (block_type == BlockType::Genesis)
-            node->blockchain()->sendLastGenesisBlock();
+
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
         break;
     }
 
-    case MessageType::BlockchainSync: {
-        auto sync_from_block_result = MessagePack::deserialize<BigNumber>(serialized);
-        if (!sync_from_block_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for blockchain sync", type);
-            break;
+    case MessageType::DagSections: {
+        if (status == MessageStatus::Request) {
+            auto range = MessagePack::deserialize<SectionRange>(serialized);
+            if (!range.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            auto first = BigNumber::create(range->first);
+            auto last  = BigNumber::create(range->last);
+            if (!first.has_value() || !last.has_value()) {
+                break;
+            }
+
+            node->dag()->network_request_sections(first.value(), last.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto txs = MessagePack::deserialize<std::string>(serialized);
+            if (!txs.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_request_sections_response(txs.value(), responder);
         }
-        node->blockchain()->syncResponseFromNetwork(sync_from_block_result.value(), responder);
         break;
     }
 
-    case MessageType::BlockchainSyncBlocks: {
-        // auto sync_blocks_result = MessagePack::deserialize<std::vector<BlockVariant>>(serialized);
-        auto sync_blocks_result = MessagePack::deserialize<std::string>(serialized);
-        if (!sync_blocks_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+    case MessageType::DagLightData: {
+        if (status == MessageStatus::Request) {
+            auto range = MessagePack::deserialize<bool>(serialized);
+            if (!range.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                break;
+            }
+
+            node->dag()->network_request_light(responder);
+        } else if (status == MessageStatus::Response) {
+            auto light = MessagePack::deserialize<DagLightPackage>(serialized);
+            if (!light.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for blockchain sync light", type);
+                break;
+            }
+
+            node->dag()->network_response_light(light.value(), responder);
+        }
+        break;
+    }
+
+    case MessageType::CoinReward: {
+        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
+        if (!reward_request_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for coin reward", type);
             break;
         }
+        const auto &reward_request = reward_request_result.value();
+        switch (status) {
+        case MessageStatus::Request: {
+            auto res = node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
 
-        node->blockchain()->syncResponseVectorFromNetwork(sync_blocks_result.value(), responder, package_data);
+            if (res) {
+                sendBrodcastMessageFurther(package_data);
+            }
+            break;
+        }
+        default:
+            break;
+        }
         break;
     }
 
@@ -1523,33 +1640,15 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->blockchain()->network_status_sync_request_signal(responder);
+            node->dag()->network_status_sync_request(responder);
         } else if (status == MessageStatus::Response) {
-            auto last_info_result = MessagePack::deserialize<BlockchainLastInfo>(serialized);
+            auto last_info_result = MessagePack::deserialize<DagLastInfo>(serialized);
             if (!last_info_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
                 break;
             }
 
-            node->blockchain()->network_status_sync_response_signal(last_info_result.value(), responder);
-        }
-        break;
-    }
-
-    case MessageType::BlockchainCoinReward: {
-        auto reward_request_result = MessagePack::deserialize<Dfs::Reward::RequestReward>(serialized);
-        if (!reward_request_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for coin reward", type);
-            break;
-        }
-        const auto &reward_request = reward_request_result.value();
-        switch (status) {
-        case MessageStatus::Request: {
-            node->dataMiningManager()->network_request_coin_reward(reward_request);
-            break;
-        }
-        default:
-            break;
+            node->dag()->network_status_sync_response(last_info_result.value(), responder);
         }
         break;
     }
@@ -1911,7 +2010,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(2000);
+        request.setTransferTimeout(1500);
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;
@@ -1947,6 +2046,10 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
 
         if (country.contains("United Kingdom")) {
             country = "United Kingdom";
+        }
+
+        if (country == "United States of America") {
+            country = "United States";
         }
 
         eLog("Country: {}", country);

@@ -27,7 +27,7 @@
 #include "extrachain_global.h"
 #include "utils/bignumber.h"
 
-const int float_size    = 100;
+const int float_size    = 60;
 using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
 
 /**
@@ -113,6 +113,14 @@ public:
 
     bool operator==(const int &other) const {
         return m_data == other;
+    }
+
+    bool operator!=(const BigNumberFloat &other) const {
+        return !(m_data == other.m_data);
+    }
+
+    bool operator!=(const int &other) const {
+        return !(m_data == other);
     }
 
     template <typename Packer>

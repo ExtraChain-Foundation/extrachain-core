@@ -63,7 +63,7 @@ using namespace magic_enum::bitwise_operators;
 #include "utils/exc_utils_base64.h"
 #include "utils/fs_path.h"
 
-enum class BlockchainMode {
+enum class DagMode {
     Full,
     Light
 };
@@ -74,11 +74,11 @@ enum class DfsMode {
 };
 
 struct ExtraChainSettings {
-    std::optional<std::string>    first_node;
-    std::optional<BlockchainMode> blockchain_mode;
-    std::optional<bool>           blockchain_need_reset;
-    std::optional<DfsMode>        dfs_mode;
-    std::optional<std::string>    network_identifier;
+    std::optional<std::string> first_node;
+    std::optional<DagMode>     blockchain_mode;
+    std::optional<bool>        blockchain_need_reset;
+    std::optional<DfsMode>     dfs_mode;
+    std::optional<std::string> network_identifier;
 };
 BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
                       (),
@@ -221,8 +221,19 @@ namespace Network {
     Q_NAMESPACE
 
     static bool    isStartedServer = true;
-    static quint16 maxConnections  = 100;
-    static bool    networkDebug    = false;
+    static quint16 maxConnections =
+#ifdef IS_RC
+    #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+        3
+    #else
+        4
+    #endif
+#else
+        100
+#endif
+
+        ;
+    static bool networkDebug = false;
 
     enum class Protocol {
         Undefined = 0,
@@ -257,6 +268,18 @@ namespace Config {
     const int NECESSARY_SAME_TX = 1;
 
     namespace DataStorage {
+        constexpr char DagCacheTable[] = "balance_cache";
+
+        // SQL statement to create the cache table
+        constexpr char DagCacheCreate[] = R"(
+CREATE TABLE IF NOT EXISTS balance_cache (
+    actor_id TEXT NOT NULL,
+    token_id TEXT NOT NULL,
+    balance TEXT NOT NULL,
+    PRIMARY KEY(actor_id, token_id)
+);
+)";
+
         static const std::string BlockTable = "Block";
         static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
                                             + " ( "
@@ -331,22 +354,22 @@ namespace Config {
                                                       "sender       TEXT  NOT NULL, "
                                                       "receiver     TEXT  NOT NULL, "
                                                       "amount       TEXT  NOT NULL, "
-                                                      "data         TEXT          , "
+                                                      "meta         TEXT          , "
                                                       "token        TEXT  NOT NULL, "
-                                                      "date         TEXT  NOT NULL, "
-                                                      "block        TEXT  NOT NULL, "
+                                                      "timestamp    TEXT  NOT NULL, "
+                                                      "section      TEXT  NOT NULL, "
                                                       "hash         TEXT  NOT NULL UNIQUE, "
                                                       "signature    TEXT  NOT NULL "
                                                       ");";
 
         // How many files one section folder will store
-        static const int SECTION_SIZE = 100000;
+        static const BigNumber SECTION_SIZE = BigNumber(10000);
 
         // How often to construct block from pending transactions (in miliseconds)
         static const int BLOCK_CREATION_PERIOD = 5000;
 
         // How often to construct genesis block (in blocks)
-        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 100;
+        static const int CONSTRUCT_GENESIS_EVERY_BLOCKS = 20;
 
         // How often to prove pransactions
         static const int PROVE_TXS_INTERVAL = 2000;
@@ -470,33 +493,6 @@ namespace Json {
         return json_convert::from_json<T>(parsed);
     }
 } // namespace Json
-
-namespace Token {
-    static const auto        MAX_TOKEN_COUNT  = BigNumberFloat("1000000000000");
-    static const std::string FOLDER_TOKENS    = "tokens";
-    static const std::string DB_TOKENS        = "tokens";
-    static const std::string TOKEN_TABLE_NAME = "tokens";
-    static const std::string DB_TOKENS_PATH   = fmt::format("{}/{}", FOLDER_TOKENS, DB_TOKENS);
-    static const std::string TOKEN_TABLE_CREATE =
-        "CREATE TABLE IF NOT EXISTS tokens("
-        "actorId       TEXT  PRIMARY KEY NOT NULL, "
-        "name          TEXT  NOT NULL, "
-        "ticker        TEXT  NOT NULL, "
-        "count         TEXT  NOT NULL, "
-        "owner         TEXT  NOT NULL, "
-        "color         TEXT  NOT NULL, "
-        "smart         TEXT  NOT NULL);";
-    namespace Fields {
-        static const std::string              actorId = "actorId";
-        static const std::string              name    = "name";
-        static const std::string              ticker  = "ticker";
-        static const std::string              count   = "count";
-        static const std::string              owner   = "owner";
-        static const std::string              color   = "color";
-        static const std::string              smart   = "smart";
-        static const std::vector<std::string> fields  = { name, ticker, count, owner, color, smart };
-    } // namespace Fields
-} // namespace Token
 
 namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
@@ -875,13 +871,14 @@ namespace BlockchainConst {
     static const std::string ACTORS_FOLDER = "actors";
 
     // Folder with blocks
-    static const std::string BLOCKCHAIN_FOLDER     = "blocks";
+    static const std::string BLOCKCHAIN_FOLDER     = "dag";
     static const std::string BLOCKCHAIN_RANGE      = "range";
     static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
 
     // Cache
-    static const std::string BLOCKCHAIN_CACHE_FOLDER = "blocks/cache";
-    static const std::string TRANSACTION_CACHE       = "blocks/cache/SelfTransactions.db";
+    static const std::string BLOCKCHAIN_CACHE_FOLDER = BLOCKCHAIN_FOLDER + "/cache";
+    static const std::string TRANSACTION_CACHE       = BLOCKCHAIN_FOLDER + "/cache/SelfTransactions.db";
+    static const std::string BALANCE_CACHE           = BLOCKCHAIN_FOLDER + "/cache/BalanceCache.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;
@@ -889,6 +886,8 @@ namespace BlockchainConst {
     enum class DataRowType {
         Universal,
     };
+
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
 } // namespace BlockchainConst
 MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
 

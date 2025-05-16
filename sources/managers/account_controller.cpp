@@ -19,9 +19,7 @@
 
 #include "managers/account_controller.h"
 
-#include "blockchain/blockchain.h"
-#include "blockchain/actor_index.h"
-#include "managers/transaction_manager.h"
+#include "managers/extrachain_node.h"
 
 AccountController::AccountController(ExtraChainNode *node)
     : QObject(node)

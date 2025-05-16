@@ -73,7 +73,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 auto encoded = Utils::to_base64(encrypted.toStdString());
                 auto written = m_ws->sendTextMessage(QString::fromStdString(encoded));
                 m_ws->flush();
-                eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
+                // eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
                 emit closeSocketSig();
             });
 
@@ -105,7 +105,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
 
 WebSocketService::~WebSocketService() {
     closeSocket();
-    eLog("[WS] I'm socket, i'm death");
+    eLog("[WS] I'm socket, i'm death: {}", ip_);
 }
 
 QWebSocket *WebSocketService::socket() const {
@@ -166,6 +166,7 @@ void WebSocketService::closeSocket() {
         normal_queue_.clear();
         low_queue_.clear();
         m_messageCache.clear();
+        locker.unlock();
     }
 
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
@@ -269,6 +270,8 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
     if (!activated_) {
         QMutexLocker locker(&queue_mutex_);
         m_messageCache.enqueue(message);
+        locker.unlock();
+
         eLog("[WS] Message cached until activation. Cache size: {}", m_messageCache.size());
         return;
     }
@@ -321,6 +324,7 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
             low_queue_.enqueue(data);
             break;
         }
+        locker.unlock();
     }
 
     if (!waiting_buffer_space_) {
@@ -347,7 +351,7 @@ void WebSocketService::tryDequeueMessage() {
 
     if (!canSendMore()) {
         waiting_buffer_space_ = true;
-        emit needToTryDequeue();
+        QTimer::singleShot(10, this, &WebSocketService::needToTryDequeue);
         return;
     }
 
@@ -362,6 +366,8 @@ void WebSocketService::tryDequeueMessage() {
     } else if (!low_queue_.isEmpty()) {
         data = low_queue_.dequeue();
     }
+
+    locker.unlock();
 
     if (!data.isEmpty()) {
         emit sendMessageInternal(data);
