@@ -212,18 +212,19 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions.find(hash) == sended_transactions.end()) {
-        eLog("[Dag] Ignore transaction result: {}", hash);
+        eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
     auto transaction = this->sended_transactions[hash];
-    this->sended_transactions.erase(hash);
+    // this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
         eLog("[Dag] Our transaction not approved: {} / {}, {}", transaction.section(), transaction.hash(), result);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
+        this->sended_transactions.erase(hash);
     }
 
     auto save_result = this->save_transaction(transaction);

@@ -149,6 +149,10 @@ void NetworkManager::reconnection() {
         return;
     }
 
+    if (failed_ips.contains(first_node_)) {
+        return;
+    }
+
     // if (first_node_ == localIp().toStdString()) {
     //     m_reconnectTimer->stop();
     //     return;

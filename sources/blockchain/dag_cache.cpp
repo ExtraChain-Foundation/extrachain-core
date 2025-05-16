@@ -197,6 +197,7 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
             // eLog("[DagCache] Found cached balance for actor {}: {}", actor_id, balances[actor_id]);
         }
     } else {
+        /*
         // No usable cache found
         if (node_->dag()->mode() == DagMode::Light) {
             // Light mode requires cache from network if not available
@@ -229,11 +230,12 @@ std::unordered_map<ActorId, BigNumberFloat> DagCache::calculate_balances(
                                           first_saved_section,
                                           read_section_callback);
             }
+        */
 
-            // If cache update failed, we'll calculate from the beginning
-            balance_start_section = first_saved_section;
-        }
+        // If cache update failed, we'll calculate from the beginning
+        balance_start_section = first_saved_section;
     }
+    // }
 
     // If we get here with use_cache == false and not in light mode,
     // we need to calculate from first_saved_section to current_section
@@ -419,12 +421,19 @@ bool DagCache::update_to_genesis_section(
     // Initialize balances map
     for (const auto& actor_id : unique_actors) {
         for (const auto& token_id : unique_tokens) {
-            balances[{ actor_id, token_id }] = BigNumberFloat(0);
+            balances[{ actor_id, token_id }] = read_cached_balance(actor_id, token_id);
         }
     }
 
+    BigNumber start_section;
+    if (cached_section_ != BigNumber(-1)) {
+        start_section = cached_section_ + 1;
+    } else {
+        start_section = first_saved_section;
+    }
+
     // Process all transactions from first_saved_section to genesis_section
-    for (BigNumber i = first_saved_section; i <= genesis_section; i++) {
+    for (BigNumber i = start_section; i <= genesis_section; i++) {
         auto section = read_section_callback(i);
         if (!section.has_value() || section->transactions.empty()) {
             continue;
