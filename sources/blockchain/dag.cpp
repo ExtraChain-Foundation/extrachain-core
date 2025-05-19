@@ -430,7 +430,7 @@ bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
             update_range();
 
             if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
-                auto network_id = section_txs[0].sender(); // Берем ID из первой транзакции
+                auto network_id = section_txs[0].sender();
                 node->actorIndex()->set_network_id(network_id);
             }
 

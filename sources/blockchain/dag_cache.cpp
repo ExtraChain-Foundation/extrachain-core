@@ -269,7 +269,6 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 
         // Process each transaction in the section
         for (const auto& tx : section->transactions) {
-            // Проверяем, затрагивает ли транзакция наших акторов
             bool affects_our_actors = false;
             for (const auto& actor_id : actor_ids) {
                 if (tx.sender() == actor_id || tx.receiver() == actor_id) {
@@ -426,7 +425,7 @@ bool DagCache::update_to_genesis_section(
         }
         // Process each transaction
         for (const auto& tx : section->transactions) {
-            process_transaction(tx, balances); // Передаем только balances без actor_ids
+            process_transaction(tx, balances);
         }
     }
 
