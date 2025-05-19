@@ -82,22 +82,18 @@ std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
 
     std::string              query = "SELECT * FROM balance_cache WHERE ";
     std::vector<std::string> conditions;
-    DbRow                    binds;
 
     for (size_t i = 0; i < actor_token_pairs.size(); ++i) {
-        const auto& pair        = actor_token_pairs[i];
-        std::string actor_param = "actor_id_" + std::to_string(i);
-        std::string token_param = "token_id_" + std::to_string(i);
-
-        conditions.push_back("(actor_id = @" + actor_param + " AND token_id = @" + token_param + ")");
-        binds[actor_param] = pair.first.to_string();
-        binds[token_param] = pair.second.to_string();
+        const auto& pair = actor_token_pairs[i];
+        conditions.push_back(fmt::format("(actor_id = \"{}\" AND token_id = \"{}\")",
+                                         pair.first.to_string(),
+                                         pair.second.to_string()));
     }
 
     query += boost::algorithm::join(conditions, " OR ");
 
     auto       cache_section = cached_section_;
-    const auto rows          = db_->select(query, "balance_cache", binds);
+    const auto rows          = db_->select(query, "balance_cache");
 
     for (const auto& row : rows) {
         auto actor_id = ActorId::create(row.at("actor_id"));
@@ -237,7 +233,8 @@ BigNumber DagCache::calculate_genesis_section(const BigNumber& section_id) const
 
 Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
                                       const BigNumber&            current_section,
-                                      const BigNumber&            first_saved_section) {
+                                      const BigNumber&            first_saved_section,
+                                      std::optional<BigNumber>    to_section) {
     eLog("[DagCache] Calculating balances for {} actors", actor_ids.size());
     Balances balances;
 
@@ -271,7 +268,8 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     }
 
     // Process transactions after the balance_start_section up to current_section
-    for (BigNumber i = balance_start_section; i <= current_section; i++) {
+    auto to = to_section.has_value() ? to_section.value() : current_section;
+    for (BigNumber i = balance_start_section; i <= to; i++) {
         auto section = node_->dag()->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
@@ -393,26 +391,14 @@ bool DagCache::update_to_genesis_section(
             continue;
         }
         for (const auto& tx : section->transactions) {
-            // Add sender with token
-            if (!tx.sender().is_zero()) {
-                actor_token_set.insert({ tx.sender(), tx.token() });
-            }
+            actor_token_set.insert({ tx.sender(), tx.token() });
+            actor_token_set.insert({ tx.receiver(), tx.token() });
 
-            // Add receiver with token
-            if (!tx.receiver().is_zero()) {
-                actor_token_set.insert({ tx.receiver(), tx.token() });
-            }
-
-            // If Conversion transaction, also add sender and receiver with from_token
             if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
                 auto from_token = TokenId::create(tx.meta().value());
                 if (from_token.has_value()) {
-                    if (!tx.sender().is_zero()) {
-                        actor_token_set.insert({ tx.sender(), from_token.value() });
-                    }
-                    if (!tx.receiver().is_zero()) {
-                        actor_token_set.insert({ tx.receiver(), from_token.value() });
-                    }
+                    actor_token_set.insert({ tx.sender(), from_token.value() });
+                    actor_token_set.insert({ tx.receiver(), from_token.value() });
                 }
             }
         }
@@ -546,6 +532,8 @@ bool DagCache::init_db() {
         return true;
     }
 
+    // bool is_exists = QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).exists();
+
     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
 
@@ -564,6 +552,21 @@ bool DagCache::init_db() {
         eLog("[DagCache] Failed to create cache table");
         return false;
     }
+
+    // if (!is_exists && node_->dag()->current_section() > Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS) {
+    //     BigNumber safe_genesis_section = calculate_genesis_section(node_->dag()->current_section());
+
+    //     // Use read_section callback from DAG
+    //     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
+    //         return node_->dag()->read_section(section_id);
+    //     };
+
+    //     // Update cache to safe section (genesis + lag)
+    //     bool result = update_to_genesis_section(safe_genesis_section,
+    //                                             node_->dag()->current_section(),
+    //                                             node_->dag()->first_saved_section(),
+    //                                             read_section_callback);
+    // }
 
     eLog("[DagCache] Cache database initialized");
     db_initialized_ = true;

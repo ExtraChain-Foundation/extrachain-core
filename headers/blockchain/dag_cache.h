@@ -139,7 +139,8 @@ public:
      */
     Balances calculate_balances(const std::vector<ActorId>& actor_ids,
                                 const BigNumber&            current_section,
-                                const BigNumber&            first_saved_section);
+                                const BigNumber&            first_saved_section,
+                                std::optional<BigNumber>    to_section = std::nullopt);
 
     /**
      * @brief Calculate the genesis section id for caching

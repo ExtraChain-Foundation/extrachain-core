@@ -212,7 +212,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions.find(hash) == sended_transactions.end()) {
-        eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
+        // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
