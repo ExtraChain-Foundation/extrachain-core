@@ -52,6 +52,7 @@ void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
 }
 
 void DirsManager::sync(const std::string& identifier) {
+    return;
     if (identifier.empty()) {
         return;
     }
@@ -106,6 +107,8 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const Responde
 
 void DirsManager::network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
                                                       const Responder&                           responder) {
+    return;
+
     // eTemp("!_!_!_! {}", dirs_rows);
     std::vector<ActorId> actors;
     actors.reserve(dirs_rows.size());
@@ -129,6 +132,8 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
 }
 
 void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const Responder& responder) {
+    return;
+
     auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dirs_row.actor_id, dirs_row.last_modified);
 
     if (!dir_rows.has_value()) {
