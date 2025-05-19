@@ -286,8 +286,7 @@ public:
      * @param token_id The token ID to calculate balances for
      * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor IDs to balances
      */
-    std::unordered_map<ActorId, BigNumberFloat> calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                         const TokenId              &token_id);
+    Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids);
 
     /**
      * @brief Add a transaction to the sent transactions list

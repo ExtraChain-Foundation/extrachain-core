@@ -280,20 +280,9 @@ void Dag::network_section(const Section &section) {
     //
 }
 
-std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                          const TokenId              &token_id) {
-
-    // Use the read_section callback to provide access to sections
-    auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
-        return this->read_section(section_id);
-    };
-
+Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids) {
     // Use DagCache to calculate balances
-    return cache_.calculate_balances(actor_ids,
-                                     token_id,
-                                     current_section_,
-                                     first_saved_section_,
-                                     read_section_callback);
+    return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_);
 }
 
 void Dag::process_cached_transactions() {
@@ -655,8 +644,8 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     TokenId token = tx.token();
 
     // Calculate sender's current balance from all previous sections
-    std::vector<ActorId> actor_ids         = { targetSender };
-    BigNumberFloat       senderBalance     = calculate_actors_balance(actor_ids, token)[targetSender];
+    std::vector<ActorId> actor_ids     = { targetSender };
+    BigNumberFloat       senderBalance = calculate_actors_balance(actor_ids)[std::pair { targetSender, token }];
     BigNumberFloat       transactionAmount = tx.amount();
 
     // Apply all transactions in the current section to the balance
@@ -972,10 +961,6 @@ void Dag::network_request_light(const Responder &responder) {
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
-        if (cache_section == BigNumber(-1)) {
-            cache_section = BigNumber(0);
-        }
-
         txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));

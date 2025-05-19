@@ -85,6 +85,8 @@ public:
     std::optional<std::pair<BigNumber, Balances>> read_cached_balances(
         const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs);
 
+    std::optional<Balances> get_cached_balances_for_actors(const std::vector<ActorId>& actor_ids);
+
     /**
      * @brief Write all balances to the cache database
      *
@@ -119,7 +121,7 @@ public:
     /**
      * @brief Calculate balances for actors using cache
      *
-     * This method calculates balances for specified actors and token by:
+     * This method calculates balances for specified actors by:
      * 1. First checking if there's a valid cache available
      * 2. If cache exists, using it as the starting point
      * 3. If no cache exists:
@@ -130,18 +132,14 @@ public:
      * cache updates and balance calculations.
      *
      * @param actor_ids Vector of actor ids to calculate balances for
-     * @param token_id Token id to calculate balances for
      * @param current_section Current section of the blockchain
      * @param first_saved_section First saved section of the blockchain
      * @param read_section_callback Function to read a section
      * @return std::map<ActorId, BigNumberFloat> Map of actor balances
      */
-    std::unordered_map<ActorId, BigNumberFloat> calculate_balances(
-        const std::vector<ActorId>&                             actor_ids,
-        const TokenId&                                          token_id,
-        const BigNumber&                                        current_section,
-        const BigNumber&                                        first_saved_section,
-        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    Balances calculate_balances(const std::vector<ActorId>& actor_ids,
+                                const BigNumber&            current_section,
+                                const BigNumber&            first_saved_section);
 
     /**
      * @brief Calculate the genesis section id for caching
