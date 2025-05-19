@@ -405,50 +405,48 @@ bool DagCache::update_to_genesis_section(
     const BigNumber&                                        current_section,
     const BigNumber&                                        first_saved_section,
     std::function<std::optional<Section>(const BigNumber&)> read_section_callback) {
-
     // If trying to update to same section, nothing to do
     if (cached_section_ == genesis_section) {
         return true;
     }
-
     eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
 
-    // Find all actors and tokens involved in transactions
-    std::set<ActorId> unique_actors;
-    std::set<TokenId> unique_tokens;
+    // Создаем множество пар actor-token
+    std::set<std::pair<ActorId, TokenId>> actor_token_set;
 
-    // Scan from first_saved_section to genesis_section to collect actors and tokens
+    // Scan from first_saved_section to genesis_section to collect actor-token pairs
     for (BigNumber i = first_saved_section; i <= genesis_section; i++) {
         auto section = read_section_callback(i);
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
-
         for (const auto& tx : section->transactions) {
-            // Add sender and receiver to unique actors
+            // Add sender with token
             if (!tx.sender().is_zero()) {
-                unique_actors.insert(tx.sender());
+                actor_token_set.insert({ tx.sender(), tx.token() });
             }
+
+            // Add receiver with token
             if (!tx.receiver().is_zero()) {
-                unique_actors.insert(tx.receiver());
+                actor_token_set.insert({ tx.receiver(), tx.token() });
             }
 
-            // Add token to unique tokens
-            unique_tokens.insert(tx.token());
-
-            // If Conversion transaction, also add from_token
+            // If Conversion transaction, also add sender and receiver with from_token
             if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
                 auto from_token = TokenId::create(tx.meta().value());
                 if (from_token.has_value()) {
-                    unique_tokens.insert(from_token.value());
+                    if (!tx.sender().is_zero()) {
+                        actor_token_set.insert({ tx.sender(), from_token.value() });
+                    }
+                    if (!tx.receiver().is_zero()) {
+                        actor_token_set.insert({ tx.receiver(), from_token.value() });
+                    }
                 }
             }
         }
     }
 
-    eLog("[DagCache] Found {} unique actors and {} unique tokens for caching",
-         unique_actors.size(),
-         unique_tokens.size());
+    eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
 
     // Initialize DB
     if (!init_db()) {
@@ -459,15 +457,19 @@ bool DagCache::update_to_genesis_section(
     // Start a transaction for efficiency
     db_->query("BEGIN TRANSACTION");
 
-    // Calculate and store balances for each actor-token pair
-    std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash> balances;
+    // Преобразуем set в vector для функции read_cached_balances
+    std::vector<std::pair<ActorId, TokenId>> actor_token_pairs(actor_token_set.begin(), actor_token_set.end());
 
-    // Initialize balances map
-    for (const auto& actor_id : unique_actors) {
-        for (const auto& token_id : unique_tokens) {
-            balances[{ actor_id, token_id }] = read_cached_balance(actor_id, token_id);
-        }
+    // Получаем все балансы одним запросом
+    auto cached_balances_opt = read_cached_balances(actor_token_pairs);
+    if (!cached_balances_opt.has_value()) {
+        eLog("[DagCache] Failed to read cached balances");
+        db_->query("ROLLBACK");
+        return false;
     }
+
+    // Используем полученные балансы напрямую как Balances
+    Balances& balances = cached_balances_opt.value().second;
 
     BigNumber start_section;
     if (cached_section_ != BigNumber(-1)) {
@@ -482,20 +484,17 @@ bool DagCache::update_to_genesis_section(
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
-
         // Process each transaction
         for (const auto& tx : section->transactions) {
-            process_transaction(tx, unique_actors, balances);
+            process_transaction(tx, balances);
         }
     }
 
     // Store non-zero balances in the database
-    for (const auto& actor_id : unique_actors) {
-        for (const auto& token_id : unique_tokens) {
-            auto it = balances.find({ actor_id, token_id });
-            if (it != balances.end() && it->second != BigNumberFloat(0)) {
-                write_cached_balance(actor_id, token_id, it->second);
-            }
+    for (const auto& pair : actor_token_set) {
+        auto it = balances.find(pair);
+        if (it != balances.end() && it->second != BigNumberFloat(0)) {
+            write_cached_balance(pair.first, pair.second, it->second);
         }
     }
 
@@ -511,73 +510,65 @@ bool DagCache::update_to_genesis_section(
     return true;
 }
 
-void DagCache::process_transaction(
-    const Transaction&                                                         tx,
-    const std::set<ActorId>&                                                   actor_ids,
-    std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash>& balances) {
-
+void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     // Skip if transaction doesn't affect balances
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
 
-    for (const auto& actor_id : actor_ids) {
-        // Reward transactions
-        if (tx.type() == TransactionType::Reward && tx.sender() == actor_id /*&& !tx.token().is_zero()*/) {
-            auto key = std::make_pair(actor_id, tx.token());
+    // Reward transactions
+    if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] += tx.amount();
+    }
+    // Contract initialization
+    else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] += tx.amount();
+    }
+    // Token conversion
+    else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
+        if (tx.meta().has_value()) {
+            auto from_token = TokenId::create(tx.meta().value());
+            if (from_token.has_value()) {
+                // Deduct from source token
+                auto from_key = std::make_pair(tx.sender(), from_token.value());
+                if (balances.find(from_key) == balances.end()) {
+                    balances[from_key] = BigNumberFloat(0);
+                }
+                balances[from_key] -= tx.amount();
+                // Add to destination token
+                auto to_key = std::make_pair(tx.sender(), tx.token());
+                if (balances.find(to_key) == balances.end()) {
+                    balances[to_key] = BigNumberFloat(0);
+                }
+                balances[to_key] += tx.amount();
+            }
+        }
+    }
+    // Regular transactions
+    else {
+        // If receiver is valid, add funds
+        if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.receiver(), tx.token());
             if (balances.find(key) == balances.end()) {
                 balances[key] = BigNumberFloat(0);
             }
             balances[key] += tx.amount();
         }
-        // Contract initialization
-        else if (tx.type() == TransactionType::InitContract && tx.sender() == actor_id && !tx.token().is_zero()) {
-            auto key = std::make_pair(actor_id, tx.token());
+        // If sender is valid, deduct funds
+        if (!tx.sender().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.sender(), tx.token());
             if (balances.find(key) == balances.end()) {
                 balances[key] = BigNumberFloat(0);
             }
-            balances[key] += tx.amount();
-        }
-        // Token conversion
-        else if (tx.type() == TransactionType::Conversion && tx.sender() == actor_id) {
-            if (tx.meta().has_value()) {
-                auto from_token = TokenId::create(tx.meta().value());
-                if (from_token.has_value()) {
-                    // Deduct from source token
-                    auto from_key = std::make_pair(actor_id, from_token.value());
-                    if (balances.find(from_key) == balances.end()) {
-                        balances[from_key] = BigNumberFloat(0);
-                    }
-                    balances[from_key] -= tx.amount();
-
-                    // Add to destination token
-                    auto to_key = std::make_pair(actor_id, tx.token());
-                    if (balances.find(to_key) == balances.end()) {
-                        balances[to_key] = BigNumberFloat(0);
-                    }
-                    balances[to_key] += tx.amount();
-                }
-            }
-        }
-        // Regular transactions
-        else {
-            // If actor is receiver, add funds
-            if (tx.receiver() == actor_id && !tx.token().is_zero()) {
-                auto key = std::make_pair(actor_id, tx.token());
-                if (balances.find(key) == balances.end()) {
-                    balances[key] = BigNumberFloat(0);
-                }
-                balances[key] += tx.amount();
-            }
-
-            // If actor is sender, deduct funds
-            if (tx.sender() == actor_id && !tx.token().is_zero()) {
-                auto key = std::make_pair(actor_id, tx.token());
-                if (balances.find(key) == balances.end()) {
-                    balances[key] = BigNumberFloat(0);
-                }
-                balances[key] -= tx.amount();
-            }
+            balances[key] -= tx.amount();
         }
     }
 }

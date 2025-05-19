@@ -20,6 +20,7 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include <unordered_map>
 #include <set>
 #include <vector>
@@ -133,7 +134,7 @@ public:
      * @param current_section Current section of the blockchain
      * @param first_saved_section First saved section of the blockchain
      * @param read_section_callback Function to read a section
-     * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor balances
+     * @return std::map<ActorId, BigNumberFloat> Map of actor balances
      */
     std::unordered_map<ActorId, BigNumberFloat> calculate_balances(
         const std::vector<ActorId>&                             actor_ids,
@@ -196,16 +197,6 @@ public:
     void reset_db();
 
 private:
-    // Helper struct for hashing actor-token pairs in unordered_map
-    struct PairHash {
-        template <class T1, class T2>
-        std::size_t operator()(const std::pair<T1, T2>& p) const {
-            auto h1 = std::hash<std::string> {}(p.first.to_string());
-            auto h2 = std::hash<std::string> {}(p.second.to_string());
-            return h1 ^ (h2 << 1);
-        }
-    };
-
     ExtraChainNode*              node_;                           // Node reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
@@ -213,29 +204,14 @@ private:
 
     /**
      * @brief Process transaction for balances
-     *
-     * Updates balances for actors based on the given transaction.
+     *      * Updates balances for actors based on the given transaction.
      * Handles different transaction types:
      * - Reward: Increases sender's balance
      * - InitContract: Increases sender's balance
      * - Conversion: Transfers from one token to another
      * - Regular: Transfers from sender to receiver
-     *
-     * @param transaction Transaction to process
-     * @param actor_ids Set of actor ids to track
+     *      * @param transaction Transaction to process
      * @param balances Map of actor-token balances to update
      */
-    void process_transaction(const Transaction&       transaction,
-                             const std::set<ActorId>& actor_ids,
-                             std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash>& balances);
-};
-
-// Hash function for std::pair to use in unordered_map
-struct PairHash {
-    template <class T1, class T2>
-    std::size_t operator()(const std::pair<T1, T2>& p) const {
-        auto h1 = std::hash<std::string> {}(p.first.to_string());
-        auto h2 = std::hash<std::string> {}(p.second.to_string());
-        return h1 ^ (h2 << 1);
-    }
+    void process_transaction(const Transaction& transaction, Balances& balances);
 };
