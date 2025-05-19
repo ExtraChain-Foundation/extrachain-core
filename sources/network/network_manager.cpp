@@ -1343,15 +1343,15 @@ void NetworkManager::messageReceived(const std::string &message,
         // TIMER_END(FRAG)
 
         if (type == MessageType::DfsStoreFragment) {
-#ifdef IS_R
+            // #ifdef IS_R
             sendBrodcastMessageFurther(package_data);
-#else
-            auto p = package_data;
-            ThreadPoolBoost::instance()->post([this, package_data = p] {
-                QThread::msleep(15);
-                sendBrodcastMessageFurther(package_data);
-            });
-#endif
+            // #else
+            //             auto p = package_data;
+            //             ThreadPoolBoost::instance()->post([this, package_data = p] {
+            //                 QThread::msleep(15);
+            //                 sendBrodcastMessageFurther(package_data);
+            //             });
+            // #endif
         }
 
         break;
