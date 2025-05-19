@@ -251,19 +251,11 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         use_cache             = true;
         balance_start_section = cached_section_ + 1;
 
-        // Получаем все кешированные балансы для запрошенных акторов
         auto cached_balances_opt = get_cached_balances_for_actors(actor_ids);
         if (cached_balances_opt.has_value()) {
-            // Копируем все балансы из кеша
             balances = cached_balances_opt.value();
         }
     } else {
-        // Если кеш недоступен, начинаем с первого сохраненного раздела
-        balance_start_section = first_saved_section;
-    }
-
-    // Если начальный раздел не определен или 0, используем first_saved_section
-    if (!use_cache && balance_start_section == 0 && balance_start_section != BigNumber(-1)) {
         balance_start_section = first_saved_section;
     }
 
@@ -381,7 +373,6 @@ bool DagCache::update_to_genesis_section(
         start_section = first_saved_section;
     }
 
-    // Создаем множество пар actor-token
     std::set<std::pair<ActorId, TokenId>> actor_token_set;
 
     // Scan from start_section to genesis_section to collect actor-token pairs
@@ -415,10 +406,9 @@ bool DagCache::update_to_genesis_section(
     // Start a transaction for efficiency
     db_->query("BEGIN TRANSACTION");
 
-    // Преобразуем set в vector для функции read_cached_balances
     std::vector<std::pair<ActorId, TokenId>> actor_token_pairs(actor_token_set.begin(), actor_token_set.end());
 
-    // Получаем все балансы одним запросом
+    // Balances from cache
     auto cached_balances_opt = read_cached_balances(actor_token_pairs);
     if (!cached_balances_opt.has_value()) {
         eLog("[DagCache] Failed to read cached balances");
@@ -426,7 +416,6 @@ bool DagCache::update_to_genesis_section(
         return false;
     }
 
-    // Используем полученные балансы напрямую как Balances
     Balances& balances = cached_balances_opt.value().second;
 
     // Process all transactions from start_section to genesis_section
