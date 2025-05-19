@@ -80,32 +80,39 @@ std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
         return std::pair { cached_section_, balances };
     }
 
-    std::string              query = "SELECT * FROM balance_cache WHERE ";
-    std::vector<std::string> conditions;
+    const size_t PAIRS_PER_QUERY = 100;
+    auto         cache_section   = cached_section_;
 
-    for (size_t i = 0; i < actor_token_pairs.size(); ++i) {
-        const auto& pair = actor_token_pairs[i];
-        conditions.push_back(fmt::format("(actor_id = \"{}\" AND token_id = \"{}\")",
-                                         pair.first.to_string(),
-                                         pair.second.to_string()));
-    }
+    for (size_t i = 0; i < actor_token_pairs.size(); i += PAIRS_PER_QUERY) {
+        size_t                                   end_idx = std::min(i + PAIRS_PER_QUERY, actor_token_pairs.size());
+        std::vector<std::pair<ActorId, TokenId>> pairs_chunk(actor_token_pairs.begin() + i,
+                                                             actor_token_pairs.begin() + end_idx);
 
-    query += boost::algorithm::join(conditions, " OR ");
+        std::string              query = "SELECT * FROM balance_cache WHERE ";
+        std::vector<std::string> conditions;
 
-    auto       cache_section = cached_section_;
-    const auto rows          = db_->select(query, "balance_cache");
-
-    for (const auto& row : rows) {
-        auto actor_id = ActorId::create(row.at("actor_id"));
-        auto token_id = TokenId::create(row.at("token_id"));
-        auto balance  = BigNumberFloat::create(row.at("balance"));
-        if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
-            continue;
+        for (const auto& pair : pairs_chunk) {
+            conditions.push_back(fmt::format("(actor_id = \"{}\" AND token_id = \"{}\")",
+                                             pair.first.to_string(),
+                                             pair.second.to_string()));
         }
-        balances[{ actor_id.value(), token_id.value() }] = balance.value();
+
+        query += boost::algorithm::join(conditions, " OR ");
+
+        const auto rows = db_->select(query, "balance_cache");
+
+        for (const auto& row : rows) {
+            auto actor_id = ActorId::create(row.at("actor_id"));
+            auto token_id = TokenId::create(row.at("token_id"));
+            auto balance  = BigNumberFloat::create(row.at("balance"));
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        }
     }
 
-    return std::pair { cached_section_, balances };
+    return std::pair { cache_section, balances };
 }
 
 std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vector<ActorId>& actor_ids) {
@@ -118,25 +125,33 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
         return Balances {};
     }
 
-    std::string              query = "SELECT * FROM balance_cache WHERE actor_id IN (";
-    std::vector<std::string> actor_ids_str;
-    for (const auto& actor_id : actor_ids) {
-        actor_ids_str.push_back("'" + actor_id.to_string() + "'");
-    }
-    query += boost::algorithm::join(actor_ids_str, ", ");
-    query += ")";
-
-    const auto rows = db_->select(query, "balance_cache");
-
     Balances balances;
-    for (const auto& row : rows) {
-        auto actor_id = ActorId::create(row.at("actor_id"));
-        auto token_id = TokenId::create(row.at("token_id"));
-        auto balance  = BigNumberFloat::create(row.at("balance"));
-        if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
-            continue;
+
+    const size_t ACTORS_PER_QUERY = 100;
+
+    for (size_t i = 0; i < actor_ids.size(); i += ACTORS_PER_QUERY) {
+        size_t               end_idx = std::min(i + ACTORS_PER_QUERY, actor_ids.size());
+        std::vector<ActorId> actor_chunk(actor_ids.begin() + i, actor_ids.begin() + end_idx);
+
+        std::string              query = "SELECT * FROM balance_cache WHERE actor_id IN (";
+        std::vector<std::string> actor_ids_str;
+        for (const auto& actor_id : actor_chunk) {
+            actor_ids_str.push_back("'" + actor_id.to_string() + "'");
         }
-        balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        query += boost::algorithm::join(actor_ids_str, ", ");
+        query += ")";
+
+        const auto rows = db_->select(query, "balance_cache");
+
+        for (const auto& row : rows) {
+            auto actor_id = ActorId::create(row.at("actor_id"));
+            auto token_id = TokenId::create(row.at("token_id"));
+            auto balance  = BigNumberFloat::create(row.at("balance"));
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        }
     }
 
     return balances;
