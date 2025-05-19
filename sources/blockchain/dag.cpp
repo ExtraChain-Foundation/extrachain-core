@@ -220,7 +220,12 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
     // this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
-        eLog("[Dag] Our transaction not approved: {} / {}, {}", transaction.section(), transaction.hash(), result);
+        eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
+             transaction.section(),
+             transaction.section().to_string(NumeralBase::Dec),
+             transaction.hash(),
+             result);
+        this->sended_transactions.erase(hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
@@ -806,6 +811,9 @@ void Dag::start_check() {
 
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
+        // QTimer::singleShot(3000, [this]() {
+        //     this->start_sync();
+        // });
         // eLog("BC 12 start_check return");
         return;
     }

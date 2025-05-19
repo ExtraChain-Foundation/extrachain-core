@@ -44,7 +44,6 @@ void DagCache::set_section(const BigNumber& section_id) {
 std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     Balances balances;
 
-    // Check if database is initialized
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for read_cached_balances");
         return { BigNumber(-1), balances }; // TODO: expected
@@ -55,7 +54,7 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
 
     for (const auto& row : rows) {
         auto actor_id = ActorId::create(row.at("actor_id"));
-        auto token_id = ActorId::create(row.at("token_id"));
+        auto token_id = TokenId::create(row.at("token_id"));
         auto balance  = BigNumberFloat::create(row.at("balance"));
 
         if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
@@ -66,6 +65,51 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     }
 
     return { cache_section, balances };
+}
+
+std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
+    const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs) {
+    Balances balances;
+
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize db for read_cached_balance");
+        return std::nullopt;
+    }
+
+    if (actor_token_pairs.empty()) {
+        return std::pair { cached_section_, balances };
+    }
+
+    std::string              query = "SELECT * FROM balance_cache WHERE ";
+    std::vector<std::string> conditions;
+    DbRow                    binds;
+
+    for (size_t i = 0; i < actor_token_pairs.size(); ++i) {
+        const auto& pair        = actor_token_pairs[i];
+        std::string actor_param = "actor_id_" + std::to_string(i);
+        std::string token_param = "token_id_" + std::to_string(i);
+
+        conditions.push_back("(actor_id = @" + actor_param + " AND token_id = @" + token_param + ")");
+        binds[actor_param] = pair.first.to_string();
+        binds[token_param] = pair.second.to_string();
+    }
+
+    query += boost::algorithm::join(conditions, " OR ");
+
+    auto       cache_section = cached_section_;
+    const auto rows          = db_->select(query, "balance_cache", binds);
+
+    for (const auto& row : rows) {
+        auto actor_id = ActorId::create(row.at("actor_id"));
+        auto token_id = TokenId::create(row.at("token_id"));
+        auto balance  = BigNumberFloat::create(row.at("balance"));
+        if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+            continue;
+        }
+        balances[{ actor_id.value(), token_id.value() }] = balance.value();
+    }
+
+    return std::pair { cached_section_, balances };
 }
 
 void DagCache::write_cached_balances(const Balances& balances, const std::optional<BigNumber>& section_id) {
@@ -84,15 +128,15 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         const TokenId& token_id = key.second;
 
         // Skip zero balances to save space (consistent with write_cached_balance)
-        if (balance == BigNumberFloat(0)) {
-            DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
-            db_->delete_row("balance_cache", where);
-        } else {
-            DbRow data = { { "actor_id", actor_id.to_string() },
-                           { "token_id", token_id.to_string() },
-                           { "balance", balance.to_string() } };
-            db_->replace("balance_cache", data);
-        }
+        // if (balance == BigNumberFloat(0)) {
+        //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
+        //     db_->delete_row("balance_cache", where);
+        // } else {
+        DbRow data = { { "actor_id", actor_id.to_string() },
+                       { "token_id", token_id.to_string() },
+                       { "balance", balance.to_string() } };
+        db_->replace("balance_cache", data);
+        // }
     }
 
     // Commit transaction
@@ -142,13 +186,13 @@ void DagCache::write_cached_balance(const ActorId&        actor_id,
                    { "token_id", token_id.to_string() },
                    { "balance", balance.to_string() } };
 
-    if (balance == BigNumberFloat(0)) {
-        // Remove zero balances to save space
-        DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
-        db_->delete_row("balance_cache", where);
-    } else {
-        db_->replace("balance_cache", data);
-    }
+    // if (balance == BigNumberFloat(0)) {
+    //     // Remove zero balances to save space
+    //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
+    //     db_->delete_row("balance_cache", where);
+    // } else {
+    db_->replace("balance_cache", data);
+    // }
 }
 
 BigNumber DagCache::calculate_genesis_section(const BigNumber& section_id) const {

@@ -960,6 +960,10 @@ void NetworkManager::messageReceived(const std::string &message,
     std::string   messId     = message_body.message_id;
     std::string   messageId(messId.begin(), messId.end());
 
+    if (ip == first_node_) {
+        // eLog("---> {} {}", type, serialized.size());
+    }
+
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         if (m_messages->contains(messageId)
             || message_body.init_sender_id == node->accountController()->system_actor().id()) {
@@ -1339,7 +1343,15 @@ void NetworkManager::messageReceived(const std::string &message,
         // TIMER_END(FRAG)
 
         if (type == MessageType::DfsStoreFragment) {
+#ifdef IS_R
             sendBrodcastMessageFurther(package_data);
+#else
+            auto p = package_data;
+            ThreadPoolBoost::instance()->post([this, package_data = p] {
+                QThread::msleep(15);
+                sendBrodcastMessageFurther(package_data);
+            });
+#endif
         }
 
         break;

@@ -80,7 +80,9 @@ public:
      *
      * @return Balances Map of actor-token pairs to their balances
      */
-    std::pair<BigNumber, Balances> read_cached_balances();
+    std::pair<BigNumber, Balances>                read_cached_balances();
+    std::optional<std::pair<BigNumber, Balances>> read_cached_balances(
+        const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs);
 
     /**
      * @brief Write all balances to the cache database
