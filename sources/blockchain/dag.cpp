@@ -146,15 +146,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
     if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
-        const std::string &transaction_hash = transaction.hash();
-        bool               is_cache_duplicate =
-            std::any_of(cached_txs_.begin(), cached_txs_.end(), [&transaction_hash](const Transaction &tx) {
-                return tx.hash() == transaction_hash;
-            });
-
-        if (!is_cache_duplicate) {
-            cached_txs_.push_back(transaction);
-        }
+        add_to_cached_tx(transaction);
         return {};
     }
 
@@ -169,7 +161,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
                                     MessageStatus::Response);
         }
 
-        return std::unexpected(false);
+        // TODO: save to todo txs, and start sync
+
+        return {};
     }
 
     auto                  section = read_section(transaction.section());
@@ -286,13 +280,24 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids) {
 }
 
 void Dag::process_cached_transactions() {
-    eLog("[Dag] Processing {} cached transactions after sync", cached_txs_.size());
+    {
+        auto guard = cached_txs_.lock();
+        eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+    }
 
     status_ = DagStatus::Final;
 
-    while (!cached_txs_.empty()) {
-        std::vector<Transaction> txs_to_process(cached_txs_.begin(), cached_txs_.end());
-        cached_txs_.clear();
+    while (true) {
+        std::set<Transaction> txs_to_process;
+        {
+            auto guard_mut = cached_txs_.lock_mut();
+            if (guard_mut->empty()) {
+                break;
+            }
+
+            txs_to_process = std::move(*guard_mut);
+            guard_mut->clear();
+        }
 
         for (const auto &tx : txs_to_process) {
             Responder responder(node->network());
@@ -303,6 +308,19 @@ void Dag::process_cached_transactions() {
     status_ = DagStatus::Ready;
     emit node->dagStatus(status_);
     set_sync_status(BlockchainSyncStatus::None);
+}
+
+void Dag::add_to_cached_tx(const Transaction &transaction) {
+    bool exists = false;
+    {
+        auto guard = cached_txs_.lock();
+        exists     = guard->find(transaction) != guard->end();
+    }
+
+    if (!exists) {
+        auto guard_mut = cached_txs_.lock_mut();
+        guard_mut->insert(transaction);
+    }
 }
 
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
@@ -950,6 +968,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
+        emit node->dagSyncProgress(current_section_);
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
     });
 }
@@ -1136,9 +1155,7 @@ void Dag::send_sync_request() {
     }
 
     auto last_block = this->read_section(current_section_);
-    auto sync_index = /*mode_ == DagMode::Light ? calculate_genesis_id_for_block(nodes_by_block.front().second)
-                                              : */ // request cache from last cache
-        (last_block.has_value() ? last_block->id + 1 : BigNumber(0));
+    auto sync_index = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
     sync_last_index = nodes_by_block.front().second;
 
     if (current_section_ > sync_last_index) {
@@ -1159,9 +1176,10 @@ void Dag::send_sync_request() {
                                       MessageStatus::Request,
                                       responder_new);
     }
+
     // request from to
     check_status_ = BlockchainSyncStatus::None;
-    // emit syncStart(sync_index, sync_last_index);
+    emit node->dagSyncStart(sync_index, sync_last_index);
     eLog("syncStart");
 }
 
