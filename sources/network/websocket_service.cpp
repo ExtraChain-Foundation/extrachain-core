@@ -41,7 +41,7 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
             &WebSocketService::sendMessageInternal,
             this,
             &WebSocketService::sendMessageInternalSlot,
-            Qt::DirectConnection);
+            Qt::QueuedConnection);
     connect(this,
             &WebSocketService::needToTryDequeue,
             this,
@@ -161,11 +161,12 @@ void WebSocketService::closeSocket() {
     closed_               = true;
 
     {
-        QMutexLocker locker(&queue_mutex_);
-        high_queue_.clear();
-        normal_queue_.clear();
-        low_queue_.clear();
-        m_messageCache.clear();
+        QMutexLocker           locker(&queue_mutex_);
+        std::queue<QByteArray> empty1, empty2, empty3, empty4;
+        high_queue_.swap(empty1);
+        normal_queue_.swap(empty2);
+        low_queue_.swap(empty3);
+        m_messageCache.swap(empty4);
         locker.unlock();
     }
 
@@ -269,7 +270,7 @@ void WebSocketService::onBinaryMessage(const QByteArray &message) {
 
     if (!activated_) {
         QMutexLocker locker(&queue_mutex_);
-        m_messageCache.enqueue(message);
+        m_messageCache.push(message);
         locker.unlock();
 
         eLog("[WS] Message cached until activation. Cache size: {}", m_messageCache.size());
@@ -315,13 +316,13 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
         QMutexLocker locker(&queue_mutex_);
         switch (priority) {
         case Priority::High:
-            high_queue_.enqueue(data);
+            high_queue_.push(data);
             break;
         case Priority::Normal:
-            normal_queue_.enqueue(data);
+            normal_queue_.push(data);
             break;
         case Priority::Low:
-            low_queue_.enqueue(data);
+            low_queue_.push(data);
             break;
         }
         locker.unlock();
@@ -351,7 +352,6 @@ void WebSocketService::tryDequeueMessage() {
 
     if (!canSendMore()) {
         waiting_buffer_space_ = true;
-        QTimer::singleShot(10, this, &WebSocketService::needToTryDequeue);
         return;
     }
 
@@ -359,12 +359,15 @@ void WebSocketService::tryDequeueMessage() {
     QMutexLocker locker(&queue_mutex_);
 
     QByteArray data;
-    if (!high_queue_.isEmpty()) {
-        data = high_queue_.dequeue();
-    } else if (!normal_queue_.isEmpty()) {
-        data = normal_queue_.dequeue();
-    } else if (!low_queue_.isEmpty()) {
-        data = low_queue_.dequeue();
+    if (!high_queue_.empty()) {
+        data = high_queue_.front();
+        high_queue_.pop();
+    } else if (!normal_queue_.empty()) {
+        data = normal_queue_.front();
+        normal_queue_.pop();
+    } else if (!low_queue_.empty()) {
+        data = low_queue_.front();
+        low_queue_.pop();
     }
 
     locker.unlock();
@@ -372,7 +375,7 @@ void WebSocketService::tryDequeueMessage() {
     if (!data.isEmpty()) {
         emit sendMessageInternal(data);
 
-        if (!high_queue_.isEmpty() || !normal_queue_.isEmpty() || !low_queue_.isEmpty()) {
+        if (!high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty()) {
             emit needToTryDequeue();
         }
     }
@@ -522,10 +525,13 @@ quint16 WebSocketService::server_port() const {
 }
 
 void WebSocketService::processCachedMessages() {
-    while (!m_messageCache.isEmpty()) {
+    while (!m_messageCache.empty()) {
         eLog("-------------------------------- processCachedMessages");
-        auto message = m_messageCache.dequeue();
+        auto message = m_messageCache.front();
+        m_messageCache.pop();
         processMessage(message);
     }
-    m_messageCache.clear();
+
+    std::queue<QByteArray> empty;
+    m_messageCache.swap(empty);
 }

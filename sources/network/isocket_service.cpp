@@ -16,11 +16,11 @@
  * along with this library; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
+#include "network/isocket_service.h"
 
 #include "extrachain_version.h"
-#include "network/isocket_service.h"
+#include "dfs/dfs_controller.h"
 #include "blockchain/actor_index.h"
-#include "encryption/encryption_tools.h"
 #include "network/network_manager.h"
 
 #ifndef EXTRACHAIN_CMAKE
@@ -49,8 +49,8 @@ const QString &SocketService::ip() const {
     return ip_;
 }
 
-const SocketService::SocketType SocketService::socket_type() const {
-    return socket_type_;
+DfsMode SocketService::dfs_mode_socket() const {
+    return dfs_mode_socket_;
 }
 
 int SocketService::bytes_compressed() const {
@@ -81,6 +81,14 @@ void SocketService::set_vpn(bool isVPN) {
     is_vpn_ = isVPN;
 }
 
+std::uint64_t SocketService::timestamp() const {
+    return timestamp_;
+}
+
+bool SocketService::is_closed() {
+    return closed_;
+}
+
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
     eLog("[Socket] Current network id: {}", node->actorIndex()->network_id());
@@ -91,8 +99,8 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     //      node->actorIndex()->network_id(),
     //      ip_);
 
-    identifier_  = QString::fromStdString(handshake.identifier);
-    socket_type_ = handshake.socket_type;
+    identifier_      = QString::fromStdString(handshake.identifier);
+    dfs_mode_socket_ = handshake.dfs_mode;
 
     // 1. Checking the version
     if (auto version_result = Utils::compare_versions(extrachain_version, handshake.version);
@@ -217,11 +225,11 @@ QByteArray SocketService::generate_first_message() {
     HandshakeMessage msg { .network_id   = node->actorIndex()->network_id().to_string(),
                            .version      = extrachain_version,
                            .identifier   = node->network_identifier(),
-                           .socket_type  = socket_type_,
                            .your_ip      = ip_.toStdString(),
                            .connections  = {},
                            .is_available = true,
-                           .is_constant  = is_constant_.load() };
+                           .is_constant  = is_constant_.load(),
+                           .dfs_mode     = node->dfs()->mode() };
 
     {
         auto connections_locked = *node->network()->connections();
