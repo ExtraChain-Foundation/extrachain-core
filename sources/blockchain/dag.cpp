@@ -212,7 +212,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions.find(hash) == sended_transactions.end()) {
-        eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
+        // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
@@ -220,7 +220,12 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
     // this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
-        eLog("[Dag] Our transaction not approved: {} / {}, {}", transaction.section(), transaction.hash(), result);
+        eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
+             transaction.section(),
+             transaction.section().to_string(NumeralBase::Dec),
+             transaction.hash(),
+             result);
+        this->sended_transactions.erase(hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
@@ -275,20 +280,9 @@ void Dag::network_section(const Section &section) {
     //
 }
 
-std::unordered_map<ActorId, BigNumberFloat> Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                                                          const TokenId              &token_id) {
-
-    // Use the read_section callback to provide access to sections
-    auto read_section_callback = [this](const BigNumber &section_id) -> std::optional<Section> {
-        return this->read_section(section_id);
-    };
-
+Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids) {
     // Use DagCache to calculate balances
-    return cache_.calculate_balances(actor_ids,
-                                     token_id,
-                                     current_section_,
-                                     first_saved_section_,
-                                     read_section_callback);
+    return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_);
 }
 
 void Dag::process_cached_transactions() {
@@ -436,7 +430,7 @@ bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
             update_range();
 
             if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
-                auto network_id = section_txs[0].sender(); // Берем ID из первой транзакции
+                auto network_id = section_txs[0].sender();
                 node->actorIndex()->set_network_id(network_id);
             }
 
@@ -650,8 +644,8 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     TokenId token = tx.token();
 
     // Calculate sender's current balance from all previous sections
-    std::vector<ActorId> actor_ids         = { targetSender };
-    BigNumberFloat       senderBalance     = calculate_actors_balance(actor_ids, token)[targetSender];
+    std::vector<ActorId> actor_ids     = { targetSender };
+    BigNumberFloat       senderBalance = calculate_actors_balance(actor_ids)[std::pair { targetSender, token }];
     BigNumberFloat       transactionAmount = tx.amount();
 
     // Apply all transactions in the current section to the balance
@@ -806,6 +800,9 @@ void Dag::start_check() {
 
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
+        // QTimer::singleShot(3000, [this]() {
+        //     this->start_sync();
+        // });
         // eLog("BC 12 start_check return");
         return;
     }
@@ -964,10 +961,6 @@ void Dag::network_request_light(const Responder &responder) {
         std::vector<Transaction> txs;
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
-        if (cache_section == BigNumber(-1)) {
-            cache_section = BigNumber(0);
-        }
-
         txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));

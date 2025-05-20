@@ -25,9 +25,6 @@
 #include "utils/exc_logs.h"
 #include "dfs/dfs_utils.h"
 
-// Implementation file will contain network-related includes that you'll add later
-// #include "network/dfs_sync_messages.h"
-
 LoadManager::LoadManager(ExtraChainNode* node)
     : node(node) {
     // load known from all dir
@@ -173,6 +170,10 @@ void LoadManager::check_all_files(std::string identifier) {
         }
 
         for (const auto& row : dir_rows.value()) {
+            if (row.type == Dfs::FileType::File && !need_load) {
+                continue;
+            }
+
             if (row.state == Dfs::FileState::Ready) {
                 auto file_path = Dfs::Path::file_path(dir.actor_id, row.file_id);
                 if (!file_path.has_value()) {
@@ -365,7 +366,7 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
                                                 responder);
 
             offset += Dfs::Basic::FRAGMENT_SIZE;
-            std::this_thread::sleep_for(std::chrono::milliseconds(15));
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
         }
 
         // auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
@@ -380,6 +381,7 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
 }
 
 void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_data) {
+    // eLog("{} {} {}", fragment_data.owner_id, fragment_data.file_id, fragment_data.offset);
     auto file_link = Dfs::FileLink { .owner_id = fragment_data.owner_id, .file_id = fragment_data.file_id };
 
     // TODO: Fragments: verify fragment, use Dir Row and fragment list

@@ -20,6 +20,7 @@
 #pragma once
 
 #include <memory>
+#include <map>
 #include <unordered_map>
 #include <set>
 #include <vector>
@@ -80,7 +81,11 @@ public:
      *
      * @return Balances Map of actor-token pairs to their balances
      */
-    std::pair<BigNumber, Balances> read_cached_balances();
+    std::pair<BigNumber, Balances>                read_cached_balances();
+    std::optional<std::pair<BigNumber, Balances>> read_cached_balances(
+        const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs);
+
+    std::optional<Balances> get_cached_balances_for_actors(const std::vector<ActorId>& actor_ids);
 
     /**
      * @brief Write all balances to the cache database
@@ -116,7 +121,7 @@ public:
     /**
      * @brief Calculate balances for actors using cache
      *
-     * This method calculates balances for specified actors and token by:
+     * This method calculates balances for specified actors by:
      * 1. First checking if there's a valid cache available
      * 2. If cache exists, using it as the starting point
      * 3. If no cache exists:
@@ -127,18 +132,15 @@ public:
      * cache updates and balance calculations.
      *
      * @param actor_ids Vector of actor ids to calculate balances for
-     * @param token_id Token id to calculate balances for
      * @param current_section Current section of the blockchain
      * @param first_saved_section First saved section of the blockchain
      * @param read_section_callback Function to read a section
-     * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor balances
+     * @return std::map<ActorId, BigNumberFloat> Map of actor balances
      */
-    std::unordered_map<ActorId, BigNumberFloat> calculate_balances(
-        const std::vector<ActorId>&                             actor_ids,
-        const TokenId&                                          token_id,
-        const BigNumber&                                        current_section,
-        const BigNumber&                                        first_saved_section,
-        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    Balances calculate_balances(const std::vector<ActorId>& actor_ids,
+                                const BigNumber&            current_section,
+                                const BigNumber&            first_saved_section,
+                                std::optional<BigNumber>    to_section = std::nullopt);
 
     /**
      * @brief Calculate the genesis section id for caching
@@ -194,16 +196,6 @@ public:
     void reset_db();
 
 private:
-    // Helper struct for hashing actor-token pairs in unordered_map
-    struct PairHash {
-        template <class T1, class T2>
-        std::size_t operator()(const std::pair<T1, T2>& p) const {
-            auto h1 = std::hash<std::string> {}(p.first.to_string());
-            auto h2 = std::hash<std::string> {}(p.second.to_string());
-            return h1 ^ (h2 << 1);
-        }
-    };
-
     ExtraChainNode*              node_;                           // Node reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
@@ -211,29 +203,14 @@ private:
 
     /**
      * @brief Process transaction for balances
-     *
-     * Updates balances for actors based on the given transaction.
+     *      * Updates balances for actors based on the given transaction.
      * Handles different transaction types:
      * - Reward: Increases sender's balance
      * - InitContract: Increases sender's balance
      * - Conversion: Transfers from one token to another
      * - Regular: Transfers from sender to receiver
-     *
-     * @param transaction Transaction to process
-     * @param actor_ids Set of actor ids to track
+     *      * @param transaction Transaction to process
      * @param balances Map of actor-token balances to update
      */
-    void process_transaction(const Transaction&       transaction,
-                             const std::set<ActorId>& actor_ids,
-                             std::unordered_map<std::pair<ActorId, TokenId>, BigNumberFloat, PairHash>& balances);
-};
-
-// Hash function for std::pair to use in unordered_map
-struct PairHash {
-    template <class T1, class T2>
-    std::size_t operator()(const std::pair<T1, T2>& p) const {
-        auto h1 = std::hash<std::string> {}(p.first.to_string());
-        auto h2 = std::hash<std::string> {}(p.second.to_string());
-        return h1 ^ (h2 << 1);
-    }
+    void process_transaction(const Transaction& transaction, Balances& balances);
 };
