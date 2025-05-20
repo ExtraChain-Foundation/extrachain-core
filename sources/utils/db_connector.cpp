@@ -215,7 +215,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     dbmutex.unlock();
 
     if (rs != SQLITE_DONE) {
-        eWarning("[DbConnector] {}/{} {} {} error: {}", m_file, m_type, query, tableName, sqlite3_errmsg(db));
+        eWarning("[DbConnector] {} ({}) {} {} error: {}", m_file, m_type, query, tableName, sqlite3_errmsg(db));
         sqlite3_finalize(stmt);
         return {};
     }

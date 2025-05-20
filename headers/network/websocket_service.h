@@ -73,15 +73,13 @@ private:
     void connections();
     void send_public_key();
     void handshake();
+    bool canSendMore() const;
+    void processMessage(const QByteArray &message);
+    void processCachedMessages();
 
     QWebSocket *m_ws = nullptr;
 
-    QTimer *m_pingTimer   = nullptr;
-    int     m_failedPongs = 0;
-
-    bool canSendMore() const;
-
-    QQueue<QByteArray> m_messageCache;
-    void               processMessage(const QByteArray &message);
-    void               processCachedMessages();
+    QTimer                *m_pingTimer   = nullptr;
+    int                    m_failedPongs = 0;
+    std::queue<QByteArray> m_messageCache;
 };

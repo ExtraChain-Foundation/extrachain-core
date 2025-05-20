@@ -111,6 +111,7 @@ void ExtraChainNode::process() {
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    ThreadPoolBoost::instance_dfs(4);
     ThreadPoolBoost::instance(4);
 
     prepareFolders();
@@ -467,6 +468,11 @@ void ExtraChainNode::start() {
                 }
             }
         }
+    });
+
+    // Version compatibility: 0.20.0
+    QThreadPool::globalInstance()->start([this]() {
+        QDir("blocks").removeRecursively();
     });
 #endif
 }

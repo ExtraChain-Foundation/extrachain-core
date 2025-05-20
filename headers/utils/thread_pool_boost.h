@@ -31,7 +31,8 @@ class ThreadPoolBoost {
 public:
     ThreadPoolBoost() = delete;
 
-    static std::shared_ptr<ThreadPoolBoost> instance(size_t threadsCount = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance_dfs(size_t threads_count = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance(size_t threads_count = 1);
 
     static void terminate();
 
