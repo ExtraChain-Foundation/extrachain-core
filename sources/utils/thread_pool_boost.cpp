@@ -22,7 +22,8 @@
 //[CDS] Maybe we will need it for future
 // #include <cds/threading/model.h>
 
-static std::shared_ptr<ThreadPoolBoost> thread_pool;
+static std::shared_ptr<ThreadPoolBoost> thread_pool_dfs;
+static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
 static boost::detail::spinlock          mutex;
 
 ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
@@ -55,19 +56,30 @@ void ThreadPoolBoost::initialize(boost::asio::thread_pool& pool, const size_t th
     //     item.get_future().wait();
 }
 
-std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(const size_t threads_count) {
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dfs(const size_t threads_count) {
     boost::detail::spinlock::scoped_lock lock(mutex);
 
-    if (!thread_pool) {
-        thread_pool = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    if (!thread_pool_dfs) {
+        thread_pool_dfs = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
     }
 
-    return thread_pool;
+    return thread_pool_dfs;
+}
+
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count) {
+    boost::detail::spinlock::scoped_lock lock(mutex);
+
+    if (!thread_pool_dag) {
+        thread_pool_dag = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    }
+
+    return thread_pool_dag;
 }
 
 void ThreadPoolBoost::terminate() {
     boost::detail::spinlock::scoped_lock lock(mutex);
-    thread_pool.reset();
+    thread_pool_dfs.reset();
+    thread_pool_dag.reset();
 }
 
 void ThreadPoolBoost::join() {

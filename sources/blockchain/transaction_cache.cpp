@@ -44,8 +44,24 @@ void TransactionCache::make_files() {
 
     DbConnector db(BlockchainConst::TRANSACTION_CACHE);
     db.open();
-    db.create_table(Config::DataStorage::TX_CACHE_CREATE);
+    auto columns = db.table_columns("Transactions");
+    if (columns.empty()) {
+        db.create_table(Config::DataStorage::TX_CACHE_CREATE);
+        db.close();
+        return;
+    }
+
     db.close();
+
+    // Version compatibility: 0.20.0 (temp)
+    auto f = std::find_if(columns.begin(), columns.end(), [](const DBColumn &column) {
+        return column.name == "timestamp";
+    });
+
+    if (f == columns.end()) {
+        QFile::remove(QString::fromStdString(BlockchainConst::TRANSACTION_CACHE));
+        make_files();
+    }
 }
 
 void TransactionCache::cache() {

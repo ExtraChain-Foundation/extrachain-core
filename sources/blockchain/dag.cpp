@@ -225,7 +225,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
              transaction.section().to_string(NumeralBase::Dec),
              transaction.hash(),
              result);
-        this->sended_transactions.erase(hash);
+        // this->sended_transactions.erase(hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
