@@ -20,12 +20,11 @@
 #ifndef ISOCKETSERVICE_H
 #define ISOCKETSERVICE_H
 
-#include "boost/describe.hpp"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "utils/exc_utils.h"
 
-#include <QQueue>
+#include <queue>
 #include <QMutex>
 
 class ExtraChainNode;
@@ -34,13 +33,6 @@ class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
 public:
-    enum class SocketType {
-        Full,
-        Part,
-        None,
-    };
-    Q_ENUM(SocketType)
-
     struct SocketPair {
         std::string ip;
         std::string identifier;
@@ -58,11 +50,12 @@ public:
         std::string          network_id;
         std::string          version;
         std::string          identifier;
-        SocketType           socket_type = SocketType::Full;
+        int                  socket_type = 0; // compability
         std::string          your_ip;
         std::set<SocketPair> connections;
         bool                 is_available = false;
         bool                 is_constant  = false;
+        DfsMode              dfs_mode;
     };
 
     enum class Priority {
@@ -79,7 +72,7 @@ public:
     virtual quint16           port() const            = 0;
     virtual quint16           server_port() const     = 0;
     const QString            &ip() const;
-    const SocketType          socket_type() const;
+    DfsMode dfs_mode_socket() const;
     int                       bytes_compressed() const;
     int                       bytes_outgoing() const;
     int                       bytes_incoming() const;
@@ -88,17 +81,13 @@ public:
     bool                      is_vpn() const;
     void                      set_vpn(bool isVPN);
 
-    std::uint64_t timestamp() const {
-        return timestamp_;
-    }
+    std::uint64_t timestamp() const;
 
 public:
     virtual void flush()                                                                  = 0;
     virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
 
-    bool is_closed() {
-        return closed_;
-    }
+    bool is_closed();
 
 protected slots:
     virtual void closeSocket();
@@ -110,7 +99,7 @@ signals:
     void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
     void activated();
     void finished(); // if threads
-    void shareConnections(const std::set<SocketPair> &);
+    void shareConnections(const std::set<SocketService::SocketPair> &);
 
 protected:
     bool       check_first_message(const HandshakeMessage &msg);
@@ -127,15 +116,15 @@ protected:
     int              bytes_incoming_   = 0;
     int              bytes_outgoing_   = 0;
     int              bytes_compressed_ = 0;
-    SocketType       socket_type_      = SocketType::Full; // TODO: this is for socket, need also global
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
+    DfsMode          dfs_mode_socket_;
 
-    QMutex             queue_mutex_;
-    QQueue<QByteArray> high_queue_;
-    QQueue<QByteArray> normal_queue_;
-    QQueue<QByteArray> low_queue_;
+    QMutex                 queue_mutex_;
+    std::queue<QByteArray> high_queue_;
+    std::queue<QByteArray> normal_queue_;
+    std::queue<QByteArray> low_queue_;
 
     static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
     bool                    waiting_buffer_space_ = false;

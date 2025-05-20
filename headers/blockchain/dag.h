@@ -26,6 +26,8 @@
 #include "blockchain/transaction_cache.h"
 #include "blockchain/dag_cache.h"
 
+#include "3rdparty/rustex.h"
+
 class ExtraChainNode;
 class Responder;
 
@@ -418,7 +420,10 @@ private:
     std::unordered_map<std::string, DagLastInfo> last_info_;         // Last blockchain info from peers
     QTimer                                      *timer_sync;         // Timer for sync operations
 
-    std::vector<Transaction> cached_txs_; // Transactions cached during synchronization
+    rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+
+    //
+    void add_to_cached_tx(const Transaction &transaction);
 
     /**
      * @brief Request sections from the network

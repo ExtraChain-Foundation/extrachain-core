@@ -256,6 +256,8 @@ signals:
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
+    void dagSyncStart(BigNumber, BigNumber);
+    void dagSyncProgress(BigNumber);
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

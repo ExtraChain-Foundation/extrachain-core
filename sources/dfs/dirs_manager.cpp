@@ -208,7 +208,7 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    ThreadPoolBoost::instance()->post([this, responder] {
+    ThreadPoolBoost::instance_dfs()->post([this, responder] {
         auto actors = node->actorIndex()->allActors();
 
         auto network_id = node->actorIndex()->network_id();
