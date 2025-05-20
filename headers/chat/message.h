@@ -36,9 +36,9 @@ namespace Chat {
 
     struct MessageData {
         std::optional<MessageType> type;
-        std::optional<std::string> data;
+        std::optional<std::string> data, reply_id;
     };
-    BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data))
+    BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data, reply_id))
 
     struct Message {
         std::string   id;
@@ -50,5 +50,6 @@ namespace Chat {
 
     struct MessageText {
         std::string text;
+        std::string reply_id;
     };
 } // namespace Chat
