@@ -856,6 +856,49 @@ namespace Utils {
     EXTRACHAIN_EXPORT ExtraChainSettings read_settings();
     EXTRACHAIN_EXPORT bool               write_settings(const ExtraChainSettings &settings);
 
+    /**
+     * @enum VersionCompareResult
+     * @brief Result of version comparison
+     */
+    enum class VersionCompareResult {
+        Newer, ///< Latest version is newer than current version
+        Older, ///< Latest version is older than current version
+        Same   ///< Versions are identical
+    };
+
+    /**
+     * @brief Compares two version strings using semantic versioning rules
+     *
+     * This function compares version strings in format X.Y.Z or X.Y.Z.W, where:
+     * - First three components (X.Y.Z) have priority in comparison
+     * - Fourth component (W) is only compared if the first three are identical
+     * - Each component is compared numerically, not lexicographically (e.g., 10 > 9)
+     * - Missing components are treated as zeros (e.g., "1.2" is equivalent to "1.2.0")
+     *
+     * @param current The current version string
+     * @param latest The latest version string to compare against
+     * @return VersionCompareResult indicating if latest version is newer, older, or the same
+     *
+     * @code
+     * // Example usage:
+     * auto result = compare_versions("0.20.0", "0.20.1");
+     * if (result == VersionCompareResult::NewerVersion) {
+     *     // Perform update
+     * }
+     * @endcode
+     */
+    EXTRACHAIN_EXPORT VersionCompareResult compare_versions(const std::string &current,
+                                                            const std::string &latest);
+
+    /**
+     * @brief Helper function that checks if the latest version is newer than current
+     *
+     * @param current The current version string
+     * @param latest The latest version string to compare against
+     * @return bool True if latest version is newer, false otherwise
+     */
+    EXTRACHAIN_EXPORT bool is_newer_version(const std::string &current, const std::string &latest);
+
 } // namespace Utils
 
 namespace BlockchainConst {

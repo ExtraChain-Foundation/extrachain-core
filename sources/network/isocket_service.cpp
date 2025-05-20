@@ -95,13 +95,14 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     socket_type_ = handshake.socket_type;
 
     // 1. Checking the version
-    if (handshake.version != extrachain_version) {
-        auto version_error_variant = (handshake.version < extrachain_version)
-                                         ? Network::SocketServiceError::VersionTooNew
-                                         : Network::SocketServiceError::VersionTooOld;
+    if (auto version_result = Utils::compare_versions(extrachain_version, handshake.version);
+        version_result != Utils::VersionCompareResult::Same) {
+        auto error_type = (version_result == Utils::VersionCompareResult::Newer)
+                              ? Network::SocketServiceError::VersionTooNew
+                              : Network::SocketServiceError::VersionTooOld;
 
         eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
-        emit error(version_error_variant,
+        emit error(error_type,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
                    identifier_.toStdString());
