@@ -398,6 +398,8 @@ std::expected<bool, ChatError> ChatManager::add_gif_message(const ActorId&      
                                                             const std::string&       file_id,
                                                             const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Gif, .data = message_text.text };
+    if (!message_text.reply_id.empty())
+        message_data.reply_id = message_text.reply_id;
     // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     // TODO: with id exists check
@@ -408,7 +410,9 @@ std::expected<bool, ChatError> ChatManager::add_image_message(const ActorId&    
                                                               const std::string&       file_id,
                                                               const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Image, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    if (!message_text.reply_id.empty())
+        message_data.reply_id = message_text.reply_id;
+    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -416,7 +420,9 @@ std::expected<bool, ChatError> ChatManager::add_video_message(const ActorId&    
                                                               const std::string&       file_id,
                                                               const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Video, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    if (!message_text.reply_id.empty())
+        message_data.reply_id = message_text.reply_id;
+    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
@@ -424,7 +430,9 @@ std::expected<bool, ChatError> ChatManager::add_file_message(const ActorId&     
                                                              const std::string&       file_id,
                                                              const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::File, .data = message_text.text };
-    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    if (!message_text.reply_id.empty())
+        message_data.reply_id = message_text.reply_id;
+    auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     return add_new_message(owner_id, file_id, message);
 }
 
