@@ -76,7 +76,7 @@ Dag::Dag(ExtraChainNode *node)
     }
 
 #ifdef IS_RC
-    mode_ = DagMode::Light;
+    // mode_ = DagMode::Light;
 #endif
 
     auto section = this->read_section(BigNumber(0));
@@ -93,6 +93,11 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     eLog("[Dag] Constructor: done");
+}
+
+void Dag::set_status(DagStatus status) {
+    this->status_ = status;
+    emit node->dagStatus(status_);
 }
 
 std::string Dag::file_folder(const BigNumber &section) const {
@@ -151,17 +156,25 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     }
 
     if (transaction.section() > current_section_ + 5) {
-        TransactionResult transaction_result { .hash   = transaction.hash(),
-                                               .result = TransactionProveError::SectionTooBig };
+        // TransactionResult transaction_result { .hash   = transaction.hash(),
+        //                                        .result = TransactionProveError::SectionTooBig };
 
-        if (!responder.identifiers().empty()) {
-            responder.send_response(transaction_result,
-                                    MessageType::DagTransactionResult,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
-        }
+        // if (!responder.identifiers().empty()) {
+        //     responder.send_response(transaction_result,
+        //                             MessageType::DagTransactionResult,
+        //                             SendMode::Focused,
+        //                             MessageStatus::Response);
+        // }
 
-        // TODO: save to todo txs, and start sync
+        add_to_cached_tx(transaction);
+
+        // if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
+        set_status(DagStatus::Sync);
+        sync_last_index = transaction.section();
+        request_sections(current_section_,
+                         std::min(sync_last_index, current_section_ + 100),
+                         responder.with_new_message_id());
+        // }
 
         return {};
     }

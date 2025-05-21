@@ -182,9 +182,7 @@ public:
      *
      * @param status The new status
      */
-    void set_status(DagStatus status) {
-        this->status_ = status;
-    }
+    void set_status(DagStatus status);
 
     /**
      * @brief Get the transaction cache
