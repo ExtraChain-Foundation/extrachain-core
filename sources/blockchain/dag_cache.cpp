@@ -298,6 +298,8 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         }
     }
 
+    eLog("-----> {}", balances);
+
     return balances;
 }
 
