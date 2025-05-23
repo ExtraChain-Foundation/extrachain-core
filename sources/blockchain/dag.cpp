@@ -992,6 +992,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         emit node->dagSyncProgress(current_section_);
+        eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ + 100);
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
     });
 }
