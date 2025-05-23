@@ -171,6 +171,8 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         // if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
         set_status(DagStatus::Sync);
         sync_last_index = transaction.section();
+
+        // if light -> remove all -> load light
         request_sections(current_section_,
                          std::min(sync_last_index, current_section_ + 100),
                          responder.with_new_message_id());
@@ -798,6 +800,7 @@ std::optional<Transaction> Dag::search_transaction(const std::string &hash, int 
 //
 
 void Dag::start_sync() {
+    return;
     // start timer, after end -> again request
     if (status_ == DagStatus::Sync) {
         // eLog("BC 11 start_sync return");
@@ -822,6 +825,7 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
+    return;
     // temp
 #ifndef IS_RC
     if (status_ == DagStatus::Ready) {
