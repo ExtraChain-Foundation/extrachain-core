@@ -167,12 +167,14 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         //                             SendMode::Focused,
         //                             MessageStatus::Response);
         // }
+        eLog("OHOOHO ____________________");
 
         add_to_cached_tx(transaction);
 
         // if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
         set_status(DagStatus::Sync);
         sync_last_index = transaction.section();
+        eLog("________ {}", sync_last_index);
 
         // if light -> remove all -> load light
         request_sections(current_section_,
