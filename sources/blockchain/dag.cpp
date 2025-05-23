@@ -79,6 +79,8 @@ Dag::Dag(ExtraChainNode *node)
     // mode_ = DagMode::Light;
 #endif
 
+    status_ = DagStatus::Ready;
+
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
