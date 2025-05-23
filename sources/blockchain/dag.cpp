@@ -152,7 +152,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
-    if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
+    if (status_ != DagStatus::Ready /*&& status_ != DagStatus::Final*/) {
         add_to_cached_tx(transaction);
         return {};
     }
@@ -339,6 +339,8 @@ void Dag::add_to_cached_tx(const Transaction &transaction) {
     if (!exists) {
         auto guard_mut = cached_txs_.lock_mut();
         guard_mut->insert(transaction);
+
+        eLog("[Dag] Add to cached txs: {} / {}", transaction.section(), transaction.hash());
     }
 }
 

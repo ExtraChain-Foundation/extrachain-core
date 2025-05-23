@@ -305,7 +305,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
 
                     if (can_connect) {
-                        connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+                        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
             });
@@ -1561,6 +1561,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
+        eLog("RES RESULT", res);
         if (res.has_value()) {
             sendBrodcastMessageFurther(package_data);
         }
