@@ -1004,6 +1004,7 @@ void NetworkManager::messageReceived(const std::string &message,
     Responder responder(this);
     responder.set_message_id(messageId);
     responder.add_identifier(identifier);
+    responder.set_message_type(type);
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
