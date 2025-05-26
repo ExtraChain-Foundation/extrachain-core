@@ -79,6 +79,9 @@ Dag::Dag(ExtraChainNode *node)
     mode_ = DagMode::Light;
 #endif
 
+    timestamp_bigger_sync_start_ = 0;
+    status_                      = DagStatus::Ready;
+
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
@@ -93,6 +96,11 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     eLog("[Dag] Constructor: done");
+}
+
+void Dag::set_status(DagStatus status) {
+    this->status_ = status;
+    emit node->dagStatus(status_);
 }
 
 std::string Dag::file_folder(const BigNumber &section) const {
@@ -145,25 +153,27 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 }
 
 std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
-    if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
-        add_to_cached_tx(transaction);
-        return {};
-    }
-
-    if (transaction.section() > current_section_ + 5) {
-        TransactionResult transaction_result { .hash   = transaction.hash(),
-                                               .result = TransactionProveError::SectionTooBig };
-
-        if (!responder.identifiers().empty()) {
-            responder.send_response(transaction_result,
-                                    MessageType::DagTransactionResult,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
+    if (status_ != DagStatus::Final) {
+        bool sync_timeout = false;
+        if (timestamp_bigger_sync_start_ != 0) {
+            sync_timeout = (Utils::current_date_ms() - timestamp_bigger_sync_start_) > 10000;
         }
 
-        // TODO: save to todo txs, and start sync
+        if (!sync_timeout && status_ != DagStatus::Ready) {
+            add_to_cached_tx(transaction);
+            return {};
+        }
 
-        return {};
+        if (sync_timeout && transaction.section() > current_section_ + 5) {
+            if (!sync_timeout)
+                add_to_cached_tx(transaction);
+            set_status(DagStatus::Sync);
+            sync_last_index              = transaction.section();
+            timestamp_bigger_sync_start_ = Utils::current_date_ms();
+            eLog("[Dag] Section bigger: {}", sync_last_index);
+            request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+            return {};
+        }
     }
 
     auto                  section = read_section(transaction.section());
@@ -173,7 +183,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     TransactionResult transaction_result { .hash = transaction.hash(), .result = res };
 
     if (res != TransactionProveError::NoError) {
-        eLog("[Dag] Transaction not approved: {} {}", transaction, res);
+        auto tx = transaction;
+        tx.set_prev_hashs({ "hashs" });
+        eLog("[Dag] Transaction not approved: {} {}", tx, res);
     } else {
         eLog("[Dag] Transaction from network approved: {}", transaction);
     }
@@ -285,7 +297,8 @@ void Dag::process_cached_transactions() {
         eLog("[Dag] Processing {} cached transactions after sync", guard->size());
     }
 
-    status_ = DagStatus::Final;
+    status_                      = DagStatus::Final;
+    timestamp_bigger_sync_start_ = 0;
 
     while (true) {
         std::set<Transaction> txs_to_process;
@@ -305,7 +318,8 @@ void Dag::process_cached_transactions() {
         }
     }
 
-    status_ = DagStatus::Ready;
+    timestamp_bigger_sync_start_ = 0;
+    status_                      = DagStatus::Ready;
     emit node->dagStatus(status_);
     set_sync_status(BlockchainSyncStatus::None);
 }
@@ -320,6 +334,8 @@ void Dag::add_to_cached_tx(const Transaction &transaction) {
     if (!exists) {
         auto guard_mut = cached_txs_.lock_mut();
         guard_mut->insert(transaction);
+
+        eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
     }
 }
 
@@ -398,6 +414,10 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
         return write_section(section).has_value();
     }
+
+    // if (section->id > current_section_) {
+    //     current_section_ = section->id;
+    // }
 
     // Add transaction to existing section
     section->transactions.insert(transaction);
@@ -887,12 +907,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
-
-    node->network()->send_message(range,
-                                  MessageType::DagSections,
-                                  SendMode::Focused,
-                                  MessageStatus::Request,
-                                  responder_new);
+    responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
     eLog("[Dag] Request sections from {} to {}", range.first, range.last);
 }
@@ -969,6 +984,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         emit node->dagSyncProgress(current_section_);
+        eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ + 100);
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
     });
 }
@@ -1063,6 +1079,8 @@ void Dag::send_sync_request() {
     }
 
     bool need_sync = false;
+
+    eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {

@@ -181,6 +181,10 @@ public:
         message_id_ = message_id;
     }
 
+    void set_message_type(MessageType type) {
+        message_type = type;
+    }
+
     Responder with_new_message_id() const {
         Responder responder   = *this;
         responder.message_id_ = generate_message_id();
