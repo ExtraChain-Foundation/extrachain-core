@@ -1562,7 +1562,6 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        eLog("RES RESULT {}", res);
         if (res.has_value()) {
             sendBrodcastMessageFurther(package_data);
         }
