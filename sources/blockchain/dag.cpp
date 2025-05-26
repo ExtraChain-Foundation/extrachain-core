@@ -79,7 +79,8 @@ Dag::Dag(ExtraChainNode *node)
     // mode_ = DagMode::Light;
 #endif
 
-    status_ = DagStatus::Ready;
+    timestamp_bigger_sync_start_ = 0;
+    status_                      = DagStatus::Ready;
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
@@ -158,28 +159,28 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     }
 
     if (transaction.section() > current_section_ + 5) {
-        // TransactionResult transaction_result { .hash   = transaction.hash(),
-        //                                        .result = TransactionProveError::SectionTooBig };
+        /*
+        TransactionResult transaction_result { .hash   = transaction.hash(),
+                                               .result = TransactionProveError::SectionTooBig };
 
-        // if (!responder.identifiers().empty()) {
-        //     responder.send_response(transaction_result,
-        //                             MessageType::DagTransactionResult,
-        //                             SendMode::Focused,
-        //                             MessageStatus::Response);
-        // }
-        eLog("OHOOHO ____________________");
+        if (!responder.identifiers().empty()) {
+            responder.send_response(transaction_result,
+                                    MessageType::DagTransactionResult,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+        }
+        */
 
         add_to_cached_tx(transaction);
 
         // if (status_ != DagStatus::Ready && status_ != DagStatus::Final) {
         set_status(DagStatus::Sync);
-        sync_last_index = transaction.section();
-        eLog("________ {}", sync_last_index);
+        sync_last_index              = transaction.section();
+        timestamp_bigger_sync_start_ = Utils::current_date_ms();
+        eLog("[Dag] Section bigger: {}", sync_last_index);
 
         // if light -> remove all -> load light
-        request_sections(current_section_,
-                         std::min(sync_last_index, current_section_ + 100),
-                         responder.with_new_message_id());
+        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
         // }
 
         return {};
@@ -324,7 +325,8 @@ void Dag::process_cached_transactions() {
         }
     }
 
-    status_ = DagStatus::Ready;
+    timestamp_bigger_sync_start_ = 0;
+    status_                      = DagStatus::Ready;
     emit node->dagStatus(status_);
     set_sync_status(BlockchainSyncStatus::None);
 }
@@ -912,12 +914,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
-
-    node->network()->send_message(range,
-                                  MessageType::DagSections,
-                                  SendMode::Focused,
-                                  MessageStatus::Request,
-                                  responder_new);
+    responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
     eLog("[Dag] Request sections from {} to {}", range.first, range.last);
 }
@@ -1089,6 +1086,8 @@ void Dag::send_sync_request() {
     }
 
     bool need_sync = false;
+
+    eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
