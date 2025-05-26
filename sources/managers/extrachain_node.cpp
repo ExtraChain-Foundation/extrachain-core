@@ -469,12 +469,12 @@ void ExtraChainNode::start() {
             }
         }
     });
+#endif
 
     // Version compatibility: 0.20.0
     QThreadPool::globalInstance()->start([this]() {
         QDir("blocks").removeRecursively();
     });
-#endif
 }
 
 Dag* ExtraChainNode::dag() {
