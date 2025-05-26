@@ -810,7 +810,6 @@ std::optional<Transaction> Dag::search_transaction(const std::string &hash, int 
 //
 
 void Dag::start_sync() {
-    return;
     // start timer, after end -> again request
     if (status_ == DagStatus::Sync) {
         // eLog("BC 11 start_sync return");
@@ -835,7 +834,6 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    return;
     // temp
 #ifndef IS_RC
     if (status_ == DagStatus::Ready) {
