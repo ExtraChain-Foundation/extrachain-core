@@ -295,7 +295,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     broadcast_stored(owner_id, dir_row);
 
-    load_manager_.broadcast_stored_file(owner_id, dir_row.file_id);
+    // load_manager_.broadcast_stored_file(owner_id, dir_row.file_id);
+    load_manager_.broadcast_file_exist(owner_id, dir_row.file_id);
 
     return dir_row;
 }
@@ -1421,7 +1422,8 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
         // check real status
         load_info.dir_row.state = Dfs::FileState::Known;
-        load_manager_.active_downloads.insert({ file_link, load_info });
+        // load_manager_.active_downloads.insert({ file_link, load_info });
+        //TODO: what need to do here?
     }
 
     emit added(owner_id, dir_row);

@@ -644,7 +644,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
+    if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
         || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
         priority = SocketService::Priority::Low;
     }
@@ -683,7 +683,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     if (serialized_message.size() > 10000
-        && (non_serialized_message.message_type != MessageType::DfsStoreFragment
+        && (non_serialized_message.message_type != MessageType::DfsFileExistNotification
             && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
         eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
@@ -1331,7 +1331,7 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::DfsStoreFragment:
+    case MessageType::DfsFileExistNotification:
     case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
         if (!fragment_data_result.has_value()) {
@@ -1339,11 +1339,9 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        // TIMER_START(FRAG)
-        node->dfs()->download_manager().network_fragment(fragment_data_result.value());
-        // TIMER_END(FRAG)
+        if (type == MessageType::DfsFileExistNotification) {
+            //TODO: here I should request that file
 
-        if (type == MessageType::DfsStoreFragment) {
             // #ifdef IS_R
             sendBrodcastMessageFurther(package_data);
             // #else
@@ -1353,6 +1351,12 @@ void NetworkManager::messageReceived(const std::string &message,
             //                 sendBrodcastMessageFurther(package_data);
             //             });
             // #endif
+        }
+        else
+        {
+            // TIMER_START(FRAG)
+            node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value());
+            // TIMER_END(FRAG)
         }
 
         break;
@@ -1390,7 +1394,7 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
 
-        node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
+        node->dfs()->download_manager().share_stored_file(link_result->owner_id,
                                                               link_result->file_id,
                                                               responder);
 

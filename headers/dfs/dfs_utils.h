@@ -285,12 +285,12 @@ namespace Dfs {
         struct FragmentData {
             ActorId     owner_id;
             std::string file_id;
-            // hash
-            // std::vector<uint8_t
+            std::uint64_t full_size;
             std::string   data;
-            std::uint64_t offset; // fragment num
+            std::uint64_t offset;
+            std::uint64_t current_size;
         };
-        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset))
+        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, full_size, data, offset, current_size))
 
         struct FileState {
             ActorId        owner_id;
