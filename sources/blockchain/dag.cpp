@@ -98,6 +98,12 @@ Dag::Dag(ExtraChainNode *node)
     eLog("[Dag] Constructor: done");
 }
 
+void Dag::set_current_section(const BigNumber &new_current_section) {
+    if (current_section_ <= new_current_section) {
+        current_section_ = new_current_section;
+    }
+}
+
 void Dag::set_status(DagStatus status) {
     this->status_ = status;
     emit node->dagStatus(status_);
@@ -198,7 +204,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
             return std::unexpected(false);
         }
 
-        current_section_ = transaction.section();
+        set_current_section(transaction.section());
         update_range();
     }
 
@@ -389,7 +395,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Create new section
         Section section { .id = transaction.section(), .transactions = { transaction } };
 
-        current_section_ = section.id;
+        set_current_section(section.id);
 
         // Check if cache needs updating
         cache_.check_and_update_cache(current_section_);
@@ -462,7 +468,7 @@ bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
                 new_section.transactions.insert(tx);
             }
 
-            current_section_ = section_id;
+            set_current_section(section_id);
             cache_.check_and_update_cache(current_section_);
 
             update_range();

@@ -150,6 +150,8 @@ public:
         return current_section_;
     }
 
+    void set_current_section(const BigNumber &new_current_section);
+
     /**
      * @brief Get the current DAG operation mode
      *
