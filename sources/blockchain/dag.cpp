@@ -560,14 +560,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     const ActorId &mainActorId    = node->accountController()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
-    if (tx.type() != TransactionType::Repeatable) {
-        const auto accounts = node->accountController()->accountsIds();
-        for (const auto &accountId : accounts) {
-            if (targetSender == accountId || targetReceiver == accountId) {
-                return TransactionProveError::SelfPleasure;
-            }
-        }
-    }
+    // if (tx.type() != TransactionType::Repeatable) {
+    //     const auto accounts = node->accountController()->accountsIds();
+    //     for (const auto &accountId : accounts) {
+    //         if (targetSender == accountId || targetReceiver == accountId) {
+    //             return TransactionProveError::SelfPleasure;
+    //         }
+    //     }
+    // }
 
     // Verify transaction hash integrity
     auto tx_copy = tx;
