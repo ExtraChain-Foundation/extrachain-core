@@ -53,15 +53,20 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     auto       cache_section = cached_section_;
 
     for (const auto& row : rows) {
-        auto actor_id = ActorId::create(row.at("actor_id"));
-        auto token_id = TokenId::create(row.at("token_id"));
-        auto balance  = BigNumberFloat::create(row.at("balance"));
+        try {
+            auto actor_id = ActorId::create(row.at("actor_id"));
+            auto token_id = TokenId::create(row.at("token_id"));
+            auto balance  = BigNumberFloat::create(row.at("balance"));
 
-        if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        } catch (const std::out_of_range& e) {
+            eLog("[DagCache] Missing required field in database row: {}", e.what());
             continue;
         }
-
-        balances[{ actor_id.value(), token_id.value() }] = balance.value();
     }
 
     return { cache_section, balances };

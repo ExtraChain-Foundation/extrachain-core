@@ -99,7 +99,7 @@ Dag::Dag(ExtraChainNode *node)
 }
 
 void Dag::set_current_section(const BigNumber &new_current_section) {
-    if (current_section_ <= new_current_section) {
+    if (current_section_ < new_current_section) {
         current_section_ = new_current_section;
     }
 }
@@ -863,11 +863,13 @@ void Dag::start_check() {
 }
 
 void Dag::network_status_sync_request(const Responder &responder) {
-    auto          section        = this->read_section(current_section_);
-    BigNumber     section_id     = section.has_value() ? section->id : BigNumber(-1);
-    auto          hashs          = section.has_value() ? section->hashs() : std::set<std::string> {};
-    auto          zero_section   = this->read_section(BigNumber(0));
-    std::uint64_t zero_timestamp = zero_section->transactions.size() == 1 ? zero_section->middle() : 0;
+    auto      section      = this->read_section(current_section_);
+    BigNumber section_id   = section.has_value() ? section->id : BigNumber(-1);
+    auto      hashs        = section.has_value() ? section->hashs() : std::set<std::string> {};
+    auto      zero_section = this->read_section(BigNumber(0));
+
+    std::uint64_t zero_timestamp =
+        zero_section.has_value() ? (zero_section->transactions.size() == 1 ? zero_section->middle() : 0) : 0;
 
     auto last_info = DagLastInfo { .last_section_id = section_id,
                                    .last_hash       = hashs,
@@ -1246,6 +1248,10 @@ std::set<std::string> Section::hashs() {
 }
 
 std::uint64_t Section::middle() {
+    if (transactions.empty()) {
+        return 0;
+    }
+
     std::uint64_t sum = 0;
 
     for (const auto &tx : transactions) {

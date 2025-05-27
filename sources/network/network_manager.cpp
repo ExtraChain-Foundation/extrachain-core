@@ -710,8 +710,8 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     auto k = kkk.elapsed();
-    if (k > 0) {
-        eLog("_____ {}", k);
+    if (k > 5) {
+        eLog("____ send {} ms {}", k, message_type);
     }
 }
 
