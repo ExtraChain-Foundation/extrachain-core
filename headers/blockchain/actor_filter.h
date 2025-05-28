@@ -72,7 +72,7 @@ private:
      * @brief Calculates a hash for the contents of a bucket
      * @param bucketItems Vector of actor strings in the bucket
      * @return 64-bit hash representing the bucket contents
-     * 
+     *
      * The function produces a deterministic hash by:
      * 1. Sorting items for consistent ordering
      * 2. Removing duplicates
@@ -105,7 +105,7 @@ private:
     /**
      * @struct BucketHashes
      * @brief Container for storing hash values of all buckets
-     * 
+     *
      * Initializes all hash values to zero by default.
      */
     struct BucketHashes {
@@ -119,7 +119,7 @@ private:
     /**
      * @brief Creates hash values for all buckets based on current local actors
      * @return BucketHashes structure containing hash values for all buckets
-     * 
+     *
      * This function distributes all local actors into their respective buckets
      * and computes a hash value for each bucket's contents.
      */
@@ -175,7 +175,7 @@ private:
      * @return Vector of bucket indices that differ between local and remote
      */
     static std::vector<uint8_t> find_different_buckets(const BucketHashes& local_hashes,
-                                                     const BucketHashes& remote_hashes) {
+                                                       const BucketHashes& remote_hashes) {
         std::vector<uint8_t> different_buckets;
 
         for (size_t i = 0; i < BUCKET_COUNT; i++) {
@@ -191,7 +191,7 @@ private:
      * @brief Retrieves all actors from specified buckets
      * @param bucket_indices Vector of bucket indices to retrieve actors from
      * @return Vector of unique ActorId objects from the specified buckets
-     * 
+     *
      * This function collects all actors that belong to the specified buckets
      * while ensuring that no duplicates are included in the result.
      */
@@ -242,7 +242,7 @@ public:
     /**
      * @brief Creates a synchronization request for sending to another node
      * @return Vector of bytes containing serialized bucket hashes
-     * 
+     *
      * This function generates hash values for all buckets of local actors
      * and serializes them for transmission to a remote node.
      */
@@ -258,7 +258,7 @@ public:
      * @brief Processes a received synchronization request
      * @param request_data Vector of bytes containing serialized bucket hashes from remote node
      * @return Vector of ActorId objects that should be sent to the remote node
-     * 
+     *
      * This function compares the received bucket hashes with local bucket hashes
      * and returns the actors from buckets that differ, which should be sent
      * to the requesting node.
@@ -280,7 +280,7 @@ public:
     /**
      * @brief Updates local actor collection with received actor IDs
      * @param received_ids Vector of ActorId objects received from a remote node
-     * 
+     *
      * This function adds the received actor IDs to the local collection,
      * ensuring that no duplicates are added.
      */

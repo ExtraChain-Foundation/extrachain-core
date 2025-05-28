@@ -58,8 +58,6 @@ Dag::Dag(ExtraChainNode *node)
     } else {
         // QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
         clear_dag();
-        cache_.reset_db();
-        cache_.init_db();
     }
 
     transaction_cache_.make_files();
@@ -223,12 +221,12 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
 }
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
-    if (sended_transactions.find(hash) == sended_transactions.end()) {
+    if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
-    auto transaction = this->sended_transactions[hash];
+    auto transaction = this->sended_transactions_[hash];
     // this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
@@ -241,7 +239,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
-        this->sended_transactions.erase(hash);
+        this->sended_transactions_.erase(hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -577,7 +575,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Verify transaction hash integrity
     auto tx_copy = tx;
-    tx_copy.calculate_hash();
+    tx_copy.update_hash();
     if (tx.hash() != tx_copy.hash()) {
         return TransactionProveError::WrongHash;
     }
@@ -746,7 +744,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
-    sended_transactions.insert({ transaction.hash(), transaction });
+    sended_transactions_.insert({ transaction.hash(), transaction });
 }
 
 void Dag::update_range() {
@@ -935,11 +933,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
-    std::vector<Transaction> txs;
-
-    if (auto count = (to - from).to_int()) {
-        txs.reserve(count.value() * 1.2);
-    }
+    std::set<Transaction> txs;
 
     for (BigNumber i = from; i <= to; i++) {
         auto section = this->read_section(i);
@@ -948,7 +942,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         }
 
         for (const auto &tx : section->transactions) {
-            txs.push_back(tx);
+            txs.insert(tx);
         }
     }
 
@@ -1211,18 +1205,30 @@ void Dag::send_sync_request() {
 
 void Dag::clear_dag() {
 #ifdef IS_RC
-    current_section_     = BigNumber(-1);
-    first_saved_section_ = BigNumber(-1);
+    auto max_section = cache_.calculate_genesis_section(current_section_);
+
+    for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
+        QString section_path = QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + i.to_string());
+
+        QDir dir(section_path);
+        if (dir.exists()) {
+            dir.removeRecursively();
+        }
+    }
+
+    QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).remove();
     QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
         .remove();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/0")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/1")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/2")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/3")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
-    QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).remove();
+
+    auto guard = cached_txs_.lock_mut();
+    guard->clear();
+    // sended_transactions.clear();
+    current_section_     = BigNumber(-1);
+    first_saved_section_ = BigNumber(-1);
+    status_              = DagStatus::Started;
+
+    cache_.reset_db();
+    cache_.init_db();
 #endif
 }
 

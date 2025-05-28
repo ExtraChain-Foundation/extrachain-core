@@ -88,10 +88,10 @@ void DataMiningManager::requestCoinReward() {
     }
 
     Transaction transaction;
-    transaction.setSender(actor.id());
-    transaction.setReceiver(actor.id());
-    transaction.setAmount(amount);
-    transaction.setType(TransactionType::Reward);
+    transaction.set_sender(actor.id());
+    transaction.set_receiver(actor.id());
+    transaction.set_amount(amount);
+    transaction.set_type(TransactionType::Reward);
     // transaction.set_section(node->dag()->current_section() + 1);
     // transaction.sign(actor);
     auto tx_result = node->dag()->prepare_transaction(transaction, actor);
@@ -101,12 +101,12 @@ void DataMiningManager::requestCoinReward() {
     }
 
     Transaction tx_conv;
-    tx_conv.setSender(actor.id());
-    tx_conv.setReceiver(actor.id());
-    tx_conv.setType(TransactionType::Conversion);
+    tx_conv.set_sender(actor.id());
+    tx_conv.set_receiver(actor.id());
+    tx_conv.set_type(TransactionType::Conversion);
     tx_conv.set_meta(ActorId().to_string());
-    tx_conv.setAmount(transaction.amount());
-    tx_conv.setToken(
+    tx_conv.set_amount(transaction.amount());
+    tx_conv.set_token(
         ActorId("468faf2f1be6504a9a26f7f027"
                 "f7e43380b0d77d"));
 

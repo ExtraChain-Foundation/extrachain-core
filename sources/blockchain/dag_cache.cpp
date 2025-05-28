@@ -23,7 +23,7 @@
 #include "utils/db_connector.h"
 
 DagCache::DagCache(ExtraChainNode* node)
-    : node_(node) {
+    : node(node) {
 }
 
 DagCache::~DagCache() {
@@ -282,7 +282,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     // Process transactions after the balance_start_section up to current_section
     auto to = to_section.has_value() ? to_section.value() : current_section;
     for (BigNumber i = balance_start_section; i <= to; i++) {
-        auto section = node_->dag()->read_section(i);
+        auto section = node->dag()->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
         }
@@ -358,18 +358,18 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
 
     // Use read_section callback from DAG
     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
-        return node_->dag()->read_section(section_id);
+        return node->dag()->read_section(section_id);
     };
 
     // Update cache to safe section (genesis + lag)
     bool result = update_to_genesis_section(safe_genesis_section,
                                             current_section,
-                                            node_->dag()->first_saved_section(),
+                                            node->dag()->first_saved_section(),
                                             read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
-        node_->dag()->update_range();
+        node->dag()->update_range();
         return true;
     }
 
@@ -464,7 +464,7 @@ bool DagCache::update_to_genesis_section(
     // Update cached section
     cached_section_ = genesis_section;
     eLog("[DagCache] Cache updated to section {}", cached_section_);
-    node_->dag()->update_range();
+    node->dag()->update_range();
     return true;
 }
 

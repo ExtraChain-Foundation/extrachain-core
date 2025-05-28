@@ -403,10 +403,10 @@ public:
     void process_cached_transactions();
 
 private:
-    ExtraChainNode                              *node;                // Parent node reference
-    TransactionCache                             transaction_cache_;  // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions; // Transactions sent but not yet confirmed
-    DagCache                                     cache_;              // Balance cache for fast calculations
+    ExtraChainNode                              *node;                 // Parent node reference
+    TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
+    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet confirmed
+    DagCache                                     cache_;               // Balance cache for fast calculations
 
     BigNumber current_section_     = BigNumber(-1);      // Current (latest) section ID
     BigNumber first_saved_section_ = BigNumber(-1);      // First section ID saved in the blockchain

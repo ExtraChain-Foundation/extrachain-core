@@ -85,15 +85,15 @@ enum class TransactionProveError {
 
 class EXTRACHAIN_EXPORT Transaction {
 private:
-    ActorId                    m_sender;                               // sender address
-    ActorId                    m_receiver;                             // receiver address
-    BigNumberFloat             m_amount;                               // coin amount
+    ActorId                    sender_;                               // sender address
+    ActorId                    receiver_;                             // receiver address
+    BigNumberFloat             amount_;                               // coin amount
     std::optional<std::string> meta_;                                 // additional payload field
-    ActorId                    m_token;                                // token contract address
-    BigNumber                  m_section = BigNumber("-1");            // section id at the moment of tx creation
-    std::string                m_hash;                                 // hash from all fields
-    Signature                  m_signature = Signature();              // digital signature
-    TransactionType            m_type      = TransactionType::Regular; // transaction type
+    ActorId                    token_;                                // token contract address
+    BigNumber                  section_ = BigNumber("-1");            // section id at the moment of tx creation
+    std::string                hash_;                                 // hash from all fields
+    Signature                  signature_ = Signature();              // digital signature
+    TransactionType            type_      = TransactionType::Regular; // transaction type
     std::uint64_t              timestamp_;
     std::set<std::string>      prev_hashs_;
 
@@ -101,26 +101,13 @@ public:
     // Construct empty transaction
     Transaction();
 
-    // Construct transaction
-    Transaction(const ActorId        &sender,
-                const ActorId        &receiver,
-                const BigNumberFloat &amount,
-                const ActorId        &token = ActorId(),
-                const std::string    &data  = std::string());
-
     Transaction(const Transaction &other);
 
     Transaction(Transaction &&other) noexcept;
 
-    // digital signature
+    // for signature
     bool sign(const Actor<KeyPrivate> &actor);
     bool verify(const Actor<KeyPublic> &actor) const;
-
-    // void setSenderBalance(BigNumber balance);
-    // void setReceiverBalance(BigNumber balance);
-    void set_section(const BigNumber &value);
-    void setSignature(const Signature &value);
-    void setHash(const std::string &value);
 
     ActorId                    sender() const;
     ActorId                    receiver() const;
@@ -131,57 +118,46 @@ public:
     ActorId                    token() const;
     TransactionType            type() const;
     std::uint64_t              timestamp() const;
-    std::set<std::string> prev_hashs() const;
-    Signature signature() const;
+    std::set<std::string>      prev_hashs() const;
+    Signature                  signature() const;
 
     /**
-     * Calculates hash of this block and writes hash to "hash" variable.
+     * Calculates hash of this transaction and writes hash to "hash" variable.
      * Uses blake3.
      */
-    void calculate_hash();
+    std::string calculate_hash() const;
 
-    virtual bool isEmpty() const;
-    virtual bool isBurn() const;
-    bool         isSigned() const;
+    void update_hash();
+
+    virtual bool is_empty() const;
+    virtual bool is_burn() const;
+    bool         is_signed() const;
     bool         operator<(const Transaction &other) const;
 
     bool         operator==(const Transaction &transaction) const;
     void         operator=(const Transaction &transaction);
     Transaction &operator=(Transaction &&other) noexcept;
 
-    void setToken(const ActorId &value);
+    void set_section(const BigNumber &value);
+    void set_type(TransactionType newType);
+    void set_sender(const ActorId &value);
+    void set_receiver(const ActorId &value);
+    void set_token(const ActorId &value);
+    void set_amount(const BigNumberFloat &value);
+    void set_timestamp(std::uint64_t new_timestamp);
     void set_meta(const std::string &value);
-    void setAmount(const BigNumberFloat &value);
-    void setSender(const ActorId &value);
-    void setReceiver(const ActorId &value);
-    bool isRewardTransaction() const;
-    bool isConversionTransaction() const;
-    void setType(TransactionType newType);
-    void set_timestamp(std::uint64_t new_timestamp) {
-        this->timestamp_ = new_timestamp;
-    }
-    void set_prev_hashs(const std::set<std::string> &prev_hashs) {
-        this->prev_hashs_ = prev_hashs;
-    }
+    void set_prev_hashs(const std::set<std::string> &prev_hashs);
+
     void insert_prev_hash(const std::string hash) {
         this->prev_hashs_.insert(hash);
     }
 
-    BOOST_DESCRIBE_CLASS(Transaction,
-                         (),
-                         (),
-                         (),
-                         (m_section,
-                          m_type,
-                          m_sender,
-                          m_receiver,
-                          m_token,
-                          m_amount,
-                          timestamp_,
-                          meta_,
-                          prev_hashs_,
-                          m_hash,
-                          m_signature))
+    BOOST_DESCRIBE_CLASS(
+        Transaction,
+        (),
+        (),
+        (),
+        (section_, type_, sender_, receiver_, token_, amount_, timestamp_, meta_, prev_hashs_, hash_, signature_))
 };
 
 struct TransactionInfo {

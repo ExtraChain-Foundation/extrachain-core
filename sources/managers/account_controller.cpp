@@ -98,8 +98,8 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
 }
 
 bool AccountController::rename_wallet(const ActorId     &profileActor,
-                                     const ActorId     &actorId,
-                                     const std::string &walletName) {
+                                      const ActorId     &actorId,
+                                      const std::string &walletName) {
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     return profile.rename_wallet(actorId, walletName);
 }

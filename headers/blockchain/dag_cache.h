@@ -196,7 +196,7 @@ public:
     void reset_db();
 
 private:
-    ExtraChainNode*              node_;                           // Node reference
+    ExtraChainNode*              node;                            // Node reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized

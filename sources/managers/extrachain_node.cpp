@@ -200,9 +200,9 @@ bool ExtraChainNode::create_new_dag() {
     auto actor = m_accountController->system_actor();
 
     Transaction tx;
-    tx.setSender(actor.id());
-    tx.setReceiver(actor.id());
-    tx.setType(TransactionType::Genesis);
+    tx.set_sender(actor.id());
+    tx.set_receiver(actor.id());
+    tx.set_type(TransactionType::Genesis);
 
     auto prepared_tx = dag_->prepare_transaction(tx, actor);
     if (!prepared_tx.has_value()) {
@@ -491,7 +491,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::ZeroAmount);
     }
 
-    if (tx.isEmpty() && !tx.isBurn()) {
+    if (tx.is_empty() && !tx.is_burn()) {
         eWarning("Can not create: {}. Transaction is empty", tx);
         return std::unexpected(TransactionError::EmptyTransaction);
     }
@@ -546,15 +546,15 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     ActorId system_id = m_accountController->system_actor().id();
 
     Transaction transaction;
-    transaction.setSender(system_id);
-    transaction.setReceiver(owner_id);
-    transaction.setAmount(BigNumberFloat("500", NumeralBase::Dec));
+    transaction.set_sender(system_id);
+    transaction.set_receiver(owner_id);
+    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
 #ifdef QT_DEBUG
-    transaction.setAmount(BigNumberFloat("1.123", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
-    transaction.setToken(token_id); // TODO: get token_id from json
+    transaction.set_token(token_id); // TODO: get token_id from json
     transaction.set_meta(std::to_string(type));
-    transaction.setType(TransactionType::Repeatable);
+    transaction.set_type(TransactionType::Repeatable);
     this->send_transaction(transaction, m_accountController->system_actor());
     // transaction.setHash()
 
@@ -599,9 +599,11 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
                                                                                ActorId        token) {
     auto actor = m_accountController->currentWallet();
 
-    Transaction tx(actor.id(), receiver, amount, token);
-    // add sent tx balances
-    tx.setToken(token);
+    Transaction tx;
+    tx.set_sender(actor.id());
+    tx.set_receiver(receiver);
+    tx.set_amount(amount);
+    tx.set_token(token);
 
     if (actor.empty()) {
         eWarning("Can not create {}. There no current user", tx);
@@ -693,8 +695,11 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 
     if (receiver.is_zero() && amount > 0) {
         if (!actor->get().empty()) {
-            Transaction tx(actor->get().id(), receiver, amount);
-            tx.setToken(token);
+            Transaction tx;
+            tx.set_sender(actor->get().id());
+            tx.set_receiver(receiver);
+            tx.set_amount(amount);
+            tx.set_token(token);
 
             eLog("Attempting to create: {} from user {}", tx, actor->get().id());
 
@@ -709,10 +714,12 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 
     if (!actor->get().empty()) {
         eLog("{}", actor->get().id());
-        Transaction tx(actor->get().id(), receiver, amount);
-        // add sent tx balances
+        Transaction tx;
+        tx.set_sender(actor->get().id());
+        tx.set_receiver(receiver);
+        tx.set_amount(amount);
+        tx.set_token(token);
 
-        tx.setToken(token);
         //        if (actorIndex->network_id() != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->network_id()))
         //                tx.setSenderBalance(BigNumber(0));

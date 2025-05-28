@@ -887,8 +887,7 @@ namespace Utils {
      * }
      * @endcode
      */
-    EXTRACHAIN_EXPORT VersionCompareResult compare_versions(const std::string &current,
-                                                            const std::string &latest);
+    EXTRACHAIN_EXPORT VersionCompareResult compare_versions(const std::string &current, const std::string &latest);
 
     /**
      * @brief Helper function that checks if the latest version is newer than current
