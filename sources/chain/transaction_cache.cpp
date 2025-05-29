@@ -59,6 +59,7 @@ void TransactionCache::cache() {
 
     eLog("[TransactionCache] Start first cache");
 
+    // TODO
     // auto ids = node->accountController()->accountsIds();
     // auto txs = node->blockchain()
     //                ->getBlockIndex()

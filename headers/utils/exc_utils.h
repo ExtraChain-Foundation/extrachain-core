@@ -901,7 +901,7 @@ namespace Utils {
 } // namespace Utils
 
 namespace ChainConst {
-    // Main blockchain folder
+    // Main dag folder
     static const int ACTOR_SIZE = 40;
 
     // Temporary folder

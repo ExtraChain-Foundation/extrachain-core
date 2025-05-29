@@ -80,7 +80,7 @@ void DataMiningManager::requestCoinReward() {
     //      amount,
     //      totalBytes.first,
     //      totalBytes.second,
-    //      node->blockchain()->getBlocksStored());
+    //      node->dag count stored);
 
     if (amount <= 0) {
         eLog("[Reward] Can't send amount, because amount = 0");
@@ -143,7 +143,7 @@ void DataMiningManager::requestCoinReward() {
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {
-    // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(blocksStoredSize/blockchainSize) * k (k=100)
+    // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
     node->dfs()->refresh_calculate();
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
@@ -163,23 +163,22 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
-    // auto blocksStored     = BigNumberFloat(node->blockchain()->getBlocksStored());
+    // auto sectionsStored     =
     auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
     res *= KoefReward;
 
     // eLog(
-    //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Blocks ratio: {}/{}, Multiplier:
-    //     , " "Result: {}" "100", sizeTaken, totalDfsSize, totalBytesSecond, totalBytesFirst, blocksStored,
-    //     lastIndex,
-    //     res);
+    //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Sections ratio: {}/{},
+    //     Multiplier: , " "Result: {}" "100", sizeTaken, totalDfsSize, totalBytesSecond, totalBytesFirst,
+    //     sextionsStored, lastIndex, res);
 
     return res;
 }
 
 BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
     if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
-        // eLog("{} {} {}", "[Blockchain] Cannot calculate reward due to division by zero. BytesSent, total
+        // eLog("{} {} {}", "[Reward] Cannot calculate reward due to division by zero. BytesSent, total
         // dfs:"
         //, requestReward.BytesSent, node->dfs()->totalDfsSize());
         return BigNumberFloat(0);

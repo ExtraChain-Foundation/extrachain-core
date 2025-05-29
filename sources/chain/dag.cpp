@@ -56,15 +56,15 @@ Dag::Dag(ExtraChainNode *node)
             file.close();
         }
     } else {
-        // QDir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
     }
 
     transaction_cache_.make_files();
     cache_.init_db();
 
-    // if (!QDir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER)).exists()) {
-    //     QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
+    // if (!QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).exists()) {
+    //     QDir().mkdir(QString::fromStdString(ChainConst::CHAIN_FOLDER));
     //     transaction_cache_.make_files();
     // }
 

@@ -54,8 +54,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     node->start(); // TODO: remove
 
     node->calculateBlockCount();
-    //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
-    //        node.blockchain()->getBlockZero();
+
     return system_actor;
 }
 
