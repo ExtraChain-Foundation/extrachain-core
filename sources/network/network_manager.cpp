@@ -305,7 +305,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
 
                     if (can_connect) {
-                        connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+                        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
             });
@@ -710,8 +710,8 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     auto k = kkk.elapsed();
-    if (k > 0) {
-        eLog("_____ {}", k);
+    if (k > 5) {
+        eLog("____ send {} ms {}", k, message_type);
     }
 }
 
@@ -1004,6 +1004,7 @@ void NetworkManager::messageReceived(const std::string &message,
     Responder responder(this);
     responder.set_message_id(messageId);
     responder.add_identifier(identifier);
+    responder.set_message_type(type);
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
