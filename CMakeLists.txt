@@ -57,15 +57,15 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/collection_template.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_vector.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_id.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_index.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/actor_filter.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/transaction_cache.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/private_profile.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/dag.h
-    ${CMAKE_CURRENT_LIST_DIR}/headers/blockchain/dag_cache.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor_id.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor_index.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor_filter.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/transaction_cache.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/private_profile.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
@@ -119,13 +119,13 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_id.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/actor_index.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/transaction_cache.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/private_profile.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/dag.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/sources/blockchain/dag_cache.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_id.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_index.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction_cache.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/private_profile.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp

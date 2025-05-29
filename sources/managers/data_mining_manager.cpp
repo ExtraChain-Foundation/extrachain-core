@@ -18,7 +18,7 @@
  */
 
 #include "managers/data_mining_manager.h"
-#include "blockchain/dag.h"
+#include "chain/dag.h"
 #include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
 #include "dfs/dfs_controller.h"

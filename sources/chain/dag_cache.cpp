@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/dag_cache.h"
-#include "blockchain/dag.h"
+#include "chain/dag_cache.h"
+#include "chain/dag.h"
 #include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
 
@@ -544,8 +544,8 @@ bool DagCache::init_db() {
 
     // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
 
-    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_CACHE_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
 
     std::string db_path = ChainConst::BALANCE_CACHE;
     db_                 = std::make_unique<DbConnector>(db_path);

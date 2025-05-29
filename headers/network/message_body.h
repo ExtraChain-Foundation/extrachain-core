@@ -23,7 +23,7 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "utils/exc_utils.h"
 
 enum class MessageType {
@@ -42,7 +42,7 @@ enum class MessageType {
     DagSections          = 32,
     DagLightData         = 33,
 
-    BlockchainSyncLastInfo = 39,
+    DagSyncLastInfo = 39,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now

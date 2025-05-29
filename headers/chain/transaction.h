@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 

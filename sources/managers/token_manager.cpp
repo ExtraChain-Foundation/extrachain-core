@@ -22,7 +22,7 @@
 #include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "blockchain/transaction.h"
+#include "chain/transaction.h"
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 

@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/dag.h"
+#include "chain/dag.h"
 
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
@@ -28,7 +28,7 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node) {
-    QFile file(QString::fromStdString(ChainConst::BLOCKCHAIN_RANGE_PATH));
+    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
 
@@ -109,7 +109,7 @@ void Dag::set_status(DagStatus status) {
 
 std::string Dag::file_folder(const BigNumber &section) const {
     BigNumber file_section = section / Config::DataStorage::SECTION_SIZE;
-    auto      path         = fmt::format("{}/{}", ChainConst::BLOCKCHAIN_FOLDER, file_section.to_string());
+    auto      path         = fmt::format("{}/{}", ChainConst::DAG_FOLDER, file_section.to_string());
     return path;
 }
 
@@ -781,12 +781,12 @@ void Dag::update_range() {
     //      current_section_,
     //      cache_.section());
 
-    QFile file(QString::fromStdString(ChainConst::BLOCKCHAIN_RANGE_PATH));
+    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
         file.write(json.data());
         file.close();
 
-        QFile check_file(QString::fromStdString(ChainConst::BLOCKCHAIN_RANGE_PATH));
+        QFile check_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
         if (check_file.open(QFile::ReadOnly)) {
             auto content = check_file.readAll();
             // eLog("[Dag] Range file written: {}", content.toStdString());
@@ -851,7 +851,7 @@ void Dag::start_sync() {
     set_sync_status(DagSyncStatus::LastInfo);
     requests_count = node->network()->active_connections_count();
     node->network()->send_message(true,
-                                  MessageType::BlockchainSyncLastInfo,
+                                  MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 }
@@ -877,7 +877,7 @@ void Dag::start_check() {
     check_status_  = DagSyncStatus::LastInfo;
     requests_count = node->network()->active_connections_count();
     node->network()->send_message(true,
-                                  MessageType::BlockchainSyncLastInfo,
+                                  MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 
@@ -897,10 +897,7 @@ void Dag::network_status_sync_request(const Responder &responder) {
                                    .last_hash       = hashs,
                                    .zero_date       = zero_section.has_value() ? zero_timestamp : 0 };
     // eLog("network_status_sync_request, send: {}", last_info);
-    responder.send_response(last_info,
-                            MessageType::BlockchainSyncLastInfo,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    responder.send_response(last_info, MessageType::DagSyncLastInfo, SendMode::Focused, MessageStatus::Response);
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
@@ -1232,7 +1229,7 @@ void Dag::clear_dag() {
     auto max_section = cache_.calculate_genesis_section(current_section_);
 
     for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
-        QString section_path = QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER + "/" + i.to_string());
+        QString section_path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
 
         QDir dir(section_path);
         if (dir.exists()) {
@@ -1241,7 +1238,7 @@ void Dag::clear_dag() {
     }
 
     QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-    QFile(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER + "/" + ChainConst::BLOCKCHAIN_RANGE)).remove();
+    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
 
     auto guard = cached_txs_.lock_mut();
     guard->clear();

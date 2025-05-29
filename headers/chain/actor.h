@@ -25,7 +25,7 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"

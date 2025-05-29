@@ -23,8 +23,8 @@
 #include <string>
 #include <vector>
 
-#include "blockchain/actor.h"
-#include "blockchain/transaction.h"
+#include "chain/actor.h"
+#include "chain/transaction.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/db_connector.h"

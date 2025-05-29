@@ -24,7 +24,7 @@
 #include <cmath>
 #include <cstring>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 
 /**
  * @class ActorSynchronizer

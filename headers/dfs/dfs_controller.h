@@ -34,7 +34,7 @@
 #include <filesystem>
 #include <QThread>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"

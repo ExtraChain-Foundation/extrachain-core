@@ -343,7 +343,7 @@ void Utils::wipeDataFiles() {
     // QString current = QDir::currentPath();
 
     QDir(QString::fromStdString(ChainConst::ACTORS_FOLDER)).removeRecursively();
-    QDir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+    QDir(QString::fromStdString(ChainConst::DAG_FOLDER)).removeRecursively();
     QDir(QString::fromStdString(DfsB::DFS_FOLDER)).removeRecursively();
     QDir(QString::fromStdString(Profiles::folder)).removeRecursively();
     QDir("tmp").removeRecursively();

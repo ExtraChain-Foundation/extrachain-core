@@ -24,7 +24,7 @@
 #include "dfs/dfs_controller.h"
 #include "dfs/load_manager.h"
 #include "utils/exc_logs.h"
-#include "blockchain/actor_index.h"
+#include "chain/actor_index.h"
 #include "utils/thread_pool_boost.h"
 
 DirsManager::DirsManager(ExtraChainNode* node)

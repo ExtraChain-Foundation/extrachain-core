@@ -22,9 +22,9 @@
 #include <boost/describe.hpp>
 
 #include "utils/bignumber.h"
-#include "blockchain/transaction.h"
-#include "blockchain/transaction_cache.h"
-#include "blockchain/dag_cache.h"
+#include "chain/transaction.h"
+#include "chain/transaction_cache.h"
+#include "chain/dag_cache.h"
 
 #include "3rdparty/rustex.h"
 

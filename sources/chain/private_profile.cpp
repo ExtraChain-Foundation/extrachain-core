@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/private_profile.h"
+#include "chain/private_profile.h"
 
 #include "managers/extrachain_node.h"
 #include "encryption/encryption_tools.h"

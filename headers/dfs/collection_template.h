@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "utils/db_schema.h"
 #include "utils/exc_utils.h"
 #include <boost/describe.hpp>

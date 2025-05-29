@@ -911,14 +911,14 @@ namespace ChainConst {
     static const std::string ACTORS_FOLDER = "actors";
 
     // Folder with blocks
-    static const std::string BLOCKCHAIN_FOLDER     = "dag";
-    static const std::string BLOCKCHAIN_RANGE      = "range";
-    static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
+    static const std::string DAG_FOLDER     = "dag";
+    static const std::string DAG_RANGE      = "range";
+    static const std::string DAG_RANGE_PATH = DAG_FOLDER + "/" + DAG_RANGE;
 
     // Cache
-    static const std::string BLOCKCHAIN_CACHE_FOLDER = BLOCKCHAIN_FOLDER + "/cache";
-    static const std::string TRANSACTION_CACHE       = BLOCKCHAIN_FOLDER + "/cache/SelfTransactions.db";
-    static const std::string BALANCE_CACHE           = BLOCKCHAIN_FOLDER + "/cache/BalanceCache.db";
+    static const std::string DAG_CACHE_FOLDER  = DAG_FOLDER + "/cache";
+    static const std::string TRANSACTION_CACHE = DAG_CACHE_FOLDER + "/SelfTransactions.db";
+    static const std::string BALANCE_CACHE     = DAG_CACHE_FOLDER + "/BalanceCache.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;

@@ -24,13 +24,13 @@
 #include <QJsonObject>
 #include <sodium/core.h>
 
-#include "blockchain/dag.h"
+#include "chain/dag.h"
 #include "extrachain_version.h"
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 #include "dfs/dfs_controller.h"
 // #include "dfs/permission_manager.h"
-#include "blockchain/actor_index.h"
-#include "blockchain/transaction.h"
+#include "chain/actor_index.h"
+#include "chain/transaction.h"
 #include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"
 #include "managers/data_mining_manager.h"
@@ -900,7 +900,7 @@ void ExtraChainNode::prepareFolders() {
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));
     QDir().mkpath(QString::fromStdString(ChainConst::TMP_FOLDER));
-    QDir().mkpath(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkpath(QString::fromStdString(ChainConst::DAG_FOLDER));
     QDir().mkpath(QString::fromStdString(ChainConst::ACTORS_FOLDER));
 
     generate_network_identifier();

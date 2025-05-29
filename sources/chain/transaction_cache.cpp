@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/transaction_cache.h"
+#include "chain/transaction_cache.h"
 
 #include <QDir>
 
@@ -34,8 +34,8 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 }
 
 void TransactionCache::make_files() {
-    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_CACHE_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
 
     is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size() != 0;
     if (is_exists) {

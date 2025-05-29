@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "blockchain/actor.h"
-#include "blockchain/private_profile.h"
+#include "chain/actor.h"
+#include "chain/private_profile.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;
