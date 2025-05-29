@@ -746,7 +746,7 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
         return "Can not create transaction without amount.";
     case TransactionError::EmptyTransaction:
         return "Can not create transaction. Transaction is empty.";
-    case TransactionError::NoLastBlock:
+    case TransactionError::NoLastSection:
         return "There is no last block in blockchain.";
     case TransactionError::InsufficientFunds:
         return "Can not create transaction. There is not enough coins/tokens in wallet.";
@@ -899,9 +899,9 @@ void ExtraChainNode::prepareFolders() {
     }
 
     QDir().mkpath(QString::fromStdString(Profiles::folder));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::TMP_FOLDER));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkpath(QString::fromStdString(BlockchainConst::ACTORS_FOLDER));
+    QDir().mkpath(QString::fromStdString(ChainConst::TMP_FOLDER));
+    QDir().mkpath(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkpath(QString::fromStdString(ChainConst::ACTORS_FOLDER));
 
     generate_network_identifier();
 }

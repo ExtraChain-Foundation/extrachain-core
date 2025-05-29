@@ -59,7 +59,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         return std::unexpected(CreateTokenError::NoConnections);
     }
 
-    if (token_count < 0 || token_count >= BlockchainConst::MAX_TOKEN_COUNT) {
+    if (token_count < 0 || token_count >= ChainConst::MAX_TOKEN_COUNT) {
         eLog(
             "[TokenManager] Error create token. Count: {} | name: {} | ticker: {} | rull address: {} | "
             "color: {}",

@@ -241,7 +241,7 @@ const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
-const std::vector<ActorId> AccountController::accountsIds() const {
+const std::vector<ActorId> AccountController::accounts_ids() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
         ids.push_back(currentProfile().actors()[i].id());

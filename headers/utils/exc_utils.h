@@ -900,14 +900,12 @@ namespace Utils {
 
 } // namespace Utils
 
-namespace BlockchainConst {
+namespace ChainConst {
     // Main blockchain folder
-    static const int         ACTOR_SIZE = 40;
-    static const std::string BLOCKCHAIN = "blockchain";
+    static const int ACTOR_SIZE = 40;
 
     // Temporary folder
-    static const std::string TMP_FOLDER        = "tmp";
-    static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
+    static const std::string TMP_FOLDER = "tmp";
 
     // Actors
     static const std::string ACTORS_FOLDER = "actors";
@@ -930,8 +928,8 @@ namespace BlockchainConst {
     };
 
     static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
-} // namespace BlockchainConst
-MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
+} // namespace ChainConst
+MSGPACK_ADD_ENUM(ChainConst::DataRowType)
 
 namespace Profiles {
     // To store user private/public keys

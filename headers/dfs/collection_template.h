@@ -205,7 +205,7 @@ namespace Dfs {
         }
         static FieldBuilder ActorId(std::string name) {
             return FieldBuilder(std::move(name), FieldType::ActorId)
-                .length(BlockchainConst::ACTOR_SIZE, BlockchainConst::ACTOR_SIZE);
+                .length(ChainConst::ACTOR_SIZE, ChainConst::ACTOR_SIZE);
         }
         static FieldBuilder String(std::string name) {
             return FieldBuilder(std::move(name), FieldType::String);

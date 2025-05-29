@@ -542,12 +542,12 @@ bool DagCache::init_db() {
         return true;
     }
 
-    // bool is_exists = QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).exists();
+    // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
 
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_CACHE_FOLDER));
 
-    std::string db_path = BlockchainConst::BALANCE_CACHE;
+    std::string db_path = ChainConst::BALANCE_CACHE;
     db_                 = std::make_unique<DbConnector>(db_path);
 
     if (!db_->open()) {

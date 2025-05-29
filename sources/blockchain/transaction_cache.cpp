@@ -34,15 +34,15 @@ TransactionCache::TransactionCache(ExtraChainNode *node, QObject *parent)
 }
 
 void TransactionCache::make_files() {
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::BLOCKCHAIN_CACHE_FOLDER));
 
     is_exists = QFile(Config::DataStorage::TX_CACHE_CREATE.c_str()).size() != 0;
     if (is_exists) {
         return;
     }
 
-    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
+    DbConnector db(ChainConst::TRANSACTION_CACHE);
     db.open();
     db.create_table(Config::DataStorage::TX_CACHE_CREATE);
     db.close();
@@ -87,7 +87,7 @@ void TransactionCache::adding(const Transaction &transaction) {
     auto map = Utils::to_dbrow(transaction);
     map.erase("prev_hashs");
 
-    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
+    DbConnector db(ChainConst::TRANSACTION_CACHE);
     db.open();
     bool res = db.insert(Config::DataStorage::TX_CACHE_TABLE, map);
     db.close();
@@ -109,7 +109,7 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
         from_time = std::numeric_limits<std::uint64_t>::max();
     }
 
-    DbConnector db(BlockchainConst::TRANSACTION_CACHE);
+    DbConnector db(ChainConst::TRANSACTION_CACHE);
     db.open();
 
     const auto query = fmt::format(

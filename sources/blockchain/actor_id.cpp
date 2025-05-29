@@ -20,7 +20,7 @@
 #include "blockchain/actor.h"
 
 ActorId::ActorId() {
-    m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
+    m_id = std::string(ChainConst::ACTOR_SIZE, '0');
 }
 
 ActorId::ActorId(const std::string &actorId) {
@@ -36,11 +36,11 @@ ActorId::ActorId(const ActorId &other) {
 ActorId::ActorId(ActorId &&other) noexcept {
     m_id = std::move(other.m_id);
     // normalize();
-    other.m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
+    other.m_id = std::string(ChainConst::ACTOR_SIZE, '0');
 }
 
 std::expected<ActorId, ActorError> ActorId::create(const std::string actor_id) {
-    if (actor_id.size() > BlockchainConst::ACTOR_SIZE) {
+    if (actor_id.size() > ChainConst::ACTOR_SIZE) {
         return std::unexpected(ActorError::IncorrectSize);
     }
 
@@ -48,7 +48,7 @@ std::expected<ActorId, ActorError> ActorId::create(const std::string actor_id) {
         return std::unexpected(ActorError::IncorrectFormat);
     }
 
-    auto actor_id_result = ActorId(std::string(BlockchainConst::ACTOR_SIZE - actor_id.length(), '0') + actor_id);
+    auto actor_id_result = ActorId(std::string(ChainConst::ACTOR_SIZE - actor_id.length(), '0') + actor_id);
     return actor_id_result;
 }
 
@@ -69,7 +69,7 @@ const std::string &ActorId::to_string() const {
 }
 
 bool ActorId::is_zero() const {
-    return m_id == std::string(BlockchainConst::ACTOR_SIZE, '0') || m_id == "";
+    return m_id == std::string(ChainConst::ACTOR_SIZE, '0') || m_id == "";
 }
 
 ActorId &ActorId::operator=(const std::string &actorId) {
@@ -88,22 +88,22 @@ ActorId &ActorId::operator=(ActorId &&other) noexcept {
     if (this != &other) {
         m_id = std::move(other.m_id);
         normalize();
-        other.m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
+        other.m_id = std::string(ChainConst::ACTOR_SIZE, '0');
     }
 
     return *this;
 }
 
 void ActorId::normalize() {
-    if (m_id.size() > BlockchainConst::ACTOR_SIZE) {
+    if (m_id.size() > ChainConst::ACTOR_SIZE) {
         eFatal("[ActorId] Not correct size: {} / '{}'", m_id.size(), m_id);
     }
 
-    m_id = std::string(BlockchainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
+    m_id = std::string(ChainConst::ACTOR_SIZE - m_id.length(), '0') + m_id;
 
     if (!Utils::is_hex_string_lower(m_id)) {
         eFatal("[ActorId] Not correct hex: {}", m_id);
-        m_id = std::string(BlockchainConst::ACTOR_SIZE, '0');
+        m_id = std::string(ChainConst::ACTOR_SIZE, '0');
     }
 }
 

@@ -47,7 +47,7 @@ enum class ActorGetType {
 };
 
 /**
- * @brief Actors that stored in blockchain
+ * @brief Actors that stored in chain
  */
 class EXTRACHAIN_EXPORT ActorIndex : public QObject {
     Q_OBJECT
@@ -56,7 +56,7 @@ private:
     ExtraChainNode *node;
 
     std::uint64_t     records           = 0;
-    const std::string folderPath        = fmt::format("{}/", BlockchainConst::ACTORS_FOLDER);
+    const std::string folderPath        = fmt::format("{}/", ChainConst::ACTORS_FOLDER);
     int16_t           SECTION_NAME_SIZE = 2;
     ActorId           network_id_;
 
