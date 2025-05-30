@@ -74,7 +74,7 @@ Dag::Dag(ExtraChainNode *node)
     }
 
 #ifdef IS_RC
-    mode_ = DagMode::Light;
+    // mode_ = DagMode::Light;
 #endif
 
     timestamp_bigger_sync_start_ = 0;
@@ -96,15 +96,43 @@ Dag::Dag(ExtraChainNode *node)
     eLog("[Dag] Constructor: done");
 }
 
+BigNumber Dag::current_section() const {
+    return current_section_;
+}
+
 void Dag::set_current_section(const BigNumber &new_current_section) {
     if (current_section_ < new_current_section) {
         current_section_ = new_current_section;
     }
 }
 
+DagMode Dag::mode() const {
+    return mode_;
+}
+
+DagStatus Dag::status() const {
+    return status_;
+}
+
+void Dag::set_mode(DagMode mode) {
+    this->mode_ = mode;
+}
+
 void Dag::set_status(DagStatus status) {
     this->status_ = status;
     emit node->dagStatus(status_);
+}
+
+TransactionCache &Dag::transaction_cache() {
+    return transaction_cache_;
+}
+
+DagCache &Dag::cache() {
+    return cache_;
+}
+
+BigNumber Dag::first_saved_section() {
+    return first_saved_section_;
 }
 
 std::string Dag::file_folder(const BigNumber &section) const {
@@ -451,6 +479,28 @@ bool Dag::save_transaction(const Transaction &transaction) {
     return write_section(section.value()).has_value();
 }
 
+bool Dag::local_remove_transaction(const BigNumber &section_id, const std::string &hash) {
+    auto section = this->read_section(section_id);
+    if (!section.has_value()) {
+        return false;
+    }
+
+    auto it =
+        std::find_if(section->transactions.begin(), section->transactions.end(), [&hash](const Transaction &tx) {
+            return tx.hash() == hash;
+        });
+
+    if (it == section->transactions.end()) {
+        eFatal("WTF?!");
+        return false;
+    }
+
+    section->transactions.erase(it);
+    this->write_section(section.value());
+
+    return true;
+}
+
 std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
     const std::vector<Transaction> &transactions) {
     if (transactions.empty()) {
@@ -511,6 +561,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
                 section->transactions.insert(tx);
             }
 
+            set_current_section(section_id);
             cache_.check_and_update_cache(current_section_);
 
             if (first_saved_section_ == BigNumber(-1) && section_id >= BigNumber(0)) {
@@ -569,7 +620,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         // TODO: Additional section validation could be added here
     }
 
-    if (current_section_ - tx.section() > 15) {
+    if ((current_section_ - tx.section()).abs() > 15) {
         return TransactionProveError::TooSectionDiff;
     }
 
@@ -962,18 +1013,21 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
             continue;
         }
 
+        if (section->transactions.empty()) {
+        }
+
         for (const auto &tx : section->transactions) {
             txs.insert(tx);
         }
     }
 
-    if (txs.empty()) {
-        return;
-    }
+    // if (txs.empty()) {
+    //     return;
+    // }
 
-    eLog("[Dag] Send sections from {} to {}", to, from);
+    eLog("[Dag] Send sections from {} to {}", from, to);
 
-    auto ser      = MessagePack::serialize(txs);
+    auto ser      = MessagePack::serialize(std::make_pair(to, txs));
     auto compress = qCompress(QByteArray::fromStdString(ser));
     responder.send_response(compress.toStdString(),
                             MessageType::DagSections,
@@ -983,7 +1037,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
-        const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
+        const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
         if (!txs.has_value()) {
@@ -1007,8 +1061,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         emit node->dagSyncProgress(current_section_);
+        set_current_section(txs->first);
         eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ + 100);
-        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+        request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
     });
 }
 

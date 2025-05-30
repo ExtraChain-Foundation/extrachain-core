@@ -195,6 +195,8 @@ public:
      */
     void reset_db();
 
+    std::set<ActorId> local_clear_less_balances();
+
 private:
     ExtraChainNode*              node;                            // Node reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
