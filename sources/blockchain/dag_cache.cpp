@@ -303,6 +303,11 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         }
     }
 
+    std::erase_if(balances, [&actor_ids](const auto& balance_entry) {
+        const ActorId& actor_id = balance_entry.first.first;
+        return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
+    });
+
     eLog("-----> {}", balances);
 
     return balances;
@@ -403,6 +408,10 @@ bool DagCache::update_to_genesis_section(
             continue;
         }
         for (const auto& tx : section->transactions) {
+            // if (tx.verify()) {
+
+            // }
+
             actor_token_set.insert({ tx.sender(), tx.token() });
             actor_token_set.insert({ tx.receiver(), tx.token() });
 
@@ -586,4 +595,115 @@ bool DagCache::init_db() {
 void DagCache::reset_db() {
     db_initialized_ = false;
     db_.reset();
+}
+
+void reverse_transaction(const Transaction& tx, Balances& balances) {
+    // Skip if transaction doesn't affect balances
+    if (tx.type() == TransactionType::Unknown) {
+        return;
+    }
+
+    // Reward transactions - reverse: subtract amount from sender
+    if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] -= tx.amount();
+    }
+    // Contract initialization - reverse: subtract amount from sender
+    else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] -= tx.amount();
+    }
+    // Token conversion - reverse: add back to source, subtract from destination
+    else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
+        if (tx.meta().has_value()) {
+            auto from_token = TokenId::create(tx.meta().value());
+            if (from_token.has_value()) {
+                // Add back to source token (reverse of deduction)
+                auto from_key = std::make_pair(tx.sender(), from_token.value());
+                if (balances.find(from_key) == balances.end()) {
+                    balances[from_key] = BigNumberFloat(0);
+                }
+                balances[from_key] += tx.amount();
+
+                // Subtract from destination token (reverse of addition)
+                auto to_key = std::make_pair(tx.sender(), tx.token());
+                if (balances.find(to_key) == balances.end()) {
+                    balances[to_key] = BigNumberFloat(0);
+                }
+                balances[to_key] -= tx.amount();
+            }
+        }
+    }
+    // Regular transactions - reverse: subtract from receiver, add to sender
+    else {
+        // If receiver is valid, subtract funds (reverse of addition)
+        if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.receiver(), tx.token());
+            if (balances.find(key) == balances.end()) {
+                balances[key] = BigNumberFloat(0);
+            }
+            balances[key] -= tx.amount();
+        }
+
+        // If sender is valid, add funds back (reverse of deduction)
+        if (!tx.sender().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.sender(), tx.token());
+            if (balances.find(key) == balances.end()) {
+                balances[key] = BigNumberFloat(0);
+            }
+            balances[key] += tx.amount();
+        }
+    }
+}
+
+std::set<ActorId> DagCache::local_clear_less_balances() {
+    Balances          balances;
+    std::set<ActorId> actors;
+
+    eLog("[Dag] local_clear_less_balances");
+
+    for (auto i = BigNumber(1); i <= node_->dag()->current_section(); i++) {
+        auto section = node_->dag()->read_section(i);
+        if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+            continue;
+        }
+
+        // Process each transaction in the section
+        for (const auto& tx : section->transactions) {
+            process_transaction(tx, balances);
+
+            if (tx.section() <= 1) {
+                continue;
+            }
+
+            // if (tx.sender() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")
+            //     || tx.receiver() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")) {
+            //     auto tx1 = tx;
+            //     tx1.set_prev_hashs({ "hashs: " + std::to_string(tx1.prev_hashs().size()) });
+            //     eLog("{}\n", tx1);
+            // }
+
+            if (balances[{ tx.sender(), tx.token() }] < 0) {
+                eLog("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
+                     tx.section(),
+                     tx.sender(),
+                     tx.token(),
+                     balances[{ tx.sender(), tx.token() }],
+                     tx.timestamp());
+
+                reverse_transaction(tx, balances);
+                node_->dag()->local_remove_transaction(tx.section(), tx.hash());
+                actors.insert(tx.sender());
+            }
+        }
+    }
+
+    eLog("[Dag] Removed for actors: {}", actors);
+    return actors;
 }

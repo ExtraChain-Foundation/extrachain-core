@@ -146,9 +146,7 @@ public:
      *
      * @return BigNumber The current (latest) section ID
      */
-    BigNumber current_section() const {
-        return current_section_;
-    }
+    BigNumber current_section() const;
 
     void set_current_section(const BigNumber &new_current_section);
 
@@ -157,27 +155,21 @@ public:
      *
      * @return DagMode The current mode (Full or Light)
      */
-    DagMode mode() const {
-        return mode_;
-    }
+    DagMode mode() const;
 
     /**
      * @brief Get the current operational status of the DAG
      *
      * @return DagStatus The current status
      */
-    DagStatus status() const {
-        return status_;
-    }
+    DagStatus status() const;
 
     /**
      * @brief Set the DAG operation mode
      *
      * @param mode The new operation mode
      */
-    void set_mode(DagMode mode) {
-        this->mode_ = mode;
-    }
+    void set_mode(DagMode mode);
 
     /**
      * @brief Set the DAG operational status
@@ -191,27 +183,21 @@ public:
      *
      * @return TransactionCache& Reference to the transaction cache
      */
-    TransactionCache &transaction_cache() {
-        return transaction_cache_;
-    }
+    TransactionCache &transaction_cache();
 
     /**
      * @brief Get the balance cache
      *
      * @return DagCache& Reference to the balance cache
      */
-    DagCache &cache() {
-        return cache_;
-    }
+    DagCache &cache();
 
     /**
      * @brief Get the ID of the first saved section
      *
      * @return BigNumber The first saved section ID
      */
-    BigNumber first_saved_section() {
-        return first_saved_section_;
-    }
+    BigNumber first_saved_section();
 
     /**
      * @brief Get the folder path for a section
@@ -460,6 +446,8 @@ public:
      * @return bool Success or failure
      */
     bool save_transaction(const Transaction &transaction);
+
+    bool local_remove_transaction(const BigNumber &section_id, const std::string &hash);
 
     /**
      * @brief Save multiple transactions to storage in batch
