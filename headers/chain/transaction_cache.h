@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "blockchain/actor_id.h"
-#include "blockchain/transaction.h"
+#include "chain/actor_id.h"
+#include "chain/transaction.h"
 
 class ExtraChainNode;
 class Transaction;

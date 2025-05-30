@@ -21,7 +21,7 @@
 
 #include <extrachain_global.h>
 #include <expected>
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "chat/chat.h"
 #include "chat/message.h"
 #include "dfs/dfs_utils.h"

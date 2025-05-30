@@ -17,8 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/actor_index.h"
-#include "blockchain/dag.h"
+#include "chain/actor_index.h"
+#include "chain/dag.h"
 #include "dfs/dfs_controller.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
@@ -651,7 +651,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     if (message_type == MessageType::Custom || message_type == MessageType::NewActor
         || message_type == MessageType::DagLightData
-        || message_type == MessageType::BlockchainSyncLastInfo) { // if client
+        || message_type == MessageType::DagSyncLastInfo) { // if client
         priority = SocketService::Priority::High;
     }
 
@@ -1583,7 +1583,7 @@ void NetworkManager::messageReceived(const std::string &message,
         if (status == MessageStatus::Request) {
             auto range = MessagePack::deserialize<SectionRange>(serialized);
             if (!range.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
                 break;
             }
 
@@ -1597,7 +1597,7 @@ void NetworkManager::messageReceived(const std::string &message,
         } else if (status == MessageStatus::Response) {
             auto txs = MessagePack::deserialize<std::string>(serialized);
             if (!txs.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
                 break;
             }
 
@@ -1610,7 +1610,7 @@ void NetworkManager::messageReceived(const std::string &message,
         if (status == MessageStatus::Request) {
             auto range = MessagePack::deserialize<bool>(serialized);
             if (!range.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
                 break;
             }
 
@@ -1618,7 +1618,7 @@ void NetworkManager::messageReceived(const std::string &message,
         } else if (status == MessageStatus::Response) {
             auto light = MessagePack::deserialize<DagLightPackage>(serialized);
             if (!light.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync light", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync light", type);
                 break;
             }
 
@@ -1649,11 +1649,11 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::BlockchainSyncLastInfo: {
+    case MessageType::DagSyncLastInfo: {
         if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
                 break;
             }
 
@@ -1661,7 +1661,7 @@ void NetworkManager::messageReceived(const std::string &message,
         } else if (status == MessageStatus::Response) {
             auto last_info_result = MessagePack::deserialize<DagLastInfo>(serialized);
             if (!last_info_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for blockchain sync vector", type);
+                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
                 break;
             }
 

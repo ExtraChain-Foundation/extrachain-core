@@ -18,7 +18,7 @@
  */
 
 #include "managers/file_data_manager.h"
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 #include "dfs/dfs_utils.h"
 #include <QJsonArray>
 #include <QJsonDocument>

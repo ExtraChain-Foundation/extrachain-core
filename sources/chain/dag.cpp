@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/dag.h"
+#include "chain/dag.h"
 
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
@@ -28,7 +28,7 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node) {
-    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
 
@@ -56,17 +56,15 @@ Dag::Dag(ExtraChainNode *node)
             file.close();
         }
     } else {
-        // QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).removeRecursively();
+        // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
-        cache_.reset_db();
-        cache_.init_db();
     }
 
     transaction_cache_.make_files();
     cache_.init_db();
 
-    // if (!QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER)).exists()) {
-    //     QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
+    // if (!QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).exists()) {
+    //     QDir().mkdir(QString::fromStdString(ChainConst::CHAIN_FOLDER));
     //     transaction_cache_.make_files();
     // }
 
@@ -98,10 +96,26 @@ Dag::Dag(ExtraChainNode *node)
     eLog("[Dag] Constructor: done");
 }
 
+BigNumber Dag::current_section() const {
+    return current_section_;
+}
+
 void Dag::set_current_section(const BigNumber &new_current_section) {
     if (current_section_ < new_current_section) {
         current_section_ = new_current_section;
     }
+}
+
+DagMode Dag::mode() const {
+    return mode_;
+}
+
+DagStatus Dag::status() const {
+    return status_;
+}
+
+void Dag::set_mode(DagMode mode) {
+    this->mode_ = mode;
 }
 
 void Dag::set_status(DagStatus status) {
@@ -109,9 +123,21 @@ void Dag::set_status(DagStatus status) {
     emit node->dagStatus(status_);
 }
 
+TransactionCache &Dag::transaction_cache() {
+    return transaction_cache_;
+}
+
+DagCache &Dag::cache() {
+    return cache_;
+}
+
+BigNumber Dag::first_saved_section() {
+    return first_saved_section_;
+}
+
 std::string Dag::file_folder(const BigNumber &section) const {
     BigNumber file_section = section / Config::DataStorage::SECTION_SIZE;
-    auto      path         = fmt::format("{}/{}", BlockchainConst::BLOCKCHAIN_FOLDER, file_section.to_string());
+    auto      path         = fmt::format("{}/{}", ChainConst::DAG_FOLDER, file_section.to_string());
     return path;
 }
 
@@ -127,7 +153,7 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
     auto section = read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
-        return std::unexpected(TransactionError::NoLastBlock);
+        return std::unexpected(TransactionError::NoLastSection);
     }
 
     if (section.has_value()) {
@@ -219,16 +245,18 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         return std::unexpected(false);
     }
 
+    check_self(transaction);
+
     return {};
 }
 
 void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
-    if (sended_transactions.find(hash) == sended_transactions.end()) {
+    if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
-    auto transaction = this->sended_transactions[hash];
+    auto transaction = this->sended_transactions_[hash];
     // this->sended_transactions.erase(hash);
 
     if (result != TransactionProveError::NoError) {
@@ -241,7 +269,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
-        this->sended_transactions.erase(hash);
+        this->sended_transactions_.erase(hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -252,9 +280,14 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
         return;
     }
 
-    const auto accounts = node->accountController()->accountsIds();
-    for (const auto &accountId : accounts) {
-        if (transaction.sender() == accountId || transaction.receiver() == accountId) {
+    check_self(transaction);
+}
+
+void Dag::check_self(const Transaction &transaction) {
+    const auto my_actors = node->accountController()->accounts_ids();
+
+    for (const auto &my_actor : my_actors) {
+        if (transaction.sender() == my_actor || transaction.receiver() == my_actor) {
             auto section = read_section(transaction.section());
             if (!section.has_value()) {
                 continue;
@@ -327,7 +360,7 @@ void Dag::process_cached_transactions() {
     timestamp_bigger_sync_start_ = 0;
     status_                      = DagStatus::Ready;
     emit node->dagStatus(status_);
-    set_sync_status(BlockchainSyncStatus::None);
+    set_sync_status(DagSyncStatus::None);
 }
 
 void Dag::add_to_cached_tx(const Transaction &transaction) {
@@ -446,19 +479,54 @@ bool Dag::save_transaction(const Transaction &transaction) {
     return write_section(section.value()).has_value();
 }
 
-bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
-    if (transactions.empty()) {
-        return true;
+bool Dag::local_remove_transaction(const BigNumber &section_id, const std::string &hash) {
+    auto section = this->read_section(section_id);
+    if (!section.has_value()) {
+        return false;
     }
 
+    auto it =
+        std::find_if(section->transactions.begin(), section->transactions.end(), [&hash](const Transaction &tx) {
+            return tx.hash() == hash;
+        });
+
+    if (it == section->transactions.end()) {
+        eFatal("WTF?!");
+        return false;
+    }
+
+    section->transactions.erase(it);
+    this->write_section(section.value());
+
+    return true;
+}
+
+std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
+    const std::vector<Transaction> &transactions) {
+    if (transactions.empty()) {
+        return std::nullopt;
+    }
+
+    // TODO: optimize
     std::map<BigNumber, std::vector<Transaction>> section_transactions;
     for (const auto &transaction : transactions) {
         section_transactions[transaction.section()].push_back(transaction);
     }
 
-    bool all_saved = true;
+    bool      all_saved   = true;
+    BigNumber min_section = BigNumber(-1);
+    BigNumber max_section;
+    bool      first_iteration = true;
 
     for (const auto &[section_id, section_txs] : section_transactions) {
+        if (min_section == BigNumber(-1)) {
+            min_section = section_id;
+            max_section = section_id;
+        } else {
+            min_section = std::min(section_id, min_section);
+            max_section = std::max(section_id, max_section);
+        }
+
         auto section = this->read_section(section_id);
 
         if (!section.has_value()) {
@@ -493,6 +561,7 @@ bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
                 section->transactions.insert(tx);
             }
 
+            set_current_section(section_id);
             cache_.check_and_update_cache(current_section_);
 
             if (first_saved_section_ == BigNumber(-1) && section_id >= BigNumber(0)) {
@@ -508,7 +577,11 @@ bool Dag::save_transactions(const std::vector<Transaction> &transactions) {
         }
     }
 
-    return all_saved;
+    if (!all_saved) {
+        return std::nullopt;
+    }
+
+    return std::make_pair(min_section, max_section);
 }
 
 TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions) {
@@ -547,7 +620,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         // TODO: Additional section validation could be added here
     }
 
-    if (current_section_ - tx.section() > 15) {
+    if ((current_section_ - tx.section()).abs() > 15) {
         return TransactionProveError::TooSectionDiff;
     }
 
@@ -577,7 +650,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Verify transaction hash integrity
     auto tx_copy = tx;
-    tx_copy.calculate_hash();
+    tx_copy.update_hash();
     if (tx.hash() != tx_copy.hash()) {
         return TransactionProveError::WrongHash;
     }
@@ -658,7 +731,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Validate InitContract transactions
     if (tx.type() == TransactionType::InitContract) {
         auto count = tx.amount();
-        if (count < 0 || count >= BlockchainConst::MAX_TOKEN_COUNT) {
+        if (count < 0 || count >= ChainConst::MAX_TOKEN_COUNT) {
             return TransactionProveError::InvalidTokenCount;
         }
         return TransactionProveError::NoError;
@@ -746,7 +819,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
-    sended_transactions.insert({ transaction.hash(), transaction });
+    sended_transactions_.insert({ transaction.hash(), transaction });
 }
 
 void Dag::update_range() {
@@ -759,12 +832,12 @@ void Dag::update_range() {
     //      current_section_,
     //      cache_.section());
 
-    QFile file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::WriteOnly)) {
         file.write(json.data());
         file.close();
 
-        QFile check_file(QString::fromStdString(BlockchainConst::BLOCKCHAIN_RANGE_PATH));
+        QFile check_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
         if (check_file.open(QFile::ReadOnly)) {
             auto content = check_file.readAll();
             // eLog("[Dag] Range file written: {}", content.toStdString());
@@ -826,10 +899,10 @@ void Dag::start_sync() {
     }
 
     last_info_.clear();
-    set_sync_status(BlockchainSyncStatus::LastInfo);
+    set_sync_status(DagSyncStatus::LastInfo);
     requests_count = node->network()->active_connections_count();
     node->network()->send_message(true,
-                                  MessageType::BlockchainSyncLastInfo,
+                                  MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 }
@@ -852,10 +925,10 @@ void Dag::start_check() {
     }
 
     last_info_.clear();
-    check_status_  = BlockchainSyncStatus::LastInfo;
+    check_status_  = DagSyncStatus::LastInfo;
     requests_count = node->network()->active_connections_count();
     node->network()->send_message(true,
-                                  MessageType::BlockchainSyncLastInfo,
+                                  MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
                                   MessageStatus::Request);
 
@@ -875,14 +948,11 @@ void Dag::network_status_sync_request(const Responder &responder) {
                                    .last_hash       = hashs,
                                    .zero_date       = zero_section.has_value() ? zero_timestamp : 0 };
     // eLog("network_status_sync_request, send: {}", last_info);
-    responder.send_response(last_info,
-                            MessageType::BlockchainSyncLastInfo,
-                            SendMode::Focused,
-                            MessageStatus::Response);
+    responder.send_response(last_info, MessageType::DagSyncLastInfo, SendMode::Focused, MessageStatus::Response);
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
-    if (sync_status_ != BlockchainSyncStatus::LastInfo && check_status_ != BlockchainSyncStatus::LastInfo) {
+    if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
         return;
     }
     // min(connections size, 5)
@@ -898,15 +968,15 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
-    if (sync_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
-        set_sync_status(BlockchainSyncStatus::Blocks);
-        check_status_ = BlockchainSyncStatus::None;
+    if (sync_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
+        set_sync_status(DagSyncStatus::Sections);
+        check_status_ = DagSyncStatus::None;
         eLog("BC 6 sync status");
         send_sync_request();
     }
 
-    if (check_status_ == BlockchainSyncStatus::LastInfo && last_info_.size() >= count) {
-        check_status_ = BlockchainSyncStatus::Blocks;
+    if (check_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
+        check_status_ = DagSyncStatus::Sections;
         eLog("BC 7 check status");
         send_sync_request();
     }
@@ -935,11 +1005,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
-    std::vector<Transaction> txs;
-
-    if (auto count = (to - from).to_int()) {
-        txs.reserve(count.value() * 1.2);
-    }
+    std::set<Transaction> txs;
 
     for (BigNumber i = from; i <= to; i++) {
         auto section = this->read_section(i);
@@ -947,18 +1013,21 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
             continue;
         }
 
+        if (section->transactions.empty()) {
+        }
+
         for (const auto &tx : section->transactions) {
-            txs.push_back(tx);
+            txs.insert(tx);
         }
     }
 
-    if (txs.empty()) {
-        return;
-    }
+    // if (txs.empty()) {
+    //     return;
+    // }
 
-    eLog("[Dag] Send sections from {} to {}", to, from);
+    eLog("[Dag] Send sections from {} to {}", from, to);
 
-    auto ser      = MessagePack::serialize(txs);
+    auto ser      = MessagePack::serialize(std::make_pair(to, txs));
     auto compress = qCompress(QByteArray::fromStdString(ser));
     responder.send_response(compress.toStdString(),
                             MessageType::DagSections,
@@ -968,19 +1037,19 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
-        const auto txs = MessagePack::deserialize<std::vector<Transaction>>(
+        const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
         if (!txs.has_value()) {
             return;
         }
 
-        auto min = BigNumber(-1), max = BigNumber(-1);
-        for (const auto &tx : std::as_const(txs.value())) {
-            min = min != -1 ? std::min(tx.section(), min) : tx.section();
-            max = std::max(tx.section(), max);
-            save_transaction(tx);
+        auto res = save_transactions(txs->second);
+        if (!res.has_value()) {
+            return;
         }
+
+        const auto &[min, max] = res.value();
 
         eLog("[Dag] Saved sections from {} to {}", min, max);
 
@@ -992,8 +1061,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         emit node->dagSyncProgress(current_section_);
+        set_current_section(txs->first);
         eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ + 100);
-        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+        request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
     });
 }
 
@@ -1074,7 +1144,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
     });
 }
 
-void Dag::set_sync_status(BlockchainSyncStatus status) {
+void Dag::set_sync_status(DagSyncStatus status) {
     sync_status_ = status;
 }
 
@@ -1119,8 +1189,8 @@ void Dag::send_sync_request() {
     }
 
     if (!need_sync) {
-        set_sync_status(BlockchainSyncStatus::None);
-        check_status_ = BlockchainSyncStatus::None;
+        set_sync_status(DagSyncStatus::None);
+        check_status_ = DagSyncStatus::None;
         process_cached_transactions();
         // timer_sync->stop();
 
@@ -1143,8 +1213,8 @@ void Dag::send_sync_request() {
     // TODO: recheck
     if (nodes_by_block.empty()) {
         eLog("BC 3");
-        set_sync_status(BlockchainSyncStatus::None);
-        check_status_ = BlockchainSyncStatus::None;
+        set_sync_status(DagSyncStatus::None);
+        check_status_ = DagSyncStatus::None;
         process_cached_transactions();
         // timer_sync->stop();
 
@@ -1167,7 +1237,7 @@ void Dag::send_sync_request() {
         });
     }
 
-    if (sync_status_ != BlockchainSyncStatus::Blocks) {
+    if (sync_status_ != DagSyncStatus::Sections) {
         start_sync();
         eLog("BC 1");
         return;
@@ -1204,25 +1274,36 @@ void Dag::send_sync_request() {
     }
 
     // request from to
-    check_status_ = BlockchainSyncStatus::None;
+    check_status_ = DagSyncStatus::None;
     emit node->dagSyncStart(sync_index, sync_last_index);
     eLog("syncStart");
 }
 
 void Dag::clear_dag() {
 #ifdef IS_RC
+    auto max_section = cache_.calculate_genesis_section(current_section_);
+
+    for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
+        QString section_path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
+
+        QDir dir(section_path);
+        if (dir.exists()) {
+            dir.removeRecursively();
+        }
+    }
+
+    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
+    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+
+    auto guard = cached_txs_.lock_mut();
+    guard->clear();
+    // sended_transactions.clear();
     current_section_     = BigNumber(-1);
     first_saved_section_ = BigNumber(-1);
-    QFile(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/" + BlockchainConst::BLOCKCHAIN_RANGE))
-        .remove();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/0")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/1")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/2")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/3")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/4")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/5")).removeRecursively();
-    QDir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER + "/6")).removeRecursively();
-    QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).remove();
+    status_              = DagStatus::Started;
+
+    cache_.reset_db();
+    cache_.init_db();
 #endif
 }
 

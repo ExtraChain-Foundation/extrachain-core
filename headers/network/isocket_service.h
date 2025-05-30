@@ -72,7 +72,7 @@ public:
     virtual quint16           port() const            = 0;
     virtual quint16           server_port() const     = 0;
     const QString            &ip() const;
-    DfsMode dfs_mode_socket() const;
+    DfsMode                   dfs_mode_socket() const;
     int                       bytes_compressed() const;
     int                       bytes_outgoing() const;
     int                       bytes_incoming() const;

@@ -28,15 +28,15 @@
 #include <QObject>
 #include <QTimer>
 
-#include "blockchain/actor_index.h"
+#include "chain/actor_index.h"
 #include "chat/chat.h"
 #include "chat/message.h"
 #include "managers/account_controller.h"
-#include "blockchain/transaction.h"
-#include "blockchain/private_profile.h"
+#include "chain/transaction.h"
+#include "chain/private_profile.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
-#include "blockchain/dag.h"
+#include "chain/dag.h"
 
 #include <atomic>
 
@@ -227,9 +227,8 @@ private:
     friend class NetworkManager;
 
     /**
-     * @brief Connect signals between NetworkManager and Blockchain
+     * @brief Connect signals between NetworkManager and
      */
-    void connectBlockchain();
     //    void connectAccountController();
     void connectActorIndex();
     void dfsConnection();

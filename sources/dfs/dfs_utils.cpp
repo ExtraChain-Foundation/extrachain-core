@@ -19,7 +19,7 @@
 
 #include "dfs/dfs_utils.h"
 
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 #include "utils/fs_path.h"
 
 std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {

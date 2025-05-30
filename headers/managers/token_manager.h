@@ -23,7 +23,7 @@
 
 #include <QObject>
 
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 
 class ExtraChainNode;
 class Transaction;

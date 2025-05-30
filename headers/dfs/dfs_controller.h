@@ -34,7 +34,7 @@
 #include <filesystem>
 #include <QThread>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
@@ -148,7 +148,7 @@ public:
             return true;
         }
 
-        const auto actor_ids = node->accountController()->accountsIds();
+        const auto actor_ids = node->accountController()->accounts_ids();
         if (std::find(actor_ids.begin(), actor_ids.end(), actor_id) != actor_ids.end()) {
             return true;
         }

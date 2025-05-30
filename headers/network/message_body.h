@@ -23,16 +23,16 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "utils/exc_utils.h"
 
 enum class MessageType {
-    Custom      = 0,
-    NewActor    = 1,
-    Actor       = 2,
-    ActorCount  = 3,
-    ActorAll    = 4,
-    Actors      = 15,
+    Custom     = 0,
+    NewActor   = 1,
+    Actor      = 2,
+    ActorCount = 3,
+    ActorAll   = 4,
+    Actors     = 15,
     ActorsHash = 16,
 
     CoinReward = 19,
@@ -42,7 +42,7 @@ enum class MessageType {
     DagSections          = 32,
     DagLightData         = 33,
 
-    BlockchainSyncLastInfo = 39,
+    DagSyncLastInfo = 39,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now

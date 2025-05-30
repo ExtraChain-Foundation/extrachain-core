@@ -887,8 +887,7 @@ namespace Utils {
      * }
      * @endcode
      */
-    EXTRACHAIN_EXPORT VersionCompareResult compare_versions(const std::string &current,
-                                                            const std::string &latest);
+    EXTRACHAIN_EXPORT VersionCompareResult compare_versions(const std::string &current, const std::string &latest);
 
     /**
      * @brief Helper function that checks if the latest version is newer than current
@@ -901,27 +900,25 @@ namespace Utils {
 
 } // namespace Utils
 
-namespace BlockchainConst {
-    // Main blockchain folder
-    static const int         ACTOR_SIZE = 40;
-    static const std::string BLOCKCHAIN = "blockchain";
+namespace ChainConst {
+    // Main dag folder
+    static const int ACTOR_SIZE = 40;
 
     // Temporary folder
-    static const std::string TMP_FOLDER        = "tmp";
-    static const std::string TMP_GENESIS_BLOCK = "tmp/genesis_block";
+    static const std::string TMP_FOLDER = "tmp";
 
     // Actors
     static const std::string ACTORS_FOLDER = "actors";
 
     // Folder with blocks
-    static const std::string BLOCKCHAIN_FOLDER     = "dag";
-    static const std::string BLOCKCHAIN_RANGE      = "range";
-    static const std::string BLOCKCHAIN_RANGE_PATH = BLOCKCHAIN_FOLDER + "/" + BLOCKCHAIN_RANGE;
+    static const std::string DAG_FOLDER     = "dag";
+    static const std::string DAG_RANGE      = "range";
+    static const std::string DAG_RANGE_PATH = DAG_FOLDER + "/" + DAG_RANGE;
 
     // Cache
-    static const std::string BLOCKCHAIN_CACHE_FOLDER = BLOCKCHAIN_FOLDER + "/cache";
-    static const std::string TRANSACTION_CACHE       = BLOCKCHAIN_FOLDER + "/cache/SelfTransactions.db";
-    static const std::string BALANCE_CACHE           = BLOCKCHAIN_FOLDER + "/cache/BalanceCache.db";
+    static const std::string DAG_CACHE_FOLDER  = DAG_FOLDER + "/cache";
+    static const std::string TRANSACTION_CACHE = DAG_CACHE_FOLDER + "/SelfTransactions.db";
+    static const std::string BALANCE_CACHE     = DAG_CACHE_FOLDER + "/BalanceCache.db";
 
     // Dfs
     static const int DATA_OFFSET = 512;
@@ -931,8 +928,8 @@ namespace BlockchainConst {
     };
 
     static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
-} // namespace BlockchainConst
-MSGPACK_ADD_ENUM(BlockchainConst::DataRowType)
+} // namespace ChainConst
+MSGPACK_ADD_ENUM(ChainConst::DataRowType)
 
 namespace Profiles {
     // To store user private/public keys

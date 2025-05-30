@@ -54,8 +54,7 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     node->start(); // TODO: remove
 
     node->calculateBlockCount();
-    //    if (!(type == ActorType::createDAppMaster)) // TODO: remove
-    //        node.blockchain()->getBlockZero();
+
     return system_actor;
 }
 
@@ -98,8 +97,8 @@ void AccountController::import_profile(const ImportedUser &imported_profile, con
 }
 
 bool AccountController::rename_wallet(const ActorId     &profileActor,
-                                     const ActorId     &actorId,
-                                     const std::string &walletName) {
+                                      const ActorId     &actorId,
+                                      const std::string &walletName) {
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     return profile.rename_wallet(actorId, walletName);
 }
@@ -241,7 +240,7 @@ const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
     return currentProfile().actors();
 }
 
-const std::vector<ActorId> AccountController::accountsIds() const {
+const std::vector<ActorId> AccountController::accounts_ids() const {
     std::vector<ActorId> ids;
     for (int i = 0; i < currentProfile().actors().size(); i++) {
         ids.push_back(currentProfile().actors()[i].id());
