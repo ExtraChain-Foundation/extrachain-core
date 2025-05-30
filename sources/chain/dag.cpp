@@ -74,7 +74,7 @@ Dag::Dag(ExtraChainNode *node)
     }
 
 #ifdef IS_RC
-    // mode_ = DagMode::Light;
+    mode_ = DagMode::Light;
 #endif
 
     timestamp_bigger_sync_start_ = 0;
@@ -1044,7 +1044,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
-        auto res = save_transactions(txs.value());
+        auto res = save_transactions(txs->second);
         if (!res.has_value()) {
             return;
         }

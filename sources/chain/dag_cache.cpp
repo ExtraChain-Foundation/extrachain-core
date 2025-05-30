@@ -670,8 +670,8 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
 
     eLog("[Dag] local_clear_less_balances");
 
-    for (auto i = BigNumber(1); i <= node_->dag()->current_section(); i++) {
-        auto section = node_->dag()->read_section(i);
+    for (auto i = BigNumber(1); i <= node->dag()->current_section(); i++) {
+        auto section = node->dag()->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
         }
@@ -700,7 +700,7 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
                      tx.timestamp());
 
                 reverse_transaction(tx, balances);
-                node_->dag()->local_remove_transaction(tx.section(), tx.hash());
+                node->dag()->local_remove_transaction(tx.section(), tx.hash());
                 actors.insert(tx.sender());
             }
         }
