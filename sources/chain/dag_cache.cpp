@@ -255,7 +255,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
                                       const BigNumber&            current_section,
                                       const BigNumber&            first_saved_section,
                                       std::optional<BigNumber>    to_section) {
-    eLog("[DagCache] Calculating balances for {} actors", actor_ids.size());
+    eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
     if (current_section == BigNumber(-1) || actor_ids.empty()) {
@@ -351,7 +351,7 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
         return false;
     }
 
-    eLog("[DagCache] Cache update needed: current_section={}, cached_section={}, safe_genesis={}",
+    eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
          current_section,
          cached_section_,
          safe_genesis_section);
@@ -402,6 +402,7 @@ bool DagCache::update_to_genesis_section(
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
+
         for (const auto& tx : section->transactions) {
             actor_token_set.insert({ tx.sender(), tx.token() });
             actor_token_set.insert({ tx.receiver(), tx.token() });
@@ -445,6 +446,7 @@ bool DagCache::update_to_genesis_section(
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
+
         // Process each transaction
         for (const auto& tx : section->transactions) {
             process_transaction(tx, balances);
