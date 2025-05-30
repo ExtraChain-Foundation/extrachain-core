@@ -103,7 +103,6 @@ BigNumber Dag::current_section() const {
 }
 
 void Dag::set_current_section(const BigNumber &new_current_section) {
-    eLog("~~~~ {}", new_current_section);
     if (current_section_ < new_current_section) {
         current_section_ = new_current_section;
     }
@@ -599,7 +598,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         // TODO: Additional section validation could be added here
     }
 
-    if (current_section_ - tx.section() > 15) {
+    if ((current_section_ - tx.section()).abs() > 15) {
         return TransactionProveError::TooSectionDiff;
     }
 
@@ -1007,9 +1006,9 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         }
     }
 
-    if (txs.empty()) {
-        return;
-    }
+    // if (txs.empty()) {
+    //     return;
+    // }
 
     eLog("[Dag] Send sections from {} to {}", from, to);
 
