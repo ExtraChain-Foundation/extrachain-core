@@ -27,7 +27,7 @@
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
-    , cache_(node) {
+    , cache_(node, this) {
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
@@ -49,7 +49,15 @@ Dag::Dag(ExtraChainNode *node)
                 cache_.set_section(last_cached_result.value());
             }
 
-            eLog("[Dag] Current: {}, first: {}, last cached: {}",
+#ifndef IS_RC
+            if (cache_.section() == -1) { // TODO: and have all 0-current
+                cache_.reset_db();
+                cache_.init_db();
+                cache_.check_and_update_cache(current_section_);
+            }
+#endif
+
+            eLog("[Dag] Loaded: {}, first: {}, last cached: {}",
                  current_section_,
                  first_saved_section_,
                  cache_.section());
@@ -1072,6 +1080,10 @@ void Dag::network_request_light(const Responder &responder) {
         QElapsedTimer timer;
         timer.start();
         std::vector<Transaction> txs;
+
+        if (cache().section() == BigNumber(-1)) {
+            return;
+        }
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
         txs.reserve(20);

@@ -471,7 +471,7 @@ namespace Json {
             auto parsed = boost::json::parse(data);
             return json_convert::from_json<T>(parsed);
         } catch (const std::exception &e) {
-            eWarning("Json deserialize error: {}", e.what());
+            eWarning("Json deserialize error: {}, data: {}", e.what(), data);
             return std::unexpected(e.what());
         }
     }

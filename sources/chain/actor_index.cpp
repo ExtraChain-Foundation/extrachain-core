@@ -349,7 +349,13 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     }
 
     emit newActorSaved(actor.id());
-    node->network()->send_broadcast(actor, MessageType::NewActor);
+
+    if (node->network()->isActiveConnectionExists()) {
+        node->network()->send_broadcast(actor, MessageType::NewActor);
+    } else {
+        node->actors_broadcast_.push_back(actor);
+    }
+
     return result;
 }
 

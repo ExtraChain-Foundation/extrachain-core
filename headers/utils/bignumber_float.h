@@ -91,37 +91,14 @@ public:
                                                                 NumeralBase        base = NumeralBase::Hex);
     static BigNumberFloat                                from_hex(const std::string &number);
 
-    std::strong_ordering operator<=>(const BigNumberFloat &other) const {
-        if (m_data < other.m_data)
-            return std::strong_ordering::less;
-        if (m_data > other.m_data)
-            return std::strong_ordering::greater;
-        return std::strong_ordering::equal;
-    }
+    void truncate(int decimalPlaces = 3);
 
-    std::strong_ordering operator<=>(const int &other) const {
-        if (m_data < other)
-            return std::strong_ordering::less;
-        if (m_data > other)
-            return std::strong_ordering::greater;
-        return std::strong_ordering::equal;
-    }
-
-    bool operator==(const BigNumberFloat &other) const {
-        return m_data == other.m_data;
-    }
-
-    bool operator==(const int &other) const {
-        return m_data == other;
-    }
-
-    bool operator!=(const BigNumberFloat &other) const {
-        return !(m_data == other.m_data);
-    }
-
-    bool operator!=(const int &other) const {
-        return !(m_data == other);
-    }
+    std::strong_ordering operator<=>(const BigNumberFloat &other) const;
+    std::strong_ordering operator<=>(const int &other) const;
+    bool                 operator==(const BigNumberFloat &other) const;
+    bool                 operator==(const int &other) const;
+    bool                 operator!=(const BigNumberFloat &other) const;
+    bool                 operator!=(const int &other) const;
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {

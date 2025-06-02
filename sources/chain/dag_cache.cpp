@@ -22,8 +22,9 @@
 #include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
 
-DagCache::DagCache(ExtraChainNode* node)
-    : node(node) {
+DagCache::DagCache(ExtraChainNode* node, Dag* dag)
+    : node(node)
+    , dag(dag) {
 }
 
 DagCache::~DagCache() {
@@ -282,7 +283,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     // Process transactions after the balance_start_section up to current_section
     auto to = to_section.has_value() ? to_section.value() : current_section;
     for (BigNumber i = balance_start_section; i <= to; i++) {
-        auto section = node->dag()->read_section(i);
+        auto section = dag->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
         }
@@ -363,18 +364,18 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
 
     // Use read_section callback from DAG
     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
-        return node->dag()->read_section(section_id);
+        return dag->read_section(section_id);
     };
 
     // Update cache to safe section (genesis + lag)
     bool result = update_to_genesis_section(safe_genesis_section,
                                             current_section,
-                                            node->dag()->first_saved_section(),
+                                            dag->first_saved_section(),
                                             read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
-        node->dag()->update_range();
+        dag->update_range();
         return true;
     }
 
@@ -475,7 +476,7 @@ bool DagCache::update_to_genesis_section(
     // Update cached section
     cached_section_ = genesis_section;
     eLog("[DagCache] Cache updated to section {}", cached_section_);
-    node->dag()->update_range();
+    dag->update_range();
     return true;
 }
 
@@ -596,6 +597,9 @@ bool DagCache::init_db() {
 
 void DagCache::reset_db() {
     db_initialized_ = false;
+    if (db_initialized_) {
+        db_->close();
+    }
     db_.reset();
 }
 
@@ -670,8 +674,8 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
 
     eLog("[Dag] local_clear_less_balances");
 
-    for (auto i = BigNumber(1); i <= node->dag()->current_section(); i++) {
-        auto section = node->dag()->read_section(i);
+    for (auto i = BigNumber(1); i <= dag->current_section(); i++) {
+        auto section = dag->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
         }
@@ -700,7 +704,7 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
                      tx.timestamp());
 
                 reverse_transaction(tx, balances);
-                node->dag()->local_remove_transaction(tx.section(), tx.hash());
+                dag->local_remove_transaction(tx.section(), tx.hash());
                 actors.insert(tx.sender());
             }
         }

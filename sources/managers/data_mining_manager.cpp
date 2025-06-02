@@ -51,6 +51,7 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
                                              blockAmount,
                                              coefficient);
     }
+
     return coinProducedForNode;
 }
 
@@ -87,6 +88,11 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
+    amount.truncate();
+    if (amount > 3) {
+        amount = 3;
+    }
+
     Transaction transaction;
     transaction.set_sender(actor.id());
     transaction.set_receiver(actor.id());
@@ -94,6 +100,7 @@ void DataMiningManager::requestCoinReward() {
     transaction.set_type(TransactionType::Reward);
     // transaction.set_section(node->dag()->current_section() + 1);
     // transaction.sign(actor);
+
     auto tx_result = node->dag()->prepare_transaction(transaction, actor);
     if (!tx_result.has_value()) {
         eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
@@ -212,8 +219,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto calc   = calculateRewardAmount(requestReward);
     auto amount = requestReward.transaction.amount();
 
-    // * KoefReward
-    if (calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (amount <= 3 || calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return false;
         }
