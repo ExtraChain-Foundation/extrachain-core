@@ -965,18 +965,26 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
-        if (m_messages->contains(messageId)
-            || message_body.init_sender_id == node->accountController()->system_actor().id()) {
-            // eWarning("Network Message ignored: already achieved such Request with messageId: {}, from: {}",
-            // messageId,
-            // identifier);
+        bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
+                              || type == MessageType::CoinReward);
+
+        if (!should_ignore
+            && (m_messages->contains(messageId)
+                || message_body.init_sender_id == node->accountController()->system_actor().id())) {
+            // eWarning(
+            //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
+            //     messageId,
+            //     identifier,
+            //     type);
             return;
         }
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
-            // eWarning("Network Message ignored 2: already achieved such Request with messageId: {} from: {}",
-            // messageId,
-            // identifier);
+            // eWarning(
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
+            //     messageId,
+            //     identifier,
+            //     type);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -994,6 +1002,11 @@ void NetworkManager::messageReceived(const std::string &message,
                                      message_edited,
                                      SendMode::Focused,
                                      searchRes->second.first);
+            // eWarning(
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: {}",
+            //     messageId,
+            //     identifier,
+            //     type);
 
             return;
         }

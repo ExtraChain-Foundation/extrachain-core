@@ -30,8 +30,9 @@
 #include "chain/transaction.h"
 
 class ExtraChainNode;
-class DbConnector;
+class Dag;
 class Section;
+class DbConnector;
 
 // Cache configuration constants
 constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and persistent cache
@@ -52,7 +53,7 @@ public:
      *
      * @param node The ExtraChainNode reference
      */
-    DagCache(ExtraChainNode* node);
+    DagCache(ExtraChainNode* node, Dag* dag);
 
     /**
      * @brief Destroy the DagCache object
@@ -199,6 +200,7 @@ public:
 
 private:
     ExtraChainNode*              node;                            // Node reference
+    Dag*                         dag;                             // Dag reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized

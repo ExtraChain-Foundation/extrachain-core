@@ -116,6 +116,7 @@ struct MessageBody {
     std::string                     message_id;
     ActorId                         sender_id;
     ActorId                         init_sender_id;
+    // std::string                     init_sender_identifier;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string                     data;

@@ -136,6 +136,9 @@ private:
     std::optional<SubscriptionRow> subscription_row;
 
 public:
+    std::vector<Actor<KeyPublic>> actors_broadcast_;
+
+public:
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);

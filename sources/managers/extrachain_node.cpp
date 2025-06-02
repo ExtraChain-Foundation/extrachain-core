@@ -872,6 +872,15 @@ void ExtraChainNode::connectSignals() {
             [this](const std::string ip, const std::string identifier) {
                 eLog("[WS] Start sync...");
 
+                if (!actors_broadcast_.empty()) {
+                    auto actors_broadcast = actors_broadcast_;
+                    actors_broadcast_.clear();
+
+                    for (const auto& actor : actors_broadcast) {
+                        network()->send_broadcast(actor, MessageType::NewActor);
+                    }
+                }
+
                 Responder responder(m_networkManager);
                 responder.add_identifier(identifier);
                 m_actorIndex->send_system_actor(responder);

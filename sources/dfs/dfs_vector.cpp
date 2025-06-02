@@ -278,6 +278,11 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
         return vector_template_file_id.value();
     }
 
+    if (!vector_template.has_value()) {
+        eCritical("[DfsVector] Can't parse {}", vector_path_.native());
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     return vector_template.value();
 }
 
