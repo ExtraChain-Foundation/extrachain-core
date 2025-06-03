@@ -396,6 +396,8 @@ private:
     DirsManager dirs_manager_;
     LoadManager load_manager_;
 
+    void check_all_files(std::string identifier);
+
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
                                                       DbRow                        row,

@@ -29,6 +29,8 @@
 #include "dfs/dirs_manager.h"
 #include "dfs/load_manager.h"
 
+#include "utils/thread_pool_boost.h"
+
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
@@ -1419,7 +1421,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         emit stored(owner_id, dir_row);
 
         auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-        auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
+        auto load_info = LoadInfo { .dir_row = dir_row };
+        LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
+
         // check real status
         load_info.dir_row.state = Dfs::FileState::Known;
         // load_manager_.active_downloads.insert({ file_link, load_info });
@@ -1811,14 +1815,93 @@ LoadManager &DfsController::download_manager() {
     return load_manager_;
 }
 
-void DfsController::sync(const std::string &identifier) {
-    static bool already_checked = false;
-    if (!already_checked) {
-        load_manager_.check_all_files(identifier);
-        already_checked = true;
+void DfsController::check_all_files(std::string identifier) {
+    auto dirs = Dfs::DirsFile::load_all();
+    if (!dirs.has_value()) {
+        return;
     }
-    dirs_manager_.temp_sync_all(identifier);
-    // dirs_manager_.sync(identifier);
+
+    for (const auto& dir : dirs.value()) {
+        bool is_full   = node->dfs()->mode() == DfsMode::Full;
+        bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
+
+        const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
+        if (!dir_rows.has_value()) {
+            //
+            continue;
+        }
+
+        for (const auto& row : dir_rows.value()) {
+            if (row.type == Dfs::FileType::File && !need_load) {
+                continue;
+            }
+
+            if (row.state == Dfs::FileState::Ready) {
+                auto file_path = Dfs::Path::file_path(dir.actor_id, row.file_id);
+                if (!file_path.has_value()) {
+                    continue;
+                }
+
+                if (row.type == Dfs::FileType::File && file_path->exists()) {
+                    auto size = file_path->file_size();
+                    if (size.has_value() && size == row.size) {
+                        continue;
+                    }
+
+                    if (!need_load) {
+                        continue;
+                    }
+                }
+
+                if (row.type != Dfs::FileType::File && file_path->exists()) {
+                    // TODO: vectorupdate
+                    // continue;
+                }
+                // TODO: add checks for vector and collection
+            }
+
+            if (row.state == Dfs::FileState::Removed) {
+                continue;
+            }
+
+            auto file_link = Dfs::FileLink { .owner_id = dir.actor_id, .file_id = row.file_id };
+
+                   // TODO: insert to queue
+
+                   // TODO: process from queue
+                   // search file
+            if (identifier.empty()) {
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    SendMode::Neighbours,
+                                                    MessageStatus::Request);
+            } else {
+                Responder responder(nullptr);
+                responder.add_identifier(identifier);
+                this->node->network()->send_message(file_link,
+                                                    MessageType::DfsFileState,
+                                                    SendMode::Focused,
+                                                    MessageStatus::Request,
+                                                    responder);
+            }
+        }
+    }
+
+           // bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+           //                                                              file_link.file_id,
+           //                                                              active_download.dir_row.hash);
+           // if (!is_downloaded) {5
+           // }
+}
+
+void DfsController::sync(const std::string &identifier) {
+    static std::once_flag check_flag;
+    ThreadPoolBoost::instance_dfs()->post([this, identifier](){
+        std::call_once(check_flag, [this, &identifier](){
+            check_all_files(identifier);
+        });
+        dirs_manager_.temp_sync_all(identifier);
+    });
 }
 
 // TODO: use dfs size

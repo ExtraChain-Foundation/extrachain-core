@@ -836,12 +836,12 @@ void NetworkManager::sendFromCache() {
 }
 
 bool NetworkManager::is_connection_exists(const std::string &identifier) {
-    auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
-        return false;
-
-    for (const auto &el : *connectionsLocked) {
-        if (el->identifier() == identifier) {
+    auto connections_locked = *m_connections;
+    for (const auto &service : *connections_locked) {
+        if (!service->is_active()) {
+            continue;
+        }
+        if (service->identifier().toStdString() == identifier) {
             return true;
         }
     }
@@ -1293,14 +1293,13 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto dirs_row_result =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+                MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
                 return;
             }
-            auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
+            node->dfs()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
         }
         break;
     }

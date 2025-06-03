@@ -38,10 +38,15 @@ enum class DownloadError {
 };
 
 struct LoadInfo {
+    struct Attempts {
+        int                                   counter { 0 };
+        std::chrono::system_clock::time_point last_attempt {};
+    };
+
     Dfs::DirRow                           dir_row;
-    int                                   attempt_count { 0 };
-    std::chrono::system_clock::time_point last_attempt {};
-    std::vector<std::string> identifier_list;
+
+    std::set<std::string> identifier_storage_checker {};
+    std::vector<std::pair<std::string, Attempts>> identifier_list {};
     // std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
     // Dfs::FileState                        state { Dfs::FileState::Known };
     // std::unordered_set<std::string> tried_neighbors;
@@ -70,10 +75,9 @@ class LoadManager : public QObject {
 public:
     explicit LoadManager(ExtraChainNode* node, QObject *parent = nullptr);
 
+    bool add_network_identifier(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
     void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
     void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
-
-    void check_all_files(std::string identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
