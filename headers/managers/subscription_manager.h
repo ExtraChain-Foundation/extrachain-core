@@ -21,6 +21,8 @@
 
 #include "chain/actor_id.h"
 #include "utils/bignumber.h"
+#include "utils/bignumber_float.h"
+#include "utils/exc_utils.h"
 
 class ExtraChainNode;
 class Transaction;
@@ -29,14 +31,52 @@ struct SubscriptionRow {
     ActorId     owner_id;
     std::string file_id;
 
-    int           type       = 0;
+    int           type       = 0; // TODO: use subscription id
     std::uint64_t date_start = 0; // section date
     bool          auto_renew = false;
+    std::string   tariff_id;
     BigNumber     section_id;
     std::string   transaction_hash;
 };
-BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
+BOOST_DESCRIBE_STRUCT(SubscriptionRow,
+                      (),
+                      (type, date_start, /*tariff_id,*/ auto_renew, section_id, transaction_hash))
 
+enum class SubscriptionInterval {
+    Day,
+    Week,
+    Month,
+    Year
+};
+
+struct SubscriptionTariff {
+    std::string                                  id;
+    BigNumberFloat                               price;
+    TokenId                                      token_id;
+    SubscriptionInterval                         interval;
+    std::unordered_map<std::string, std::string> name;
+    std::unordered_map<std::string, std::string> desc;
+
+    void generate_id() {
+        id = Utils::generate_random_hex(6);
+    }
+
+    void add_name(const std::string& lang, const std::string& name) {
+        this->name.insert({ lang, name });
+    }
+
+    void add_desc(const std::string& lang, const std::string& desc) {
+        this->desc.insert({ lang, desc });
+    }
+};
+BOOST_DESCRIBE_STRUCT(SubscriptionTariff, (), (id, price, token_id, interval, name, desc))
+
+struct SubscriptionTariffs {
+    std::vector<SubscriptionTariff> tariffs;
+};
+BOOST_DESCRIBE_STRUCT(SubscriptionTariffs, (), (tariffs))
+
+//
 class SubscriptionManager {
 public:
     SubscriptionManager(ExtraChainNode* node);
@@ -49,7 +89,13 @@ public:
 
     void self_tx_repeatable_added(const Transaction& transaction);
 
-    bool create_subscription_vector(const std::string& file_name);
+    bool create_tafiffs_file(const std::string& file_name, const std::vector<SubscriptionTariff> tariffs);
+    bool create_subscription_vector(const ActorId&     tariff_owner_id,
+                                    std::string&       tariff_file_id,
+                                    const std::string& file_name);
+
+    std::optional<std::vector<SubscriptionTariff>> read_tariffs(const ActorId&     owner_id,
+                                                                const std::string& file_name);
 
 private:
     ExtraChainNode* node;

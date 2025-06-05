@@ -25,7 +25,9 @@ SubscriptionManager::SubscriptionManager(ExtraChainNode* node)
     : node(node) {
 }
 
-bool SubscriptionManager::create_subscription_vector(const std::string& file_name) {
+bool SubscriptionManager::create_subscription_vector(const ActorId&     tariff_owner_id,
+                                                     std::string&       tariff_file_id,
+                                                     const std::string& file_name) {
     auto network_id = node->actorIndex()->network_id();
     if (network_id.is_zero()) {
         return false;
@@ -46,7 +48,38 @@ bool SubscriptionManager::create_subscription_vector(const std::string& file_nam
         return false;
     }
 
+    // save tariffs file link json
+    auto file_link = Dfs::FileLink { .owner_id = tariff_owner_id, .file_id = tariff_file_id };
+    auto json      = Json::serialize(file_link);
+
+    auto res = node->dfs()->store_data_as_file(system_actor_id,
+                                               system_actor_id,
+                                               ByteArray(json).toBytes(),
+                                               Dfs::Basic::TEMPLATE_SUBSCRIPTIONS,
+                                               file_name,
+                                               Dfs::DataSecurity::Public);
+
     return true;
+}
+
+std::optional<std::vector<SubscriptionTariff>> SubscriptionManager::read_tariffs(const ActorId&     owner_id,
+                                                                                 const std::string& file_name) {
+    auto file_path = Dfs::Path::file_path(owner_id, "");
+    if (!file_path.has_value()) {
+        return std::nullopt;
+    }
+
+    auto content = Utils::read_file_content(file_path.value());
+    if (!content.has_value()) {
+        return std::nullopt;
+    }
+
+    auto tariffs = Json::deserialize<std::vector<SubscriptionTariff>>(content.value());
+    if (!tariffs.has_value()) {
+        return std::nullopt;
+    }
+
+    return tariffs.value();
 }
 
 bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
@@ -61,21 +94,21 @@ bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
     ActorId system_id = node->accountController()->system_actor().id();
 
     Transaction transaction;
+    transaction.set_type(TransactionType::Repeatable);
     transaction.set_sender(system_id);
     transaction.set_receiver(owner_id);
-    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec)); // TODO: get from tariff
 #ifdef QT_DEBUG
     transaction.set_amount(BigNumberFloat("1.123", NumeralBase::Dec));
 #endif
     transaction.set_token(token_id); // TODO: get token_id from json
-    transaction.set_meta(std::to_string(type));
-    transaction.set_type(TransactionType::Repeatable);
-    node->send_transaction(transaction, node->accountController()->system_actor());
-    // transaction.setHash()
+    transaction.set_meta(Json::serialize(Dfs::FileLink { .owner_id = owner_id, .file_id = file_id }));
 
-    auto row =
-        SubscriptionRow { .owner_id = owner_id, .file_id = file_id, .type = type, .auto_renew = auto_renew };
+    node->send_transaction(transaction, node->accountController()->system_actor());
+
+    auto row         = SubscriptionRow { .owner_id = owner_id, .file_id = file_id, .type = type };
     subscription_row = row;
+
     return true;
 }
 
@@ -107,4 +140,18 @@ void SubscriptionManager::self_tx_repeatable_added(const Transaction& transactio
     if (res) {
         emit node->subscriptionAdded(row.owner_id, row.file_id);
     }
+}
+
+bool SubscriptionManager::create_tafiffs_file(const std::string&                    file_name,
+                                              const std::vector<SubscriptionTariff> tariffs) {
+    auto system_actor_id = node->accountController()->system_actor().id();
+    auto json            = Json::serialize(tariffs);
+
+    auto res = node->dfs()->store_data_as_file(system_actor_id,
+                                               system_actor_id,
+                                               ByteArray(json).toBytes(),
+                                               Dfs::Basic::TEMPLATE_SUBSCRIPTIONS,
+                                               file_name,
+                                               Dfs::DataSecurity::Public);
+    return res.has_value();
 }

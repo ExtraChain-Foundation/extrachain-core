@@ -137,9 +137,6 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
 }
 
 void NetworkManager::process() {
-    if (!node->isClientApp())
-        return;
-
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
     m_reconnectTimer->start(Utils::RECONNECT_INTERVAL);
 }
@@ -981,10 +978,8 @@ void NetworkManager::messageReceived(const std::string &message,
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
-            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -1003,10 +998,8 @@ void NetworkManager::messageReceived(const std::string &message,
                                      SendMode::Focused,
                                      searchRes->second.first);
             // eWarning(
-            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
 
             return;
         }
@@ -1649,7 +1642,7 @@ void NetworkManager::messageReceived(const std::string &message,
         const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::Request: {
-            auto res = node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
+            auto res = node->mining_manager()->network_request_coin_reward(reward_request, responder);
 
             if (res) {
                 sendBrodcastMessageFurther(package_data);

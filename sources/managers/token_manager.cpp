@@ -146,8 +146,8 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
     token_data.tx_hash    = transaction.hash();
     auto json             = Json::serialize(token_data);
 
-    auto res = node->dfs()->store_data_as_file(transaction.sender(),
-                                               transaction.sender(),
+    auto res = node->dfs()->store_data_as_file(transaction.receiver(),
+                                               transaction.receiver(),
                                                ByteArray(json).toBytes(),
                                                Dfs::Basic::TEMPLATE_CONTRACTS,
                                                "token-description.json",

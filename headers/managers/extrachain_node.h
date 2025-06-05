@@ -66,7 +66,6 @@ enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
-// class RestApiServerManager;
 
 enum class ImportProfileError {
     DataEmpty,
@@ -79,21 +78,17 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent,
-                          bool     isClientApp           = false,
-                          bool     allowRunRestApiServer = false,
-                          bool     isRaccoon             = false);
-
+    ExtraChainNodeWrapper(QObject* parent, bool isRaccoon = false);
     ~ExtraChainNodeWrapper();
 
-    void Init(bool makeAsync = false);
-
+    void            Init(bool makeAsync = false);
     ExtraChainNode* node;
 
 private:
     QThread* m_thread = nullptr;
 };
 
+//
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
@@ -102,24 +97,20 @@ public:
 
 private:
     // common object for
-    DfsController*       m_dfs                 = nullptr;
-    ActorIndex*          m_actorIndex          = nullptr;
+    DfsController*       dfs_                  = nullptr;
+    ActorIndex*          actor_index_          = nullptr;
     Dag*                 dag_                  = nullptr;
-    NetworkManager*      m_networkManager      = nullptr;
-    AccountController*   m_accountController   = nullptr;
-    DataMiningManager*   m_dmm                 = nullptr;
+    NetworkManager*      network_manager_      = nullptr;
+    AccountController*   account_controller_   = nullptr;
+    DataMiningManager*   mining_manager_       = nullptr;
     TokenManager*        token_manager_        = nullptr;
     SubscriptionManager* subscription_manager_ = nullptr;
     ChatManager*         chat_manager_         = nullptr;
-    QTimer*              timer                 = nullptr;
-    QTimer*              timer_reward          = nullptr;
-    QTimer*              timer_info            = nullptr;
+    QTimer*              timer_all_actors_     = nullptr;
+    QTimer*              timer_reward_         = nullptr;
+    QTimer*              timer_info_           = nullptr;
 
-    bool                        started               = false;
-    bool                        isClientApplication   = false;
-    bool                        allowRunRestApiServer = false;
-    std::uint64_t               blockCount;
-    std::vector<BigNumber>      resiveCounts;
+    bool                        started_       = false;
     VpnFunctionClearType        m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
 
@@ -139,10 +130,6 @@ public:
 
     void start();
 
-    bool isClientApp() {
-        return isClientApplication;
-    };
-
     std::pair<QString, QString> getInitPublicIPAndCountry() const;
 
     Dag*               dag();
@@ -150,7 +137,7 @@ public:
     AccountController* accountController() const;
     ActorIndex*        actorIndex() const;
     DfsController*     dfs() const;
-    DataMiningManager* dataMiningManager() const;
+    DataMiningManager* mining_manager() const;
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
@@ -192,8 +179,6 @@ public:
     std::string generate_network_identifier();
     std::string network_identifier();
 
-    std::uint64_t getBlockCount() const;
-
     void                 InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager*        token_manager() const;
     SubscriptionManager* subscription_manager() const;
@@ -204,7 +189,7 @@ public:
     VPNConfigStorage vpnConfigStorage;
 
 private:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
+    ExtraChainNode(bool isRaccoon = false);
 
     friend class ExtraChainNodeWrapper;
     friend class NetworkManager;
@@ -227,7 +212,6 @@ signals:
     void finished();
     void NodeInitialised();
     void ready();
-    void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void readyInitLocalizationFiles();
     void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
