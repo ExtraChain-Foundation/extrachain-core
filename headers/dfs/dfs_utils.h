@@ -504,9 +504,9 @@ namespace Dfs {
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const ActorId&     owner_id,
                                                                                      const std::string& folder,
                                                                                      const std::string& name);
-
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_hash(const ActorId&     owner_id,
                                                                           const std::string& hash);
+            bool is_file_ready(const ActorId& owner_id, const std::string& folder, const std::string& name);
 
             std::expected<std::string, Dfs::DfsError> last_file_id(const ActorId&     owner_id,
                                                                    const std::string& file_id);

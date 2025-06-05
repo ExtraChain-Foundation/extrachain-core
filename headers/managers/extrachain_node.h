@@ -59,6 +59,7 @@ class KeyPublic;
 class ConnectionsManager;
 class VPNConnectorManager;
 class TokenManager;
+class SubscriptionManager;
 struct VPNMessage;
 class ExtraChainNode;
 enum class MessageType;
@@ -73,18 +74,6 @@ enum class ImportProfileError {
     DecryptError,
     IncorrectJson
 };
-
-struct SubscriptionRow {
-    ActorId     owner_id;
-    std::string file_id;
-
-    int           type       = 0;
-    std::uint64_t date_start = 0; // block date
-    bool          auto_renew = false;
-    BigNumber     section_id;
-    std::string   transaction_hash;
-};
-BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
@@ -113,17 +102,18 @@ public:
 
 private:
     // common object for
-    DfsController*     m_dfs               = nullptr;
-    ActorIndex*        m_actorIndex        = nullptr;
-    Dag*               dag_                = nullptr;
-    NetworkManager*    m_networkManager    = nullptr;
-    AccountController* m_accountController = nullptr;
-    DataMiningManager* m_dmm               = nullptr;
-    TokenManager*      m_tokenManager      = nullptr;
-    ChatManager*       chat_manager_       = nullptr;
-    QTimer*            timer               = nullptr;
-    QTimer*            timer_reward        = nullptr;
-    QTimer*            timer_info          = nullptr;
+    DfsController*       m_dfs                 = nullptr;
+    ActorIndex*          m_actorIndex          = nullptr;
+    Dag*                 dag_                  = nullptr;
+    NetworkManager*      m_networkManager      = nullptr;
+    AccountController*   m_accountController   = nullptr;
+    DataMiningManager*   m_dmm                 = nullptr;
+    TokenManager*        token_manager_        = nullptr;
+    SubscriptionManager* subscription_manager_ = nullptr;
+    ChatManager*         chat_manager_         = nullptr;
+    QTimer*              timer                 = nullptr;
+    QTimer*              timer_reward          = nullptr;
+    QTimer*              timer_info            = nullptr;
 
     bool                        started               = false;
     bool                        isClientApplication   = false;
@@ -132,8 +122,6 @@ private:
     std::vector<BigNumber>      resiveCounts;
     VpnFunctionClearType        m_vpnClearFunc = nullptr;
     std::pair<QString, QString> m_initPublicIPAndCountry;
-
-    std::optional<SubscriptionRow> subscription_row;
 
 public:
     std::vector<Actor<KeyPublic>> actors_broadcast_;
@@ -148,9 +136,6 @@ public:
     bool create_subscription_template();
     bool create_token_template();
     bool create_token_vector();
-
-    // not only for the one
-    bool create_subscription_vector(const std::string& file_name);
 
     void start();
 
@@ -209,19 +194,14 @@ public:
 
     std::uint64_t getBlockCount() const;
 
-    void          InitVPN(VpnFunctionClearType vpnClearFun);
-    TokenManager* tokenManager() const;
-    bool          isRaccoon;
+    void                 InitVPN(VpnFunctionClearType vpnClearFun);
+    TokenManager*        token_manager() const;
+    SubscriptionManager* subscription_manager() const;
+    bool                 isRaccoon;
 
     ChatManager* chat_manager();
 
     VPNConfigStorage vpnConfigStorage;
-
-    bool add_subscription(const ActorId&     owner_id,
-                          const std::string& file_id,
-                          int                type,
-                          bool               auto_renew,
-                          const TokenId&     token_id);
 
 private:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
@@ -270,10 +250,6 @@ private slots:
     void getAllActorsTimerCall();
     void timer_reward_request();
     void timer_info_print();
-
-public:
-    void selfTxInitContractAdded(const Transaction& transaction);
-    void selfTxRepeatableAdded(const Transaction& transaction);
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);
