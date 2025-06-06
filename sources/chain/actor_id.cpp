@@ -17,7 +17,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "chain/actor.h"
+#include "chain/actor_id.h"
+#include "utils/exc_utils.h"
 
 ActorId::ActorId() {
     m_id = std::string(ChainConst::ACTOR_SIZE, '0');

@@ -149,7 +149,7 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
     auto res = node->dfs()->store_data_as_file(transaction.receiver(),
                                                transaction.receiver(),
                                                ByteArray(json).toBytes(),
-                                               Dfs::Basic::TEMPLATE_CONTRACTS,
+                                               Dfs::Basic::TEMPLATE_CONTRACT,
                                                "token-description.json",
                                                Dfs::DataSecurity::Public);
 

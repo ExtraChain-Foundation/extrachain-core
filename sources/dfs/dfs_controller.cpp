@@ -66,6 +66,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                                     const std::string           &visual_name,
                                                                     Dfs::DataSecurity            data_security,
                                                                     const Dfs::DataSecurityData &security_data) {
+    if (owner_id.is_zero() || author_id.is_zero()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     // TODO: move this checks to fn
     if (visual_folder.contains("'") || visual_name.contains("'")) {
         return std::unexpected(Dfs::DfsError::InvalidName);
@@ -319,8 +323,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     case Dfs::ServiceFolder::Chat:
         visual_path = Dfs::Basic::TEMPLATE_CHAT;
         break;
-    case Dfs::ServiceFolder::Contracts:
-        visual_path = Dfs::Basic::TEMPLATE_CONTRACTS;
+    case Dfs::ServiceFolder::Contract:
+        visual_path = Dfs::Basic::TEMPLATE_CONTRACT;
         break;
     case Dfs::ServiceFolder::Base:
         break;
@@ -404,6 +408,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     const Dfs::CollectionTemplate &collection_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
+    if (owner_id.is_zero() || author_id.is_zero()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
                                                                                    Dfs::Basic::TEMPLATE_COLLECTION,
                                                                                    visual_name);
@@ -492,6 +500,10 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     const Dfs::DfsTemplateVariant &vector_template,
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
+    if (owner_id.is_zero() || author_id.is_zero()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
     auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
                                                                                    Dfs::Basic::TEMPLATE_VECTOR,
                                                                                    visual_name);

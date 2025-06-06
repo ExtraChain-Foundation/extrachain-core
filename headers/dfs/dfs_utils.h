@@ -96,8 +96,8 @@ namespace Dfs {
         static const std::string TEMPLATE_COLLECTION_TEMPLATE = ":CollectionTemplate";
         static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
         static const std::string TEMPLATE_VECTOR              = ":Vector";
-        static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
-        static const std::string TEMPLATE_SUBSCRIPTIONS       = ":Subscriptions";
+        static const std::string TEMPLATE_CONTRACT            = ":Contract";
+        static const std::string TEMPLATE_SUBSCRIPTION        = ":Subscription";
         static const std::string TEMPLATE_CHAT                = ":Chat";
     } // namespace Basic
 

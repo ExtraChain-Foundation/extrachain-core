@@ -124,7 +124,6 @@ public:
     bool create_new_dag();
     bool create_usernames_vector();
     bool create_chat_templates();
-    bool create_subscription_template();
     bool create_token_template();
     bool create_token_vector();
 

@@ -20,9 +20,8 @@
 #pragma once
 
 #include "chain/actor_id.h"
-#include "utils/bignumber.h"
-#include "utils/bignumber_float.h"
 #include "utils/exc_utils.h"
+#include "dfs/dfs_utils.h"
 
 class ExtraChainNode;
 class Transaction;
@@ -31,16 +30,12 @@ struct SubscriptionRow {
     ActorId     owner_id;
     std::string file_id;
 
-    int           type       = 0; // TODO: use subscription id
-    std::uint64_t date_start = 0; // section date
-    bool          auto_renew = false;
-    std::string   tariff_id;
+    std::string   plan_id;
+    std::uint64_t date_start = 0;
     BigNumber     section_id;
     std::string   transaction_hash;
 };
-BOOST_DESCRIBE_STRUCT(SubscriptionRow,
-                      (),
-                      (type, date_start, /*tariff_id,*/ auto_renew, section_id, transaction_hash))
+BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (plan_id, date_start, section_id, transaction_hash))
 
 enum class SubscriptionInterval {
     Day,
@@ -49,32 +44,22 @@ enum class SubscriptionInterval {
     Year
 };
 
-struct SubscriptionTariff {
-    std::string                                  id;
-    BigNumberFloat                               price;
+struct SubscriptionPlan {
+    std::string                                  price; // BigNumberFloat
     TokenId                                      token_id;
     SubscriptionInterval                         interval;
     std::unordered_map<std::string, std::string> name;
-    std::unordered_map<std::string, std::string> desc;
-
-    void generate_id() {
-        id = Utils::generate_random_hex(6);
-    }
+    // std::unordered_map<std::string, std::string> desc;
 
     void add_name(const std::string& lang, const std::string& name) {
         this->name.insert({ lang, name });
     }
 
-    void add_desc(const std::string& lang, const std::string& desc) {
-        this->desc.insert({ lang, desc });
-    }
+    // void add_desc(const std::string& lang, const std::string& desc) {
+    //     this->desc.insert({ lang, desc });
+    // }
 };
-BOOST_DESCRIBE_STRUCT(SubscriptionTariff, (), (id, price, token_id, interval, name, desc))
-
-struct SubscriptionTariffs {
-    std::vector<SubscriptionTariff> tariffs;
-};
-BOOST_DESCRIBE_STRUCT(SubscriptionTariffs, (), (tariffs))
+BOOST_DESCRIBE_STRUCT(SubscriptionPlan, (), (price, token_id, interval, name))
 
 //
 class SubscriptionManager {
@@ -82,20 +67,27 @@ public:
     SubscriptionManager(ExtraChainNode* node);
 
     bool add_subscription(const ActorId&     owner_id,
-                          const std::string& file_id,
-                          int                type,
-                          bool               auto_renew,
-                          const TokenId&     token_id);
+                          const std::string& subscription_name,
+                          const std::string& plan_id);
 
     void self_tx_repeatable_added(const Transaction& transaction);
 
-    bool create_tafiffs_file(const std::string& file_name, const std::vector<SubscriptionTariff> tariffs);
-    bool create_subscription_vector(const ActorId&     tariff_owner_id,
-                                    std::string&       tariff_file_id,
-                                    const std::string& file_name);
+    bool create_subscription_template();
 
-    std::optional<std::vector<SubscriptionTariff>> read_tariffs(const ActorId&     owner_id,
-                                                                const std::string& file_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> create_plans(const std::string&                  file_name,
+                                                           const std::vector<SubscriptionPlan> plans);
+
+    bool create_subscription_vector(const ActorId&     plan_owner_id,
+                                    std::string&       plan_file_id,
+                                    const std::string& subscription_name);
+
+    std::optional<std::pair<std::string, std::string>> is_subscription_prepared(
+        const ActorId&     owner_id,
+        const std::string& subscription_name);
+
+    std::optional<std::unordered_map<std::string, SubscriptionPlan>> read_plans(
+        const ActorId&     owner_id,
+        const std::string& subscription_name);
 
 private:
     ExtraChainNode* node;

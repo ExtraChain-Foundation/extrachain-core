@@ -272,25 +272,6 @@ bool ExtraChainNode::create_chat_templates() {
     return true;
 }
 
-bool ExtraChainNode::create_subscription_template() {
-    auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
-                                     .value()
-                                     .add_fields({ Dfs::Field::Integer("type").not_null(),
-                                                   Dfs::Field::Integer("date_start").not_null(),
-                                                   Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
-                                                   Dfs::Field::String("section_id").not_null(),
-                                                   Dfs::Field::String("transaction_hash").not_null() });
-
-    auto system_actor_id = accountController()->system_actor().id();
-    auto template_res    = dfs()->store_template(system_actor_id, subscription_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create subscription template, because {}", template_res.error());
-        return false;
-    }
-
-    return true;
-}
-
 bool ExtraChainNode::create_token_template() {
     auto network_id      = actor_index_->network_id();
     auto tokens_template = Dfs::CollectionTemplate::create("TokensCache")
