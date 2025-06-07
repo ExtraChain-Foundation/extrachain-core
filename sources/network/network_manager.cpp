@@ -1330,7 +1330,11 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::DfsFileExistNotification:
+    case MessageType::DfsFileExistNotification: {
+        // sendBrodcastMessageFurther(package_data);
+        // auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+        // node->dfs()->network_response_file_state(file_state_result.value(), responder);
+    }
     case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
         if (!fragment_data_result.has_value()) {
@@ -1338,25 +1342,9 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        if (type == MessageType::DfsFileExistNotification) {
-            //TODO: here I should request that file
-
-            // #ifdef IS_R
-            sendBrodcastMessageFurther(package_data);
-            // #else
-            //             auto p = package_data;
-            //             ThreadPoolBoost::instance()->post([this, package_data = p] {
-            //                 QThread::msleep(15);
-            //                 sendBrodcastMessageFurther(package_data);
-            //             });
-            // #endif
-        }
-        else
-        {
-            // TIMER_START(FRAG)
-            node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value());
-            // TIMER_END(FRAG)
-        }
+        // TIMER_START(FRAG)
+        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value());
+        // TIMER_END(FRAG)
 
         break;
     }
@@ -1377,25 +1365,19 @@ void NetworkManager::messageReceived(const std::string &message,
                 return;
             }
 
-            node->dfs()->network_response_file_state(file_state_result->owner_id,
-                                                     file_state_result->file_id,
-                                                     file_state_result->state,
-                                                     file_state_result->hash,
-                                                     responder);
+            node->dfs()->network_response_file_state(file_state_result.value(), responder);
         }
         break;
     }
 
     case MessageType::DfsFileRequest: {
-        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        auto link_result = MessagePack::deserialize<Dfs::FileLinkFragment>(serialized);
         if (!link_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file request", type);
             return;
         }
 
-        node->dfs()->download_manager().share_stored_file(link_result->owner_id,
-                                                              link_result->file_id,
-                                                              responder);
+        node->dfs()->download_manager().share_stored_file(link_result.value(), responder);
 
         break;
     }

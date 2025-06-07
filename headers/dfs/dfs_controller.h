@@ -344,11 +344,8 @@ public:
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
                                     const Responder   &responder);
-    void network_response_file_state(const ActorId     &owner_id,
-                                     const std::string &file_id,
-                                     Dfs::FileState     state,
-                                     const std::string &hash,
-                                     const Responder   &responder);
+    void network_response_file_state(const Dfs::Packets::FileState& data, const Responder &responder);
+    void network_file_exist_notification(const Dfs::Packets::FileState& data, const Responder &responder);
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);

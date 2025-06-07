@@ -1036,6 +1036,11 @@ void DfsController::network_response_content_collection(const ActorId           
     }
     db.close();
 
+    Dfs::FileLinkFragment file_link_fragment;
+    file_link_fragment.file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+    file_link_fragment.fragment_numbers.emplace(1);
+    load_manager_.remove_active_download(file_link_fragment);
+
     // check if history and file ok
     load_manager_.finish_him(owner_id, dir_row.value());
 }
@@ -1153,6 +1158,12 @@ void DfsController::network_response_content_vector(
     auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
     bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+
+    Dfs::FileLinkFragment file_link_fragment;
+    file_link_fragment.file_link = Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
+    file_link_fragment.fragment_numbers.emplace(1);
+    load_manager_.remove_active_download(file_link_fragment);
+
     load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
 }
 
@@ -1199,26 +1210,39 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
                                                 .file_id  = file_id,
                                                 .state    = dir_row->state,
-                                                .hash     = dir_row->hash };
+                                                .hash     = dir_row->hash};
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
-void DfsController::network_response_file_state(const ActorId     &owner_id,
-                                                const std::string &file_id,
-                                                Dfs::FileState     state,
-                                                const std::string &hash,
+void DfsController::network_response_file_state(const Dfs::Packets::FileState& data,
                                                 const Responder   &responder) {
-    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
 
     if (!dir_row.has_value()) {
         return;
     }
 
-    if (state == Dfs::FileState::Ready) {
-        dir_row->state = state;
-        dir_row->hash  = hash;
-        load_manager_.add_to_queue(owner_id, dir_row.value(), *responder.identifiers().begin());
+    if (data.state == Dfs::FileState::Ready) {
+        dir_row->state = data.state;
+        dir_row->hash  = data.hash;
+        load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin());
     }
+}
+
+void DfsController::network_file_exist_notification(const Dfs::Packets::FileState& data, const Responder &responder)
+{
+    //TODO: check light node or not and some logic do we want to download new file or not
+    // auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
+
+    // if (!dir_row.has_value()) {
+    //     return;
+    // }
+
+    // if (data.state == Dfs::FileState::Ready) {
+    //     dir_row->state = data.state;
+    //     dir_row->hash  = data.hash;
+    //     load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin());
+    // }
 }
 
 std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {

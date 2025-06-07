@@ -45,6 +45,10 @@ struct LoadInfo {
 
     Dfs::DirRow                           dir_row;
 
+    size_t amount_fragments;
+    std::set<size_t> fragments_left;
+
+
     std::set<std::string> identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
     // std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
@@ -76,13 +80,14 @@ public:
     explicit LoadManager(ExtraChainNode* node, QObject *parent = nullptr);
 
     bool add_network_identifier(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
+    void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
     void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
     void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
 
-    void share_stored_file(const ActorId& owner_id, const std::string& file_id, const Responder& responder);
+    void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content);
@@ -95,17 +100,19 @@ private:
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 2;
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
+    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>> m_amount_file_fragments_requests;
 
     struct ReadStorage {
-        uint64_t current_size;
-        uint64_t total_size;
-        std::map<uint64_t, bool> offsets_read_progress;
+        // uint64_t current_size;
+        std::size_t amount_fragments;
+        std::set<size_t> fragments_achieved;
+        // std::map<uint64_t, bool> offsets_read_progress;
     };
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
