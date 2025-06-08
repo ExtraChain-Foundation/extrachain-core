@@ -39,6 +39,17 @@ public:
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>
     auto post(NullaryToken&& nullary_token) {
         return boost::asio::post(*m_thread_pool, nullary_token);
+        // auto safe_wrapper = [token = std::forward<NullaryToken>(nullary_token)]() mutable {
+        //     try {
+        //         token();
+        //     } catch (const std::exception& e) {
+        //         std::cerr << "Exception in posted task: " << e.what() << std::endl;
+        //     } catch (...) {
+        //         std::cerr << "Unknown exception in posted task." << std::endl;
+        //     }
+        // };
+
+        // return boost::asio::post(*m_thread_pool, std::move(safe_wrapper));
     }
 
     template <BOOST_ASIO_COMPLETION_TOKEN_FOR(void()) NullaryToken>

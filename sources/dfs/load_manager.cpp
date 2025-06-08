@@ -59,6 +59,7 @@ void LoadManager::timer_runner()
                 break;
 
             auto& load_info = it.second;
+            bool is_requested = false;
             for(auto identifier : load_info.identifier_list)
             {
                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
@@ -76,6 +77,14 @@ void LoadManager::timer_runner()
                     continue;
                 else if (identifier.second.counter == 0 || duration > std::chrono::seconds(10))
                 {
+                    if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1)
+                    {
+                        this->node->network()->send_message(it.first,
+                                                            MessageType::DfsFileRequestContinueUpload,
+                                                            SendMode::Neighbours,
+                                                            MessageStatus::Request);
+                    }
+
                     identifier.second.counter++;
                     identifier.second.last_attempt = std::chrono::system_clock::now();
 
@@ -109,12 +118,18 @@ void LoadManager::timer_runner()
                                                         responder);
 
                     eLog("LoadManager::timer_runner, try to send request once more with identifier ({}), attempt: {} for file_link: {} and fragments: {}.", identifier.first, identifier.second.counter, it.first, output.fragment_numbers);
+                    is_requested = true;
+                    break;
                 }
+            }
+            if (!is_requested)
+            {
+                qCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", load_info.identifier_list.size());
             }
         }
     }
     else if (m_active_downloads->empty()) {
-        eLog("LoadManager::timer_runner, EMPTY");
+        eTemp("LoadManager::timer_runner, EMPTY and its GOOD!");
     }
 }
 
@@ -124,9 +139,7 @@ void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_
     m_amount_file_fragments_requests->erase(file_link_fragment);
 }
 
-bool LoadManager::add_network_identifier(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier) {
-    const auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-
+bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::string identifier) {
     auto active_downloads_locked = *m_active_downloads;
     auto it = active_downloads_locked->find(file_link);
     if (it != active_downloads_locked->end())
@@ -232,7 +245,7 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     else
     {
         eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
-        add_network_identifier(owner_id, dir_row, identifier);
+        add_network_identifier(file_link, identifier);
     }
 }
 

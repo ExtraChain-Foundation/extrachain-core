@@ -344,6 +344,7 @@ public:
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
                                     const Responder   &responder);
+    void network_request_file_existance(const Dfs::FileLink& file_link, const Responder   &responder);
     void network_response_file_state(const Dfs::Packets::FileState& data, const Responder &responder);
     void network_file_exist_notification(const Dfs::Packets::FileState& data, const Responder &responder);
 

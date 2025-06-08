@@ -1214,6 +1214,16 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
+void DfsController::network_request_file_existance(const Dfs::FileLink& file_link, const Responder   &responder)
+{
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(file_link.owner_id, file_link.file_id);
+
+    if (!dir_row.has_value())
+        return;
+
+    responder.send_response(file_link, MessageType::DfsFileRequestContinueUpload, SendMode::Focused, MessageStatus::Response);
+}
+
 void DfsController::network_response_file_state(const Dfs::Packets::FileState& data,
                                                 const Responder   &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);

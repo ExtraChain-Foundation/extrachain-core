@@ -1382,6 +1382,21 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DfsFileRequestContinueUpload: {
+        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        if (!link_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for request file state", type);
+            return;
+        }
+
+        if (status == MessageStatus::Request)
+            node->dfs()->network_request_file_existance(link_result.value(), responder);
+        else if (status == MessageStatus::Response)
+            node->dfs()->download_manager().add_network_identifier(link_result.value(), identifier);
+
+        break;
+    }
+
     case MessageType::DfsFileRemove: {
         auto file_remove = MessagePack::deserialize<Dfs::Packets::RemoveFile>(serialized);
         if (!file_remove.has_value()) {
