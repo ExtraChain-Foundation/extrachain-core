@@ -472,7 +472,7 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
     if (ip.isEmpty())
         return;
 
-    const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
+    const quint16 port = (protocol == Network::Protocol::WebSocket ? is_light ? wsl_port : wsPort : 0);
     eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
     // m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
