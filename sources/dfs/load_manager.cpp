@@ -41,11 +41,13 @@ void LoadManager::timer_runner()
     {
         auto amount_file_fragments_requests_locked = *m_amount_file_fragments_requests;
         auto now = std::chrono::system_clock::now();
-        for (auto it = amount_file_fragments_requests_locked->begin(); it != amount_file_fragments_requests_locked->end(); ++it)
+        for (auto it = amount_file_fragments_requests_locked->begin(); it != amount_file_fragments_requests_locked->end();)
         {
             auto duration = now - it->second;
             if (duration > std::chrono::seconds(10))
-                amount_file_fragments_requests_locked->erase(it);
+                it = amount_file_fragments_requests_locked->erase(it);
+            else
+                ++it;
         }
     }
 
@@ -430,6 +432,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
 
         const auto path = Dfs::Path::file_path(file_link.owner_id, file_link.file_id);
         if (!path.has_value()) {
+            // timer_runner();
             return;
         }
 
@@ -439,6 +442,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto result = Utils::write_file_chunk(path.value(), file_content.data, file_content.offset);
             if (!result.has_value()) {
                 eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+                // timer_runner();
                 return;
             }
 
@@ -467,6 +471,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                      dir_row.hash);
                         if (!is_downloaded) {
                             eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
+                            // timer_runner();
                             return;
                         }
 
@@ -491,6 +496,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                             res->second.fragments_left.erase(file_content.fragment_number);
                         }
                     }
+                    // timer_runner();
                 }
             }
         }
