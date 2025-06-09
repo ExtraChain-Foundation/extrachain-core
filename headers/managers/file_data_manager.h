@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 
 #include <QObject>
 #include <vector>

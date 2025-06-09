@@ -17,7 +17,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/actor_index.h"
+#include "chain/actor_index.h"
 
 #include <QDir>
 
@@ -349,7 +349,13 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     }
 
     emit newActorSaved(actor.id());
-    node->network()->send_broadcast(actor, MessageType::NewActor);
+
+    if (node->network()->isActiveConnectionExists()) {
+        node->network()->send_broadcast(actor, MessageType::NewActor);
+    } else {
+        node->actors_broadcast_.push_back(actor);
+    }
+
     return result;
 }
 

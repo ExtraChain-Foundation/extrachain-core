@@ -25,7 +25,7 @@
 
 #include <msgpack.hpp>
 
-#include "blockchain/actor_id.h"
+#include "chain/actor_id.h"
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
 #include "extrachain_global.h"
@@ -71,8 +71,8 @@ public:
         auto public_key = this->key_.public_key();
         auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 
-        if (hash.size() >= BlockchainConst::ACTOR_SIZE)
-            id_ = hash.substr(0, BlockchainConst::ACTOR_SIZE);
+        if (hash.size() >= ChainConst::ACTOR_SIZE)
+            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
         else
             eFatal("[Actor] Create: error size of hash");
     }
