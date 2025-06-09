@@ -1345,8 +1345,8 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::DfsFileExistNotification: {
         // sendBrodcastMessageFurther(package_data);
-        // auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
-        // node->dfs()->network_response_file_state(file_state_result.value(), responder);
+        auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+        node->dfs()->network_response_file_state(file_state_result.value(), responder);
         break;
     }
     case MessageType::DfsFileFragment: {
@@ -1357,7 +1357,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
 
         // TIMER_START(FRAG)
-        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value());
+        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
         // TIMER_END(FRAG)
 
         break;

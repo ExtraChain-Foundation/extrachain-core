@@ -81,8 +81,8 @@ public:
 
     bool add_network_identifier(const Dfs::FileLink& file_link, std::string identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
-    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
-    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
+    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier);
+    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
@@ -90,12 +90,12 @@ public:
     void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
-    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content);
+    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
 private:
-    void timer_runner();
+    void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
 
     ExtraChainNode* node;
 
