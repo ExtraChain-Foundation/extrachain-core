@@ -19,9 +19,17 @@
 
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent, const bool is_constant)
+WebSocketService::WebSocketService(QWebSocket     *ws,
+                                   ExtraChainNode *node,
+                                   QObject        *parent,
+                                   const bool      is_constant,
+                                   const bool      is_light)
     : SocketService(node, parent) {
     is_constant_ = is_constant;
+
+    if (is_light) {
+        mode_ = SocketMode::Light;
+    }
 
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
@@ -116,13 +124,12 @@ bool WebSocketService::is_active() const {
     return activated_ && m_ws->isValid();
 }
 
-void WebSocketService::open(const QString &ip, quint16 port, SocketMode mode) {
+void WebSocketService::open(const QString &ip, quint16 port) {
     if (m_ws->isValid()) {
         eCritical("[WS] Already opened");
         closeSocket();
     } else {
         timestamp_ = Utils::current_date_ms();
-        mode_      = mode;
 
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         eLog("[WS] Open {}", url);

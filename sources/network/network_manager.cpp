@@ -250,7 +250,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->ip() != first_node()) {
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
             reconn_.insert({ service->ip().toStdString(), 1 });
         }
     });
@@ -393,7 +393,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "DFS"));
+    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "Second"));
 
     if (!local) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -402,10 +402,11 @@ void NetworkManager::startNetwork() {
 
     if (!Network::isStartedServer)
         return;
+
     wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (!wsServer->listen(QHostAddress::Any, wsPort)) {
-        eLog("[NetworkManager] Can't listen port");
+        eLog("[NetworkManager] Can't listen port {}", wsPort);
         return;
     }
 
@@ -420,9 +421,28 @@ void NetworkManager::startNetwork() {
         eLog("[WS] Server socker error: {}", int(socketError));
     });
 
-    eLog("[WS] Start listening: {}:{}",
-         wsServer->serverAddress(),
-         wsServer->serverPort()); // << wsServer->serverName();
+    eLog("[WS] Start listening: {}:{}", wsServer->serverAddress(), wsServer->serverPort());
+
+    // light server
+    ws_server_light = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
+
+    if (!ws_server_light->listen(QHostAddress::Any, wsl_port)) {
+        eLog("[NetworkManager] Can't listen port {}", wsl_port);
+        return;
+    }
+
+    connect(ws_server_light, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsLightConnection);
+    connect(ws_server_light, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
+        eLog("[WS] Server error code: {}", int(closeCode));
+    });
+    connect(ws_server_light, &QWebSocketServer::closed, [] {
+        eLog("[WS] Server: closed");
+    });
+    connect(ws_server_light, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
+        eLog("[WS] Server socker error: {}", int(socketError));
+    });
+
+    eLog("[WS] Start listening: {}:{}", ws_server_light->serverAddress(), ws_server_light->serverPort());
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -436,7 +456,8 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       bool              isConstant) {
+                                       bool              isConstant,
+                                       const bool        is_light) {
     if (ip.toStdString() == first_node_) {
         isConstant = true;
     }
@@ -460,7 +481,7 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
     case Protocol::Udp:
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), port, request, isConstant);
+        connectToWebSocket(ip.simplified(), port, request, isConstant, is_light);
         break;
     case Protocol::Undefined:
         eFatal("Undefined connectToNode");
@@ -470,12 +491,13 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
 void NetworkManager::connectToWebSocket(const QString &ip,
                                         quint16        port,
                                         bool           requestListNodes,
-                                        const bool     isConstant) {
+                                        const bool     isConstant,
+                                        const bool     is_light) {
     if (ip.isEmpty()) {
         return;
     }
 
-    auto service = new WebSocketService(nullptr, node, this, isConstant);
+    auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
     connectWsService(service, requestListNodes);
     service->open(ip, port);
     m_reconnectionsToIdentifier
@@ -1929,6 +1951,33 @@ void NetworkManager::onNewWsConnection() {
     }
 
     auto service = new WebSocketService(ws, node, this, false);
+    connectWsService(service);
+    if (!needToDelete)
+        m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
+                                                                .port     = service->port(),
+                                                                .protocol = Network::Protocol::WebSocket },
+                                             "");
+}
+
+void NetworkManager::onNewWsLightConnection() {
+    eLog("NetworkManager::onNewWsLightConnection()");
+    auto ws = wsServer->nextPendingConnection();
+    if (ws == nullptr)
+        eFatal("[WS] Error: ws == nulltpr");
+
+    bool needToDelete = false;
+    /*
+    if (active_connections_count() >= Network::maxConnections) {
+        if (!removeOneConnection()) {
+            eLog(
+                "[NetworkManager] Can't connect from WS light server because the maximum number of "
+                "constant connections reached!");
+            needToDelete = true;
+        }
+    }
+    */
+
+    auto service = new WebSocketService(ws, node, this, false, true);
     connectWsService(service);
     if (!needToDelete)
         m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
