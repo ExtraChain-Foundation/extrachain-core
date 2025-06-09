@@ -981,10 +981,8 @@ void NetworkManager::messageReceived(const std::string &message,
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
-            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -1003,10 +1001,8 @@ void NetworkManager::messageReceived(const std::string &message,
                                      SendMode::Focused,
                                      searchRes->second.first);
             // eWarning(
-            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
 
             return;
         }
@@ -1346,6 +1342,11 @@ void NetworkManager::messageReceived(const std::string &message,
     case MessageType::DfsFileExistNotification: {
         sendBrodcastMessageFurther(package_data);
         auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+        if (!file_state_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file state", type);
+            break;
+        }
+
         node->dfs()->network_response_file_state(file_state_result.value(), responder);
         break;
     }
