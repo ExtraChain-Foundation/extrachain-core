@@ -1334,6 +1334,7 @@ void NetworkManager::messageReceived(const std::string &message,
         // sendBrodcastMessageFurther(package_data);
         // auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
         // node->dfs()->network_response_file_state(file_state_result.value(), responder);
+        break;
     }
     case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
