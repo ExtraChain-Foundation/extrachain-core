@@ -695,6 +695,10 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             continue;
         }
 
+        if (service->mode() == SocketMode::Light && send_mode != SendMode::Focused) {
+            continue;
+        }
+
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
                                           service->identifier().toStdString(),
@@ -981,10 +985,8 @@ void NetworkManager::messageReceived(const std::string &message,
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
-            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -1003,10 +1005,8 @@ void NetworkManager::messageReceived(const std::string &message,
                                      SendMode::Focused,
                                      searchRes->second.first);
             // eWarning(
-            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
 
             return;
         }

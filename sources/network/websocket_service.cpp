@@ -116,12 +116,13 @@ bool WebSocketService::is_active() const {
     return activated_ && m_ws->isValid();
 }
 
-void WebSocketService::open(const QString &ip, quint16 port) {
+void WebSocketService::open(const QString &ip, quint16 port, SocketMode mode) {
     if (m_ws->isValid()) {
         eCritical("[WS] Already opened");
         closeSocket();
     } else {
         timestamp_ = Utils::current_date_ms();
+        mode_      = mode;
 
         auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
         eLog("[WS] Open {}", url);

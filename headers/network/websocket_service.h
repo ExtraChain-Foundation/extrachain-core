@@ -40,7 +40,7 @@ public:
 
     QWebSocket               *socket() const;
     bool                      is_active() const override;
-    void                      open(const QString &ip, quint16 port);
+    void                      open(const QString &ip, quint16 port, SocketMode mode = SocketMode::Full);
     virtual QString           protocol_string() const override;
     virtual Network::Protocol protocol() const override;
 
