@@ -34,13 +34,14 @@ public:
     explicit WebSocketService(QWebSocket     *ws,
                               ExtraChainNode *node,
                               QObject        *parent      = nullptr,
-                              const bool      is_constant = false);
+                              const bool      is_constant = false,
+                              const bool      is_light    = false);
     // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
     QWebSocket               *socket() const;
     bool                      is_active() const override;
-    void                      open(const QString &ip, quint16 port, SocketMode mode = SocketMode::Full);
+    void                      open(const QString &ip, quint16 port);
     virtual QString           protocol_string() const override;
     virtual Network::Protocol protocol() const override;
 

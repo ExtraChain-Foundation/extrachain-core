@@ -223,9 +223,11 @@ private:
     std::unique_ptr<UPnPConnector>  upnpConnector;
     QMap<std::string, int>          msgHashList = {};
 
-    ExtraChainNode*                              node;
-    std::shared_ptr<QNetworkAddressEntry>        local;
-    QWebSocketServer*                            wsServer = nullptr;
+    ExtraChainNode*                       node;
+    std::shared_ptr<QNetworkAddressEntry> local;
+    QWebSocketServer*                     wsServer        = nullptr;
+    QWebSocketServer*                     ws_server_light = nullptr;
+
     SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
@@ -263,7 +265,8 @@ public:
 
     // protected:
     // quint16 tcpPort = 2222;
-    const quint16 wsPort = 2222;
+    const quint16 wsPort   = 2222;
+    const quint16 wsl_port = 2223;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
@@ -296,13 +299,15 @@ signals:
     void connectToNode(const QString&    ip,
                        Network::Protocol protocol,
                        const bool        request    = false,
-                       const bool        isConstant = false);
+                       const bool        isConstant = false,
+                       const bool        is_light   = false);
 
 protected:
     void connectToWebSocket(const QString& ip,
                             quint16        port,
                             bool           requestListNodes = false,
-                            const bool     isConstant       = false);
+                            const bool     isConstant       = false,
+                            const bool     is_light         = false);
 
     /**
      * @brief NetworkManager::checkMsgCount
@@ -313,6 +318,7 @@ protected:
 
 private slots:
     void onNewWsConnection();
+    void onNewWsLightConnection();
 
 protected slots:
     virtual void checkConnectionsStatus();
@@ -323,7 +329,8 @@ public slots:
     void connectToNodeSlot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           bool              isConstant = false);
+                           bool              isConstant = false,
+                           const bool        is_light   = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type,
