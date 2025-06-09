@@ -169,7 +169,10 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return;
     }
 
-    if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
+    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
+    if (dir_row.type == Dfs::FileType::File && (dir_row.state != Dfs::FileState::Ready || !need_load)) {
         return;
     }
 
