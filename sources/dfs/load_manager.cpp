@@ -120,7 +120,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed)
                                                         MessageStatus::NoStatus,
                                                         responder);
 
-                    eLog("LoadManager::timer_runner, try to send request once more with identifier ({}), attempt: {} for file_link: {} and fragments: {}.", identifier.first, identifier.second.counter, it.first, output.fragment_numbers);
+                    // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}), attempt: {} for file_link: {} and fragments: {}.", identifier.first, identifier.second.counter, it.first, output.fragment_numbers);
                     is_requested = true;
                     break;
                 }
@@ -132,7 +132,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed)
             auto identifier_list_size = load_info.identifier_list.size();
             if (!is_requested && identifier_list_size > 0)
             {
-                eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", identifier_list_size);
+                // eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", identifier_list_size);
             }
         }
     }
@@ -257,7 +257,7 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     }
     else
     {
-        eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
+        // eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
         add_network_identifier(file_link, identifier);
     }
 }
@@ -285,19 +285,19 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     eLog("LoadManager::share_stored_file, file_id: {}", file_link_fragment.file_link.file_id);
     auto path = Dfs::Path::file_path(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
     if (!path.has_value()) {
-        eCritical("LoadManager::share_stored_file, no path. file_id: {}", file_link_fragment.file_link.file_id);
+        // eCritical("LoadManager::share_stored_file, no path. file_id: {}", file_link_fragment.file_link.file_id);
         return;
     }
 
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
     if (!dir_row.has_value()) {
-        eCritical("LoadManager::share_stored_file, no dir_row. file_id: {}", file_link_fragment.file_link.file_id);
+        // eCritical("LoadManager::share_stored_file, no dir_row. file_id: {}", file_link_fragment.file_link.file_id);
         return;
     }
 
     auto size = path->file_size();
     if (!size.has_value()) {
-        eCritical("LoadManager::share_stored_file, no size. file_id: {}", file_link_fragment.file_link.file_id);
+        // eCritical("LoadManager::share_stored_file, no size. file_id: {}", file_link_fragment.file_link.file_id);
         return;
     }
     const uint64_t total_size = size.value();
@@ -305,11 +305,11 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     if (dir_row->type != Dfs::FileType::File) {
         if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, responder);
-            eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
+            // eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
         }
         if (dir_row->type == Dfs::FileType::Vector) {
             node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, responder);
-            eCritical("LoadManager::share_stored_file, its a vector. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
+            // eCritical("LoadManager::share_stored_file, its a vector. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
         }
         return;
     }
@@ -329,7 +329,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             offset = Dfs::Basic::FRAGMENT_SIZE * (fragment_number-1);
             auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
             if (!chunk.has_value()) {
-                eCritical("[Dfs] LoadManager::share_stored_file, empy file chunk. owner_id: {}, file_id: {}, fragment number: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, fragment_number);
+                // eCritical("[Dfs] LoadManager::share_stored_file, empy file chunk. owner_id: {}, file_id: {}, fragment number: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, fragment_number);
                 return;
             }
             auto chunk_size = chunk->size();
@@ -343,7 +343,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             file_fragment.fragment_number = fragment_number;
             file_fragment.full_amount_fragments = max_offsets;
             if (!this->node->network()->isActiveConnectionExists()) {
-                eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file. owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
+                // eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file. owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
                 return;
             }
 
@@ -436,7 +436,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             {
                 if (item->second.fragments_achieved.contains(file_content.fragment_number))
                 {
-                    eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+                    // eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
                     return;
                 }
             }
@@ -460,7 +460,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             std::lock_guard<std::mutex> m_lock(m_write_file_mutex);
             auto result = Utils::write_file_chunk(path.value(), file_content.data, file_content.offset);
             if (!result.has_value()) {
-                eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+                // eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
                 timer_runner(file_link);
                 return;
             }
