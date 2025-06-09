@@ -313,8 +313,9 @@ namespace Dfs {
             std::string    file_id;
             Dfs::FileState state = Dfs::FileState::Known;
             std::string    hash;
+            bool           notify_neighbours = false;
         };
-        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash))
+        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash, notify_neighbours))
 
         struct RemoveFile {
             ActorId       owner_id;

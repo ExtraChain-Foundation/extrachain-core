@@ -1235,7 +1235,7 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState& d
     if (data.state == Dfs::FileState::Ready) {
         dir_row->state = data.state;
         dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin());
+        load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin(), data.notify_neighbours);
     }
 }
 

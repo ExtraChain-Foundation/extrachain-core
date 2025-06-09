@@ -48,6 +48,7 @@ struct LoadInfo {
     size_t amount_fragments;
     std::set<size_t> fragments_left;
 
+    bool notify_neighbours;
 
     std::set<std::string> identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -81,7 +82,7 @@ public:
 
     bool add_network_identifier(const Dfs::FileLink& file_link, std::string identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
-    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier);
+    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier, const bool notify_neighbours = false);
     void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& identifier);
 
     // void process_next();

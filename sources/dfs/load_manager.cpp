@@ -161,7 +161,7 @@ bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::st
     return false;
 }
 
-void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier) {
+void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier, const bool notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
@@ -238,6 +238,8 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
     load_info.identifier_list.emplace_back(identifier, attempts);
 
     load_info.dir_row.state = Dfs::FileState::Known;
+
+    load_info.notify_neighbours = notify_neighbours;
 
     auto res = m_active_downloads->emplace(file_link, load_info);
     if (res.second)
@@ -405,10 +407,11 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
     file_state.owner_id = owner_id;
     file_state.state = dir_row->state;
     file_state.hash = dir_row->hash;
+    file_state.notify_neighbours = true;
 
     auto message_id = this->node->network()->send_message(file_state,
                                                           MessageType::DfsFileExistNotification,
-                                                          SendMode::Broadcast,
+                                                          SendMode::Neighbours,
                                                           MessageStatus::NoStatus);
     eLog("[Dfs] LoadManager::brodcast_file_exist, file fragment sended (message_id: {}). owner_id: {}, file_id: {}", message_id, owner_id, file_id);
 }
@@ -497,10 +500,15 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                             return;
                         }
 
+                        bool notify_neighbours = res->second.notify_neighbours;
+
                         active_downloads_locked->erase(res);
                         eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
 
                         finish_him(file_link.owner_id, dir_row);
+
+                        if (notify_neighbours)
+                            broadcast_file_exist(file_link.owner_id, file_link.file_id);
                     }
                     else
                     {

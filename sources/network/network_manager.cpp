@@ -1340,7 +1340,6 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DfsFileExistNotification: {
-        sendBrodcastMessageFurther(package_data);
         auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
         if (!file_state_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file state", type);
