@@ -695,6 +695,10 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             continue;
         }
 
+        if (service->mode() == SocketMode::Light && send_mode != SendMode::Focused) {
+            continue;
+        }
+
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
                                           service->identifier().toStdString(),

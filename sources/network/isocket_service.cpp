@@ -102,6 +102,11 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     identifier_      = QString::fromStdString(handshake.identifier);
     dfs_mode_socket_ = handshake.dfs_mode;
 
+    // 0. Check mode
+    if (handshake.socket_mode == SocketMode::Light) { // if full -> nothing change, because we can replace light
+        mode_ = SocketMode::Light;
+    }
+
     // 1. Checking the version
     if (auto version_result = Utils::compare_versions(extrachain_version, handshake.version);
         version_result != Utils::VersionCompareResult::Same) {
@@ -229,6 +234,7 @@ QByteArray SocketService::generate_first_message() {
                            .connections  = {},
                            .is_available = true,
                            .is_constant  = is_constant_.load(),
+                           .socket_mode  = mode_,
                            .dfs_mode     = node->dfs()->mode() };
 
     {
