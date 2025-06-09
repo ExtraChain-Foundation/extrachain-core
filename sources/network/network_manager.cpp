@@ -971,23 +971,21 @@ void NetworkManager::messageReceived(const std::string &message,
         if (!should_ignore
             && (m_messages->contains(messageId)
                 || message_body.init_sender_id == node->accountController()->system_actor().id())) {
-            eWarning(
-                "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
-                messageId,
-                identifier,
-                type);
+            // eWarning(
+            //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
+            //     messageId,
+            //     identifier,
+            //     type);
             return;
         }
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
-            eWarning(
-                "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
-                messageId,
-                identifier,
-                type);
+            // eWarning(
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
             return;
         } else {
-            eInfo("MessageID emplaced: {}", messageId);
+            // eInfo("MessageID emplaced: {}", messageId);
         }
     } else if (status == MessageStatus::Response) {
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
@@ -1002,12 +1000,9 @@ void NetworkManager::messageReceived(const std::string &message,
                                      message_edited,
                                      SendMode::Focused,
                                      searchRes->second.first);
-            eWarning(
-                "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: "
-                "{}",
-                messageId,
-                identifier,
-                type);
+            // eWarning(
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
 
             return;
         }
