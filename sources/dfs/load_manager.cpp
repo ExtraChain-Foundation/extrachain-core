@@ -273,7 +273,7 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        if (dir_row.type == Dfs::FileType::File && !need_load) {
+        if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }
 
