@@ -132,7 +132,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed)
             auto identifier_list_size = load_info.identifier_list.size();
             if (!is_requested && identifier_list_size > 0)
             {
-                qCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", identifier_list_size);
+                eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", identifier_list_size);
             }
         }
     }
