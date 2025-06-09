@@ -20,7 +20,7 @@
 #pragma once
 
 #include "dfs/dfs_utils.h"
-#include "blockchain/actor.h"
+#include "chain/actor.h"
 #include "utils/fs_path.h"
 
 enum class CollectionOperation {

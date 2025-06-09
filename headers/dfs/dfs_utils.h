@@ -23,10 +23,9 @@
 #include <string>
 #include <vector>
 
-#include "blockchain/actor.h"
-#include "blockchain/transaction.h"
+#include "chain/actor.h"
+#include "chain/transaction.h"
 #include "utils/bignumber.h"
-#include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <fmt/format.h>
@@ -364,19 +363,6 @@ namespace Dfs {
             MSGPACK_DEFINE(actorId)
         };
 
-        struct ResponseBlockCount {
-            ActorId   actorId;
-            BigNumber blockCount;
-
-            MSGPACK_DEFINE(actorId, blockCount)
-        };
-
-        struct RequestBlockCount {
-            ActorId actorId;
-
-            MSGPACK_DEFINE(actorId)
-        };
-
         struct VerifyFileMessage {
             ActorId       actorId;
             std::string   hash;
@@ -466,8 +452,7 @@ namespace Dfs {
     } // namespace HistoricalOld
 
     namespace Reward {
-        static const int       TOLERANCE                   = 100;
-        static const BigNumber coinProductionAlgorithmTick = BigNumber("20", NumeralBase::Dec); // 100
+        static const int TOLERANCE = 100;
 
         enum TypeFunctioning {
             Base,

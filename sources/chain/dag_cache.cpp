@@ -17,13 +17,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include "blockchain/dag_cache.h"
-#include "blockchain/dag.h"
+#include "chain/dag_cache.h"
+#include "chain/dag.h"
 #include "managers/extrachain_node.h"
 #include "utils/db_connector.h"
 
-DagCache::DagCache(ExtraChainNode* node)
-    : node_(node) {
+DagCache::DagCache(ExtraChainNode* node, Dag* dag)
+    : node(node)
+    , dag(dag) {
 }
 
 DagCache::~DagCache() {
@@ -53,15 +54,20 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     auto       cache_section = cached_section_;
 
     for (const auto& row : rows) {
-        auto actor_id = ActorId::create(row.at("actor_id"));
-        auto token_id = TokenId::create(row.at("token_id"));
-        auto balance  = BigNumberFloat::create(row.at("balance"));
+        try {
+            auto actor_id = ActorId::create(row.at("actor_id"));
+            auto token_id = TokenId::create(row.at("token_id"));
+            auto balance  = BigNumberFloat::create(row.at("balance"));
 
-        if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        } catch (const std::out_of_range& e) {
+            eLog("[DagCache] Missing required field in database row: {}", e.what());
             continue;
         }
-
-        balances[{ actor_id.value(), token_id.value() }] = balance.value();
     }
 
     return { cache_section, balances };
@@ -250,7 +256,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
                                       const BigNumber&            current_section,
                                       const BigNumber&            first_saved_section,
                                       std::optional<BigNumber>    to_section) {
-    eLog("[DagCache] Calculating balances for {} actors", actor_ids.size());
+    eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
     if (current_section == BigNumber(-1) || actor_ids.empty()) {
@@ -277,7 +283,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     // Process transactions after the balance_start_section up to current_section
     auto to = to_section.has_value() ? to_section.value() : current_section;
     for (BigNumber i = balance_start_section; i <= to; i++) {
-        auto section = node_->dag()->read_section(i);
+        auto section = dag->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
         }
@@ -297,6 +303,11 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
             }
         }
     }
+
+    std::erase_if(balances, [&actor_ids](const auto& balance_entry) {
+        const ActorId& actor_id = balance_entry.first.first;
+        return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
+    });
 
     eLog("-----> {}", balances);
 
@@ -346,25 +357,25 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
         return false;
     }
 
-    eLog("[DagCache] Cache update needed: current_section={}, cached_section={}, safe_genesis={}",
+    eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
          current_section,
          cached_section_,
          safe_genesis_section);
 
     // Use read_section callback from DAG
     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
-        return node_->dag()->read_section(section_id);
+        return dag->read_section(section_id);
     };
 
     // Update cache to safe section (genesis + lag)
     bool result = update_to_genesis_section(safe_genesis_section,
                                             current_section,
-                                            node_->dag()->first_saved_section(),
+                                            dag->first_saved_section(),
                                             read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
-        node_->dag()->update_range();
+        dag->update_range();
         return true;
     }
 
@@ -397,7 +408,12 @@ bool DagCache::update_to_genesis_section(
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
+
         for (const auto& tx : section->transactions) {
+            // if (tx.verify()) {
+
+            // }
+
             actor_token_set.insert({ tx.sender(), tx.token() });
             actor_token_set.insert({ tx.receiver(), tx.token() });
 
@@ -440,6 +456,7 @@ bool DagCache::update_to_genesis_section(
         if (!section.has_value() || section->transactions.empty()) {
             continue;
         }
+
         // Process each transaction
         for (const auto& tx : section->transactions) {
             process_transaction(tx, balances);
@@ -459,7 +476,7 @@ bool DagCache::update_to_genesis_section(
     // Update cached section
     cached_section_ = genesis_section;
     eLog("[DagCache] Cache updated to section {}", cached_section_);
-    node_->dag()->update_range();
+    dag->update_range();
     return true;
 }
 
@@ -537,12 +554,12 @@ bool DagCache::init_db() {
         return true;
     }
 
-    // bool is_exists = QFile(QString::fromStdString(BlockchainConst::BALANCE_CACHE)).exists();
+    // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
 
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_FOLDER));
-    QDir().mkdir(QString::fromStdString(BlockchainConst::BLOCKCHAIN_CACHE_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
 
-    std::string db_path = BlockchainConst::BALANCE_CACHE;
+    std::string db_path = ChainConst::BALANCE_CACHE;
     db_                 = std::make_unique<DbConnector>(db_path);
 
     if (!db_->open()) {
@@ -580,5 +597,119 @@ bool DagCache::init_db() {
 
 void DagCache::reset_db() {
     db_initialized_ = false;
+    if (db_initialized_) {
+        db_->close();
+    }
     db_.reset();
+}
+
+void reverse_transaction(const Transaction& tx, Balances& balances) {
+    // Skip if transaction doesn't affect balances
+    if (tx.type() == TransactionType::Unknown) {
+        return;
+    }
+
+    // Reward transactions - reverse: subtract amount from sender
+    if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] -= tx.amount();
+    }
+    // Contract initialization - reverse: subtract amount from sender
+    else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
+        auto key = std::make_pair(tx.sender(), tx.token());
+        if (balances.find(key) == balances.end()) {
+            balances[key] = BigNumberFloat(0);
+        }
+        balances[key] -= tx.amount();
+    }
+    // Token conversion - reverse: add back to source, subtract from destination
+    else if (tx.type() == TransactionType::Conversion && !tx.sender().is_zero()) {
+        if (tx.meta().has_value()) {
+            auto from_token = TokenId::create(tx.meta().value());
+            if (from_token.has_value()) {
+                // Add back to source token (reverse of deduction)
+                auto from_key = std::make_pair(tx.sender(), from_token.value());
+                if (balances.find(from_key) == balances.end()) {
+                    balances[from_key] = BigNumberFloat(0);
+                }
+                balances[from_key] += tx.amount();
+
+                // Subtract from destination token (reverse of addition)
+                auto to_key = std::make_pair(tx.sender(), tx.token());
+                if (balances.find(to_key) == balances.end()) {
+                    balances[to_key] = BigNumberFloat(0);
+                }
+                balances[to_key] -= tx.amount();
+            }
+        }
+    }
+    // Regular transactions - reverse: subtract from receiver, add to sender
+    else {
+        // If receiver is valid, subtract funds (reverse of addition)
+        if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.receiver(), tx.token());
+            if (balances.find(key) == balances.end()) {
+                balances[key] = BigNumberFloat(0);
+            }
+            balances[key] -= tx.amount();
+        }
+
+        // If sender is valid, add funds back (reverse of deduction)
+        if (!tx.sender().is_zero() && !tx.token().is_zero()) {
+            auto key = std::make_pair(tx.sender(), tx.token());
+            if (balances.find(key) == balances.end()) {
+                balances[key] = BigNumberFloat(0);
+            }
+            balances[key] += tx.amount();
+        }
+    }
+}
+
+std::set<ActorId> DagCache::local_clear_less_balances() {
+    Balances          balances;
+    std::set<ActorId> actors;
+
+    eLog("[Dag] local_clear_less_balances");
+
+    for (auto i = BigNumber(1); i <= dag->current_section(); i++) {
+        auto section = dag->read_section(i);
+        if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+            continue;
+        }
+
+        // Process each transaction in the section
+        for (const auto& tx : section->transactions) {
+            process_transaction(tx, balances);
+
+            if (tx.section() <= 1) {
+                continue;
+            }
+
+            // if (tx.sender() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")
+            //     || tx.receiver() == ActorId("1a902514053b9f2c814621799acbbef21e2ff6a5")) {
+            //     auto tx1 = tx;
+            //     tx1.set_prev_hashs({ "hashs: " + std::to_string(tx1.prev_hashs().size()) });
+            //     eLog("{}\n", tx1);
+            // }
+
+            if (balances[{ tx.sender(), tx.token() }] < 0) {
+                eLog("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
+                     tx.section(),
+                     tx.sender(),
+                     tx.token(),
+                     balances[{ tx.sender(), tx.token() }],
+                     tx.timestamp());
+
+                reverse_transaction(tx, balances);
+                dag->local_remove_transaction(tx.section(), tx.hash());
+                actors.insert(tx.sender());
+            }
+        }
+    }
+
+    eLog("[Dag] Removed for actors: {}", actors);
+    return actors;
 }

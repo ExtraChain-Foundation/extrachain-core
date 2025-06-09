@@ -30,7 +30,7 @@ enum class LogModule {
     Dfs        = 1 << 0,
     Network    = 1 << 1,
     Utils      = 1 << 2,
-    Blockchain = 1 << 3,
+    Chain      = 1 << 3,
     Managers   = 1 << 4,
     Global     = 1 << 5,
     Encryption = 1 << 6,
@@ -66,9 +66,10 @@ public:
         m_modules["Dfs"] = { "dfs_controller",     "fragment_storage", "historical_chain", "historical_sql",
                              "permission_manager", "dfs_utils",        "name_validator" };
 
-        m_modules["Blockchain"] = { "actor",         "block",          "actors",           "blockchain",
-                                    "genesis_block", "block_variant",  "index/actorindex", "index/blockindex",
-                                    "transaction",   "private_profile" };
+        // TODO
+        m_modules["Chain"] = { "actor",         "block",          "actors",           "blockchain",
+                               "genesis_block", "block_variant",  "index/actorindex", "index/blockindex",
+                               "transaction",   "private_profile" };
 
         m_modules["Encryption"] = { "encryption_tools", "key_private", "key_public" };
 
@@ -191,8 +192,8 @@ public:
             return LogModule::Network;
         if (matchesModule(filename, "Utils"))
             return LogModule::Utils;
-        if (matchesModule(filename, "Blockchain"))
-            return LogModule::Blockchain;
+        if (matchesModule(filename, "Chain"))
+            return LogModule::Chain;
         if (matchesModule(filename, "Managers"))
             return LogModule::Managers;
         if (matchesModule(filename, "Global"))

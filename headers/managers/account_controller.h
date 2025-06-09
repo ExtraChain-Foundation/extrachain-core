@@ -19,8 +19,8 @@
 
 #pragma once
 
-#include "blockchain/actor.h"
-#include "blockchain/private_profile.h"
+#include "chain/actor.h"
+#include "chain/private_profile.h"
 #include "utils/autologinhash.h"
 
 class ExtraChainNode;
@@ -81,7 +81,7 @@ public:
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
-    const std::vector<ActorId>            accountsIds() const;
+    const std::vector<ActorId>            accounts_ids() const;
     const Actor<KeyPrivate>              &currentWallet() const; // temp
     void                                  clear();
 

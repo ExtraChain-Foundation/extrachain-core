@@ -20,7 +20,7 @@
 
 #include "extrachain_version.h"
 #include "dfs/dfs_controller.h"
-#include "blockchain/actor_index.h"
+#include "chain/actor_index.h"
 #include "network/network_manager.h"
 
 #ifndef EXTRACHAIN_CMAKE

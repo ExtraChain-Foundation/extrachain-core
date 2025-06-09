@@ -22,9 +22,9 @@
 #include <boost/describe.hpp>
 
 #include "utils/bignumber.h"
-#include "blockchain/transaction.h"
-#include "blockchain/transaction_cache.h"
-#include "blockchain/dag_cache.h"
+#include "chain/transaction.h"
+#include "chain/transaction_cache.h"
+#include "chain/dag_cache.h"
 
 #include "3rdparty/rustex.h"
 
@@ -32,7 +32,7 @@ class ExtraChainNode;
 class Responder;
 
 /**
- * @brief Represents a section (block) in the blockchain
+ * @brief Represents a section in the chain
  *
  * A section contains a collection of transactions and metadata
  * including its ID and timestamp.
@@ -66,7 +66,7 @@ struct TransactionResult {
 BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
 
 /**
- * @brief Represents the range of sections in the blockchain
+ * @brief Represents the range of sections in the chain
  *
  * Contains the IDs of the first and last sections, as well as
  * the ID of the last cached section
@@ -79,12 +79,12 @@ struct SectionRange {
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
 /**
- * @brief Enumeration of blockchain synchronization states
+ * @brief Enumeration of chain synchronization states
  */
-enum class BlockchainSyncStatus {
+enum class DagSyncStatus {
     None,     // No synchronization in progress
-    LastInfo, // Retrieving last blockchain info from peers
-    Blocks    // Synchronizing sections/blocks
+    LastInfo, // Retrieving last chain info from peers
+    Sections  // Synchronizing sections
 };
 
 /**
@@ -100,10 +100,10 @@ enum class DagStatus {
 };
 
 /**
- * @brief Information about the last state of the blockchain
+ * @brief Information about the last state of the chain
  *
- * Contains the ID of the last block, its previous hashes,
- * and the timestamp of the genesis block
+ * Contains the ID of the last section, its previous hashes,
+ * and the timestamp of the genesis section / transaction
  */
 struct DagLastInfo {
     BigNumber             last_section_id;
@@ -126,9 +126,9 @@ struct DagLightPackage {
 BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs))
 
 /**
- * @brief Directed Acyclic Graph blockchain implementation
+ * @brief Directed Acyclic Chain implementation
  *
- * This class manages the blockchain storage, transaction processing,
+ * This class manages the chain storage, transaction processing,
  * and network synchronization. It supports both full and light modes
  * of operation.
  */
@@ -146,36 +146,30 @@ public:
      *
      * @return BigNumber The current (latest) section ID
      */
-    BigNumber current_section() const {
-        return current_section_;
-    }
+    BigNumber current_section() const;
+
+    void set_current_section(const BigNumber &new_current_section);
 
     /**
      * @brief Get the current DAG operation mode
      *
      * @return DagMode The current mode (Full or Light)
      */
-    DagMode mode() const {
-        return mode_;
-    }
+    DagMode mode() const;
 
     /**
      * @brief Get the current operational status of the DAG
      *
      * @return DagStatus The current status
      */
-    DagStatus status() const {
-        return status_;
-    }
+    DagStatus status() const;
 
     /**
      * @brief Set the DAG operation mode
      *
      * @param mode The new operation mode
      */
-    void set_mode(DagMode mode) {
-        this->mode_ = mode;
-    }
+    void set_mode(DagMode mode);
 
     /**
      * @brief Set the DAG operational status
@@ -189,27 +183,21 @@ public:
      *
      * @return TransactionCache& Reference to the transaction cache
      */
-    TransactionCache &transaction_cache() {
-        return transaction_cache_;
-    }
+    TransactionCache &transaction_cache();
 
     /**
      * @brief Get the balance cache
      *
      * @return DagCache& Reference to the balance cache
      */
-    DagCache &cache() {
-        return cache_;
-    }
+    DagCache &cache();
 
     /**
      * @brief Get the ID of the first saved section
      *
      * @return BigNumber The first saved section ID
      */
-    BigNumber first_saved_section() {
-        return first_saved_section_;
-    }
+    BigNumber first_saved_section();
 
     /**
      * @brief Get the folder path for a section
@@ -296,7 +284,7 @@ public:
     void add_transaction_sended(const Transaction &transaction);
 
     /**
-     * @brief Update the blockchain range information
+     * @brief Update the chain range information
      *
      * Updates the persistent storage with the current first section,
      * last section, and last cached section IDs.
@@ -321,16 +309,16 @@ public:
     std::optional<Section> read_section(const BigNumber &section_id) const;
 
     /**
-     * @brief Start blockchain synchronization
+     * @brief Start chain synchronization
      *
      * Initiates the process of synchronizing with the network.
      */
     void start_sync();
 
     /**
-     * @brief Start blockchain verification
+     * @brief Start chain verification
      *
-     * Initiates the process of verifying the blockchain against the network.
+     * Initiates the process of verifying the chain against the network.
      */
     void start_check();
 
@@ -344,7 +332,7 @@ public:
     /**
      * @brief Process a sync status response from the network
      *
-     * @param last_info The blockchain info received
+     * @param last_info The chain info received
      * @param responder The responder that sent the info
      */
     void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
@@ -386,36 +374,36 @@ public:
     void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
 
     /**
-     * @brief Set the blockchain synchronization status
+     * @brief Set the chain synchronization status
      *
      * @param status The new sync status
      */
-    void set_sync_status(BlockchainSyncStatus status);
+    void set_sync_status(DagSyncStatus status);
 
     /**
      * @brief Process transactions that were cached during synchronization
      *
-     * Processes transactions that were received while the blockchain
+     * Processes transactions that were received while the chain
      * was synchronizing with the network.
      */
     void process_cached_transactions();
 
 private:
-    ExtraChainNode                              *node;                // Parent node reference
-    TransactionCache                             transaction_cache_;  // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions; // Transactions sent but not yet confirmed
-    DagCache                                     cache_;              // Balance cache for fast calculations
+    ExtraChainNode                              *node;                 // Parent node reference
+    TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
+    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet confirmed
+    DagCache                                     cache_;               // Balance cache for fast calculations
 
     BigNumber current_section_     = BigNumber(-1);      // Current (latest) section ID
-    BigNumber first_saved_section_ = BigNumber(-1);      // First section ID saved in the blockchain
+    BigNumber first_saved_section_ = BigNumber(-1);      // First section ID saved in the chain
     DagMode   mode_                = DagMode::Full;      // Current operation mode
     DagStatus status_              = DagStatus::Started; // Current operational status
 
-    BlockchainSyncStatus sync_status_  = BlockchainSyncStatus::None; // Current sync status
-    BlockchainSyncStatus check_status_ = BlockchainSyncStatus::None; // Current check status
-    BigNumber            sync_last_index;                            // Last section index to sync
-    int                  requests_count = 0;                         // Number of outstanding requests
-    std::unordered_map<std::string, DagLastInfo> last_info_;         // Last blockchain info from peers
+    DagSyncStatus                                sync_status_  = DagSyncStatus::None; // Current sync status
+    DagSyncStatus                                check_status_ = DagSyncStatus::None; // Current check status
+    BigNumber                                    sync_last_index;                     // Last section index to sync
+    int                                          requests_count = 0; // Number of outstanding requests
+    std::unordered_map<std::string, DagLastInfo> last_info_;         // Last chain info from peers
     QTimer                                      *timer_sync;         // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
 
@@ -459,6 +447,8 @@ public:
      */
     bool save_transaction(const Transaction &transaction);
 
+    bool local_remove_transaction(const BigNumber &section_id, const std::string &hash);
+
     /**
      * @brief Save multiple transactions to storage in batch
      *      * Groups transactions by section and processes each section once,
@@ -469,7 +459,9 @@ public:
      * @param transactions Vector of transactions to save
      * @return bool True if all transactions were saved successfully, false otherwise
      */
-    bool save_transactions(const std::vector<Transaction> &transactions);
+    std::optional<std::pair<BigNumber, BigNumber>> save_transactions(const std::vector<Transaction> &transactions);
+
+    void check_self(const Transaction &transaction);
 
     /**
      * @brief Validate a transaction

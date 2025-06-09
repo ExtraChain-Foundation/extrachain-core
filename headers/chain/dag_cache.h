@@ -27,11 +27,12 @@
 #include <optional>
 
 #include "utils/bignumber.h"
-#include "blockchain/transaction.h"
+#include "chain/transaction.h"
 
 class ExtraChainNode;
-class DbConnector;
+class Dag;
 class Section;
+class DbConnector;
 
 // Cache configuration constants
 constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and persistent cache
@@ -39,7 +40,7 @@ constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and p
 using Balances = std::map<std::pair<ActorId, TokenId>, BigNumberFloat>;
 
 /**
- * @brief DagCache - Manages caching of actor balances for blockchain
+ * @brief DagCache - Manages caching of actor balances for chain
  *
  * This class handles database caching of actor balances
  * to accelerate balance calculations and support light mode.
@@ -52,7 +53,7 @@ public:
      *
      * @param node The ExtraChainNode reference
      */
-    DagCache(ExtraChainNode* node);
+    DagCache(ExtraChainNode* node, Dag* dag);
 
     /**
      * @brief Destroy the DagCache object
@@ -132,8 +133,8 @@ public:
      * cache updates and balance calculations.
      *
      * @param actor_ids Vector of actor ids to calculate balances for
-     * @param current_section Current section of the blockchain
-     * @param first_saved_section First saved section of the blockchain
+     * @param current_section Current section of the chain
+     * @param first_saved_section First saved section of the chain
      * @param read_section_callback Function to read a section
      * @return std::map<ActorId, BigNumberFloat> Map of actor balances
      */
@@ -161,7 +162,7 @@ public:
      *      * This prevents frequent cache updates and ensures we only cache "mature" sections
      * that are unlikely to change.
      *
-     * @param current_section Current section of the blockchain
+     * @param current_section Current section of the chain
      * @return true If cache was updated
      * @return false If no update was needed or update failed
      */
@@ -171,8 +172,8 @@ public:
      * @brief Update cache to a specific genesis section
      *
      * @param genesis_section The genesis section to update to
-     * @param current_section Current section of the blockchain
-     * @param first_saved_section First saved section in the blockchain
+     * @param current_section Current section of the chain
+     * @param first_saved_section First saved section in the chain
      * @param read_section_callback Function to read sections
      * @return true If update was successful
      * @return false If update failed
@@ -195,8 +196,11 @@ public:
      */
     void reset_db();
 
+    std::set<ActorId> local_clear_less_balances();
+
 private:
-    ExtraChainNode*              node_;                           // Node reference
+    ExtraChainNode*              node;                            // Node reference
+    Dag*                         dag;                             // Dag reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> db_;                             // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized

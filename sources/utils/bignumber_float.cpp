@@ -294,6 +294,51 @@ BigNumberFloat BigNumberFloat::from_hex(const std::string &number) {
                           NumeralBase::Dec);
 }
 
+void BigNumberFloat::truncate(int decimalPlaces) {
+    auto   str    = this->to_string(NumeralBase::Dec);
+    size_t dotPos = str.find('.');
+
+    if (dotPos == std::string::npos) {
+        return;
+    }
+
+    if (str.length() > dotPos + decimalPlaces + 1) {
+        *this = BigNumberFloat(str.substr(0, dotPos + decimalPlaces + 1), NumeralBase::Dec);
+    }
+}
+
+std::strong_ordering BigNumberFloat::operator<=>(const int &other) const {
+    if (m_data < other)
+        return std::strong_ordering::less;
+    if (m_data > other)
+        return std::strong_ordering::greater;
+    return std::strong_ordering::equal;
+}
+
+bool BigNumberFloat::operator==(const int &other) const {
+    return m_data == other;
+}
+
+bool BigNumberFloat::operator!=(const int &other) const {
+    return !(m_data == other);
+}
+
+bool BigNumberFloat::operator==(const BigNumberFloat &other) const {
+    return m_data == other.m_data;
+}
+
+std::strong_ordering BigNumberFloat::operator<=>(const BigNumberFloat &other) const {
+    if (m_data < other.m_data)
+        return std::strong_ordering::less;
+    if (m_data > other.m_data)
+        return std::strong_ordering::greater;
+    return std::strong_ordering::equal;
+}
+
+bool BigNumberFloat::operator!=(const BigNumberFloat &other) const {
+    return !(m_data == other.m_data);
+}
+
 namespace magic {
     std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
         return value.to_string(NumeralBase::Hex);

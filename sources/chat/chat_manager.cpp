@@ -24,7 +24,7 @@
 #include "encryption/encryption_tools.h"
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
-#include "blockchain/actor_index.h"
+#include "chain/actor_index.h"
 
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
