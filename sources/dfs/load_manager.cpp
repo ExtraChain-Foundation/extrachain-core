@@ -25,20 +25,154 @@
 #include "utils/exc_logs.h"
 #include "dfs/dfs_utils.h"
 
-LoadManager::LoadManager(ExtraChainNode* node)
-    : node(node) {
-    // load known from all dir
+#include "utils/thread_pool_boost.h"
+
+#include <QTimer>
+
+LoadManager::LoadManager(ExtraChainNode* node, QObject *parent)
+    : QObject(parent), node(node) {
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, [=]() { timer_runner(); } );
+    m_timer->start(5000);
 }
 
-void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier) {
+void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed)
+{
+    {
+        auto amount_file_fragments_requests_locked = *m_amount_file_fragments_requests;
+        auto now = std::chrono::system_clock::now();
+        for (auto it = amount_file_fragments_requests_locked->begin(); it != amount_file_fragments_requests_locked->end();)
+        {
+            auto duration = now - it->second;
+            if (duration > std::chrono::seconds(10))
+                it = amount_file_fragments_requests_locked->erase(it);
+            else
+                ++it;
+        }
+    }
+
+
+    if (!m_active_downloads->empty() && m_amount_file_fragments_requests->size() <= MAX_CONCURRENT_DOWNLOADS)
+    {
+        auto active_downloads_locked = *m_active_downloads;
+        for(auto& it : *active_downloads_locked)
+        {
+            if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
+                break;
+
+            auto& load_info = it.second;
+            bool ignore_timeout = file_link_to_proceed == it.first;
+            bool is_requested = false;
+            for(auto& identifier : load_info.identifier_list)
+            {
+                if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
+                    break;
+
+                auto now = std::chrono::system_clock::now();
+                auto duration = now - identifier.second.last_attempt;
+                if (!node->network()->is_connection_exists(identifier.first))
+                {
+                    eCritical("LoadManager::timer_runner, connection with identifier ({}) not exist for file_link: {}.", identifier.first, it.first);
+                    continue;
+                }
+
+                if (identifier.second.counter >= 3)
+                    continue;
+                else if (identifier.second.counter == 0 || (duration > std::chrono::seconds(10) || ignore_timeout))
+                {
+                    if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1)
+                    {
+                        this->node->network()->send_message(it.first,
+                                                            MessageType::DfsFileRequestContinueUpload,
+                                                            SendMode::Neighbours,
+                                                            MessageStatus::Request);
+                    }
+
+                    identifier.second.counter++;
+                    identifier.second.last_attempt = std::chrono::system_clock::now();
+
+                    Responder responder(nullptr);
+                    responder.add_identifier(identifier.first);
+
+                    Dfs::FileLinkFragment output;
+                    output.file_link = it.first;
+
+                    if (it.second.amount_fragments > 0)
+                    {
+                        for(auto number : it.second.fragments_left)
+                        {
+                            if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
+                                break;
+                            output.fragment_numbers.emplace(number);
+                            m_amount_file_fragments_requests->emplace(output, std::chrono::system_clock::now());
+                        }
+                    }
+                    else
+                    {
+                        output.fragment_numbers.emplace(1);
+                        m_amount_file_fragments_requests->emplace(output, std::chrono::system_clock::now());
+                    }
+
+
+                    this->node->network()->send_message(output,
+                                                        MessageType::DfsFileRequest,
+                                                        SendMode::Focused,
+                                                        MessageStatus::NoStatus,
+                                                        responder);
+
+                    // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}), attempt: {} for file_link: {} and fragments: {}.", identifier.first, identifier.second.counter, it.first, output.fragment_numbers);
+                    is_requested = true;
+                    break;
+                }
+                else {
+                    is_requested = true;
+                    break;
+                }
+            }
+            auto identifier_list_size = load_info.identifier_list.size();
+            if (!is_requested && identifier_list_size > 0)
+            {
+                // eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers. Identifiers list size: {}", identifier_list_size);
+            }
+        }
+    }
+    // else if (m_active_downloads->empty()) {
+    //     eTemp("LoadManager::timer_runner, EMPTY and its GOOD!");
+    // }
+}
+
+void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_fragment)
+{
+    m_active_downloads->erase(file_link_fragment.file_link);
+    m_amount_file_fragments_requests->erase(file_link_fragment);
+}
+
+bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::string identifier) {
+    auto active_downloads_locked = *m_active_downloads;
+    auto it = active_downloads_locked->find(file_link);
+    if (it != active_downloads_locked->end())
+    {
+        auto identifier_storage_checker_it = it->second.identifier_storage_checker.emplace(identifier);
+        if (identifier_storage_checker_it.second) {
+            it->second.identifier_list.emplace_back(identifier, LoadInfo::Attempts { .counter = 0});
+            return true;
+        }
+    }
+    return false;
+}
+
+void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier, const bool notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
-    if (active_downloads.contains(file_link)) {
+    if (m_active_downloads->contains(file_link)) {
         return;
     }
 
-    if (dir_row.type == Dfs::FileType::File && dir_row.state != Dfs::FileState::Ready) {
+    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+
+    if (/*dir_row.type == Dfs::FileType::File && (dir_row.state != Dfs::FileState::Ready ||*/ !need_load/*)*/) {
         return;
     }
 
@@ -100,42 +234,37 @@ void LoadManager::add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_r
 
     eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
-    // // Check in queue
-    // bool file_in_queue =
-    //     std::any_of(download_queue.cbegin(), download_queue.cend(), [&file_link](const auto& info) {
-    //         return false; // info.dir_row == file_link;
-    //     });
+    auto load_info = LoadInfo { .dir_row = dir_row};
+    // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
+    LoadInfo::Attempts attempts { .counter = 0};
+    load_info.identifier_storage_checker.emplace(identifier);
+    load_info.identifier_list.emplace_back(identifier, attempts);
 
-    // if (file_in_queue) {
-    //     return;
-    // }
-
-    auto load_info = LoadInfo { .dir_row = dir_row, .last_attempt = std::chrono::system_clock::now() };
-    // check real status
     load_info.dir_row.state = Dfs::FileState::Known;
-    mutex.lock();
-    active_downloads.insert({ file_link, load_info });
-    mutex.unlock();
-    // download_queue.push(load_info);
 
-    // temp: request file
-    Responder responder(nullptr);
-    responder.add_identifier(identifier);
-    this->node->network()->send_message(file_link,
-                                        MessageType::DfsFileRequest,
-                                        SendMode::Focused,
-                                        MessageStatus::NoStatus,
-                                        responder);
+    load_info.notify_neighbours = notify_neighbours;
 
-    // Try to process queue if we have space for new downloads
-    if (active_downloads.size() < MAX_CONCURRENT_DOWNLOADS) {
-        // process_next();
+    auto res = m_active_downloads->emplace(file_link, load_info);
+    if (res.second)
+    {
+        // Responder responder(nullptr);
+        // responder.add_identifier(identifier);
+        // this->node->network()->send_message(file_link,
+        //         MessageType::DfsFileRequest,
+        //         SendMode::Focused,
+        //         MessageStatus::NoStatus,
+        //         responder);
+    }
+    else
+    {
+        // eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
+        add_network_identifier(file_link, identifier);
     }
 }
 
 void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
-                               std::string                     identifier) {
+                               const std::string& identifier) {
     bool is_full   = node->dfs()->mode() == DfsMode::Full;
     bool need_load = is_full || node->dfs()->is_priority(owner_id);
 
@@ -144,7 +273,7 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        if (dir_row.type == Dfs::FileType::File && !need_load) {
+        if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }
 
@@ -152,166 +281,100 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
     }
 }
 
-// TODO: move to dirs manager
-void LoadManager::check_all_files(std::string identifier) {
-    auto dirs = Dfs::DirsFile::load_all();
-    if (!dirs.has_value()) {
-        return;
-    }
-
-    for (const auto& dir : dirs.value()) {
-        bool is_full   = node->dfs()->mode() == DfsMode::Full;
-        bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
-
-        const auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dir.actor_id);
-        if (!dir_rows.has_value()) {
-            //
-            continue;
-        }
-
-        for (const auto& row : dir_rows.value()) {
-            if (row.type == Dfs::FileType::File && !need_load) {
-                continue;
-            }
-
-            if (row.state == Dfs::FileState::Ready) {
-                auto file_path = Dfs::Path::file_path(dir.actor_id, row.file_id);
-                if (!file_path.has_value()) {
-                    continue;
-                }
-
-                if (row.type == Dfs::FileType::File && file_path->exists()) {
-                    auto size = file_path->file_size();
-                    if (size.has_value() && size == row.size) {
-                        continue;
-                    }
-
-                    if (!need_load) {
-                        continue;
-                    }
-                }
-
-                if (row.type != Dfs::FileType::File && file_path->exists()) {
-                    // TODO: vectorupdate
-                    // continue;
-                }
-                // TODO: add checks for vector and collection
-            }
-
-            if (row.state == Dfs::FileState::Removed) {
-                continue;
-            }
-
-            auto file_link = Dfs::FileLink { .owner_id = dir.actor_id, .file_id = row.file_id };
-
-            // TODO: insert to queue
-
-            // TODO: process from queue
-            // search file
-            if (identifier.empty()) {
-                this->node->network()->send_message(file_link,
-                                                    MessageType::DfsFileState,
-                                                    SendMode::Neighbours,
-                                                    MessageStatus::Request);
-            } else {
-                Responder responder(nullptr);
-                responder.add_identifier(identifier);
-                this->node->network()->send_message(file_link,
-                                                    MessageType::DfsFileState,
-                                                    SendMode::Focused,
-                                                    MessageStatus::Request,
-                                                    responder);
-            }
-        }
-    }
-
-    // bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
-    //                                                              file_link.file_id,
-    //                                                              active_download.dir_row.hash);
-    // if (!is_downloaded) {5
-    // }
-}
-
-// void LoadManager::process_next() {
-//     while (active_downloads.size() < MAX_CONCURRENT_DOWNLOADS) {
-//         auto next = get_next_download();
-//         if (!next) {
-//             break; // No more items to process
-//         }
-
-//         // send_search_request(*next);
-
-//         next->last_attempt          = std::chrono::system_clock::now();
-//         next->last_segment_time     = std::chrono::system_clock::now();
-//         active_downloads[file_link] = *next;
-//     }
-// }
-
-// std::optional<LoadInfo> LoadManager::get_next_download() {
-//     while (!download_queue.empty()) {
-//         auto info = download_queue.front();
-//         download_queue.pop();
-
-//         if (info.attempt_count >= MAX_ATTEMPTS) {
-//             eWarning("Max attempts reached for file: {}", info.???);
-//             continue;
-//         }
-
-//         if (!info.can_retry()) {
-//             // Put back in queue if it's too early to retry
-//             download_queue.push(info);
-//             return std::nullopt;
-//         }
-
-//         info.attempt_count++;
-//         return info;
-//     }
-//     return std::nullopt;
-// }
-
-// void LoadManager::check_stalled_downloads() {
-//     std::vector<Dfs::FileLink> stalled_files;
-
-//     // Find stalled downloads
-//     for (const auto& [file_link, info] : active_downloads) {
-//         if (info.is_stalled()) {
-//             stalled_files.push_back(file_link);
-//         }
-//     }
-
-//     // Move stalled downloads to queue end
-//     for (const auto& file_link : stalled_files) {
-//         move_to_queue_end(file_link);
-//     }
-// }
-
-void LoadManager::move_to_queue_end(const Dfs::FileLink& file_link) {
-    auto it = active_downloads.find(file_link);
-    if (it == active_downloads.end()) {
-        return;
-    }
-
-    eWarning("Moving stalled download to queue end: {}", file_link);
-
-    auto info = it->second;
-    mutex.lock();
-    active_downloads.erase(it);
-    mutex.unlock();
-    download_queue.push(info);
-
-    // Try to start next download
-    // process_next();
-}
-
-void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
-                                        const std::string& file_id,
-                                        const Responder&   responder) {
-    auto path = Dfs::Path::file_path(owner_id, file_id);
+void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder&   responder) {
+    eLog("LoadManager::share_stored_file, file_id: {}", file_link_fragment.file_link.file_id);
+    auto path = Dfs::Path::file_path(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
     if (!path.has_value()) {
+        // eCritical("LoadManager::share_stored_file, no path. file_id: {}", file_link_fragment.file_link.file_id);
         return;
     }
+
+    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
+    if (!dir_row.has_value()) {
+        // eCritical("LoadManager::share_stored_file, no dir_row. file_id: {}", file_link_fragment.file_link.file_id);
+        return;
+    }
+
     auto size = path->file_size();
     if (!size.has_value()) {
+        // eCritical("LoadManager::share_stored_file, no size. file_id: {}", file_link_fragment.file_link.file_id);
+        return;
+    }
+    const uint64_t total_size = size.value();
+
+    if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Collection) {
+            node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, responder);
+            // eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
+        }
+        if (dir_row->type == Dfs::FileType::Vector) {
+            node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, responder);
+            // eCritical("LoadManager::share_stored_file, its a vector. Another thlow. file_id: {}", file_link_fragment.file_link.file_id);
+        }
+        return;
+    }
+
+    static auto calculate_max_offsets = [](size_t total_size, size_t buffer_size) -> size_t {
+        return (total_size + buffer_size - 1) / buffer_size;
+    };
+
+    auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
+
+    std::string identifier = *responder.identifiers().begin();
+    ThreadPoolBoost::instance_dfs()->post([this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row](){
+        uint64_t       offset     = 0;
+
+        for (const auto& fragment_number : file_link_fragment.fragment_numbers)
+        {
+            offset = Dfs::Basic::FRAGMENT_SIZE * (fragment_number-1);
+            auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
+            if (!chunk.has_value()) {
+                // eCritical("[Dfs] LoadManager::share_stored_file, empy file chunk. owner_id: {}, file_id: {}, fragment number: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, fragment_number);
+                return;
+            }
+            auto chunk_size = chunk->size();
+
+            Dfs::Packets::FragmentData file_fragment;
+            file_fragment.owner_id = file_link_fragment.file_link.owner_id;
+            file_fragment.file_id  = file_link_fragment.file_link.file_id;
+            file_fragment.data     = std::move(*chunk);
+            file_fragment.offset   = offset;
+            file_fragment.current_size   = chunk_size;
+            file_fragment.fragment_number = fragment_number;
+            file_fragment.full_amount_fragments = max_offsets;
+            if (!this->node->network()->isActiveConnectionExists()) {
+                // eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file. owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
+                return;
+            }
+
+            Responder responder(nullptr);
+            responder.add_identifier(identifier);
+
+            auto message_id = this->node->network()->send_message(file_fragment,
+                                                                  MessageType::DfsFileFragment,
+                                                                  SendMode::Focused,
+                                                                  MessageStatus::NoStatus,
+                                                                  responder);
+            eLog("[Dfs] LoadManager::share_stored_file, file fragment sended (message_id: {}). owner_id: {}, file_id: {}, offset: {}", message_id, file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
+
+            // offset += Dfs::Basic::FRAGMENT_SIZE;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+
+        // while (offset < total_size) {
+
+        // }
+
+        // emit node->dfs()->uploaded(file_link_fragment.file_link.owner_id, dir_row.value());
+    });
+    eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
+}
+
+void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::string& file_id)
+{
+    auto path = Dfs::Path::file_path(owner_id, file_id);
+    if (!path.has_value()) {
         return;
     }
 
@@ -320,121 +383,157 @@ void LoadManager::broadcast_stored_file(const ActorId&     owner_id,
         return;
     }
 
+    // auto size = path->file_size();
+    // if (!size.has_value()) {
+    //     return;
+    // }
+    // const uint64_t total_size = size.value();
+
     if (dir_row->type != Dfs::FileType::File) {
         if (dir_row->type == Dfs::FileType::Collection) {
-            node->dfs()->network_request_collection(owner_id, file_id, responder);
+            node->dfs()->network_request_collection(owner_id, file_id, {});
         }
         if (dir_row->type == Dfs::FileType::Vector) {
-            node->dfs()->network_request_vector(owner_id, file_id, responder);
+            node->dfs()->network_request_vector(owner_id, file_id, {});
         }
         return;
     }
 
-    const uint64_t total_size = size.value();
-    uint64_t       offset     = 0;
+    // static auto calculate_max_offsets = [](size_t total_size, size_t buffer_size) -> size_t {
+    //     return (total_size + buffer_size - 1) / buffer_size;
+    // };
 
-    std::string identifier = responder.identifiers().empty() ? "" : *responder.identifiers().begin();
-    std::thread sender([this, owner_id, file_id, dir_row, path = *path, total_size = *size, identifier]() {
-        uint64_t offset = 0;
+    // auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
 
-        while (offset < total_size) {
-            auto chunk = Utils::read_file_chunk(path, offset, Dfs::Basic::FRAGMENT_SIZE);
-            if (!chunk.has_value()) {
-                return;
-            }
+    Dfs::Packets::FileState file_state;
+    file_state.file_id = file_id;
+    file_state.owner_id = owner_id;
+    file_state.state = dir_row->state;
+    file_state.hash = dir_row->hash;
+    file_state.notify_neighbours = true;
 
-            Dfs::Packets::FragmentData file_fragment;
-            file_fragment.owner_id = owner_id;
-            file_fragment.file_id  = file_id;
-            file_fragment.data     = std::move(*chunk);
-            file_fragment.offset   = offset;
-
-            if (!this->node->network()->isActiveConnectionExists()) {
-                return;
-            }
-
-            auto message_type = identifier.empty() ? MessageType::DfsStoreFragment : MessageType::DfsFileFragment;
-            auto type_send    = identifier.empty() ? SendMode::Broadcast : SendMode::Focused;
-
-            Responder responder(nullptr);
-            responder.add_identifier(identifier);
-
-            this->node->network()->send_message(file_fragment,
-                                                message_type,
-                                                type_send,
-                                                MessageStatus::NoStatus,
-                                                responder);
-
-            offset += Dfs::Basic::FRAGMENT_SIZE;
-            std::this_thread::sleep_for(std::chrono::milliseconds(30));
-        }
-
-        // auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
-        // if (!dir_row.has_value()) {
-        //     return;
-        // }
-        // use list for first uploaded
-        emit node->dfs()->uploaded(owner_id, dir_row.value());
-    });
-
-    sender.detach();
+    auto message_id = this->node->network()->send_message(file_state,
+                                                          MessageType::DfsFileExistNotification,
+                                                          SendMode::Neighbours,
+                                                          MessageStatus::NoStatus);
+    eLog("[Dfs] LoadManager::brodcast_file_exist, file fragment sended (message_id: {}). owner_id: {}, file_id: {}", message_id, owner_id, file_id);
 }
 
-void LoadManager::network_fragment(const Dfs::Packets::FragmentData& fragment_data) {
-    // eLog("{} {} {}", fragment_data.owner_id, fragment_data.file_id, fragment_data.offset);
-    auto file_link = Dfs::FileLink { .owner_id = fragment_data.owner_id, .file_id = fragment_data.file_id };
+void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier) {
+    Dfs::FileLinkFragment file_link_fragment;
+    file_link_fragment.file_link = Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
+    file_link_fragment.fragment_numbers.emplace(file_content.fragment_number);
+    m_amount_file_fragments_requests->erase(file_link_fragment);
 
-    // TODO: Fragments: verify fragment, use Dir Row and fragment list
-    if (fragment_data.data.size() > Dfs::Basic::FRAGMENT_SIZE) {
-        eCritical("[Dfs] Incorrect fragment size: {}", fragment_data.data.size());
-        return;
-    }
+    ThreadPoolBoost::instance_dfs()->post([this, file_content, identifier](){
+        const auto file_link = Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
+        eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
 
-    auto path = Dfs::Path::file_path(fragment_data.owner_id, fragment_data.file_id);
-    if (!path.has_value()) {
-        return;
-    }
+        {
+            auto active_reads_locked = *m_active_reads;
+            auto item = active_reads_locked->find(file_link);
+            if (item != active_reads_locked->end())
+            {
+                if (item->second.fragments_achieved.contains(file_content.fragment_number))
+                {
+                    // eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+                    return;
+                }
+            }
+            else
+            {
+                ReadStorage read_storage {.amount_fragments = file_content.full_amount_fragments, .fragments_achieved = {}};
+                // read_storage.offsets_read_progress.emplace(file_content.offset, false);
 
-    auto result = Utils::write_file_chunk(path.value(), fragment_data.data, fragment_data.offset);
-    if (!result.has_value()) {
-        return;
-    }
+                active_reads_locked->emplace(file_link, read_storage);
+            }
+        }
 
-    if (fragment_data.offset == 0) {
-        Dfs::Tables::ActorDirFile::update_file_state(fragment_data.owner_id,
-                                                     fragment_data.file_id,
-                                                     Dfs::FileState::Partial);
-    }
-
-    if (active_downloads.find(file_link) == active_downloads.end()) {
-        eWarning("Unknown fragment");
-        return;
-    }
-
-    auto active_download  = active_downloads.at(file_link);
-    bool is_last_fragment = (fragment_data.offset + Dfs::Basic::FRAGMENT_SIZE >= active_download.dir_row.size);
-    if (is_last_fragment) {
-        bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
-                                                                     file_link.file_id,
-                                                                     active_download.dir_row.hash);
-        if (!is_downloaded) {
-            eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
+        const auto path = Dfs::Path::file_path(file_link.owner_id, file_link.file_id);
+        if (!path.has_value()) {
+            timer_runner(file_link);
             return;
         }
 
-        mutex.lock();
-        active_downloads.erase(file_link);
-        mutex.unlock();
-        eLog("[Fragment] Last fragment (downloaded) for {}", file_link);
 
-        finish_him(file_link.owner_id, active_download.dir_row);
-    }
+        {
+            std::lock_guard<std::mutex> m_lock(m_write_file_mutex);
+            auto result = Utils::write_file_chunk(path.value(), file_content.data, file_content.offset);
+            if (!result.has_value()) {
+                // eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+                timer_runner(file_link);
+                return;
+            }
 
-    // eTemp("[Fragment] {}: size: {}, offset: {}, {}",
-    //       file_link,
-    //       active_download.dir_row.size,
-    //       fragment_data.offset,
-    //       is_last_fragment);
+            auto active_reads_locked = *m_active_reads;
+            auto item = active_reads_locked->find(file_link);
+            if (item != active_reads_locked->end())
+                item->second.fragments_achieved.emplace(file_content.fragment_number);
+        }
+
+        {
+            auto active_reads_locked = *m_active_reads;
+            auto item = active_reads_locked->find(file_link);
+            if (item != active_reads_locked->end())
+            {
+                auto active_downloads_locked = *m_active_downloads;
+                auto res                         = active_downloads_locked->find(file_link);
+                if (res != active_downloads_locked->end())
+                {
+                    for (auto& item : res->second.identifier_list)
+                    {
+                        if (item.first == identifier)
+                        {
+                            item.second.counter--;
+                            break;
+                        }
+                    }
+
+                    if (item->second.fragments_achieved.size() == item->second.amount_fragments)
+                    {
+                        active_reads_locked->erase(item);
+
+                        auto dir_row = res->second.dir_row;
+                        bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+                                                                                     file_link.file_id,
+                                                                                     dir_row.hash);
+                        if (!is_downloaded) {
+                            eLog("[Fragment] Ooops, something wrong. Need to implement Fragments checks (not downloaded)");
+                            timer_runner(file_link);
+                            return;
+                        }
+
+                        bool notify_neighbours = res->second.notify_neighbours;
+
+                        active_downloads_locked->erase(res);
+                        eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
+
+                        finish_him(file_link.owner_id, dir_row);
+
+                        if (notify_neighbours)
+                            broadcast_file_exist(file_link.owner_id, file_link.file_id);
+                    }
+                    else
+                    {
+                        if (res->second.amount_fragments == 0)
+                        {
+                            res->second.amount_fragments = file_content.full_amount_fragments;
+                            for(int i = 0; i < res->second.amount_fragments; ++i)
+                            {
+                                if (i + 1 != file_content.fragment_number)
+                                    res->second.fragments_left.emplace(i + 1);
+                            }
+                        }
+                        else
+                        {
+                            res->second.fragments_left.erase(file_content.fragment_number);
+                        }
+                    }
+                    timer_runner(file_link);
+                }
+            }
+        }
+    });
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {

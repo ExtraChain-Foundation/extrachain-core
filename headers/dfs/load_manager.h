@@ -38,25 +38,36 @@ enum class DownloadError {
 };
 
 struct LoadInfo {
+    struct Attempts {
+        int                                   counter { 0 };
+        std::chrono::system_clock::time_point last_attempt {};
+    };
+
     Dfs::DirRow                           dir_row;
-    int                                   attempt_count { 0 };
-    std::chrono::system_clock::time_point last_attempt {};
-    std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
+
+    size_t amount_fragments;
+    std::set<size_t> fragments_left;
+
+    bool notify_neighbours;
+
+    std::set<std::string> identifier_storage_checker {};
+    std::vector<std::pair<std::string, Attempts>> identifier_list {};
+    // std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
     // Dfs::FileState                        state { Dfs::FileState::Known };
-    std::unordered_set<std::string> tried_neighbors;
+    // std::unordered_set<std::string> tried_neighbors;
 
-    [[nodiscard]] std::chrono::milliseconds next_delay() const {
-        return std::chrono::minutes(1) * (1 << attempt_count);
-    }
+    // [[nodiscard]] std::chrono::milliseconds next_delay() const {
+    //     return std::chrono::minutes(1) * (1 << attempt_count);
+    // }
 
-    [[nodiscard]] bool can_retry() const {
-        return std::chrono::system_clock::now() >= last_attempt + next_delay();
-    }
+    // [[nodiscard]] bool can_retry() const {
+    //     return std::chrono::system_clock::now() >= last_attempt + next_delay();
+    // }
 
-    [[nodiscard]] bool is_stalled() const {
-        // If last segment was received more than 30 seconds ago
-        return std::chrono::system_clock::now() - last_segment_time > std::chrono::seconds(30);
-    }
+    // [[nodiscard]] bool is_stalled() const {
+    //     // If last segment was received more than 30 seconds ago
+    //     return std::chrono::system_clock::now() - last_segment_time > std::chrono::seconds(30);
+    // }
 };
 
 enum class PullMode {
@@ -64,52 +75,49 @@ enum class PullMode {
     Selective
 };
 
-class LoadManager {
+class LoadManager : public QObject {
+    Q_OBJECT
 public:
-    explicit LoadManager(ExtraChainNode* node);
+    explicit LoadManager(ExtraChainNode* node, QObject *parent = nullptr);
 
-    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, std::string identifier);
-    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, std::string identifier);
-
-    void check_all_files(std::string identifier);
+    bool add_network_identifier(const Dfs::FileLink& file_link, std::string identifier);
+    void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
+    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier, const bool notify_neighbours = false);
+    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
 
-    // You'll need to add:
-    // void on_search_result(const DfsSyncSearchResult& result);
-    // void on_segment_received(const std::string& file_id); // Update time of last segment
-    // void on_download_error(/* error parameters */);
+    void share_stored_file(const Dfs::FileLinkFragment& file_link_fragment, const Responder& responder);
+    void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
-    void broadcast_stored_file(const ActorId&     owner_id,
-                               const std::string& file_id,
-                               const Responder&   responder = Responder());
-
-    void network_fragment(const Dfs::Packets::FragmentData& fragment_data);
+    void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
 private:
+    void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 2;
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
 
-    std::queue<LoadInfo> download_queue;
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
+    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>> m_amount_file_fragments_requests;
 
-    QMutex mutex;
+    struct ReadStorage {
+        // uint64_t current_size;
+        std::size_t amount_fragments;
+        std::set<size_t> fragments_achieved;
+        // std::map<uint64_t, bool> offsets_read_progress;
+    };
 
-public:
-    std::unordered_map<Dfs::FileLink, LoadInfo> active_downloads;
+    SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
+    std::mutex m_write_file_mutex;
 
-private:
-    // [[nodiscard]] std::optional<LoadInfo> get_next_download();
-    void move_to_queue_end(const Dfs::FileLink& file_link); // Move stalled download to end of queue
-
-    // You'll need to add:
-    // void send_search_request(const LoadInfo& info);
-    // std::string select_random_neighbor(const std::unordered_set<std::string>& excluded);
+    QTimer *m_timer;
 };

@@ -83,7 +83,7 @@ namespace Dfs {
         static const std::string   COLLECTION_FILE            = ".collection";
         static const std::string   VECTOR_FILE                = ".vector";
         static const std::string   DICTIONARY_FILE            = ".dictionary";
-        static const std::uint64_t FRAGMENT_SIZE              = /*2097152*/ 524228;
+        static const std::uint64_t FRAGMENT_SIZE              = 256000;
         static const std::uint64_t maxSectionSize             = 209715200;
         static const std::uint64_t minDfsLimit                = 2147483648;
         static const std::uint64_t historicalChainSectionSize = 209715200;
@@ -145,11 +145,27 @@ namespace Dfs {
 
         bool operator==(const FileLink&) const = default;
 
+        bool operator<(const FileLink& other) const {
+            return std::tie(owner_id, file_id) < std::tie(other.owner_id, other.file_id);
+        }
+
         size_t hash() const {
             return std::hash<std::string>()(owner_id.to_string() + file_id);
         }
     };
     BOOST_DESCRIBE_STRUCT(FileLink, (), (owner_id, file_id))
+
+    struct FileLinkFragment {
+        FileLink file_link;
+        std::set<std::size_t> fragment_numbers;
+
+        bool operator<(const FileLinkFragment& other) const {
+            return std::tie(file_link, fragment_numbers) < std::tie(other.file_link, other.fragment_numbers);
+        }
+
+        bool operator==(const FileLinkFragment&) const = default;
+    };
+    BOOST_DESCRIBE_STRUCT(FileLinkFragment, (), (file_link, fragment_numbers))
 
     enum class DfsError {
         Unknown,
@@ -284,20 +300,22 @@ namespace Dfs {
         struct FragmentData {
             ActorId     owner_id;
             std::string file_id;
-            // hash
-            // std::vector<uint8_t
             std::string   data;
-            std::uint64_t offset; // fragment num
+            std::uint64_t offset;
+            std::uint64_t current_size;
+            std::size_t fragment_number;
+            std::size_t full_amount_fragments;
         };
-        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset))
+        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset, current_size, fragment_number, full_amount_fragments))
 
         struct FileState {
             ActorId        owner_id;
             std::string    file_id;
             Dfs::FileState state = Dfs::FileState::Known;
             std::string    hash;
+            bool           notify_neighbours = false;
         };
-        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash))
+        BOOST_DESCRIBE_STRUCT(FileState, (), (owner_id, file_id, state, hash, notify_neighbours))
 
         struct RemoveFile {
             ActorId       owner_id;

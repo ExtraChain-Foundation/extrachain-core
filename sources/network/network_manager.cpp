@@ -644,7 +644,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
+    if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
         || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
         priority = SocketService::Priority::Low;
     }
@@ -683,7 +683,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     if (serialized_message.size() > 10000
-        && (non_serialized_message.message_type != MessageType::DfsStoreFragment
+        && (non_serialized_message.message_type != MessageType::DfsFileExistNotification
             && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
         eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
@@ -836,12 +836,12 @@ void NetworkManager::sendFromCache() {
 }
 
 bool NetworkManager::is_connection_exists(const std::string &identifier) {
-    auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
-        return false;
-
-    for (const auto &el : *connectionsLocked) {
-        if (el->identifier() == identifier) {
+    auto connections_locked = *m_connections;
+    for (const auto &service : *connections_locked) {
+        if (!service->is_active()) {
+            continue;
+        }
+        if (service->identifier().toStdString() == identifier) {
             return true;
         }
     }
@@ -981,10 +981,8 @@ void NetworkManager::messageReceived(const std::string &message,
         auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
-            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
             return;
         } else {
             // eInfo("MessageID emplaced: {}", messageId);
@@ -1003,10 +1001,8 @@ void NetworkManager::messageReceived(const std::string &message,
                                      SendMode::Focused,
                                      searchRes->second.first);
             // eWarning(
-            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type: {}",
-            //     messageId,
-            //     identifier,
-            //     type);
+            //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
+            //     {}", messageId, identifier, type);
 
             return;
         }
@@ -1306,14 +1302,13 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto dirs_row_result =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+                MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
                 return;
             }
-            auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
+            node->dfs()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
         }
         break;
     }
@@ -1344,7 +1339,16 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
-    case MessageType::DfsStoreFragment:
+    case MessageType::DfsFileExistNotification: {
+        auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+        if (!file_state_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file state", type);
+            break;
+        }
+
+        node->dfs()->network_response_file_state(file_state_result.value(), responder);
+        break;
+    }
     case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
         if (!fragment_data_result.has_value()) {
@@ -1353,20 +1357,8 @@ void NetworkManager::messageReceived(const std::string &message,
         }
 
         // TIMER_START(FRAG)
-        node->dfs()->download_manager().network_fragment(fragment_data_result.value());
+        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
         // TIMER_END(FRAG)
-
-        if (type == MessageType::DfsStoreFragment) {
-            // #ifdef IS_R
-            sendBrodcastMessageFurther(package_data);
-            // #else
-            //             auto p = package_data;
-            //             ThreadPoolBoost::instance()->post([this, package_data = p] {
-            //                 QThread::msleep(15);
-            //                 sendBrodcastMessageFurther(package_data);
-            //             });
-            // #endif
-        }
 
         break;
     }
@@ -1387,25 +1379,34 @@ void NetworkManager::messageReceived(const std::string &message,
                 return;
             }
 
-            node->dfs()->network_response_file_state(file_state_result->owner_id,
-                                                     file_state_result->file_id,
-                                                     file_state_result->state,
-                                                     file_state_result->hash,
-                                                     responder);
+            node->dfs()->network_response_file_state(file_state_result.value(), responder);
         }
         break;
     }
 
     case MessageType::DfsFileRequest: {
-        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        auto link_result = MessagePack::deserialize<Dfs::FileLinkFragment>(serialized);
         if (!link_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file request", type);
             return;
         }
 
-        node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
-                                                              link_result->file_id,
-                                                              responder);
+        node->dfs()->download_manager().share_stored_file(link_result.value(), responder);
+
+        break;
+    }
+
+    case MessageType::DfsFileRequestContinueUpload: {
+        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        if (!link_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for request file state", type);
+            return;
+        }
+
+        if (status == MessageStatus::Request)
+            node->dfs()->network_request_file_existance(link_result.value(), responder);
+        else if (status == MessageStatus::Response)
+            node->dfs()->download_manager().add_network_identifier(link_result.value(), identifier);
 
         break;
     }
@@ -2040,7 +2041,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(1500);
+        request.setTransferTimeout(2500);
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;

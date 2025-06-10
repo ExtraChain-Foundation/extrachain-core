@@ -18,7 +18,6 @@
  */
 
 #include "utils/fs_path.h"
-#include <boost/filesystem/operations.hpp>
 
 #include "utils/exc_logs.h"
 #include "dfs/name_validator.h"
@@ -83,15 +82,15 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
         //     current = current.parent_path();
         // }
 
-        // auto parent = fs_path.parent_path();
-        // if (!parent.empty()) {
-        //     if (!std::filesystem::exists(parent)) {
-        //         return std::unexpected(FsError::ParentNotFound);
-        //     }
-        //     if (!std::filesystem::is_directory(parent)) {
-        //         return std::unexpected(FsError::ParentNotDirectory);
-        //     }
-        // }
+       // auto parent = fs_path.parent_path();
+       // if (!parent.empty()) {
+       //     if (!std::filesystem::exists(parent)) {
+       //         return std::unexpected(FsError::ParentNotFound);
+       //     }
+       //     if (!std::filesystem::is_directory(parent)) {
+       //         return std::unexpected(FsError::ParentNotDirectory);
+       //     }
+       // }
 #endif
 
         return FsPath(std::filesystem::weakly_canonical(fs_path));
@@ -286,8 +285,11 @@ std::expected<std::uintmax_t, FsError> FsPath::directory_size() const {
 
 std::expected<FsPath::TimePoint, FsError> FsPath::last_write_time() const {
     try {
-        std::time_t ftime = boost::filesystem::last_write_time(m_path.string());
-        return FsPath::TimePoint(boost::chrono::seconds(ftime));
+        auto ftime = std::filesystem::last_write_time(m_path);
+        auto sctp  = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+            ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+        auto time_t_val = std::chrono::system_clock::to_time_t(sctp);
+        return std::chrono::system_clock::from_time_t(time_t_val);
     } catch (const std::exception& e) {
         eCritical("Failed to get last write time: {}", e.what());
         return std::unexpected(FsError::IoError);
