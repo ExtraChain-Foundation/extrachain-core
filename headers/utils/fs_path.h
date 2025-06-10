@@ -126,7 +126,7 @@ class DirectoryIterator;
 
 class FsPath {
 public:
-    using TimePoint = boost::chrono::system_clock::time_point;
+    using TimePoint = std::chrono::system_clock::time_point;
 
     explicit FsPath() = default;
 
