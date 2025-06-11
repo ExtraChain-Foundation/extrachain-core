@@ -1,30 +1,12 @@
-/*
- * ExtraChain Core
- * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
- *
- * This library is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published
- * by the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #pragma once
-
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 #include <QWebSocket>
-
+#include <QMutex>
+#include <QMutexLocker>
+#include <atomic>
 #include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
@@ -35,24 +17,21 @@ public:
                               ExtraChainNode *node,
                               QObject        *parent      = nullptr,
                               const bool      is_constant = false);
-    // WebSocketService(const WebSocketService &);
-    ~WebSocketService();
+    ~WebSocketService() override;
 
     QWebSocket               *socket() const;
     bool                      is_active() const override;
     void                      open(const QString &ip, quint16 port);
-    virtual QString           protocol_string() const override;
-    virtual Network::Protocol protocol() const override;
+    QString                   protocol_string() const override;
+    Network::Protocol         protocol() const override;
+    quint16                   port() const override;
+    quint16                   server_port() const override;
 
     bool operator==(const WebSocketService &service) const;
 
-    quint16 port() const override;
-    quint16 server_port() const override;
-
-public:
+public slots:
     void send_message(const QByteArray &data, Priority priority = Priority::High) override;
-
-    virtual void flush() override;
+    void flush() override;
 
 signals:
     void sendMessageInternal(const QByteArray &data);
@@ -62,7 +41,6 @@ signals:
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
-
     void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
@@ -70,16 +48,32 @@ private slots:
     void tryDequeueMessage();
 
 private:
+    // Helper methods
     void connections();
     void send_public_key();
     void handshake();
     bool canSendMore() const;
+    bool isSocketValid() const;
+    bool safeSocketSend(const std::function<qint64()> &sendFunc, const QString &operation);
     void processMessage(const QByteArray &message);
     void processCachedMessages();
+    void cleanupSocket();
 
-    QWebSocket *m_ws = nullptr;
+           // Member variables
+    QWebSocket                *m_ws                   = nullptr;
+    QTimer                    *m_pingTimer            = nullptr;
+    std::atomic<int>           m_failedPongs          {0};
+    std::atomic<bool>          m_socketValid          {false};
 
-    QTimer                *m_pingTimer   = nullptr;
-    int                    m_failedPongs = 0;
-    std::queue<QByteArray> m_messageCache;
+    // Thread safety
+    mutable QMutex             m_sendMutex;
+    mutable QMutex             m_stateMutex;
+
+    // Message caching
+    std::queue<QByteArray>     m_messageCache;
+
+    // Constants
+    static constexpr qint64    MAX_BUFFER_SIZE        = 1024 * 1024; // 1MB
+    static constexpr int       MAX_FAILED_PONGS       = 3;
+    static constexpr int       PING_INTERVAL_MS       = 3000;
 };
