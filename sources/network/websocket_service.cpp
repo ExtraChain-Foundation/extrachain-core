@@ -432,6 +432,7 @@ void WebSocketService::flush() {
         return;
     }
 
+    eLog("Flush");
     m_ws->flush();
 }
 
