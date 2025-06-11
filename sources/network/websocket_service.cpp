@@ -63,6 +63,11 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                     return;
                 }
 
+                if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+                    closeSocket();
+                    return;
+                }
+
                 auto code_string = QByteArray::number(std::to_underlying(code));
                 auto encrypted   = prepareSendMessage("Error " + code_string);
                 if (encrypted.isEmpty()) {
@@ -72,7 +77,8 @@ WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject
                 }
                 auto encoded = Utils::to_base64(encrypted.toStdString());
                 auto written = m_ws->sendTextMessage(QString::fromStdString(encoded));
-                m_ws->flush();
+                // m_ws->flush();
+                flush();
                 // eLog("[WS] Error sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
                 emit closeSocketSig();
             });
@@ -398,6 +404,12 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
         return;
     }
 
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        eLog("[WS] Socket has error: {}", m_ws->error());
+        closeSocket();
+        return;
+    }
+
     qint64 written = m_ws->sendBinaryMessage(prepared);
     if (written < 0) {
         eCritical("[WS] Failed to send message");
@@ -409,7 +421,14 @@ void WebSocketService::flush() {
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
         return;
     }
+
     if (!this->activated_ || m_ws->bytesToWrite() == 0) {
+        return;
+
+    }
+
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+        eLog("[WS] Socket has error, skipping flush");
         return;
     }
 
@@ -462,7 +481,7 @@ void WebSocketService::send_public_key() {
         return;
     }
 
-    if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
         closeSocket();
         return;
     }
@@ -495,6 +514,11 @@ void WebSocketService::handshake() {
     }
 
     if (!m_ws || !m_ws->isValid() || m_ws->state() != QAbstractSocket::ConnectedState) {
+        closeSocket();
+        return;
+    }
+
+    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
         closeSocket();
         return;
     }
