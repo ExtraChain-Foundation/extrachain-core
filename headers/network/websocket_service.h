@@ -25,6 +25,7 @@
 #include <QWebSocket>
 #include <QMutex>
 #include <QTimer>
+#include <atomic>
 #include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
@@ -74,9 +75,7 @@ private:
 
     // Новые методы для безопасной работы с сокетами
     void setupPingTimer();
-    bool isSocketValid() const;
     bool isSocketConnected() const;
-    void closeSocketInternal();
     void safeFlush();
     bool safeSendTextMessage(const QString &message);
     bool safeSendBinaryMessage(const QByteArray &message);
@@ -84,9 +83,9 @@ private:
            // Переменные
     QWebSocket                *m_ws = nullptr;
     QTimer                    *m_pingTimer = nullptr;
-    int                        m_failedPongs = 0;
+    std::atomic<int>           m_failedPongs{0};
     std::queue<QByteArray>     m_messageCache;
 
-    // Мьютекс для защиты операций с соединением
-    mutable QMutex            *m_connectionMutex = nullptr;
+    // Атомарные флаги для безопасности
+    std::atomic<bool>          m_isClosed{false};
 };
