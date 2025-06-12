@@ -75,9 +75,8 @@ private:
     // Новые методы для безопасной работы с сокетами
     void setupPingTimer();
     bool isSocketValid() const;
+    bool isSocketConnected() const;
     void closeSocketInternal();
-    void send_public_key_internal();
-    void handshakeInternal();
     void safeFlush();
     bool safeSendTextMessage(const QString &message);
     bool safeSendBinaryMessage(const QByteArray &message);
