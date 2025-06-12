@@ -44,17 +44,17 @@ DfsController::DfsController(ExtraChainNode *node)
         Dfs::initialize_actor_folder(actor_id);
     });
 
-// #ifdef IS_RC
+#ifdef IS_RC
     this->dfs_mode_ = DfsMode::Light;
-// #endif
+#endif
 
-    // auto settings = Utils::read_settings();
-    // if (settings.dfs_mode.has_value()) {
-    //     this->dfs_mode_ = settings.dfs_mode.value();
-    // } else {
-    //     settings.dfs_mode = this->dfs_mode_;
-    //     Utils::write_settings(settings);
-    // }
+    auto settings = Utils::read_settings();
+    if (settings.dfs_mode.has_value()) {
+        this->dfs_mode_ = settings.dfs_mode.value();
+    } else {
+        settings.dfs_mode = this->dfs_mode_;
+        Utils::write_settings(settings);
+    }
 }
 
 DfsController::~DfsController() {
