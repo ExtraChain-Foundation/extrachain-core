@@ -54,7 +54,7 @@ ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
 #ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
+    // signal(SIGPIPE, SIG_IGN);
 #endif
 }
 
@@ -108,7 +108,7 @@ void ExtraChainNode::process() {
     }
 
 #ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
+    // signal(SIGPIPE, SIG_IGN);
 #endif
 
     ThreadPoolBoost::instance_dfs(4);
