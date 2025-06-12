@@ -22,16 +22,20 @@
 #include <QMutexLocker>
 #include <atomic>
 
-// Глобальная инициализация для игнорирования SIGPIPE
-static bool sigpipe_initialized = false;
-static void init_sigpipe_handling() {
-    if (!sigpipe_initialized) {
 #ifdef Q_OS_LINUX
-        // Игнорируем SIGPIPE глобально для процесса
-        signal(SIGPIPE, SIG_IGN);
+    #include <sys/signal.h>
 #endif
-        sigpipe_initialized = true;
-    }
+
+// Глобальная инициализация для игнорирования SIGPIPE - должна быть в main() или очень рано
+static void init_sigpipe_handling() {
+#ifdef Q_OS_LINUX
+    // Игнорируем SIGPIPE глобально для процесса и всех потоков
+    struct sigaction sa;
+    sa.sa_handler = SIG_IGN;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGPIPE, &sa, nullptr);
+#endif
 }
 
 WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent, const bool is_constant)
@@ -121,21 +125,13 @@ void WebSocketService::setupPingTimer() {
             }
 
                    // Безопасный ping
-            try {
-                m_ws->ping();
-                int failed = m_failedPongs.fetch_add(1);
+            m_ws->ping();
+            int failed = m_failedPongs.fetch_add(1);
 
-                if (failed > 3) {
-                    eLog("[WS] Connection lost (no pong) from {}", ip_);
-                    emit error(Network::SocketServiceError::PongLost,
-                               "No pong response",
-                               ip_.toStdString(),
-                               identifier_.toStdString());
-                }
-            } catch (...) {
-                eLog("[WS] Exception during ping to {}", ip_);
+            if (failed > 3) {
+                eLog("[WS] Connection lost (no pong) from {}", ip_);
                 emit error(Network::SocketServiceError::PongLost,
-                           "Ping exception",
+                           "No pong response",
                            ip_.toStdString(),
                            identifier_.toStdString());
             }
@@ -156,6 +152,7 @@ bool WebSocketService::isSocketConnected() const {
     return m_ws &&
            m_ws->isValid() &&
            m_ws->state() == QAbstractSocket::ConnectedState &&
+           m_ws->error() == QAbstractSocket::UnknownSocketError &&
            !m_isClosed.load();
 }
 
@@ -175,13 +172,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
     eLog("[WS] Open {}", url);
     connections();
 
-    try {
-        m_ws->open(url);
-        ip_ = ip;
-    } catch (...) {
-        eLog("[WS] Exception during socket open");
-        closeSocket();
-    }
+    m_ws->open(url);
+    ip_ = ip;
 }
 
 QString WebSocketService::protocol_string() const {
@@ -202,16 +194,6 @@ void WebSocketService::closeSocket() {
     waiting_buffer_space_ = false;
     closed_               = true;
 
-           // Очищаем очереди
-    {
-        QMutexLocker locker(&queue_mutex_);
-        std::queue<QByteArray> empty1, empty2, empty3, empty4;
-        high_queue_.swap(empty1);
-        normal_queue_.swap(empty2);
-        low_queue_.swap(empty3);
-        m_messageCache.swap(empty4);
-    }
-
            // Останавливаем таймер
     if (m_pingTimer) {
         m_pingTimer->stop();
@@ -221,20 +203,29 @@ void WebSocketService::closeSocket() {
 
            // Безопасно закрываем сокет
     if (m_ws) {
-        try {
-            if (m_ws->state() == QAbstractSocket::ConnectedState) {
-                eLog("[WS] Close socket");
-                m_ws->close();
-            }
+        // Сначала отключаем все сигналы
+        m_ws->blockSignals(true);
 
-            // Отключаем все сигналы перед удалением
-            m_ws->disconnect();
-            m_ws->deleteLater();
-            m_ws = nullptr;
-        } catch (...) {
-            eLog("[WS] Exception during socket close");
-            m_ws = nullptr;
+        // Закрываем соединение если оно активно
+        if (m_ws->state() == QAbstractSocket::ConnectedState) {
+            eLog("[WS] Close socket");
+            m_ws->close();
         }
+
+        // Отключаем все сигналы и удаляем сокет
+        m_ws->disconnect();
+        m_ws->deleteLater();
+        m_ws = nullptr;
+    }
+
+           // Очищаем очереди после закрытия сокета
+    {
+        QMutexLocker locker(&queue_mutex_);
+        std::queue<QByteArray> empty1, empty2, empty3, empty4;
+        high_queue_.swap(empty1);
+        normal_queue_.swap(empty2);
+        low_queue_.swap(empty3);
+        m_messageCache.swap(empty4);
     }
 
     if (!is_disconnected_) {
@@ -248,7 +239,7 @@ bool WebSocketService::operator==(const WebSocketService &service) const {
 }
 
 void WebSocketService::onTextMessage(const QString &message) {
-    if (m_isClosed.load()) {
+    if (m_isClosed.load() || !m_ws || !m_ws->isValid()) {
         return;
     }
 
@@ -317,7 +308,7 @@ void WebSocketService::onTextMessage(const QString &message) {
 }
 
 void WebSocketService::onBinaryMessage(const QByteArray &message) {
-    if (m_isClosed.load()) {
+    if (m_isClosed.load() || !m_ws || !m_ws->isValid()) {
         return;
     }
 
@@ -388,11 +379,7 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
 }
 
 bool WebSocketService::canSendMore() const {
-    if (!isSocketConnected()) {
-        return false;
-    }
-
-    if (m_ws->error() != QAbstractSocket::UnknownSocketError) {
+    if (m_isClosed.load() || !isSocketConnected()) {
         return false;
     }
 
@@ -436,51 +423,35 @@ void WebSocketService::tryDequeueMessage() {
 }
 
 bool WebSocketService::safeSendTextMessage(const QString &message) {
-    if (message.isEmpty() || !m_ws || m_isClosed.load()) {
+    if (message.isEmpty() || m_isClosed.load() || !isSocketConnected()) {
         return false;
     }
 
-    try {
-        qint64 written = m_ws->sendTextMessage(message);
-        if (written < 0) {
-            eCritical("[WS] Failed to send text message");
-            QTimer::singleShot(0, this, [this]() {
-                emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
-            });
-            return false;
-        }
-        return true;
-    } catch (...) {
-        eCritical("[WS] Exception during text message send");
+    qint64 written = m_ws->sendTextMessage(message);
+    if (written < 0) {
+        eCritical("[WS] Failed to send text message");
         QTimer::singleShot(0, this, [this]() {
             emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
         });
         return false;
     }
+    return true;
 }
 
 bool WebSocketService::safeSendBinaryMessage(const QByteArray &message) {
-    if (message.isEmpty() || !m_ws || m_isClosed.load()) {
+    if (message.isEmpty() || m_isClosed.load() || !isSocketConnected()) {
         return false;
     }
 
-    try {
-        qint64 written = m_ws->sendBinaryMessage(message);
-        if (written < 0) {
-            eCritical("[WS] Failed to send binary message");
-            QTimer::singleShot(0, this, [this]() {
-                emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
-            });
-            return false;
-        }
-        return true;
-    } catch (...) {
-        eCritical("[WS] Exception during binary message send");
+    qint64 written = m_ws->sendBinaryMessage(message);
+    if (written < 0) {
+        eCritical("[WS] Failed to send binary message");
         QTimer::singleShot(0, this, [this]() {
             emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
         });
         return false;
     }
+    return true;
 }
 
 void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
@@ -503,14 +474,12 @@ void WebSocketService::flush() {
 }
 
 void WebSocketService::safeFlush() {
-    if (!isSocketConnected() || !activated_ || m_ws->bytesToWrite() == 0) {
+    if (m_isClosed.load() || !isSocketConnected() || !activated_) {
         return;
     }
 
-    try {
+    if (m_ws->bytesToWrite() > 0) {
         m_ws->flush();
-    } catch (...) {
-        eLog("[WS] Exception during flush");
     }
 }
 
@@ -547,7 +516,7 @@ void WebSocketService::connections() {
     });
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
-        if (waiting_buffer_space_) {
+        if (!m_isClosed.load() && waiting_buffer_space_) {
             emit needToTryDequeue();
         }
     });
@@ -612,9 +581,10 @@ void WebSocketService::handshake() {
 }
 
 quint16 WebSocketService::port() const {
-    if (m_ws == nullptr) {
+    if (m_isClosed.load() || !m_ws || !m_ws->isValid()) {
         return 0;
     }
+
     if (m_ws->peerPort() != node->network()->wsPort)
         return m_ws->peerPort();
     else
