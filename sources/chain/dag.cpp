@@ -86,7 +86,10 @@ Dag::Dag(ExtraChainNode *node)
 #endif
 
     timestamp_bigger_sync_start_ = 0;
+
+#ifndef IS_R
     status_                      = DagStatus::Ready;
+#endif
 
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
