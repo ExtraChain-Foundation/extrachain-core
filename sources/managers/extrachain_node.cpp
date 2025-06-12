@@ -43,19 +43,12 @@
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
-#ifdef Q_OS_LINUX
-    #include <signal.h>
-#endif
-
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
                                              bool     allowRunRestApiServer,
                                              bool     isRaccoonCheck)
     : QObject(parent)
     , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
-#ifdef Q_OS_LINUX
-    // signal(SIGPIPE, SIG_IGN);
-#endif
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -106,10 +99,6 @@ void ExtraChainNode::process() {
         eFatal("Encryption init error");
         QCoreApplication::exit(-1000);
     }
-
-#ifdef Q_OS_LINUX
-    // signal(SIGPIPE, SIG_IGN);
-#endif
 
     ThreadPoolBoost::instance_dfs(4);
     ThreadPoolBoost::instance(4);

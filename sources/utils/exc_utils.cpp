@@ -50,6 +50,10 @@
 // #include "managers/data_mining_manager.h"
 #include "dfs/dfs_utils.h"
 
+#ifdef Q_OS_LINUX
+    #include <signal.h>
+#endif
+
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
 #endif
@@ -1071,4 +1075,13 @@ Utils::VersionCompareResult Utils::compare_versions(const std::string &current, 
 
 bool Utils::is_newer_version(const std::string &current, const std::string &latest) {
     return compare_versions(current, latest) == VersionCompareResult::Newer;
+}
+
+void Utils::prepare_extrachain() {
+#ifdef Q_OS_LINUX
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+#endif
 }
