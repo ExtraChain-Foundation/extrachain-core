@@ -495,6 +495,8 @@ namespace Json {
 } // namespace Json
 
 namespace Utils {
+    EXTRACHAIN_EXPORT void prepare_extrachain();
+
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
 
