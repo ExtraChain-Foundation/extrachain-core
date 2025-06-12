@@ -18,24 +18,22 @@
  */
 
 #pragma once
-
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 #include <QWebSocket>
-
+#include <QMutex>
+#include <QTimer>
 #include "extrachain_global.h"
 
 class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
     Q_OBJECT
-
 public:
     explicit WebSocketService(QWebSocket     *ws,
                               ExtraChainNode *node,
                               QObject        *parent      = nullptr,
                               const bool      is_constant = false);
-    // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 
     QWebSocket               *socket() const;
@@ -43,15 +41,12 @@ public:
     void                      open(const QString &ip, quint16 port);
     virtual QString           protocol_string() const override;
     virtual Network::Protocol protocol() const override;
-
     bool operator==(const WebSocketService &service) const;
-
     quint16 port() const override;
     quint16 server_port() const override;
 
 public:
     void send_message(const QByteArray &data, Priority priority = Priority::High) override;
-
     virtual void flush() override;
 
 signals:
@@ -62,7 +57,6 @@ signals:
 private slots:
     void onTextMessage(const QString &message);
     void onBinaryMessage(const QByteArray &message);
-
     void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
     void closeSocket() override;
@@ -70,6 +64,7 @@ private slots:
     void tryDequeueMessage();
 
 private:
+    // Основные методы
     void connections();
     void send_public_key();
     void handshake();
@@ -77,9 +72,22 @@ private:
     void processMessage(const QByteArray &message);
     void processCachedMessages();
 
-    QWebSocket *m_ws = nullptr;
+    // Новые методы для безопасной работы с сокетами
+    void setupPingTimer();
+    bool isSocketValid() const;
+    void closeSocketInternal();
+    void send_public_key_internal();
+    void handshakeInternal();
+    void safeFlush();
+    bool safeSendTextMessage(const QString &message);
+    bool safeSendBinaryMessage(const QByteArray &message);
 
-    QTimer                *m_pingTimer   = nullptr;
-    int                    m_failedPongs = 0;
-    std::queue<QByteArray> m_messageCache;
+           // Переменные
+    QWebSocket                *m_ws = nullptr;
+    QTimer                    *m_pingTimer = nullptr;
+    int                        m_failedPongs = 0;
+    std::queue<QByteArray>     m_messageCache;
+
+    // Мьютекс для защиты операций с соединением
+    mutable QMutex            *m_connectionMutex = nullptr;
 };
