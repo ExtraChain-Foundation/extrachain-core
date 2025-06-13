@@ -1150,21 +1150,23 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 
 void DfsController::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
-    auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
-    if (!dfs_vector_result.has_value()) {
-        return;
-    }
+    ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content]{
+        auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
+        if (!dfs_vector_result.has_value()) {
+            return;
+        }
 
-    auto &[dir_row, dfs_vector] = dfs_vector_result.value();
+        auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
-    bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+        bool res_handle = dfs_vector.handle_package(dfs_vector_content);
 
-    Dfs::FileLinkFragment file_link_fragment;
-    file_link_fragment.file_link = Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
-    file_link_fragment.fragment_numbers.emplace(1);
-    load_manager_.remove_active_download(file_link_fragment);
+        Dfs::FileLinkFragment file_link_fragment;
+        file_link_fragment.file_link = Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
+        file_link_fragment.fragment_numbers.emplace(1);
+        load_manager_.remove_active_download(file_link_fragment);
 
-    load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
+        load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
+    });
 }
 
 void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
@@ -1945,7 +1947,7 @@ void DfsController::sendSizeRequestMsg(const ActorId &actorId) const {
 }
 
 void DfsController::sendSizeReponseMsg(const Dfs::Packets::RequestDfsSize &msg, const Responder &responder) {
-    const auto            dfsSize = calculate_size().local;
+    const auto            dfsSize = m_sizeTaken; // calculate_size().local;
     DfsP::ResponseDfsSize response { .actorId = msg.actorId, .size = dfsSize };
     responder.send_response(response, MessageType::ResponseDfsSize, SendMode::Focused, MessageStatus::Response);
 }
