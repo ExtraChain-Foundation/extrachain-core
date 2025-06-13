@@ -151,7 +151,7 @@ void DataMiningManager::requestCoinReward() {
 
 BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
-    node->dfs()->refresh_calculate();
+    // node->dfs()->refresh_calculate();
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
