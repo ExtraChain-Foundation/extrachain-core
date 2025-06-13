@@ -41,7 +41,6 @@ enum class PrivateProfileReadError {
 };
 
 struct ImportedUser {
-    ActorId                                  network;
     std::string                              version;
     uint64_t                                 date = 0;
     ActorId                                  system;
@@ -54,7 +53,7 @@ struct ImportedUser {
 };
 BOOST_DESCRIBE_STRUCT(ImportedUser,
                       (),
-                      (network, date, system, main, actors, imports, wallet_names, creation_date, modified_date))
+                      (date, system, main, actors, imports, wallet_names, creation_date, modified_date))
 
 class ExtraChainNode;
 

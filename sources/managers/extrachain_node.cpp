@@ -604,13 +604,8 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
 
 std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
     const auto& current_profile = m_accountController->currentProfile();
-    auto        network_id      = m_actorIndex->network_id();
-    if (network_id.is_zero()) {
-        return std::unexpected(ImportError::NoNetworkId);
-    }
 
-    auto imported_user = ImportedUser { .network       = network_id,
-                                        .version       = extrachain_version,
+    auto imported_user = ImportedUser { .version       = extrachain_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
                                         .main          = current_profile.main()->get().id(),
