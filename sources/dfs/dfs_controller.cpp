@@ -1150,7 +1150,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 
 void DfsController::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
-    ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content]{
+    ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
         auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
         if (!dfs_vector_result.has_value()) {
             return;
@@ -1161,7 +1161,8 @@ void DfsController::network_response_content_vector(
         bool res_handle = dfs_vector.handle_package(dfs_vector_content);
 
         Dfs::FileLinkFragment file_link_fragment;
-        file_link_fragment.file_link = Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
+        file_link_fragment.file_link =
+            Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
         file_link_fragment.fragment_numbers.emplace(1);
         load_manager_.remove_active_download(file_link_fragment);
 
@@ -1212,22 +1213,23 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
                                                 .file_id  = file_id,
                                                 .state    = dir_row->state,
-                                                .hash     = dir_row->hash};
+                                                .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
 
-void DfsController::network_request_file_existance(const Dfs::FileLink& file_link, const Responder   &responder)
-{
+void DfsController::network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(file_link.owner_id, file_link.file_id);
 
     if (!dir_row.has_value())
         return;
 
-    responder.send_response(file_link, MessageType::DfsFileRequestContinueUpload, SendMode::Focused, MessageStatus::Response);
+    responder.send_response(file_link,
+                            MessageType::DfsFileRequestContinueUpload,
+                            SendMode::Focused,
+                            MessageStatus::Response);
 }
 
-void DfsController::network_response_file_state(const Dfs::Packets::FileState& data,
-                                                const Responder   &responder) {
+void DfsController::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
 
     if (!dir_row.has_value()) {
@@ -1237,14 +1239,17 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState& d
     if (data.state == Dfs::FileState::Ready) {
         dir_row->state = data.state;
         dir_row->hash  = data.hash;
-        load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin(), data.notify_neighbours);
+        load_manager_.add_to_queue(data.owner_id,
+                                   dir_row.value(),
+                                   *responder.identifiers().begin(),
+                                   data.notify_neighbours);
     }
 }
 
-void DfsController::network_file_exist_notification(const Dfs::Packets::FileState& data, const Responder &responder)
-{
-    //TODO: check light node or not and some logic do we want to download new file or not
-    // auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
+void DfsController::network_file_exist_notification(const Dfs::Packets::FileState &data,
+                                                    const Responder               &responder) {
+    // TODO: check light node or not and some logic do we want to download new file or not
+    //  auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
 
     // if (!dir_row.has_value()) {
     //     return;
@@ -1456,14 +1461,14 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     if (dir_row.type == Dfs::FileType::File && network_stote == Dfs::NetworkStoreFile::Broadcast) {
         emit stored(owner_id, dir_row);
 
-        auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-        auto load_info = LoadInfo { .dir_row = dir_row };
-        LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
+        auto               file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        auto               load_info = LoadInfo { .dir_row = dir_row };
+        LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now() };
 
         // check real status
         load_info.dir_row.state = Dfs::FileState::Known;
         // load_manager_.active_downloads.insert({ file_link, load_info });
-        //TODO: what need to do here?
+        // TODO: what need to do here?
     }
 
     emit added(owner_id, dir_row);
@@ -1857,7 +1862,7 @@ void DfsController::check_all_files(std::string identifier) {
         return;
     }
 
-    for (const auto& dir : dirs.value()) {
+    for (const auto &dir : dirs.value()) {
         bool is_full   = node->dfs()->mode() == DfsMode::Full;
         bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
 
@@ -1867,7 +1872,7 @@ void DfsController::check_all_files(std::string identifier) {
             continue;
         }
 
-        for (const auto& row : dir_rows.value()) {
+        for (const auto &row : dir_rows.value()) {
             if (row.type == Dfs::FileType::File && !need_load) {
                 continue;
             }
@@ -1902,10 +1907,10 @@ void DfsController::check_all_files(std::string identifier) {
 
             auto file_link = Dfs::FileLink { .owner_id = dir.actor_id, .file_id = row.file_id };
 
-                   // TODO: insert to queue
+            // TODO: insert to queue
 
-                   // TODO: process from queue
-                   // search file
+            // TODO: process from queue
+            // search file
             if (identifier.empty()) {
                 this->node->network()->send_message(file_link,
                                                     MessageType::DfsFileState,
@@ -1923,17 +1928,17 @@ void DfsController::check_all_files(std::string identifier) {
         }
     }
 
-           // bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
-           //                                                              file_link.file_id,
-           //                                                              active_download.dir_row.hash);
-           // if (!is_downloaded) {5
-           // }
+    // bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+    //                                                              file_link.file_id,
+    //                                                              active_download.dir_row.hash);
+    // if (!is_downloaded) {5
+    // }
 }
 
 void DfsController::sync(const std::string &identifier) {
     static std::once_flag check_flag;
-    ThreadPoolBoost::instance_dfs()->post([this, identifier](){
-        std::call_once(check_flag, [this, &identifier](){
+    ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
+        std::call_once(check_flag, [this, &identifier]() {
             check_all_files(identifier);
         });
         dirs_manager_.temp_sync_all(identifier);

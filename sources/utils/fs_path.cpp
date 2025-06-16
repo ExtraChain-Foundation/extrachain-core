@@ -82,15 +82,15 @@ std::expected<FsPath, FsError> FsPath::create(std::string_view utf8_path) {
         //     current = current.parent_path();
         // }
 
-       // auto parent = fs_path.parent_path();
-       // if (!parent.empty()) {
-       //     if (!std::filesystem::exists(parent)) {
-       //         return std::unexpected(FsError::ParentNotFound);
-       //     }
-       //     if (!std::filesystem::is_directory(parent)) {
-       //         return std::unexpected(FsError::ParentNotDirectory);
-       //     }
-       // }
+        // auto parent = fs_path.parent_path();
+        // if (!parent.empty()) {
+        //     if (!std::filesystem::exists(parent)) {
+        //         return std::unexpected(FsError::ParentNotFound);
+        //     }
+        //     if (!std::filesystem::is_directory(parent)) {
+        //         return std::unexpected(FsError::ParentNotDirectory);
+        //     }
+        // }
 #endif
 
         return FsPath(std::filesystem::weakly_canonical(fs_path));

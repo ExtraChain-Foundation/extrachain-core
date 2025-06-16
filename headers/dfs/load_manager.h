@@ -43,14 +43,14 @@ struct LoadInfo {
         std::chrono::system_clock::time_point last_attempt {};
     };
 
-    Dfs::DirRow                           dir_row;
+    Dfs::DirRow dir_row;
 
-    size_t amount_fragments;
+    size_t           amount_fragments;
     std::set<size_t> fragments_left;
 
     bool notify_neighbours;
 
-    std::set<std::string> identifier_storage_checker {};
+    std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
     // std::chrono::system_clock::time_point last_segment_time {}; // Time of last received segment
     // Dfs::FileState                        state { Dfs::FileState::Known };
@@ -78,12 +78,17 @@ enum class PullMode {
 class LoadManager : public QObject {
     Q_OBJECT
 public:
-    explicit LoadManager(ExtraChainNode* node, QObject *parent = nullptr);
+    explicit LoadManager(ExtraChainNode* node, QObject* parent = nullptr);
 
     bool add_network_identifier(const Dfs::FileLink& file_link, std::string identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
-    void add_to_queue(const ActorId& owner_id, const Dfs::DirRow& dir_row, const std::string& identifier, const bool notify_neighbours = false);
-    void add_to_queue(const ActorId& owner_id, const std::vector<Dfs::DirRow>& dir_rows, const std::string& identifier);
+    void add_to_queue(const ActorId&     owner_id,
+                      const Dfs::DirRow& dir_row,
+                      const std::string& identifier,
+                      const bool         notify_neighbours = false);
+    void add_to_queue(const ActorId&                  owner_id,
+                      const std::vector<Dfs::DirRow>& dir_rows,
+                      const std::string&              identifier);
 
     // void process_next();
     void check_stalled_downloads(); // Check "stalled" downloads
@@ -107,17 +112,18 @@ private:
     PullMode pull_mode = PullMode::All;
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
-    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>> m_amount_file_fragments_requests;
+    SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>>
+        m_amount_file_fragments_requests;
 
     struct ReadStorage {
         // uint64_t current_size;
-        std::size_t amount_fragments;
+        std::size_t      amount_fragments;
         std::set<size_t> fragments_achieved;
         // std::map<uint64_t, bool> offsets_read_progress;
     };
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
-    std::mutex m_write_file_mutex;
+    std::mutex                                              m_write_file_mutex;
 
-    QTimer *m_timer;
+    QTimer* m_timer;
 };

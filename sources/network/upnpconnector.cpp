@@ -22,12 +22,11 @@
 #include <iostream>
 
 UPnPConnector::UPnPConnector(std::shared_ptr<QNetworkAddressEntry> local, QObject *parent)
-    : QObject(parent),
-    udpSocket(new QUdpSocket(this)),
-    networkManager(new QNetworkAccessManager(this)),
-    timeoutTimer(new QTimer(this)),
-    localAddress(local)
-{
+    : QObject(parent)
+    , udpSocket(new QUdpSocket(this))
+    , networkManager(new QNetworkAccessManager(this))
+    , timeoutTimer(new QTimer(this))
+    , localAddress(local) {
     connect(udpSocket, &QUdpSocket::readyRead, this, &UPnPConnector::onUdpReadyRead);
     connect(networkManager, &QNetworkAccessManager::finished, this, &UPnPConnector::onHttpFinished);
     timeoutTimer->setSingleShot(true);
@@ -39,10 +38,9 @@ UPnPConnector::~UPnPConnector() {
 }
 
 void UPnPConnector::discoverDevices() {
-    std::cout << "UDP socket state before bind: " << udpSocket->state() <<std::endl;
+    std::cout << "UDP socket state before bind: " << udpSocket->state() << std::endl;
     // You may try port 1900 if you want to follow the standard.
-    if (!udpSocket->bind(localAddress->ip(), 1901,
-                         QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+    if (!udpSocket->bind(localAddress->ip(), 1901, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
         emit errorOccurred("Failed to bind UDP socket: " + udpSocket->errorString());
         return;
     }
@@ -64,17 +62,18 @@ void UPnPConnector::onUdpReadyRead() {
         QByteArray datagram;
         datagram.resize(int(udpSocket->pendingDatagramSize()));
         QHostAddress sender;
-        quint16 senderPort;
+        quint16      senderPort;
         udpSocket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
         QString response = QString::fromUtf8(datagram);
-        std::cout << "Received UDP response from: " << sender.toString().toStdString() << "port: " << senderPort <<std::endl;
-        std::cout << "Response:" << response.toStdString()<<std::endl;
+        std::cout << "Received UDP response from: " << sender.toString().toStdString() << "port: " << senderPort
+                  << std::endl;
+        std::cout << "Response:" << response.toStdString() << std::endl;
         int locIndex = response.indexOf("LOCATION: ");
         if (locIndex != -1) {
-            int start = locIndex + QString("LOCATION: ").length();
-            int end = response.indexOf("\r\n", start);
+            int     start    = locIndex + QString("LOCATION: ").length();
+            int     end      = response.indexOf("\r\n", start);
             QString location = response.mid(start, end - start).trimmed();
-            emit deviceDiscovered(sender, location);
+            emit    deviceDiscovered(sender, location);
         }
     }
 }
@@ -84,16 +83,16 @@ void UPnPConnector::onHttpFinished(QNetworkReply *reply) {
         emit errorOccurred("HTTP error: " + reply->errorString());
     } else {
         QString response = QString::fromUtf8(reply->readAll());
-        std::cout << "HTTP Response:" << response.toStdString()<<std::endl;
+        std::cout << "HTTP Response:" << response.toStdString() << std::endl;
         emit soapResponseReceived(response);
         if (currentSoapAction == "GetExternalIPAddress") {
             // Parse the response to extract the external IP.
             // For example, search for <NewExternalIPAddress>...</NewExternalIPAddress>
             int start = response.indexOf("<NewExternalIPAddress>") + QString("<NewExternalIPAddress>").length();
-            int end = response.indexOf("</NewExternalIPAddress>", start);
+            int end   = response.indexOf("</NewExternalIPAddress>", start);
             if (start > 0 && end > start) {
                 QString externalIP = response.mid(start, end - start).trimmed();
-                emit externalIPAddressObtained(externalIP);
+                emit    externalIPAddressObtained(externalIP);
             }
         } else if (currentSoapAction == "AddPortMapping") {
             emit portMappingAdded();
@@ -133,13 +132,12 @@ void UPnPConnector::getExternalIPAddress(const QUrl &controlUrl) {
     postSOAP(controlUrl, "GetExternalIPAddress", message);
 }
 
-void UPnPConnector::addPortMapping(const QUrl &controlUrl,
-                                   int internalPort,
-                                   int externalPort,
+void UPnPConnector::addPortMapping(const QUrl    &controlUrl,
+                                   int            internalPort,
+                                   int            externalPort,
                                    const QString &protocol,
                                    const QString &description,
-                                   const QString &internalClient)
-{    
+                                   const QString &internalClient) {
     QString message =
         "<?xml version=\"1.0\"?>\r\n"
         "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
@@ -160,10 +158,7 @@ void UPnPConnector::addPortMapping(const QUrl &controlUrl,
     postSOAP(controlUrl, "AddPortMapping", message);
 }
 
-void UPnPConnector::removePortMapping(const QUrl &controlUrl,
-                                      int externalPort,
-                                      const QString &protocol)
-{
+void UPnPConnector::removePortMapping(const QUrl &controlUrl, int externalPort, const QString &protocol) {
     QString message =
         "<?xml version=\"1.0\"?>\r\n"
         "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "
@@ -181,7 +176,7 @@ void UPnPConnector::removePortMapping(const QUrl &controlUrl,
 
 void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) {
     QNetworkRequest request(deviceDescriptionUrl);
-    QNetworkReply *reply = networkManager->get(request);
+    QNetworkReply  *reply = networkManager->get(request);
 
     // Allocate a buffer to accumulate data.
     auto *accumulatedData = new QByteArray;
@@ -207,14 +202,14 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
         // QByteArray contentLength = reply->rawHeader("Content-Length");
         // qInfo() << "Content-Length:" << contentLength;
 
-        //qInfo() << "Accumulated Data length:" << accumulatedData->size();
+        // qInfo() << "Accumulated Data length:" << accumulatedData->size();
         QString xmlContent = QString::fromUtf8(*accumulatedData);
         qInfo() << "Device Description XML:" << xmlContent;
 
         // Parse the XML description using QXmlStreamReader.
         QXmlStreamReader xml(xmlContent);
-        QString controlUrl;
-        bool foundWANIPConnection = false;
+        QString          controlUrl;
+        bool             foundWANIPConnection = false;
         // Loop over the XML tokens
 
         while (!xml.atEnd() && !xml.hasError()) {
@@ -237,7 +232,7 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
                     }
                     // Check if this service is WANIPConnection.
                     if (serviceType.contains("WANIPConnection", Qt::CaseInsensitive)) {
-                        controlUrl = serviceControlURL;
+                        controlUrl           = serviceControlURL;
                         foundWANIPConnection = true;
                         break;
                     }
@@ -247,10 +242,11 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
 
         if (foundWANIPConnection && !controlUrl.isEmpty()) {
             // If the control URL is relative, resolve it against the base device URL.
-            QUrl baseUrl = deviceDescriptionUrl;
+            QUrl baseUrl        = deviceDescriptionUrl;
             QUrl fullControlUrl = baseUrl.resolved(QUrl(controlUrl));
-            std::cout << "Found WANIPConnection control URL: " << fullControlUrl.toString().toStdString()<<std::endl;
-            //emit soapResponseReceived(fullControlUrl.toString());
+            std::cout << "Found WANIPConnection control URL: " << fullControlUrl.toString().toStdString()
+                      << std::endl;
+            // emit soapResponseReceived(fullControlUrl.toString());
             emit controlURLFound(fullControlUrl.toString());
         } else {
             emit errorOccurred("Control URL for WANIPConnection not found in device description.");
@@ -260,10 +256,9 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
     });
 }
 
-void UPnPConnector::getSpecificPortMappingEntry(const QUrl &controlUrl,
-                                                int externalPort,
-                                                const QString &protocol)
-{
+void UPnPConnector::getSpecificPortMappingEntry(const QUrl    &controlUrl,
+                                                int            externalPort,
+                                                const QString &protocol) {
     // Construct the SOAP message.
     QString soapMessage =
         "<?xml version=\"1.0\"?>\r\n"
@@ -278,7 +273,7 @@ void UPnPConnector::getSpecificPortMappingEntry(const QUrl &controlUrl,
         "  </s:Body>\r\n"
         "</s:Envelope>\r\n";
 
-           // Set up the network request.
+    // Set up the network request.
     QNetworkRequest request(controlUrl);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "text/xml; charset=\"utf-8\"");
 
@@ -288,10 +283,10 @@ void UPnPConnector::getSpecificPortMappingEntry(const QUrl &controlUrl,
 
     request.setRawHeader("Content-Length", QString::number(soapMessage.toUtf8().size()).toUtf8());
 
-           // Send the SOAP request.
+    // Send the SOAP request.
     QNetworkReply *reply = networkManager->post(request, soapMessage.toUtf8());
 
-           // Connect to the finished signal to process the response.
+    // Connect to the finished signal to process the response.
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() != QNetworkReply::NoError) {
             emit errorOccurred("GetSpecificPortMappingEntry error: " + reply->errorString());

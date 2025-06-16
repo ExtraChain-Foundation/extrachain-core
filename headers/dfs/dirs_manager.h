@@ -50,7 +50,8 @@ public:
                                              const Responder&                           responder);
 
     void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const Responder& responder);
-    void network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data, const Responder& responder);
+    void network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+                                   const Responder&                                                responder);
 
     // temp
     void temp_sync_all(const std::string& identifier);

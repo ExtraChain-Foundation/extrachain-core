@@ -88,7 +88,7 @@ Dag::Dag(ExtraChainNode *node)
     timestamp_bigger_sync_start_ = 0;
 
 #ifndef IS_R
-    status_                      = DagStatus::Ready;
+    status_ = DagStatus::Ready;
 #endif
 
     auto section = this->read_section(BigNumber(0));

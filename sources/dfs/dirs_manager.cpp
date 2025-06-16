@@ -146,11 +146,11 @@ void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_ro
                             MessageStatus::Response);
 }
 
-void DirsManager::network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
-                                            const Responder&                responder) {
+void DirsManager::network_response_dir_rows(
+    const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+    const Responder&                                                responder) {
     ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
-        for (auto &[owner_id, dir_rows] : response_data)
-        {
+        for (auto& [owner_id, dir_rows] : response_data) {
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
 
@@ -163,7 +163,8 @@ void DirsManager::network_response_dir_rows(const std::vector<std::pair<ActorId,
                     auto it = local_dir_rows->find(network_row.file_id);
 
                      if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
-                         eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id, network_row.last_modified);
+                         eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id,
+            network_row.last_modified);
                      }
                  }
              }
@@ -179,7 +180,9 @@ void DirsManager::network_response_dir_rows(const std::vector<std::pair<ActorId,
 
                     if (file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
-                        Dfs::Tables::ActorDirFile::update_file_state(owner_id, row.file_id, Dfs::FileState::Removed);
+                        Dfs::Tables::ActorDirFile::update_file_state(owner_id,
+                                                                     row.file_id,
+                                                                     Dfs::FileState::Removed);
                     }
                 }
             }

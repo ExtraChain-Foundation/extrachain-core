@@ -156,7 +156,7 @@ namespace Dfs {
     BOOST_DESCRIBE_STRUCT(FileLink, (), (owner_id, file_id))
 
     struct FileLinkFragment {
-        FileLink file_link;
+        FileLink              file_link;
         std::set<std::size_t> fragment_numbers;
 
         bool operator<(const FileLinkFragment& other) const {
@@ -298,15 +298,18 @@ namespace Dfs {
 
     namespace Packets {
         struct FragmentData {
-            ActorId     owner_id;
-            std::string file_id;
+            ActorId       owner_id;
+            std::string   file_id;
             std::string   data;
             std::uint64_t offset;
             std::uint64_t current_size;
-            std::size_t fragment_number;
-            std::size_t full_amount_fragments;
+            std::size_t   fragment_number;
+            std::size_t   full_amount_fragments;
         };
-        BOOST_DESCRIBE_STRUCT(FragmentData, (), (owner_id, file_id, data, offset, current_size, fragment_number, full_amount_fragments))
+        BOOST_DESCRIBE_STRUCT(
+            FragmentData,
+            (),
+            (owner_id, file_id, data, offset, current_size, fragment_number, full_amount_fragments))
 
         struct FileState {
             ActorId        owner_id;

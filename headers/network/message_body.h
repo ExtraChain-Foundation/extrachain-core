@@ -54,10 +54,10 @@ enum class MessageType {
     DfsFileState = 56,
     // DfsFileWant      = 57,
     DfsFileExistNotification = 58,
-    DfsFileRequest   = 59,
-    DfsFileFragment  = 60,
+    DfsFileRequest           = 59,
+    DfsFileFragment          = 60,
     // DfsFileThanks   = 61,
-    DfsFileRemove = 62,
+    DfsFileRemove                = 62,
     DfsFileRequestContinueUpload = 63,
 
     DfsCollectionRequest   = 70,
@@ -111,12 +111,12 @@ enum class SendMode {
 MSGPACK_ADD_ENUM(SendMode)
 
 struct MessageBody {
-    SendMode                        send_type;
-    MessageType                     message_type;
-    MessageStatus                   status;
-    std::string                     message_id;
-    ActorId                         sender_id;
-    ActorId                         init_sender_id;
+    SendMode      send_type;
+    MessageType   message_type;
+    MessageStatus status;
+    std::string   message_id;
+    ActorId       sender_id;
+    ActorId       init_sender_id;
     // std::string                     init_sender_identifier;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
