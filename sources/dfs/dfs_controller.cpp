@@ -45,12 +45,12 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_RC
-    this->dfs_mode_ = DfsMode::Light;
+    set_mode(DfsMode::Light);
 #endif
 
     auto settings = Utils::read_settings();
-    if (settings.dfs_mode.has_value()) {
-        this->dfs_mode_ = settings.dfs_mode.value();
+    if (settings.dfs_mode.has_value() && settings.dfs_mode.value() == DfsMode::Light) {
+        set_mode(DfsMode::Light);
     } else {
         settings.dfs_mode = this->dfs_mode_;
         Utils::write_settings(settings);

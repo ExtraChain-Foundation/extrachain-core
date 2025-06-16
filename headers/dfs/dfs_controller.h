@@ -165,6 +165,11 @@ public:
     }
 
     void set_mode(DfsMode mode) {
+        if (dfs_mode_ == mode) {
+            return;
+        }
+
+        eLog("[Dfs] Set mode to {}", mode);
         dfs_mode_ = mode;
     }
 

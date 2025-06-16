@@ -57,6 +57,7 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("Set node_enabled to {}", node_enabled);
 
     if (m_thread) {
+        ThreadPoolBoost::terminate();
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
@@ -151,7 +152,7 @@ ExtraChainNode::~ExtraChainNode() {
         m_vpnClearFunc();
     }
 
-    ThreadPoolBoost::terminate();
+    // ThreadPoolBoost::terminate();
 }
 
 void ExtraChainNode::cleanUp() {

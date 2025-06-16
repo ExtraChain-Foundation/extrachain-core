@@ -355,7 +355,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                                                                   SendMode::Focused,
                                                                   MessageStatus::NoStatus,
                                                                   responder);
-            eLog("[Dfs] LoadManager::share_stored_file, file fragment sended (message_id: {}). owner_id: {}, file_id: {}, offset: {}", message_id, file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
+            // eLog("[Dfs] LoadManager::share_stored_file, file fragment sended (message_id: {}). owner_id: {}, file_id: {}, offset: {}", message_id, file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id, offset);
 
             // offset += Dfs::Basic::FRAGMENT_SIZE;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -368,7 +368,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
 
         // emit node->dfs()->uploaded(file_link_fragment.file_link.owner_id, dir_row.value());
     });
-    eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
+    // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}", file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
 }
 
 void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::string& file_id)
@@ -416,7 +416,7 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
                                                           MessageType::DfsFileExistNotification,
                                                           SendMode::Neighbours,
                                                           MessageStatus::NoStatus);
-    eLog("[Dfs] LoadManager::brodcast_file_exist, file fragment sended (message_id: {}). owner_id: {}, file_id: {}", message_id, owner_id, file_id);
+    // eLog("[Dfs] LoadManager::brodcast_file_exist, file fragment sended (message_id: {}). owner_id: {}, file_id: {}", message_id, owner_id, file_id);
 }
 
 void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier) {
@@ -427,7 +427,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
 
     ThreadPoolBoost::instance_dfs()->post([this, file_content, identifier](){
         const auto file_link = Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
-        eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
+        // eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
 
         {
             auto active_reads_locked = *m_active_reads;
@@ -506,7 +506,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                         bool notify_neighbours = res->second.notify_neighbours;
 
                         active_downloads_locked->erase(res);
-                        eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
+                        // eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
 
                         finish_him(file_link.owner_id, dir_row);
 
