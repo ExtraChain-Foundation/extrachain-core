@@ -29,6 +29,7 @@ enum class NetworkVPNType;
 
 struct VPNConfigStorage {
     struct VPNHandhakeCache {
+        bool is_sended = false;
         std::string uuid;
         // std::string              requesterIP;
         std::string              requesterNetworkIdentifier;
