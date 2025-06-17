@@ -483,6 +483,10 @@ void NetworkManager::connectToWebSocket(const QString &ip,
 }
 
 void NetworkManager::clearNetworkCaches() {
+    eInfo("m_messages size: {}, m_network_forwarded_messages size: {}",
+          m_messages->size(),
+          m_network_forwarded_messages->size());
+
     {
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
         for (auto it = network_forwarded_messages_locked->begin();
