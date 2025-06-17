@@ -355,6 +355,15 @@ namespace detail {
 
         log_buffer.clear();
         msg_buffer.clear();
+        thread_local int log_count = 0;
+        if (++log_count % 1000 == 0) {
+            if (log_buffer.capacity() > 10 * 1024 * 1024) {
+                log_buffer = fmt::memory_buffer {};
+            }
+            if (msg_buffer.capacity() > 10 * 1024 * 1024) {
+                msg_buffer = fmt::memory_buffer {};
+            }
+        }
 
         // Format message
         fmt::format_to(std::back_inserter(msg_buffer), format_str, std::forward<Args>(args)...);
