@@ -41,11 +41,6 @@ enum class NumeralBase {
     Hex = 16
 };
 
-namespace BigNumberUtils {
-    const static std::vector<char> Chars = { 'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
-                                             '2', '3', '4', '5', '6', '7', '8', '9' };
-}
-
 enum class BigNumberError {
     NoError,
     InvalidNumber,
