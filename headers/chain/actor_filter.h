@@ -21,7 +21,6 @@
 
 #include <vector>
 #include <string>
-#include <cmath>
 #include <cstring>
 
 #include "chain/actor_id.h"
@@ -36,7 +35,7 @@
  */
 class ActorSynchronizer {
 private:
-    std::vector<ActorId> local_actors_;
+    std::set<ActorId> local_actors_;
 
     /// Number of buckets (256 = 1 byte for bucket index)
     static constexpr size_t BUCKET_COUNT = 256;
@@ -236,7 +235,7 @@ public:
      * @param actors Vector of ActorId objects to set as local actors
      */
     void set_actors(const std::vector<ActorId>& actors) {
-        local_actors_ = actors;
+        local_actors_ = std::set<ActorId>(actors.begin(), actors.end());
     }
 
     /**
@@ -285,19 +284,8 @@ public:
      * ensuring that no duplicates are added.
      */
     void apply_received_ids(const std::vector<ActorId>& received_ids) {
-        // Set for fast checking of existing actors
-        std::unordered_set<std::string> existing_actors;
-        for (const auto& actor : local_actors_) {
-            existing_actors.insert(actor.to_string());
-        }
-
-        // Add only unique actors
         for (const auto& actor : received_ids) {
-            std::string actor_str = actor.to_string();
-            if (existing_actors.find(actor_str) == existing_actors.end()) {
-                local_actors_.push_back(actor);
-                existing_actors.insert(actor_str);
-            }
+            local_actors_.insert(actor);
         }
     }
 };
