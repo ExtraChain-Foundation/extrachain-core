@@ -720,6 +720,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 }
 
 void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data) {
+    return;
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
