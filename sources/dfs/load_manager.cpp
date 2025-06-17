@@ -69,10 +69,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 auto now      = std::chrono::system_clock::now();
                 auto duration = now - identifier.second.last_attempt;
                 if (!node->network()->is_connection_exists(identifier.first)) {
-                    eCritical(
-                        "LoadManager::timer_runner, connection with identifier ({}) not exist for file_link: {}.",
-                        identifier.first,
-                        it.first);
+                    // eCritical(
+                    //     "LoadManager::timer_runner, connection with identifier ({}) not exist for file_link:
+                    //     {}.", identifier.first, it.first);
                     continue;
                 }
 

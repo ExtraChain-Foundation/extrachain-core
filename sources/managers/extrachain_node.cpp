@@ -83,9 +83,6 @@ ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, boo
     , isRaccoon(isRaccoonCheck)
     , allowRunRestApiServer(allowRunRestApiServer) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
-#ifndef RACCOON_CLIENT_CONSOLE
-    Logger::instance().set_debug(true);
-#endif
 }
 
 void ExtraChainNode::process() {
