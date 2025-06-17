@@ -483,9 +483,9 @@ void NetworkManager::connectToWebSocket(const QString &ip,
 }
 
 void NetworkManager::clearNetworkCaches() {
-    eInfo("m_messages size: {}, m_network_forwarded_messages size: {}",
+    eInfo("m_messages size: {}, m_network_forwarded_messages size: {}. | {}",
           m_messages->size(),
-          m_network_forwarded_messages->size());
+          m_network_forwarded_messages->size(), btcounts);
 
     {
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
@@ -719,7 +719,12 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 }
 
-void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data) {
+void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data, MessageType msg_type) {
+    btcounts[msg_type] += 1;
+
+    if (msg_type != MessageType::KKKK) {
+        int a = 0;
+    }
     return;
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
@@ -1148,7 +1153,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
         auto actor_handling_result = node->actorIndex()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
-            sendBrodcastMessageFurther(package_data);
+            sendBrodcastMessageFurther(package_data, type);
         }
         break;
     }
@@ -1339,7 +1344,7 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_store_file(file_link_result->owner_id,
                                         file_link_result->dir_row,
                                         Dfs::NetworkStoreFile::Broadcast);
-        sendBrodcastMessageFurther(package_data);
+        sendBrodcastMessageFurther(package_data, type);
 
         break;
     }
@@ -1428,7 +1433,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                                 file_remove->sign,
                                                 file_remove->last_modified);
         // if sign not verify only -> not broadrcast
-        sendBrodcastMessageFurther(package_data);
+        sendBrodcastMessageFurther(package_data, type);
         break;
     }
 
@@ -1492,7 +1497,7 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_response_content_vector(db_content_result.value());
 
         if (type == MessageType::DfsVectorCreation) {
-            sendBrodcastMessageFurther(package_data);
+            sendBrodcastMessageFurther(package_data, type);
         }
         break;
     }
@@ -1508,7 +1513,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                         db_content_result->file_id,
                                         db_content_result->row);
 
-        sendBrodcastMessageFurther(package_data);
+        sendBrodcastMessageFurther(package_data, type);
         break;
     }
 
@@ -1582,7 +1587,7 @@ void NetworkManager::messageReceived(const std::string &message,
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
         if (res.has_value()) {
-            sendBrodcastMessageFurther(package_data);
+            sendBrodcastMessageFurther(package_data, type);
         }
         break;
     }
@@ -1658,7 +1663,7 @@ void NetworkManager::messageReceived(const std::string &message,
             auto res = node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
 
             if (res) {
-                sendBrodcastMessageFurther(package_data);
+                sendBrodcastMessageFurther(package_data, type);
             }
             break;
         }

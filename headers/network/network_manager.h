@@ -214,6 +214,9 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
+
+    std::map<MessageType, int> btcounts;
+
     bool                            reservedActorListUse = false;
     bool                            active               = false;
     bool                            shouldRequest        = false;
@@ -340,7 +343,7 @@ public:
     std::string first_node();
     bool        save_first_node(const std::string_view first_node);
 
-    void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
+    void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data, MessageType msg_type);
 
     void saveToCache(const std::string& serialized_message,
                      SendMode           send_mode,

@@ -87,6 +87,7 @@ enum class MessageType {
 
     ShareConnections = 113,
 
+    KKKK = 249,
     Unknown = 250
 };
 MSGPACK_ADD_ENUM(MessageType)
