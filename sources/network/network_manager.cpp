@@ -492,7 +492,7 @@ void NetworkManager::clearNetworkCaches() {
         for (auto it = network_forwarded_messages_locked->begin();
              it != network_forwarded_messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
-            if (it->second.second.secsTo(currentTime) >= 120) {
+            if (it->second.second.secsTo(currentTime) >= 20) {
                 it = network_forwarded_messages_locked->erase(it);
             } else
                 ++it;
@@ -503,7 +503,7 @@ void NetworkManager::clearNetworkCaches() {
         auto messages_locked = *m_messages;
         for (auto it = messages_locked->begin(); it != messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
-            if (it->second.second.secsTo(currentTime) >= 120) {
+            if (it->second.second.secsTo(currentTime) >= 20) {
                 // eTemp("MessageID erased: {}", it->first);
                 it = messages_locked->erase(it);
             } else
