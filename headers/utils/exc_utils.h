@@ -229,7 +229,7 @@ namespace Network {
         4
     #endif
 #else
-        100
+        1000
 #endif
 
         ;
