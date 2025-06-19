@@ -1052,17 +1052,20 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
         if (!txs.has_value()) {
+            // eLog("network_request_sections_response 1");
             return;
         }
 
-        auto res = save_transactions(txs->second);
-        if (!res.has_value()) {
-            return;
+        if (!txs->second.empty()) {
+            auto res = save_transactions(txs->second);
+            if (!res.has_value()) {
+                // eLog("network_request_sections_response 2");
+                return;
+            }
+
+            const auto &[min, max] = res.value();
+            eLog("[Dag] Saved sections from {} to {}", min, max);
         }
-
-        const auto &[min, max] = res.value();
-
-        eLog("[Dag] Saved sections from {} to {}", min, max);
 
         if (current_section_ >= sync_last_index - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
@@ -1073,7 +1076,8 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         emit node->dagSyncProgress(current_section_);
         set_current_section(txs->first);
-        eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ + 100);
+        // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
+        // 100);
         request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
     });
 }
