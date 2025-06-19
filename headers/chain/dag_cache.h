@@ -196,7 +196,8 @@ public:
      */
     void reset_db();
 
-    std::set<ActorId> local_clear_less_balances();
+    std::set<ActorId> local_clear_less_balances(const BigNumber& from     = BigNumber(1),
+                                                const Balances &start_balances = Balances());
 
 private:
     ExtraChainNode*              node;                            // Node reference

@@ -20,6 +20,7 @@
 #pragma once
 
 #include <boost/describe.hpp>
+#include <QTimer>
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"

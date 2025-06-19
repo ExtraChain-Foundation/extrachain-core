@@ -357,10 +357,10 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
         return false;
     }
 
-    eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
-         current_section,
-         cached_section_,
-         safe_genesis_section);
+    // eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
+    //      current_section,
+    //      cached_section_,
+    //      safe_genesis_section);
 
     // Use read_section callback from DAG
     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
@@ -427,7 +427,7 @@ bool DagCache::update_to_genesis_section(
         }
     }
 
-    eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
+    // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
 
     // Initialize DB
     if (!init_db()) {
@@ -448,7 +448,9 @@ bool DagCache::update_to_genesis_section(
         return false;
     }
 
-    Balances& balances = cached_balances_opt.value().second;
+    Balances& balances  = cached_balances_opt.value().second;
+    auto      cache_res = read_cached_balances();
+    local_clear_less_balances(cache_res.first, cache_res.second);
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -475,7 +477,7 @@ bool DagCache::update_to_genesis_section(
     db_->query("COMMIT");
     // Update cached section
     cached_section_ = genesis_section;
-    eLog("[DagCache] Cache updated to section {}", cached_section_);
+    // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
     return true;
 }
@@ -668,13 +670,13 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     }
 }
 
-std::set<ActorId> DagCache::local_clear_less_balances() {
-    Balances          balances;
+std::set<ActorId> DagCache::local_clear_less_balances(const BigNumber& from, const Balances& start_balances) {
+    auto              balances = start_balances;
     std::set<ActorId> actors;
 
-    eLog("[Dag] local_clear_less_balances");
+    eLog("[Dag] Clear txs...");
 
-    for (auto i = BigNumber(1); i <= dag->current_section(); i++) {
+    for (auto i = from; i <= dag->current_section(); i++) {
         auto section = dag->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
@@ -696,12 +698,14 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
             // }
 
             if (balances[{ tx.sender(), tx.token() }] < 0) {
-                eLog("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
-                     tx.section(),
-                     tx.sender(),
-                     tx.token(),
-                     balances[{ tx.sender(), tx.token() }],
-                     tx.timestamp());
+#ifndef IS_RC
+                eInfo("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
+                      tx.section(),
+                      tx.sender(),
+                      tx.token(),
+                      balances[{ tx.sender(), tx.token() }],
+                      tx.timestamp());
+#endif
 
                 reverse_transaction(tx, balances);
                 dag->local_remove_transaction(tx.section(), tx.hash());
