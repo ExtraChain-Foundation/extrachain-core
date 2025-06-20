@@ -28,6 +28,13 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
+    auto settings = Utils::read_settings();
+    if (settings.blockchain_mode.has_value()) {
+        mode_ = settings.blockchain_mode.value();
+    }
+
+    eLog("[Dag] Mode: {}", mode_);
+
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
@@ -42,20 +49,22 @@ Dag::Dag(ExtraChainNode *node)
                 return;
             }
 
-            current_section_     = current_id_result.value();
-            first_saved_section_ = first_id_result.value();
+            if (mode_ == DagMode::Full && first_id_result != BigNumber("0")) {
+                clear_dag();
+            } else {
+                current_section_     = current_id_result.value();
+                first_saved_section_ = first_id_result.value();
 
-            if (last_cached_result.has_value()) {
-                cache_.set_section(last_cached_result.value());
+                if (last_cached_result.has_value()) {
+                    cache_.set_section(last_cached_result.value());
+                }
             }
 
-#ifndef IS_RC
-            if (cache_.section() == -1) { // TODO: and have all 0-current
+            if (mode_ == DagMode::Full && cache_.section() == -1) { // TODO: and have all 0-current
                 cache_.reset_db();
                 cache_.init_db();
                 cache_.check_and_update_cache(current_section_);
             }
-#endif
 
             eLog("[Dag] Loaded: {}, first: {}, last cached: {}",
                  current_section_,
@@ -76,14 +85,9 @@ Dag::Dag(ExtraChainNode *node)
     //     transaction_cache_.make_files();
     // }
 
-    auto settings = Utils::read_settings();
-    if (settings.blockchain_mode.has_value()) {
-        mode_ = settings.blockchain_mode.value();
-    }
-
-#ifdef IS_RC
+    // #ifdef IS_RC
     mode_ = DagMode::Light;
-#endif
+    // #endif
 
     timestamp_bigger_sync_start_ = 0;
 
