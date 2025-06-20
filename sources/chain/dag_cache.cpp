@@ -601,6 +601,7 @@ void DagCache::reset_db() {
     db_initialized_ = false;
     if (db_initialized_) {
         db_->close();
+        QFile::remove(ChainConst::BALANCE_CACHE.c_str());
     }
     db_.reset();
 }
@@ -674,7 +675,7 @@ std::set<ActorId> DagCache::local_clear_less_balances(const BigNumber& from, con
     auto              balances = start_balances;
     std::set<ActorId> actors;
 
-    eLog("[Dag] Clear txs...");
+    // eLog("[Dag] Clear txs...");
 
     for (auto i = from; i <= dag->current_section(); i++) {
         auto section = dag->read_section(i);
@@ -699,12 +700,17 @@ std::set<ActorId> DagCache::local_clear_less_balances(const BigNumber& from, con
 
             if (balances[{ tx.sender(), tx.token() }] < 0) {
 #ifndef IS_RC
-                eInfo("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
-                      tx.section(),
-                      tx.sender(),
-                      tx.token(),
-                      balances[{ tx.sender(), tx.token() }],
-                      tx.timestamp());
+                eInfo(
+                    "[Dag] Exorcised. Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
+                    "balance: {}, timestamp: {}",
+                    tx.section(),
+                    tx.sender(),
+                    tx.receiver(),
+                    tx.type(),
+                    tx.token(),
+                    tx.amount(),
+                    balances[{ tx.sender(), tx.token() }],
+                    tx.timestamp());
 #endif
 
                 reverse_transaction(tx, balances);
@@ -714,6 +720,8 @@ std::set<ActorId> DagCache::local_clear_less_balances(const BigNumber& from, con
         }
     }
 
-    eLog("[Dag] Removed for actors: {}", actors);
+    if (actors.size() != 0) {
+        eLog("[Dag] Removed for actors: {}", actors);
+    }
     return actors;
 }

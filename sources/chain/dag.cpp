@@ -28,6 +28,19 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
+    auto settings = Utils::read_settings();
+    if (settings.dag_mode.has_value()) {
+        mode_ = settings.dag_mode.value();
+    }
+
+    if (!settings.dag_mode.has_value()) {
+#ifdef IS_RC
+        set_mode(DagMode::Light);
+#else
+        set_mode(DagMode::Full);
+#endif
+    }
+
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
@@ -42,20 +55,26 @@ Dag::Dag(ExtraChainNode *node)
                 return;
             }
 
-            current_section_     = current_id_result.value();
-            first_saved_section_ = first_id_result.value();
+            if (mode_ == DagMode::Full && first_id_result != BigNumber("0")) {
+                current_section_     = current_id_result.value();
+                first_saved_section_ = first_id_result.value();
+                clear_dag();
+                cache_.reset_db();
+                cache_.init_db();
+            } else {
+                current_section_     = current_id_result.value();
+                first_saved_section_ = first_id_result.value();
 
-            if (last_cached_result.has_value()) {
-                cache_.set_section(last_cached_result.value());
+                if (last_cached_result.has_value()) {
+                    cache_.set_section(last_cached_result.value());
+                }
             }
 
-#ifndef IS_RC
-            if (cache_.section() == -1) { // TODO: and have all 0-current
+            if (mode_ == DagMode::Full && cache_.section() == -1) { // TODO: and have all 0-current
                 cache_.reset_db();
                 cache_.init_db();
                 cache_.check_and_update_cache(current_section_);
             }
-#endif
 
             eLog("[Dag] Loaded: {}, first: {}, last cached: {}",
                  current_section_,
@@ -76,15 +95,6 @@ Dag::Dag(ExtraChainNode *node)
     //     transaction_cache_.make_files();
     // }
 
-    auto settings = Utils::read_settings();
-    if (settings.blockchain_mode.has_value()) {
-        mode_ = settings.blockchain_mode.value();
-    }
-
-#ifdef IS_RC
-    mode_ = DagMode::Light;
-#endif
-
     timestamp_bigger_sync_start_ = 0;
 
 #ifndef IS_R
@@ -104,7 +114,7 @@ Dag::Dag(ExtraChainNode *node)
         cache_.init_db();
     }
 
-    eLog("[Dag] Constructor: done");
+    eLog("[Dag] Done. Mode: {}", mode_);
 }
 
 BigNumber Dag::current_section() const {
@@ -126,7 +136,15 @@ DagStatus Dag::status() const {
 }
 
 void Dag::set_mode(DagMode mode) {
+    // if (this->mode_ == mode) {
+    //     return;
+    // }
+
     this->mode_ = mode;
+
+    auto settings     = Utils::read_settings();
+    settings.dag_mode = this->mode_;
+    Utils::write_settings(settings);
 }
 
 void Dag::set_status(DagStatus status) {
@@ -947,6 +965,10 @@ void Dag::start_check() {
 }
 
 void Dag::network_status_sync_request(const Responder &responder) {
+#ifdef IS_RC
+    return;
+#endif
+
     auto      section      = this->read_section(current_section_);
     BigNumber section_id   = section.has_value() ? section->id : BigNumber(-1);
     auto      hashs        = section.has_value() ? section->hashs() : std::set<std::string> {};
@@ -1008,6 +1030,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
     }
 
     if (from < first_saved_section_) {
+        // eLog("sysync 1 {} {}", from, first_saved_section_);
         return;
     }
 
@@ -1053,6 +1076,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         if (!txs.has_value()) {
             // eLog("network_request_sections_response 1");
+            // eLog("sysync 2");
             return;
         }
 
@@ -1060,11 +1084,12 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             auto res = save_transactions(txs->second);
             if (!res.has_value()) {
                 // eLog("network_request_sections_response 2");
+                // eLog("sysync 3");
                 return;
             }
 
             const auto &[min, max] = res.value();
-            eLog("[Dag] Saved sections from {} to {}", min, max);
+            // eLog("[Dag] Saved sections from {} to {}", min, max);
         }
 
         if (current_section_ >= sync_last_index - 1) {
@@ -1300,6 +1325,7 @@ void Dag::send_sync_request() {
 
 void Dag::clear_dag() {
 #ifdef IS_RC
+    eLog("[Dag] Clearing...");
     auto max_section = cache_.calculate_genesis_section(current_section_);
 
     for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
@@ -1323,6 +1349,8 @@ void Dag::clear_dag() {
 
     cache_.reset_db();
     cache_.init_db();
+
+    eLog("[Dag] Creared");
 #endif
 }
 

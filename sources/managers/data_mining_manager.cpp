@@ -89,8 +89,8 @@ void DataMiningManager::requestCoinReward() {
     }
 
     amount.truncate();
-    if (amount > 3) {
-        amount = 3;
+    if (amount > MaxReward) {
+        amount = MaxReward;
     }
 
     Transaction transaction;
@@ -171,9 +171,9 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto sectionsStored     =
-    auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+    auto res = sizeTaken / totalDfsSize + 1 / 1 // totalBytesSecond / totalBytesFirst
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
-    res *= KoefReward;
+    res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag : KoefReward;
 
     // eLog(
     //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Sections ratio: {}/{},
@@ -208,7 +208,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
     }
 
     auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-                + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+                + 1 / 1 // + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
                 + BigNumberFloat { requestReward.BlocksStored } / current_section * 100);
     res *= KoefReward;
     return res;
@@ -219,7 +219,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
     auto calc   = calculateRewardAmount(requestReward);
     auto amount = requestReward.transaction.amount();
 
-    if (amount <= 3 || calc - amount <= Dfs::Reward::TOLERANCE) {
+    if (amount <= MaxReward || calc - amount <= Dfs::Reward::TOLERANCE) {
         if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
             return false;
         }

@@ -160,8 +160,12 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
     // Don't add if already in queue or active downloads
-    if (m_active_downloads->contains(file_link)) {
-        return;
+    {
+        auto active_downloads_locked = *m_active_downloads;
+
+        if (active_downloads_locked->contains(file_link)) {
+            return;
+        }
     }
 
     bool is_full   = node->dfs()->mode() == DfsMode::Full;
