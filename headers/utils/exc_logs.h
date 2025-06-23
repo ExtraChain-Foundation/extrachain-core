@@ -55,9 +55,10 @@ enum class LogLevel {
 class Logger {
     std::ofstream     log_file;
     std::string       current_log_filename;
-    bool              debug_enabled       = false;
-    bool              file_output_enabled = false;
-    const std::string logs_directory      = "logs";
+    bool              debug_enabled          = false;
+    bool              file_output_enabled    = false;
+    bool              compact_console_output = false;
+    const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
 
@@ -142,6 +143,14 @@ public:
 
     bool is_debug() const {
         return debug_enabled;
+    }
+
+    void set_compact_console(bool enabled) {
+        compact_console_output = enabled;
+    }
+
+    bool is_compact_console() const {
+        return compact_console_output;
     }
 
     void enable_filter(bool enable = true) {
