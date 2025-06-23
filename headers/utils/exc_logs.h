@@ -262,7 +262,7 @@ namespace detail {
         auto    now   = std::chrono::system_clock::now();
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
         auto    timer = std::chrono::system_clock::to_time_t(now);
-        std::tm bt    = *std::localtime(&timer);
+        std::tm bt    = *std::gmtime(&timer);
 
         return fmt::format("{:04d}.{:02d}.{:02d} {:02d}:{:02d}:{:02d}.{:03d}",
                            bt.tm_year + 1900,
