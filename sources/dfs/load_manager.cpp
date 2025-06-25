@@ -231,7 +231,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
-    eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
+    // eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
     auto load_info = LoadInfo { .dir_row = dir_row };
     // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};

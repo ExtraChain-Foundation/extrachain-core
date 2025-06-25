@@ -477,5 +477,35 @@ public:
 
     void clear_dag();
 
+    void tx_list_log(const ActorId &actor_id) {
+        Balances balances;
+
+        for (BigNumber i = BigNumber(1); i <= current_section_; i++) {
+            auto section = read_section(i);
+            if (!section.has_value() || section->transactions.empty()) {
+                continue;
+            }
+
+            // Process each transaction
+            for (const auto &tx : section->transactions) {
+                cache_.process_transaction(tx, balances);
+
+                if (tx.sender() == ActorId(actor_id) || tx.receiver() == ActorId(actor_id)) {
+                    eInfo(
+                        "[TX] Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
+                        "timestamp: {}, balance: {}",
+                        tx.section(),
+                        tx.sender(),
+                        tx.receiver(),
+                        tx.type(),
+                        tx.token(),
+                        tx.amount().to_string(NumeralBase::Dec),
+                        tx.timestamp(),
+                        balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec));
+                }
+            }
+        }
+    }
+
     friend class ExtraChainNode;
 };

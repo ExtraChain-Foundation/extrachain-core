@@ -1755,7 +1755,19 @@ void NetworkManager::socketError(Network::SocketServiceError error,
 void NetworkManager::localInizialization() {
     eLog("Doesn't find service. Start find local service");
     connect(&m_networkStatus, &NetworkStatus::statusChanged, [](NetworkStatus::Status status) {
-        eLog("[NetworkStatus] {}", status);
+        switch (status) {
+        case NetworkStatus::Status::Online:
+            eInfo("World network is online");
+            break;
+        case NetworkStatus::Status::Offline:
+            eInfo("Warning: World network is offline");
+            break;
+        case NetworkStatus::Status::Local:
+            eInfo("Warning: Local network only");
+            break;
+        default:
+            break;
+        }
     });
 
     local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));

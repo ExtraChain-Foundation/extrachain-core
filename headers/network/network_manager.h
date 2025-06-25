@@ -282,6 +282,9 @@ private:
 public:
     SafePtr<std::set<SocketService*>> connections() const;
     bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
+    void connect_network() {
+        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+    }
 
 public slots:
     void removeConnection(const QString& identifier);

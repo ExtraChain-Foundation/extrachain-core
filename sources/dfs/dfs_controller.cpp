@@ -49,11 +49,13 @@ DfsController::DfsController(ExtraChainNode *node)
 #endif
 
     auto settings = Utils::read_settings();
-    if (settings.dfs_mode.has_value() && settings.dfs_mode.value() == DfsMode::Light) {
-        set_mode(DfsMode::Light);
-    } else {
-        settings.dfs_mode = this->dfs_mode_;
-        Utils::write_settings(settings);
+    if (settings.dfs_mode.has_value()) {
+        if (settings.dfs_mode.value() == DfsMode::Light) {
+            set_mode(DfsMode::Light);
+        } /*else {
+            settings.dfs_mode = this->dfs_mode_;
+            Utils::write_settings(settings);
+        }*/
     }
 }
 
