@@ -225,8 +225,7 @@ private:
 
     ExtraChainNode*                       node;
     std::shared_ptr<QNetworkAddressEntry> local;
-    QWebSocketServer*                     wsServer        = nullptr;
-    QWebSocketServer*                     ws_server_light = nullptr;
+    QWebSocketServer*                     wsServer = nullptr;
 
     SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
@@ -265,8 +264,7 @@ public:
 
     // protected:
     // quint16 tcpPort = 2222;
-    const quint16 wsPort   = 2222;
-    const quint16 wsl_port = 2223;
+    const quint16 wsPort = 2222;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
@@ -318,7 +316,6 @@ protected:
 
 private slots:
     void onNewWsConnection();
-    void onNewWsLightConnection();
 
 protected slots:
     virtual void checkConnectionsStatus();

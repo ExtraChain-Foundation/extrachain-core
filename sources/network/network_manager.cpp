@@ -393,7 +393,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "Second"));
+    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "Else"));
 
     if (!local) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -422,27 +422,6 @@ void NetworkManager::startNetwork() {
     });
 
     eLog("[WS] Start listening: {}:{}", wsServer->serverAddress(), wsServer->serverPort());
-
-    // light server
-    ws_server_light = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
-
-    if (!ws_server_light->listen(QHostAddress::Any, wsl_port)) {
-        eLog("[NetworkManager] Can't listen port {}", wsl_port);
-        return;
-    }
-
-    connect(ws_server_light, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsLightConnection);
-    connect(ws_server_light, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
-        eLog("[WS] Server error code: {}", int(closeCode));
-    });
-    connect(ws_server_light, &QWebSocketServer::closed, [] {
-        eLog("[WS] Server: closed");
-    });
-    connect(ws_server_light, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
-        eLog("[WS] Server socker error: {}", int(socketError));
-    });
-
-    eLog("[WS] Start listening: {}:{}", ws_server_light->serverAddress(), ws_server_light->serverPort());
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -1967,33 +1946,6 @@ void NetworkManager::onNewWsConnection() {
     }
 
     auto service = new WebSocketService(ws, node, this, false);
-    connectWsService(service);
-    if (!needToDelete)
-        m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
-                                                                .port     = service->port(),
-                                                                .protocol = Network::Protocol::WebSocket },
-                                             "");
-}
-
-void NetworkManager::onNewWsLightConnection() {
-    eLog("NetworkManager::onNewWsLightConnection()");
-    auto ws = wsServer->nextPendingConnection();
-    if (ws == nullptr)
-        eFatal("[WS] Error: ws == nulltpr");
-
-    bool needToDelete = false;
-    /*
-    if (active_connections_count() >= Network::maxConnections) {
-        if (!removeOneConnection()) {
-            eLog(
-                "[NetworkManager] Can't connect from WS light server because the maximum number of "
-                "constant connections reached!");
-            needToDelete = true;
-        }
-    }
-    */
-
-    auto service = new WebSocketService(ws, node, this, false, true);
     connectWsService(service);
     if (!needToDelete)
         m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
