@@ -369,6 +369,11 @@ void Utils::wipeDataFiles() {
 #endif
 }
 
+qint64 Utils::diskAvailableMemory() {
+    QStorageInfo x(qApp->applicationDirPath());
+    return x.bytesAvailable();
+}
+
 qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
     return x.bytesFree();

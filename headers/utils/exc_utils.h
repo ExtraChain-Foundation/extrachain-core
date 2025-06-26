@@ -594,6 +594,7 @@ namespace Utils {
     }
 
     EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
+    EXTRACHAIN_EXPORT qint64  diskAvailableMemory();
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 

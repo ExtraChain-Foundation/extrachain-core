@@ -478,7 +478,9 @@ public:
     void clear_dag();
 
     void tx_list_log(const ActorId &actor_id) {
-        Balances balances;
+        eLog("Start tx_list_log");
+        Balances                 balances;
+        std::vector<std::string> logs;
 
         for (BigNumber i = BigNumber(1); i <= current_section_; i++) {
             auto section = read_section(i);
@@ -486,25 +488,35 @@ public:
                 continue;
             }
 
+            if (i % BigNumber(1000) == 0) {
+                eLog("tx_list_log on 0x{} / {}", i, i.to_string(NumeralBase::Dec));
+            }
+
             // Process each transaction
             for (const auto &tx : section->transactions) {
                 cache_.process_transaction(tx, balances);
 
                 if (tx.sender() == ActorId(actor_id) || tx.receiver() == ActorId(actor_id)) {
-                    eInfo(
-                        "[TX] Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
-                        "timestamp: {}, balance: {}",
-                        tx.section(),
-                        tx.sender(),
-                        tx.receiver(),
-                        tx.type(),
-                        tx.token(),
-                        tx.amount().to_string(NumeralBase::Dec),
-                        tx.timestamp(),
-                        balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec));
+                    logs.push_back(
+                        fmt::format("[TX] Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
+                                    "timestamp: {}, balance: {}",
+                                    tx.section(),
+                                    tx.sender(),
+                                    tx.receiver(),
+                                    tx.type(),
+                                    tx.token(),
+                                    tx.amount().to_string(NumeralBase::Dec),
+                                    tx.timestamp(),
+                                    balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec)));
                 }
             }
         }
+
+        for (const auto &log : logs) {
+            eInfo("{}", log);
+        }
+
+        eLog("End tx_list_log");
     }
 
     friend class ExtraChainNode;
