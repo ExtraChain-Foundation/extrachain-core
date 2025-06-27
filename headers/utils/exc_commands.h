@@ -18,6 +18,7 @@
  */
 
 #pragma once
+
 #include <QObject>
 #include <QMutex>
 #include <QString>
@@ -26,16 +27,23 @@
 #include <string>
 #include <thread>
 #include <atomic>
-#include <termios.h>
-#include <unistd.h>
-#include <cstdio>
 #include <chrono>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <conio.h>
+#else
+    #include <termios.h>
+    #include <unistd.h>
+#endif
+
+#include <cstdio>
 
 class SimpleConsole : public QObject {
     Q_OBJECT
 
 public:
-    // Единственная функция для запуска консоли
+    // Single function to start the console
     static SimpleConsole* start(std::function<void(const std::string&)> commandHandler) {
         static SimpleConsole* instance = nullptr;
         if (!instance) {
@@ -46,7 +54,7 @@ public:
         return instance;
     }
 
-    // Функции для логов
+    // Functions for logging
     static void preserveInput() {
         static SimpleConsole* instance = getInstance();
         if (instance) {
@@ -97,22 +105,37 @@ private:
     }
 
     void setupTerminal() {
+#ifdef _WIN32
+        m_hStdin = GetStdHandle(STD_INPUT_HANDLE);
+        GetConsoleMode(m_hStdin, &m_oldConsoleMode);
+        SetConsoleMode(m_hStdin, 0); // Disable line input and echo
+#else
         tcgetattr(STDIN_FILENO, &m_oldTermios);
         struct termios newTermios = m_oldTermios;
         newTermios.c_lflag &= ~(ICANON | ECHO);
         newTermios.c_cc[VMIN]  = 0;
         newTermios.c_cc[VTIME] = 1;
         tcsetattr(STDIN_FILENO, TCSANOW, &newTermios);
+#endif
     }
 
     void restoreTerminal() {
+#ifdef _WIN32
+        SetConsoleMode(m_hStdin, m_oldConsoleMode);
+#else
         tcsetattr(STDIN_FILENO, TCSANOW, &m_oldTermios);
+#endif
     }
 
     void inputLoop() {
         char ch;
         while (m_running) {
+#ifdef _WIN32
+            if (_kbhit()) {
+                ch = _getch();
+#else
             if (read(STDIN_FILENO, &ch, 1) > 0) {
+#endif
                 QMutexLocker locker(&m_mutex);
 
                 if (ch == '\n' || ch == '\r') {
@@ -127,13 +150,17 @@ private:
                         printf("\n> ");
                         fflush(stdout);
                     }
-                } else if (ch == 127 || ch == 8) { // Backspace
+#ifdef _WIN32
+                } else if (ch == 8) { // Backspace on Windows
+#else
+                } else if (ch == 127 || ch == 8) { // Backspace on Unix
+#endif
                     if (m_cursorPos > 0) {
                         m_currentInput.erase(m_cursorPos - 1, 1);
                         m_cursorPos--;
                         redrawLine();
                     }
-                } else if (ch >= 32 && ch <= 126) { // Печатаемые символы
+                } else if (ch >= 32 && ch <= 126) { // Printable characters
                     m_currentInput.insert(m_cursorPos, 1, ch);
                     m_cursorPos++;
                     redrawLine();
@@ -173,8 +200,14 @@ private:
     std::thread                             m_inputThread;
     std::atomic<bool>                       m_running { false };
     QMutex                                  m_mutex;
-    struct termios                          m_oldTermios;
     std::string                             m_currentInput;
     size_t                                  m_cursorPos = 0;
     std::function<void(const std::string&)> m_commandHandler;
+
+#ifdef _WIN32
+    HANDLE m_hStdin;
+    DWORD  m_oldConsoleMode;
+#else
+    struct termios m_oldTermios;
+#endif
 };
