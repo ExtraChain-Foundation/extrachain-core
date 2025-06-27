@@ -74,13 +74,14 @@ class Logger {
         std::tm bt    = *std::localtime(&timer);
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-        return fmt::format("{}-{:02d}-{:02d}-{:02d}.{:02d}.{:02d}.{:03d}.log",
+        return fmt::format("{}-{:04d}.{:02d}.{:02d}_{:02d}-{:02d}-{:02d}.log",
                            instance().file_name,
+                           bt.tm_year + 1900,
+                           bt.tm_mon + 1,
+                           bt.tm_mday,
                            bt.tm_hour,
                            bt.tm_min,
                            bt.tm_sec,
-                           bt.tm_mday,
-                           bt.tm_mon + 1,
                            ms.count());
     }
 

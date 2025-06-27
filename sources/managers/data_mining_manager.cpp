@@ -56,10 +56,7 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#ifndef IS_RC
-    return;
-#endif
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(RACCOON_CLIENT_CONSOLE)
+#if !defined(IS_RC) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
 
@@ -173,7 +170,16 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // auto sectionsStored     =
     auto res = sizeTaken / totalDfsSize + 1 / 1 // totalBytesSecond / totalBytesFirst
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
-    res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag * koef_to_koef : KoefReward * koef_to_koef;
+
+    if (node->dfs()->mode() == DfsMode::Full) {
+        res *= KoefRewardDagDfs * koef_to_koef;
+    } else if (node->dag()->mode() == DagMode::Full) {
+        res *= KoefRewardDag * koef_to_koef;
+    } else {
+        res *= KoefReward * koef_to_koef;
+    }
+
+    // res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag * koef_to_koef : KoefReward * koef_to_koef;
 
     // eLog(
     //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Sections ratio: {}/{},

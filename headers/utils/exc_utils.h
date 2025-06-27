@@ -978,7 +978,7 @@ struct EXTRACHAIN_EXPORT Notification {
         Deposit,
         Withdrawal,
         Reward,
-        Message
+        Message,
         // TxToUser,
         // TxToMe,
         // ChatMsg,
@@ -986,6 +986,7 @@ struct EXTRACHAIN_EXPORT Notification {
         // NewPost,
         // NewEvent,
         // NewFollower
+        Unknown = 50
     };
 
     static NotifyType fromInt(int value) {
@@ -998,7 +999,10 @@ struct EXTRACHAIN_EXPORT Notification {
             return Reward;
         case 3:
             return Message;
+        case 50:
+            break;
         }
+        return Unknown;
     }
 
     static int toInt(NotifyType value) {
@@ -1012,7 +1016,10 @@ struct EXTRACHAIN_EXPORT Notification {
         case Message:
             return 3;
             break;
+        case Unknown:
+            break;
         }
+        return 50;
     }
 
     std::uint64_t time;
