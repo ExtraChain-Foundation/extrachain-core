@@ -201,7 +201,7 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        eLog("[Network] Reconnect to first node");
+        eLog("[Network] Reconnect to first node {}", first_node_);
         emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
     }
@@ -250,7 +250,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->ip() != first_node()) {
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
             reconn_.insert({ service->ip().toStdString(), 1 });
         }
     });
@@ -393,7 +393,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "DFS"));
+    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "Else"));
 
     if (!local) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -402,10 +402,11 @@ void NetworkManager::startNetwork() {
 
     if (!Network::isStartedServer)
         return;
+
     wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
     if (!wsServer->listen(QHostAddress::Any, wsPort)) {
-        eLog("[NetworkManager] Can't listen port");
+        eLog("[NetworkManager] Can't listen port {}", wsPort);
         return;
     }
 
@@ -420,9 +421,7 @@ void NetworkManager::startNetwork() {
         eLog("[WS] Server socker error: {}", int(socketError));
     });
 
-    eLog("[WS] Start listening: {}:{}",
-         wsServer->serverAddress(),
-         wsServer->serverPort()); // << wsServer->serverName();
+    eLog("[WS] Start listening: {}:{}", wsServer->serverAddress(), wsServer->serverPort());
 }
 
 [[maybe_unused]] void NetworkManager::startDiscovery() {
@@ -436,7 +435,8 @@ void NetworkManager::startNetwork() {
 void NetworkManager::connectToNodeSlot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       bool              isConstant) {
+                                       bool              isConstant,
+                                       const bool        is_light) {
     if (ip.toStdString() == first_node_) {
         isConstant = true;
     }
@@ -460,7 +460,7 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
     case Protocol::Udp:
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), port, request, isConstant);
+        connectToWebSocket(ip.simplified(), port, request, isConstant, is_light);
         break;
     case Protocol::Undefined:
         eFatal("Undefined connectToNode");
@@ -470,12 +470,13 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
 void NetworkManager::connectToWebSocket(const QString &ip,
                                         quint16        port,
                                         bool           requestListNodes,
-                                        const bool     isConstant) {
+                                        const bool     isConstant,
+                                        const bool     is_light) {
     if (ip.isEmpty()) {
         return;
     }
 
-    auto service = new WebSocketService(nullptr, node, this, isConstant);
+    auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
     connectWsService(service, requestListNodes);
     service->open(ip, port);
     m_reconnectionsToIdentifier
@@ -692,6 +693,10 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     for (const auto &service : *connections_locked) {
         if (!service->is_active()) {
+            continue;
+        }
+
+        if (service->mode() == SocketMode::Light && send_mode != SendMode::Focused) {
             continue;
         }
 
@@ -1755,7 +1760,19 @@ void NetworkManager::socketError(Network::SocketServiceError error,
 void NetworkManager::localInizialization() {
     eLog("Doesn't find service. Start find local service");
     connect(&m_networkStatus, &NetworkStatus::statusChanged, [](NetworkStatus::Status status) {
-        eLog("[NetworkStatus] {}", status);
+        switch (status) {
+        case NetworkStatus::Status::Online:
+            eInfo("World network is online");
+            break;
+        case NetworkStatus::Status::Offline:
+            eInfo("Warning: World network is offline");
+            break;
+        case NetworkStatus::Status::Local:
+            eInfo("Warning: Local network only");
+            break;
+        default:
+            break;
+        }
     });
 
     local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));

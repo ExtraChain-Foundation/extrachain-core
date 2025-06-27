@@ -647,6 +647,8 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
         return std::unexpected(ImportProfileError::IncorrectJson);
     }
 
+    eLog("imported_user", imported_user.value());
+
     // TODO: network id check
 
     m_accountController->import_profile(imported_user.value(), hash);
@@ -833,7 +835,7 @@ void ExtraChainNode::dfsConnection() {
 
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, []() {
-        eInfo("Node successfully started");
+        eInfo("Your node successfully started");
     });
 
     //    connectAccountController();

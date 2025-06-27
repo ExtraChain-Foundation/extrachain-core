@@ -78,8 +78,18 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count)
 
 void ThreadPoolBoost::terminate() {
     boost::detail::spinlock::scoped_lock lock(mutex);
-    thread_pool_dfs.reset();
-    thread_pool_dag.reset();
+
+    if (thread_pool_dfs) {
+        thread_pool_dfs->m_thread_pool->stop();
+        thread_pool_dfs.reset();
+    }
+
+    if (thread_pool_dag) {
+        thread_pool_dag->m_thread_pool->stop();
+        thread_pool_dag.reset();
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void ThreadPoolBoost::join() {

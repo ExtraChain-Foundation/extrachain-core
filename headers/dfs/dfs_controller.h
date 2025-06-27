@@ -166,11 +166,15 @@ public:
 
     void set_mode(DfsMode mode) {
         if (dfs_mode_ == mode) {
-            return;
+            // return;
         }
 
         eLog("[Dfs] Set mode to {}", mode);
         dfs_mode_ = mode;
+
+        auto settings     = Utils::read_settings();
+        settings.dfs_mode = this->dfs_mode_;
+        Utils::write_settings(settings);
     }
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(

@@ -173,6 +173,8 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
     for (const auto &actor : actors) {
         this->save_actor(actor);
     }
+
+    emit firstSyncEnded();
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
@@ -196,6 +198,10 @@ void ActorIndex::request_actors_hash(const Responder &responder) {
     // TIMER_START(request_actors_hash)
     std::vector<uint8_t> sync_request = synch.create_sync_request();
     // TIMER_END(request_actors_hash)
+
+    if (records <= 100) {
+        emit firstSyncStarted();
+    }
 
     responder.with_new_message_id().send_response(sync_request,
                                                   MessageType::ActorsHash,

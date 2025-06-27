@@ -100,6 +100,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h

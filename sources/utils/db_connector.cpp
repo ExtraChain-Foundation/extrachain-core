@@ -269,7 +269,7 @@ bool DbConnector::update(const std::string &query) {
 
 bool DbConnector::update(const std::string &table_name, const DbRow &set_data, const DbRow &where_data) {
     if (!is_open()) {
-        eFatal("[DbConnector] Database not open");
+        eFatal("[DbConnector] Database not open: {}", m_file);
     }
     if (set_data.size() == 0) {
         eWarning("[DbConnector] {}(false): [ImplementationUpdate] SET data is empty", file());
