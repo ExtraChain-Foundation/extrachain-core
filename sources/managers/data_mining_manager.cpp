@@ -173,7 +173,7 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     // auto sectionsStored     =
     auto res = sizeTaken / totalDfsSize + 1 / 1 // totalBytesSecond / totalBytesFirst
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
-    res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag : KoefReward;
+    res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag * koef_to_koef : KoefReward * koef_to_koef;
 
     // eLog(
     //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Sections ratio: {}/{},
@@ -237,4 +237,8 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         return false;
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
+}
+
+void DataMiningManager::set_koef_to_koef(const BigNumberFloat &koef_to_koef) {
+    this->koef_to_koef = koef_to_koef;
 }

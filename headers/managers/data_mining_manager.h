@@ -37,6 +37,7 @@ class DataMiningManager : public QObject {
     const int            MaxReward          = 1;
     const BigNumberFloat KoefRewardDag      = BigNumberFloat("0.0063", NumeralBase::Dec); // 0.0063 - dfs + dag
     const BigNumberFloat KoefReward         = BigNumberFloat("0.00015", NumeralBase::Dec);
+    BigNumberFloat       koef_to_koef       = BigNumberFloat(1);
     bool                 isRecalculate      = false;
 
 public:
@@ -64,6 +65,8 @@ public:
      * @brief Send reward amount
      */
     bool network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward, const Responder &responder);
+
+    void set_koef_to_koef(const BigNumberFloat &koef_to_koef);
 
 private:
 };

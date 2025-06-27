@@ -201,7 +201,7 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        eLog("[Network] Reconnect to first node");
+        eLog("[Network] Reconnect to first node {}", first_node_);
         emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
     }
