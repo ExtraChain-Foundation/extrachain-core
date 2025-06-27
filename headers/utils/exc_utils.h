@@ -359,6 +359,18 @@ CREATE TABLE IF NOT EXISTS balance_cache (
                                                       "signature    TEXT  NOT NULL "
                                                       ");";
 
+        static const std::string notificationTable = "Notifications";
+        static const std::string notificationTableCreate = "CREATE TABLE IF NOT EXISTS " + notificationTable
+                                                     + " ("
+                                                     "type            INT    NOT NULL, "
+                                                     "amount          TEXT   NOT NULL, "
+                                                     "sender          TEXT   NOT NULL, "
+                                                     "receiver        TEXT   NOT NULL, "
+                                                     "hash            TEXT   NOT NULL, "
+                                                     "timestamp       INT    NOT NULL, "
+                                                     "message         TEXT"
+                                                     ");";
+
         // How many files one section folder will store
         static const BigNumber SECTION_SIZE = BigNumber(10000);
 
@@ -496,6 +508,8 @@ namespace Utils {
 
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
+    // Notifications
+    static const std::string NOTIFIACATION_CACHE = "tmp/NotificationCache.db";
 
     // static std::uint64_t current_date_secs() {
     //     using namespace std::chrono;
@@ -960,14 +974,46 @@ namespace SearchEnum {
 
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType {
-        TxToUser,
-        TxToMe,
-        ChatMsg,
-        ChatInvite,
-        NewPost,
-        NewEvent,
-        NewFollower
+        Deposit,
+        Withdrawal,
+        Reward,
+        Message
+        // TxToUser,
+        // TxToMe,
+        // ChatMsg,
+        // ChatInvite,
+        // NewPost,
+        // NewEvent,
+        // NewFollower
     };
+
+    static NotifyType fromInt(int value) {
+        switch (value) {
+        case 0:
+            return Deposit;
+        case 1:
+            return Withdrawal;
+        case 2:
+            return Reward;
+        case 3:
+            return Message;
+        }
+    }
+
+    static int toInt(NotifyType value) {
+        switch (value) {
+        case NotifyType::Deposit:
+            return 0;
+        case NotifyType::Withdrawal:
+            return 1;
+        case NotifyType::Reward:
+            return 2;
+        case Message:
+            return 3;
+            break;
+        }
+    }
+
     std::uint64_t time;
     NotifyType    type;
     QByteArray    data = "";
