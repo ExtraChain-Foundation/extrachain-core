@@ -196,8 +196,8 @@ public:
      */
     void reset_db();
 
-    std::set<ActorId> local_clear_less_balances(const BigNumber& from     = BigNumber(1),
-                                                const Balances &start_balances = Balances());
+    std::set<ActorId> local_clear_less_balances(const BigNumber& from           = BigNumber(2),
+                                                const Balances&  start_balances = Balances());
 
 private:
     ExtraChainNode*              node;                            // Node reference
@@ -206,6 +206,7 @@ private:
     std::unique_ptr<DbConnector> db_;                             // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized
 
+public:
     /**
      * @brief Process transaction for balances
      *      * Updates balances for actors based on the given transaction.

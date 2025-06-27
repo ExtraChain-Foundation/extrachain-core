@@ -223,9 +223,10 @@ private:
     std::unique_ptr<UPnPConnector>  upnpConnector;
     QMap<std::string, int>          msgHashList = {};
 
-    ExtraChainNode*                              node;
-    std::shared_ptr<QNetworkAddressEntry>        local;
-    QWebSocketServer*                            wsServer = nullptr;
+    ExtraChainNode*                       node;
+    std::shared_ptr<QNetworkAddressEntry> local;
+    QWebSocketServer*                     wsServer = nullptr;
+
     SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
     NetworkStatus                                m_networkStatus;
@@ -282,6 +283,9 @@ private:
 public:
     SafePtr<std::set<SocketService*>> connections() const;
     bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
+    void connect_network() {
+        connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+    }
 
 public slots:
     void removeConnection(const QString& identifier);
@@ -293,13 +297,15 @@ signals:
     void connectToNode(const QString&    ip,
                        Network::Protocol protocol,
                        const bool        request    = false,
-                       const bool        isConstant = false);
+                       const bool        isConstant = false,
+                       const bool        is_light   = false);
 
 protected:
     void connectToWebSocket(const QString& ip,
                             quint16        port,
                             bool           requestListNodes = false,
-                            const bool     isConstant       = false);
+                            const bool     isConstant       = false,
+                            const bool     is_light         = false);
 
     /**
      * @brief NetworkManager::checkMsgCount
@@ -320,7 +326,8 @@ public slots:
     void connectToNodeSlot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           bool              isConstant = false);
+                           bool              isConstant = false,
+                           const bool        is_light   = false);
     void process();
     void reconnection();
     void setupProxy(QNetworkProxy::ProxyType type,

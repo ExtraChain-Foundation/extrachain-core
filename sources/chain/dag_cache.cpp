@@ -491,17 +491,13 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     // Reward transactions
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
+
         balances[key] += tx.amount();
     }
     // Contract initialization
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
+
         balances[key] += tx.amount();
     }
     // Token conversion
@@ -511,16 +507,12 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
             if (from_token.has_value()) {
                 // Deduct from source token
                 auto from_key = std::make_pair(tx.sender(), from_token.value());
-                if (balances.find(from_key) == balances.end()) {
-                    balances[from_key] = BigNumberFloat(0);
-                }
+
                 balances[from_key] -= tx.amount();
 
                 // Add to destination token
                 auto to_key = std::make_pair(tx.sender(), tx.token());
-                if (balances.find(to_key) == balances.end()) {
-                    balances[to_key] = BigNumberFloat(0);
-                }
+
                 balances[to_key] += tx.amount();
             }
         }
@@ -530,17 +522,13 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
         // If receiver is valid, add funds
         if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
+
             balances[key] += tx.amount();
         }
         // If sender is valid, deduct funds
         if (!tx.sender().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
+
             balances[key] -= tx.amount();
         }
     }
@@ -615,17 +603,11 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     // Reward transactions - reverse: subtract amount from sender
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
         balances[key] -= tx.amount();
     }
     // Contract initialization - reverse: subtract amount from sender
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
         balances[key] -= tx.amount();
     }
     // Token conversion - reverse: add back to source, subtract from destination
@@ -635,16 +617,10 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
             if (from_token.has_value()) {
                 // Add back to source token (reverse of deduction)
                 auto from_key = std::make_pair(tx.sender(), from_token.value());
-                if (balances.find(from_key) == balances.end()) {
-                    balances[from_key] = BigNumberFloat(0);
-                }
                 balances[from_key] += tx.amount();
 
                 // Subtract from destination token (reverse of addition)
                 auto to_key = std::make_pair(tx.sender(), tx.token());
-                if (balances.find(to_key) == balances.end()) {
-                    balances[to_key] = BigNumberFloat(0);
-                }
                 balances[to_key] -= tx.amount();
             }
         }
@@ -654,18 +630,12 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
         // If receiver is valid, subtract funds (reverse of addition)
         if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
             balances[key] -= tx.amount();
         }
 
         // If sender is valid, add funds back (reverse of deduction)
         if (!tx.sender().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
             balances[key] += tx.amount();
         }
     }
