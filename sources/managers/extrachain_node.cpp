@@ -656,6 +656,62 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
     return hash;
 }
 
+std::string get_import_error_message(ImportProfileError error) {
+    switch (error) {
+    case ImportProfileError::DecryptError:
+        return "The username or password entered is incorrect. Please try again";
+    case ImportProfileError::DataEmpty:
+        return "Import data is empty";
+    case ImportProfileError::LoginPasswordEmpty:
+        return "Login and password is empty";
+    case ImportProfileError::IncorrectJson:
+        return "Json data is empty";
+    default:
+        return "Unknown import error";
+    }
+}
+
+std::expected<std::string, ImportProfileFileError> ExtraChainNode::import_profile_file(
+    const std::string& file_path,
+    const std::string& login,
+    const std::string& password) {
+    eLog("Importing profile from file: {}", file_path);
+
+    if (login.empty() || password.empty()) {
+        return std::unexpected(ImportProfileFileError::LoginPasswordEmpty);
+    }
+
+    QFile file(QString::fromStdString(file_path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        eInfo("Import operation failed: unable to open file {}", file_path);
+        return std::unexpected(ImportProfileFileError::FileNotFound);
+    }
+
+    QByteArray file_content = file.readAll();
+    file.close();
+
+    if (file_content.isEmpty()) {
+        eInfo("Import operation failed: file is empty");
+        return std::unexpected(ImportProfileFileError::FileEmpty);
+    }
+
+    std::string file_content_str = file_content.toStdString();
+    auto        from_base64      = Utils::from_base64(file_content_str);
+    if (!from_base64.has_value()) {
+        eInfo("Import operation failed: base64 decode error");
+        return std::unexpected(ImportProfileFileError::Base64DecodeError);
+    }
+
+    auto hash_result = import_profile(from_base64.value(), login, password);
+    if (!hash_result.has_value()) {
+        eInfo("Import operation failed: {}", get_import_error_message(hash_result.error()));
+        return std::unexpected(ImportProfileFileError::ImportError);
+    }
+
+    eInfo("Profile successfully imported!");
+    return hash_result.value();
+}
+
 ActorId ExtraChainNode::network_id() {
     return m_actorIndex->network_id();
 }

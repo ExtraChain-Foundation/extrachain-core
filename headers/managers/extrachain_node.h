@@ -74,6 +74,15 @@ enum class ImportProfileError {
     IncorrectJson
 };
 
+enum class ImportProfileFileError {
+    LoginPasswordEmpty,
+    FileNotFound,
+    FileReadError,
+    FileEmpty,
+    Base64DecodeError,
+    ImportError
+};
+
 struct SubscriptionRow {
     ActorId     owner_id;
     std::string file_id;
@@ -200,6 +209,10 @@ public:
     std::expected<std::string, ImportProfileError> import_profile(const std::string& data,
                                                                   const std::string& login,
                                                                   const std::string& password);
+
+    std::expected<std::string, ImportProfileFileError> import_profile_file(const std::string& file_path,
+                                                                           const std::string& login,
+                                                                           const std::string& password);
 
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
