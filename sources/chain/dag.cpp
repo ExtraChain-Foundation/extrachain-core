@@ -1160,7 +1160,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
     // eLog("network_response_light {}", dag_light);
 
     ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
-        TIMER_START(network_response_light)
+        // TIMER_START(network_response_light)
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         // auto min = BigNumber(-1), max = BigNumber(-1);
@@ -1184,7 +1184,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
              current_section_);
 
         process_cached_transactions();
-        TIMER_END(network_response_light)
+        // TIMER_END(network_response_light)
     });
 }
 
