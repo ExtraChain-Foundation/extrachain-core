@@ -135,3 +135,36 @@ private:
                          (),
                          (system_, main_, actors_, imports_, wallet_names_, creation_date_, modified_date_))
 };
+
+class SeedProfile {
+public:
+    std::expected<void, bool>                                  save(const std::string &hash);
+    static std::expected<SeedProfile, PrivateProfileReadError> load(
+        const std::string                        &file_name,
+        const std::variant<std::string, KeyPass> &key_or_password);
+
+    void generate();
+
+    MasterSeed seed() {
+        return seed_;
+    }
+
+    void set(MasterSeed seed) {
+        seed_ = seed;
+    }
+
+    const std::vector<Actor<KeyPrivate>> &actors() const {
+        return actors_;
+    }
+
+    const std::string &filename() const {
+        return filename_;
+    }
+
+    SeedProfile &operator=(const SeedProfile &) = default;
+
+private:
+    MasterSeed                     seed_;
+    std::string                    filename_;
+    std::vector<Actor<KeyPrivate>> actors_;
+};

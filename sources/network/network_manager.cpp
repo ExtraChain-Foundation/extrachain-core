@@ -1857,7 +1857,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
 
     KeyPrivate key;
-    key.generate();
+    key.generate_random();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
                                   + node->accountController()->system_actor().id().to_string() + salt,

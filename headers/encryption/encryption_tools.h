@@ -35,6 +35,7 @@ static_assert(crypto_secretbox_KEYBYTES >= 32, "Key size must be at least 32 byt
 using Bytes         = std::vector<std::uint8_t>;
 using PrivateKey    = std::array<std::uint8_t, crypto_sign_SECRETKEYBYTES>;
 using PublicKey     = std::array<std::uint8_t, crypto_sign_PUBLICKEYBYTES>;
+using MasterSeed    = std::array<std::uint8_t, crypto_sign_ed25519_SEEDBYTES>;
 using Signature     = std::array<std::uint8_t, crypto_sign_BYTES>;
 using Nonce         = std::array<std::uint8_t, crypto_box_NONCEBYTES>;
 using Salt          = std::array<std::uint8_t, crypto_pwhash_SALTBYTES>;
@@ -78,6 +79,14 @@ namespace Cryptography {
     EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt_password(const Bytes &data, const std::string &password);
 
     EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> asymmetric_create_pair();
+
+    EXTRACHAIN_EXPORT MasterSeed generate_seed();
+    EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> asymmetric_from_seed(const MasterSeed &master_seed,
+                                                                            int               index);
+    EXTRACHAIN_EXPORT PublicKey                        get_public_from_private(const PrivateKey &private_key);
+
+    EXTRACHAIN_EXPORT std::vector<std::string> create_mnemonic(const MasterSeed &master_seed);
+    EXTRACHAIN_EXPORT MasterSeed               restore_seed_from_mnemonic(const std::string &mnemonic);
 
     EXTRACHAIN_EXPORT CryptoResult asymmetric_encrypt(const Bytes      &data,
                                                       const PrivateKey &sender_secret_key,

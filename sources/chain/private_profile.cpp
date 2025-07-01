@@ -296,3 +296,106 @@ std::expected<std::string, ImportError> PrivateProfile::export_actor(const Actor
 void PrivateProfile::add_imported_actor(const Actor<KeyPrivate> &imported_actor) {
     imports_.push_back(imported_actor);
 }
+
+std::expected<void, bool> SeedProfile::save(const std::string &hash) {
+    if (hash.empty()) {
+        return std::unexpected(false);
+    }
+
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), hash);
+    if (!encrypted.has_value()) {
+        eCritical("Incorrect seed profile save: encryption");
+        return std::unexpected(false);
+    }
+
+    // Utils::to_hex(seed);
+    filename_ = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
+
+    std::ofstream file(filename_, std::ios::binary);
+    if (!file) {
+        eFatal("Can't open file for writing");
+    }
+
+    if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
+        eFatal("Can't write");
+    }
+    file.close();
+
+    return {};
+}
+
+// std::variant<std::string, KeyPass>
+// std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(const std::string &file_name, const
+// std::string &hash) {
+//     SeedProfile profile;
+//     profile.file_name = Profiles::folder + Utils::platformDelimeter() + "PROFILE_FILE" + Profiles::format;
+
+//     std::ifstream file(profile.file_name, std::ios::binary);
+//     if (!file) {
+//         return std::unexpected(PrivateProfileReadError::File);
+//     }
+//     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+//     auto json_bytes = key.has_value() ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
+//                                       : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
+//     if (!json_bytes.has_value()) {
+//         // eWarning("Incorrect private profile load");
+//         return std::unexpected(PrivateProfileReadError::Decrypt);
+//     }
+
+//     auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
+//     if (!profile.has_value()) {
+//         // eWarning("Incorrect private profile load: incorrect json");
+//         return std::unexpected(PrivateProfileReadError::Json);
+//     }
+
+//     return profile.value();
+// }
+
+std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
+    const std::string                        &file_name,
+    const std::variant<std::string, KeyPass> &key_or_password) {
+    SeedProfile profile;
+    profile.filename_ = Profiles::folder + Utils::platformDelimeter() + file_name + Profiles::format;
+
+    std::ifstream file(profile.filename_, std::ios::binary);
+    if (!file) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
+    std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    std::optional<std::string> seed;
+
+    std::visit(
+        [&](const auto &arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::string>) {
+                auto result = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), arg);
+                if (result.has_value()) {
+                    seed = ByteArray(result.value()).toString();
+                }
+            } else {
+                auto result = Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), arg);
+                if (result.has_value()) {
+                    seed = ByteArray(result.value()).toString();
+                }
+            }
+        },
+        key_or_password);
+
+    if (!seed.has_value()) {
+        return std::unexpected(PrivateProfileReadError::Decrypt);
+    }
+
+    profile.seed_ = ByteArray(seed.value()).toArray<32>();
+    profile.generate();
+    return profile;
+}
+
+void SeedProfile::generate() {
+    for (int i = 0; i != 1; i++) {
+        Actor<KeyPrivate> actor;
+        actor.generate_from_seed(seed_, i, ActorType::User);
+        actors_.push_back(actor);
+    }
+}

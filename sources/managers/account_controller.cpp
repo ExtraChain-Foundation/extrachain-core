@@ -26,20 +26,25 @@ AccountController::AccountController(ExtraChainNode *node)
     , node(node) {
 }
 
-Actor<KeyPrivate> AccountController::createProfile(const std::string               &hash,
-                                                   ActorType                        type,
-                                                   std::optional<Actor<KeyPrivate>> predefine_actor) {
-    if (hash.empty())
+SeedProfile AccountController::create_profile(const std::string               &hash,
+                                              ActorType                        type,
+                                              std::optional<Actor<KeyPrivate>> predefine_actor) {
+    if (hash.empty()) {
         eFatal("[Accounts] Create actor: hash is empty");
+    }
+
+    auto seed    = Cryptography::generate_seed();
+    profile_type = ProfileType::New;
 
     Actor<KeyPrivate> system_actor;
-    if (predefine_actor.has_value())
+    if (predefine_actor.has_value()) {
         system_actor = predefine_actor.value();
-    else
-        system_actor.create(type);
+    } else {
+        system_actor.generate_from_seed(seed, 0, type);
+    }
 
     Actor<KeyPrivate> main_actor;
-    main_actor.create(ActorType::User);
+    main_actor.generate_from_seed(seed, 1, ActorType::User);
 
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     m_profiles.push_back(profile);
@@ -49,22 +54,38 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     insert_to_profile_set(system_actor.id());
     autologinHash.save(hash); // TODO: add arg
 
+    SeedProfile profile_seed;
+    profile_seed.set(seed);
+    profile_seed.generate();
+    profile_seed.save(hash);
+    this->profile_seed = profile_seed;
+
     eLog("[Accounts] Created new profile. System: {}, main: {}", system_actor.id(), main_actor.id());
 
     node->start(); // TODO: remove
 
     node->calculateBlockCount();
 
-    return system_actor;
+    return profile_seed;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &walletName) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &wallet_name) {
     Actor<KeyPrivate> actor;
     actor.create(ActorType::User);
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     profile.add_wallet(actor);
-    profile.rename_wallet(actor.id(), walletName);
+    profile.rename_wallet(actor.id(), wallet_name);
     node->actorIndex()->store_new_actor(actor.to_public());
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::crete_wallet(const ActorId &system_actor, int index) {
+    Actor<KeyPrivate> actor;
+    actor.generate_from_seed(profile_seed.seed(), index, ActorType::User);
+    node->actorIndex()->store_new_actor(actor.to_public());
+
+    auto &profile = getProfile(system_actor.is_zero() ? m_currentProfile : system_actor);
+    profile.add_wallet(actor);
     return actor;
 }
 

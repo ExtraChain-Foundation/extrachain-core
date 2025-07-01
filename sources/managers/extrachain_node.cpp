@@ -169,9 +169,9 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calculate_hash(login + password);
-    auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
-    m_actorIndex->set_network_id(first.id());
-    m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
+    auto first       = m_accountController->create_profile(consoleHash, ActorType::DAppMaster);
+    m_actorIndex->set_network_id(first.actors().front().id());
+    // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
     create_new_dag();
 

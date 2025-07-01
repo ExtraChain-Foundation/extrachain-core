@@ -30,7 +30,7 @@
 SocketService::SocketService(ExtraChainNode *node, QObject *parent)
     : node(node)
     , QObject(parent) {
-    priv_.generate();
+    priv_.generate_random();
 }
 
 const QString &SocketService::identifier() const {

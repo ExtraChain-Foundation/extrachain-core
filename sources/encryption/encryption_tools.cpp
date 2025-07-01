@@ -19,6 +19,8 @@
 
 #include "encryption/encryption_tools.h"
 
+#include <bip3x/bip3x_mnemonic.h>
+
 using Cryptography::CryptoError;
 
 namespace {
@@ -118,6 +120,7 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes& data, co
     Bytes result(nonce.size() + encrypted.size());
     std::copy(nonce.begin(), nonce.end(), result.begin());
     std::copy(encrypted.begin(), encrypted.end(), result.begin() + nonce.size());
+    eInfo("--- data {} encr {} result {}", data.size(), encrypted.size(), result.size());
     return result;
 }
 
@@ -193,6 +196,50 @@ std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_create_pair() {
     PublicKey  pk;
     crypto_sign_keypair(pk.data(), sk.data());
     return { sk, pk };
+}
+
+MasterSeed Cryptography::generate_seed() {
+    MasterSeed master_seed;
+    randombytes_buf(master_seed.data(), master_seed.size());
+    return master_seed;
+}
+
+std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const MasterSeed& master_seed, int index) {
+    std::array<std::uint8_t, 32> derived_seed;
+    std::string derivation_data = std::string((char*)master_seed.data(), 32) + std::to_string(index);
+
+    crypto_generichash(derived_seed.data(),
+                       32,
+                       (uint8_t*)derivation_data.c_str(),
+                       derivation_data.length(),
+                       nullptr,
+                       0);
+
+    PrivateKey private_key;
+    PublicKey  public_key;
+    crypto_sign_seed_keypair(public_key.data(), private_key.data(), derived_seed.data());
+
+    return { private_key, public_key };
+}
+
+PublicKey Cryptography::get_public_from_private(const PrivateKey& private_key) {
+    PublicKey public_key;
+    std::copy(private_key.begin() + 32, private_key.end(), public_key.begin());
+    return public_key;
+}
+
+std::vector<std::string> Cryptography::create_mnemonic(const MasterSeed& master_seed) {
+    auto result = bip3x::bip3x_mnemonic::encode_bytes(master_seed.data(), "en", BIP3X_ENTROPY_LEN_256);
+    return result.words;
+}
+
+MasterSeed Cryptography::restore_seed_from_mnemonic(const std::string& mnemonic) {
+    auto decoded = bip3x::bip3x_mnemonic::decode_mnemonic(mnemonic.c_str(), "en", BIP3X_ENTROPY_LEN_256);
+
+    MasterSeed master_seed;
+    std::copy(decoded.begin(), decoded.end(), master_seed.begin());
+
+    return master_seed;
 }
 
 Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      data,
