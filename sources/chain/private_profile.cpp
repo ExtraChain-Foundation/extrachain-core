@@ -125,6 +125,9 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::imports() const {
 }
 
 std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> PrivateProfile::main() const {
+    if (main_.is_zero()) {
+        eFatal("Zero main");
+    }
     return get_actor(main_);
 }
 
@@ -396,7 +399,7 @@ std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
 }
 
 void SeedProfile::generate() {
-    for (int i = 0; i != 1; i++) {
+    for (int i = 0; i != 2; i++) {
         Actor<KeyPrivate> actor;
         actor.generate_from_seed(seed_, i, ActorType::User);
         actors_.push_back(actor);
