@@ -373,8 +373,6 @@ bool AccountController::import_seed_phrase(const std::string &login,
     auto res  = seed_profile.save(hash);
 
     insert_to_profile_set(seed_profile.actors().front().id());
-    node->login(hash);
-
     return res.has_value();
 }
 
@@ -396,7 +394,5 @@ bool AccountController::import_seed_hex(const std::string &login,
     auto res = seed_profile.save(Utils::calculate_hash(login + password));
 
     insert_to_profile_set(seed_profile.actors().front().id());
-    node->login(hash);
-
     return res.has_value();
 }
