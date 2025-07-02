@@ -58,6 +58,11 @@ namespace Cryptography {
         FileAccessError
     };
 
+    enum class MnemonicError {
+        Empty,
+        Validate
+    };
+
     using CryptoResult = std::expected<Bytes, CryptoError>;
 
     constexpr size_t MIN_ENCRYPTED_SIZE_SYMMETRIC  = crypto_secretbox_MACBYTES + crypto_secretbox_NONCEBYTES;
@@ -86,7 +91,9 @@ namespace Cryptography {
     EXTRACHAIN_EXPORT PublicKey                        get_public_from_private(const PrivateKey &private_key);
 
     EXTRACHAIN_EXPORT std::vector<std::string> create_mnemonic(const MasterSeed &master_seed);
-    EXTRACHAIN_EXPORT MasterSeed               restore_seed_from_mnemonic(const std::string &mnemonic);
+    EXTRACHAIN_EXPORT std::expected<MasterSeed, MnemonicError> restore_seed_from_mnemonic(
+        const std::string &mnemonic);
+    EXTRACHAIN_EXPORT bool validate_mnemonic(const std::string &mnemonic);
 
     EXTRACHAIN_EXPORT CryptoResult asymmetric_encrypt(const Bytes      &data,
                                                       const PrivateKey &sender_secret_key,

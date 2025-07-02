@@ -233,13 +233,26 @@ std::vector<std::string> Cryptography::create_mnemonic(const MasterSeed& master_
     return result.words;
 }
 
-MasterSeed Cryptography::restore_seed_from_mnemonic(const std::string& mnemonic) {
+std::expected<MasterSeed, Cryptography::MnemonicError> Cryptography::restore_seed_from_mnemonic(
+    const std::string& mnemonic) {
+    if (mnemonic.empty()) {
+        return std::unexpected(Cryptography::MnemonicError::Empty);
+    }
+
+    if (!validate_mnemonic(mnemonic)) {
+        return std::unexpected(Cryptography::MnemonicError::Validate);
+    }
+
     auto decoded = bip3x::bip3x_mnemonic::decode_mnemonic(mnemonic.c_str(), "en", BIP3X_ENTROPY_LEN_256);
 
     MasterSeed master_seed;
     std::copy(decoded.begin(), decoded.end(), master_seed.begin());
 
     return master_seed;
+}
+
+bool Cryptography::validate_mnemonic(const std::string& mnemonic) {
+    return bip3x::bip3x_mnemonic::validate_words("en", mnemonic.c_str());
 }
 
 Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      data,
