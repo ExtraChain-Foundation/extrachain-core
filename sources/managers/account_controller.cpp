@@ -348,7 +348,8 @@ std::string AccountController::seed_hex() {
         return "";
     }
 
-    auto encrypt_result = Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash);
+    auto encrypt_result =
+        Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash, true);
     if (!encrypt_result.has_value()) {
         return "";
     }

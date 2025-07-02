@@ -77,10 +77,14 @@ namespace Cryptography {
                                                               const PublicKey &public_key,
                                                               const Signature &signature);
 
-    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt(const Bytes &data, const KeyPass &secret_key);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt(const Bytes   &data,
+                                                     const KeyPass &secret_key,
+                                                     bool           nonce_from_key = false);
     EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt(const Bytes &data, const KeyPass &secret_key);
 
-    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes &data, const std::string &password);
+    EXTRACHAIN_EXPORT CryptoResult symmetric_encrypt_password(const Bytes       &data,
+                                                              const std::string &password,
+                                                              bool               nonce_from_key = false);
     EXTRACHAIN_EXPORT CryptoResult symmetric_decrypt_password(const Bytes &data, const std::string &password);
 
     EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> asymmetric_create_pair();

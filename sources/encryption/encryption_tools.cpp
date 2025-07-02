@@ -100,18 +100,24 @@ std::expected<bool, Cryptography::CryptoError> Cryptography::verify(const Bytes&
     return res == 0;
 }
 
-Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes& data, const KeyPass& secret_key) {
+Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes&   data,
+                                                           const KeyPass& secret_key,
+                                                           bool           nonce_from_key) {
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-
     if (Utils::is_container_empty(secret_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
 
     Bytes encrypted(crypto_secretbox_MACBYTES + data.size());
     Nonce nonce;
-    randombytes_buf(nonce.data(), nonce.size());
+
+    if (nonce_from_key) {
+        std::copy(secret_key.begin(), secret_key.begin() + nonce.size(), nonce.begin());
+    } else {
+        randombytes_buf(nonce.data(), nonce.size());
+    }
 
     if (crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data()) != 0) {
         return std::unexpected(CryptoError::EncryptionFailed);
@@ -120,7 +126,7 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes& data, co
     Bytes result(nonce.size() + encrypted.size());
     std::copy(nonce.begin(), nonce.end(), result.begin());
     std::copy(encrypted.begin(), encrypted.end(), result.begin() + nonce.size());
-    eInfo("--- data {} encr {} result {}", data.size(), encrypted.size(), result.size());
+
     return result;
 }
 
@@ -157,7 +163,8 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_encrypt_password(const Bytes&       data,
-                                                                    const std::string& password) {
+                                                                    const std::string& password,
+                                                                    bool               nonce_from_key) {
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
@@ -171,7 +178,7 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt_password(const Bytes&
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
-    return symmetric_encrypt(data, key_result.value());
+    return symmetric_encrypt(data, key_result.value(), nonce_from_key);
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_decrypt_password(const Bytes&       data,
