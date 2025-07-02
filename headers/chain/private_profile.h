@@ -165,7 +165,7 @@ public:
     SeedProfile &operator=(const SeedProfile &) = default;
 
 private:
-    MasterSeed                     seed_;
+    MasterSeed                     seed_ = MasterSeed();
     std::string                    filename_;
     std::vector<Actor<KeyPrivate>> actors_;
 };

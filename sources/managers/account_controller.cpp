@@ -336,3 +336,67 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     file.write(json);
     file.close();
 }
+
+std::string AccountController::seed_hex() {
+    if (Utils::is_container_empty(profile_seed.seed())) {
+        return "";
+    }
+
+    std::string hex;
+    auto        hash = currentProfile().hash();
+    if (hash.empty()) {
+        return "";
+    }
+
+    auto encrypt_result = Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash);
+    if (!encrypt_result.has_value()) {
+        return "";
+    }
+
+    hex = Utils::to_hex(ByteArray(encrypt_result.value()).toBytes());
+
+    return hex;
+}
+
+bool AccountController::import_seed_phrase(const std::string &login,
+                                           const std::string &password,
+                                           const std::string &phrase) {
+    auto seed = Cryptography::restore_seed_from_mnemonic(phrase);
+    if (!seed.has_value()) {
+        return false;
+    }
+
+    SeedProfile seed_profile;
+    seed_profile.set(seed.value());
+    seed_profile.generate();
+    auto hash = Utils::calculate_hash(login + password);
+    auto res  = seed_profile.save(hash);
+
+    insert_to_profile_set(seed_profile.actors().front().id());
+    node->login(hash);
+
+    return res.has_value();
+}
+
+bool AccountController::import_seed_hex(const std::string &login,
+                                        const std::string &password,
+                                        const std::string &seed_hex) {
+    auto hash            = Utils::calculate_hash(login + password);
+    auto bytes           = Utils::from_hex(seed_hex);
+    auto encrypted_bytes = ByteArray(bytes).toBytes();
+
+    auto seed = Cryptography::symmetric_decrypt_password(encrypted_bytes, hash);
+    if (!seed.has_value()) {
+        return false;
+    }
+
+    SeedProfile seed_profile;
+    seed_profile.set(ByteArray(seed.value()).toArray<32>());
+    seed_profile.generate();
+    auto res = seed_profile.save(Utils::calculate_hash(login + password));
+
+    insert_to_profile_set(seed_profile.actors().front().id());
+    node->login(hash);
+
+    return res.has_value();
+}

@@ -252,6 +252,10 @@ std::expected<MasterSeed, Cryptography::MnemonicError> Cryptography::restore_see
 }
 
 bool Cryptography::validate_mnemonic(const std::string& mnemonic) {
+    if (mnemonic.empty()) {
+        return false;
+    }
+
     return bip3x::bip3x_mnemonic::validate_words("en", mnemonic.c_str());
 }
 

@@ -314,7 +314,8 @@ std::expected<void, bool> SeedProfile::save(const std::string &hash) {
         return std::unexpected(false);
     }
 
-    // Utils::to_hex(seed);
+    auto base64 = Utils::to_base64(encrypted.value());
+
     filename_ = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
 
     std::ofstream file(filename_, std::ios::binary);
@@ -322,7 +323,7 @@ std::expected<void, bool> SeedProfile::save(const std::string &hash) {
         eFatal("Can't open file for writing");
     }
 
-    if (!file.write(reinterpret_cast<const char *>(encrypted->data()), encrypted->size())) {
+    if (!file.write(base64.c_str(), base64.size())) {
         eFatal("Can't write");
     }
     file.close();
@@ -369,6 +370,10 @@ std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
         return std::unexpected(PrivateProfileReadError::File);
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    auto        from_base64 = Utils::from_base64(data);
+    if (!from_base64.has_value()) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
 
     std::optional<std::string> seed;
 
@@ -376,12 +381,13 @@ std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
         [&](const auto &arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::string>) {
-                auto result = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), arg);
+                auto result =
+                    Cryptography::symmetric_decrypt_password(ByteArray(from_base64.value()).toBytes(), arg);
                 if (result.has_value()) {
                     seed = ByteArray(result.value()).toString();
                 }
             } else {
-                auto result = Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), arg);
+                auto result = Cryptography::symmetric_decrypt(ByteArray(from_base64.value()).toBytes(), arg);
                 if (result.has_value()) {
                     seed = ByteArray(result.value()).toString();
                 }

@@ -757,7 +757,18 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
                                                                                   const char (&content)[N]);
 
-    std::string to_hex(std::vector<unsigned char> &data);
+    template <typename T>
+    std::string to_hex(const std::vector<T> &data) {
+        static_assert(std::is_same_v<T, unsigned char> || std::is_same_v<T, uint8_t>,
+                      "T must be unsigned char or uint8_t");
+
+        size_t            psize = data.size() * 2 + 1;
+        std::vector<char> p(psize);
+        sodium_bin2hex(p.data(), psize, reinterpret_cast<const unsigned char *>(data.data()), data.size());
+        std::string s(p.begin(), p.end());
+        return s;
+    }
+
     std::string to_hex(const std::string &data);
     std::string from_hex(const std::string &data);
 

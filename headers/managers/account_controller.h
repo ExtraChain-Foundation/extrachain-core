@@ -104,4 +104,8 @@ private:
 public:
     SeedProfile profile_seed;
     ProfileType profile_type = ProfileType::Old;
+
+    std::string seed_hex();
+    bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
+    bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
 };
