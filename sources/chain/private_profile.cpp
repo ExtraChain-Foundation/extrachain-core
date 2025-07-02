@@ -26,7 +26,8 @@
 PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
                                       const Actor<KeyPrivate> &main_actor,
                                       const std::string       &hash,
-                                      ExtraChainNode          *node) {
+                                      ExtraChainNode          *node,
+                                      bool                     is_save) {
     PrivateProfile user;
     user.actors_.push_back(system_actor);
     user.actors_.push_back(main_actor);
@@ -37,7 +38,9 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
     user.creation_date_ = Utils::current_date_ms();
     user.modified_date_ = user.creation_date_;
     user.node           = node;
-    user.save();
+    if (is_save) {
+        user.save();
+    }
     return user;
 }
 

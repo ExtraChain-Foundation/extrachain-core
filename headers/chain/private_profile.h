@@ -63,7 +63,8 @@ public:
     static PrivateProfile                                         create(const Actor<KeyPrivate> &system_actor,
                                                                          const Actor<KeyPrivate> &main_actor,
                                                                          const std::string       &hash,
-                                                                         ExtraChainNode          *node);
+                                                                         ExtraChainNode          *node,
+                                                                         bool                     is_save = true);
     static std::expected<PrivateProfile, PrivateProfileReadError> read(
         const ActorId                &actor_id,
         const std::string            &hash,

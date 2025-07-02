@@ -149,6 +149,13 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
                 break;
             }
         }
+
+        if (!profile.has_value()) {
+            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+            if (try_new.has_value()) {
+                count++;
+            }
+        }
     }
 
     if (count > 1) {
@@ -171,7 +178,12 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 }
 
 bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
-    auto profile = PrivateProfile::load(actor_id, hash, node);
+    auto key_result = Cryptography::key_from_password(hash);
+    if (!key_result.has_value()) {
+        return false;
+    }
+
+    auto profile = PrivateProfile::load(actor_id, hash, node, key_result.value());
 
     if (profile.loaded()) {
         const auto &actors = profile.actors();
@@ -186,6 +198,19 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
         node->start();            // TODO: remove
         autologinHash.save(hash); // TODO: add arg
         return true;
+    } else {
+        auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+        if (try_new.has_value()) {
+            auto profile = PrivateProfile::create(try_new->actors()[0], try_new->actors()[1], hash, node, false);
+            m_profiles.push_back(profile);
+            m_currentProfile = try_new->actors()[0].id();
+            insert_to_profile_set(try_new->actors()[0].id());
+            autologinHash.save(hash); // TODO: add arg
+
+            this->profile_seed = try_new.value();
+            profile_type       = ProfileType::New;
+            return true;
+        }
     }
 
     return false;
