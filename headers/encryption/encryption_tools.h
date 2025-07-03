@@ -95,7 +95,7 @@ namespace Cryptography {
 
     EXTRACHAIN_EXPORT MasterSeed generate_seed();
     EXTRACHAIN_EXPORT std::pair<PrivateKey, PublicKey> asymmetric_from_seed(const MasterSeed &master_seed,
-                                                                            int               index);
+                                                                            std::uint32_t     index);
     EXTRACHAIN_EXPORT PublicKey                        get_public_from_private(const PrivateKey &private_key);
 
     EXTRACHAIN_EXPORT std::vector<std::string> create_mnemonic(const MasterSeed &master_seed);

@@ -222,17 +222,31 @@ MasterSeed Cryptography::generate_seed() {
     return master_seed;
 }
 
-std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const MasterSeed& master_seed, int index) {
+std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const MasterSeed& master_seed,
+                                                                    std::uint32_t     index) {
     std::array<std::uint8_t, 32> derived_seed;
-    std::string derivation_data = std::string((char*)master_seed.data(), 32) + std::to_string(index);
 
+    // Prepare derivation data: master_seed || index (4 bytes, big-endian)
+    std::array<std::uint8_t, 36> derivation_data;
+
+    // Copy master seed
+    std::memcpy(derivation_data.data(), master_seed.data(), 32);
+
+    // Append index as 4 bytes (big-endian)
+    derivation_data[32] = (index >> 24) & 0xFF;
+    derivation_data[33] = (index >> 16) & 0xFF;
+    derivation_data[34] = (index >> 8) & 0xFF;
+    derivation_data[35] = index & 0xFF;
+
+    // Derive seed using BLAKE2b
     crypto_generichash(derived_seed.data(),
-                       32,
-                       (uint8_t*)derivation_data.c_str(),
-                       derivation_data.length(),
+                       derived_seed.size(),
+                       derivation_data.data(),
+                       derivation_data.size(),
                        nullptr,
                        0);
 
+    // Generate Ed25519 keypair
     PrivateKey private_key;
     PublicKey  public_key;
     crypto_sign_seed_keypair(public_key.data(), private_key.data(), derived_seed.data());
