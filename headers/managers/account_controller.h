@@ -63,7 +63,7 @@ public:
     Actor<KeyPrivate> createService(const ActorId                   &profileActor     = ActorId(),
                                     std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
 
-    void import_profile(const ImportedUser &imported_profile, const std::string &hash);
+    void import_old_profile(const ImportedUser &imported_profile, const std::string &hash);
 
     bool rename_wallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
@@ -100,12 +100,17 @@ private:
 
     std::vector<PrivateProfile> m_profiles;
     ActorId                     m_currentProfile;
+    ProfileType                 profile_type_ = ProfileType::Old;
 
 public:
     SeedProfile profile_seed;
-    ProfileType profile_type = ProfileType::Old;
+
+    ProfileType profile_type() {
+        return profile_type_;
+    }
 
     std::string seed_hex();
     bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
     bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
+    bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
 };

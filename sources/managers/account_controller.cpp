@@ -33,8 +33,8 @@ SeedProfile AccountController::create_profile(const std::string               &h
         eFatal("[Accounts] Create actor: hash is empty");
     }
 
-    auto seed    = Cryptography::generate_seed();
-    profile_type = ProfileType::New;
+    auto seed     = Cryptography::generate_seed();
+    profile_type_ = ProfileType::New;
 
     Actor<KeyPrivate> system_actor;
     if (predefine_actor.has_value()) {
@@ -102,7 +102,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
     return actor;
 }
 
-void AccountController::import_profile(const ImportedUser &imported_profile, const std::string &hash) {
+void AccountController::import_old_profile(const ImportedUser &imported_profile, const std::string &hash) {
     auto              profile = PrivateProfile::import(imported_profile, hash, node);
     Actor<KeyPrivate> actor   = profile.system();
 
@@ -208,7 +208,7 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
             autologinHash.save(hash); // TODO: add arg
 
             this->profile_seed = try_new.value();
-            profile_type       = ProfileType::New;
+            profile_type_      = ProfileType::New;
             return true;
         }
     }
@@ -367,14 +367,7 @@ bool AccountController::import_seed_phrase(const std::string &login,
         return false;
     }
 
-    SeedProfile seed_profile;
-    seed_profile.set(seed.value());
-    seed_profile.generate();
-    auto hash = Utils::calculate_hash(login + password);
-    auto res  = seed_profile.save(hash);
-
-    insert_to_profile_set(seed_profile.actors().front().id());
-    return res.has_value();
+    return import_seed(login, password, seed.value());
 }
 
 bool AccountController::import_seed_hex(const std::string &login,
@@ -389,10 +382,17 @@ bool AccountController::import_seed_hex(const std::string &login,
         return false;
     }
 
+    return import_seed(login, password, ByteArray(seed.value()).toArray<32>());
+}
+
+bool AccountController::import_seed(const std::string &login,
+                                    const std::string &password,
+                                    const MasterSeed  &seed) {
     SeedProfile seed_profile;
-    seed_profile.set(ByteArray(seed.value()).toArray<32>());
+    seed_profile.set(seed);
     seed_profile.generate();
-    auto res = seed_profile.save(Utils::calculate_hash(login + password));
+    auto hash = Utils::calculate_hash(login + password);
+    auto res  = seed_profile.save(hash);
 
     insert_to_profile_set(seed_profile.actors().front().id());
     return res.has_value();
