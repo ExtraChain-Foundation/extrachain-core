@@ -71,21 +71,22 @@ SeedProfile AccountController::create_profile(const std::string               &h
 
 Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &wallet_name) {
     Actor<KeyPrivate> actor;
-    actor.create(ActorType::User);
+
+    if (profile_type_ == ProfileType::Old) {
+        actor.create(ActorType::User);
+    } else {
+        actor.generate_from_seed(profile_seed.seed(), profile_seed.actors().size(), ActorType::User);
+    }
+
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
-    profile.add_wallet(actor);
-    profile.rename_wallet(actor.id(), wallet_name);
-    node->actorIndex()->store_new_actor(actor.to_public());
-    return actor;
-}
+    //
+    profile.add_wallet(actor, profile_type_ == ProfileType::Old);
 
-Actor<KeyPrivate> AccountController::crete_wallet(const ActorId &system_actor, int index) {
-    Actor<KeyPrivate> actor;
-    actor.generate_from_seed(profile_seed.seed(), index, ActorType::User);
-    node->actorIndex()->store_new_actor(actor.to_public());
+    if (profile_type_ == ProfileType::Old) {
+        profile.rename_wallet(actor.id(), wallet_name);
+    }
 
-    auto &profile = getProfile(system_actor.is_zero() ? m_currentProfile : system_actor);
-    profile.add_wallet(actor);
+    node->actorIndex()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -201,7 +202,16 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
     } else {
         auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
         if (try_new.has_value()) {
+
             auto profile = PrivateProfile::create(try_new->actors()[0], try_new->actors()[1], hash, node, false);
+
+            const auto actors = try_new->generate_other(node);
+            if (!actors.empty()) {
+                for (const auto &actor : actors) {
+                    profile.add_wallet(actor, false);
+                }
+            }
+
             m_profiles.push_back(profile);
             m_currentProfile = try_new->actors()[0].id();
             insert_to_profile_set(try_new->actors()[0].id());
@@ -391,6 +401,7 @@ bool AccountController::import_seed(const std::string &login,
     SeedProfile seed_profile;
     seed_profile.set(seed);
     seed_profile.generate();
+    // profile_seed.generate_other(node);
     auto hash = Utils::calculate_hash(login + password);
     auto res  = seed_profile.save(hash);
 

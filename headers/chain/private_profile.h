@@ -92,7 +92,7 @@ public:
     }
 
     bool change_current(const ActorId &actorId);
-    void add_wallet(const Actor<KeyPrivate> &actor);
+    void add_wallet(const Actor<KeyPrivate> &actor, bool is_save = true);
     bool rename_wallet(const ActorId &actor_id, const std::string &wallet_name);
 
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> get_actor(
@@ -144,7 +144,8 @@ public:
         const std::string                        &file_name,
         const std::variant<std::string, KeyPass> &key_or_password);
 
-    void generate();
+    void                           generate();
+    std::vector<Actor<KeyPrivate>> generate_other(ExtraChainNode *node);
 
     MasterSeed seed() {
         return seed_;

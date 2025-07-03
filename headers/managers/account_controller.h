@@ -58,7 +58,6 @@ public:
                                      std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
     Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
                                    const std::string &wallet_name  = std::string());
-    Actor<KeyPrivate> crete_wallet(const ActorId &system_actor, int index);
     // createDAppMaster
     Actor<KeyPrivate> createService(const ActorId                   &profileActor     = ActorId(),
                                     std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);

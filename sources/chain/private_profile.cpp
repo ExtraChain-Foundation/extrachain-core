@@ -141,9 +141,12 @@ bool PrivateProfile::change_current(const ActorId &actorId) {
     return true;
 }
 
-void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor) {
+void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor, bool is_save) {
     actors_.push_back(actor);
-    save();
+
+    if (is_save) {
+        save();
+    }
 }
 
 bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &wallet_name) {
@@ -405,9 +408,28 @@ std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
 }
 
 void SeedProfile::generate() {
-    for (int i = 0; i != 2; i++) {
+    for (int i = 0; i < 2; i++) {
         Actor<KeyPrivate> actor;
         actor.generate_from_seed(seed_, i, ActorType::User);
         actors_.push_back(actor);
     }
+}
+
+std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node) {
+    std::vector<Actor<KeyPrivate>> actor_ids;
+
+    for (int i = 2;; i++) {
+        Actor<KeyPrivate> actor;
+        actor.generate_from_seed(seed_, i, ActorType::User);
+
+        bool exists = node->actorIndex()->exists(actor.id());
+        if (exists) {
+            actor_ids.push_back(actor);
+            actors_.push_back(actor);
+        } else {
+            break;
+        }
+    }
+
+    return actor_ids;
 }
