@@ -377,7 +377,7 @@ bool AccountController::import_seed_hex(const std::string &login,
     auto bytes           = Utils::from_hex(seed_hex);
     auto encrypted_bytes = ByteArray(bytes).toBytes();
 
-    auto seed = Cryptography::symmetric_decrypt_password(encrypted_bytes, hash);
+    auto seed = Cryptography::symmetric_decrypt_password(encrypted_bytes, hash, true);
     if (!seed.has_value()) {
         return false;
     }

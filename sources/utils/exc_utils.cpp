@@ -398,6 +398,13 @@ std::string Utils::to_hex(const std::string &data) {
     return to_hex(v);
 }
 
+std::string Utils::to_hex_impl(const unsigned char *data, size_t size) {
+    size_t            psize = size * 2 + 1;
+    std::vector<char> p(psize);
+    sodium_bin2hex(p.data(), psize, data, size);
+    return std::string(p.data(), size * 2);
+}
+
 std::string Utils::from_hex(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);

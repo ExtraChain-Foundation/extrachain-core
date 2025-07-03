@@ -308,7 +308,7 @@ std::expected<void, bool> SeedProfile::save(const std::string &hash) {
         return std::unexpected(false);
     }
 
-    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), hash);
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), hash, true);
     if (!encrypted.has_value()) {
         eCritical("Incorrect seed profile save: encryption");
         return std::unexpected(false);
@@ -382,12 +382,12 @@ std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, std::string>) {
                 auto result =
-                    Cryptography::symmetric_decrypt_password(ByteArray(from_base64.value()).toBytes(), arg);
+                    Cryptography::symmetric_decrypt_password(ByteArray(from_base64.value()).toBytes(), arg, true);
                 if (result.has_value()) {
                     seed = ByteArray(result.value()).toString();
                 }
             } else {
-                auto result = Cryptography::symmetric_decrypt(ByteArray(from_base64.value()).toBytes(), arg);
+                auto result = Cryptography::symmetric_decrypt(ByteArray(from_base64.value()).toBytes(), arg, true);
                 if (result.has_value()) {
                     seed = ByteArray(result.value()).toString();
                 }
