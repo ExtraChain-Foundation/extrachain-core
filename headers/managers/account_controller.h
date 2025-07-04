@@ -108,7 +108,10 @@ public:
         return profile_type_;
     }
 
-    std::string seed_hex();
+    std::vector<std::string> seed_mnemonic();
+    bool                     validate_mnemonic(const std::string &phrase);
+    std::string              seed_hex();
+
     bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
     bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
     bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);

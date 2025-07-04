@@ -348,6 +348,16 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     file.close();
 }
 
+std::vector<std::string> AccountController::seed_mnemonic() {
+    auto seed     = profile_seed.seed();
+    auto mnemonic = Cryptography::create_mnemonic(seed);
+    return mnemonic;
+}
+
+bool AccountController::validate_mnemonic(const std::string &phrase) {
+    return Cryptography::validate_mnemonic(phrase);
+}
+
 std::string AccountController::seed_hex() {
     if (Utils::is_container_empty(profile_seed.seed())) {
         return "";
