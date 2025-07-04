@@ -229,7 +229,6 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
         emit firstSyncEnded();
         sync_first_done = true;
         node->accountController()->dogenerate();
-        return;
     }
 
     auto r = responder;
