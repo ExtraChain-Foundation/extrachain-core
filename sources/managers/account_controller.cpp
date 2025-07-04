@@ -219,6 +219,7 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
 
             this->profile_seed = try_new.value();
             profile_type_      = ProfileType::New;
+            node->start();
             return true;
         }
     }
@@ -407,4 +408,22 @@ bool AccountController::import_seed(const std::string &login,
 
     insert_to_profile_set(seed_profile.actors().front().id());
     return res.has_value();
+}
+
+void AccountController::dogenerate() {
+    if (profile_type_ == ProfileType::Old) {
+        return;
+    }
+
+    const auto actors = profile_seed.generate_other(node);
+
+    if (actors.empty()) {
+        return;
+    }
+
+    for (const auto &actor : actors) {
+        getProfile(m_currentProfile).add_wallet(actor, false);
+    }
+
+    emit dogenerated();
 }

@@ -1222,13 +1222,13 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::ActorsHash: {
         if (status == MessageStatus::Request) {
-            auto bits = MessagePack::deserialize<std::vector<uint8_t>>(serialized);
-            if (!bits.has_value()) {
+            auto actors = MessagePack::deserialize<std::pair<std::uint64_t, std::vector<uint8_t>>>(serialized);
+            if (!actors.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed in {} state", type, status);
                 break;
             }
 
-            node->actorIndex()->network_actors_hash_request(bits.value(), responder);
+            node->actorIndex()->network_actors_hash_request(actors->first, actors->second, responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
             if (!actors_list_result.has_value()) {

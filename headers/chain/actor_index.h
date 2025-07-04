@@ -61,6 +61,8 @@ private:
     ActorId           network_id_;
 
     ActorSynchronizer synch;
+    std::uint64_t     synch_count     = 0;
+    bool              sync_first_done = false;
 
 public:
     /**
@@ -143,7 +145,9 @@ public:
     void getActorCount(const QByteArray &requestHash, const Responder &responder);
 
     void request_actors_hash(const Responder &responder);
-    void network_actors_hash_request(const std::vector<uint8_t> &bits, const Responder &responder);
+    void network_actors_hash_request(std::uint64_t               count,
+                                     const std::vector<uint8_t> &bits,
+                                     const Responder            &responder);
 
 signals:
     void newActorSaved(ActorId actor_id);

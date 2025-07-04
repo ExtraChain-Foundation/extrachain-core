@@ -112,4 +112,9 @@ public:
     bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
     bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
     bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
+
+    void dogenerate();
+
+signals:
+    void dogenerated();
 };
