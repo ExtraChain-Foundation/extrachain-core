@@ -38,8 +38,14 @@ KeyPrivate::KeyPrivate(const KeyPrivate &keyPrivate) {
     public_key_ = keyPrivate.public_key();
 }
 
-void KeyPrivate::generate() {
+void KeyPrivate::generate_random() {
     auto [secret_key, public_key] = Cryptography::asymmetric_create_pair();
+    secret_key_                   = secret_key;
+    public_key_                   = public_key;
+}
+
+void KeyPrivate::generate_seed(const MasterSeed &seed, int index) {
+    auto [secret_key, public_key] = Cryptography::asymmetric_from_seed(seed, index);
     secret_key_                   = secret_key;
     public_key_                   = public_key;
 }

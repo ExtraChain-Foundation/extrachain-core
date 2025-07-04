@@ -393,18 +393,16 @@ QString Utils::dataDir(const QString &newDir) {
     return current;
 }
 
-std::string Utils::to_hex(std::vector<unsigned char> &data) {
-    size_t            psize = data.size() * 2 + 1;
-    std::vector<char> p(psize);
-    sodium_bin2hex(p.data(), psize, data.data(), data.size());
-    std::string s(p.begin(), p.end());
-    // s.erase(--s.end());
-    return s;
-}
-
 std::string Utils::to_hex(const std::string &data) {
     std::vector<unsigned char> v(data.begin(), data.end());
     return to_hex(v);
+}
+
+std::string Utils::to_hex_impl(const unsigned char *data, size_t size) {
+    size_t            psize = size * 2 + 1;
+    std::vector<char> p(psize);
+    sodium_bin2hex(p.data(), psize, data, size);
+    return std::string(p.data(), size * 2);
 }
 
 std::string Utils::from_hex(const std::string &data) {

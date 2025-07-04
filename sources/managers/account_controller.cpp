@@ -26,20 +26,25 @@ AccountController::AccountController(ExtraChainNode *node)
     , node(node) {
 }
 
-Actor<KeyPrivate> AccountController::createProfile(const std::string               &hash,
-                                                   ActorType                        type,
-                                                   std::optional<Actor<KeyPrivate>> predefine_actor) {
-    if (hash.empty())
+SeedProfile AccountController::create_profile(const std::string               &hash,
+                                              ActorType                        type,
+                                              std::optional<Actor<KeyPrivate>> predefine_actor) {
+    if (hash.empty()) {
         eFatal("[Accounts] Create actor: hash is empty");
+    }
+
+    auto seed     = Cryptography::generate_seed();
+    profile_type_ = ProfileType::New;
 
     Actor<KeyPrivate> system_actor;
-    if (predefine_actor.has_value())
+    if (predefine_actor.has_value()) {
         system_actor = predefine_actor.value();
-    else
-        system_actor.create(type);
+    } else {
+        system_actor.generate_from_seed(seed, 0, type);
+    }
 
     Actor<KeyPrivate> main_actor;
-    main_actor.create(ActorType::User);
+    main_actor.generate_from_seed(seed, 1, ActorType::User);
 
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     m_profiles.push_back(profile);
@@ -49,21 +54,38 @@ Actor<KeyPrivate> AccountController::createProfile(const std::string            
     insert_to_profile_set(system_actor.id());
     autologinHash.save(hash); // TODO: add arg
 
+    SeedProfile profile_seed;
+    profile_seed.set(seed);
+    profile_seed.generate();
+    profile_seed.save(hash);
+    this->profile_seed = profile_seed;
+
     eLog("[Accounts] Created new profile. System: {}, main: {}", system_actor.id(), main_actor.id());
 
     node->start(); // TODO: remove
 
     node->calculateBlockCount();
 
-    return system_actor;
+    return profile_seed;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &walletName) {
+Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &wallet_name) {
     Actor<KeyPrivate> actor;
-    actor.create(ActorType::User);
+
+    if (profile_type_ == ProfileType::Old) {
+        actor.create(ActorType::User);
+    } else {
+        actor.generate_from_seed(profile_seed.seed(), profile_seed.actors().size(), ActorType::User);
+    }
+
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
-    profile.add_wallet(actor);
-    profile.rename_wallet(actor.id(), walletName);
+    //
+    profile.add_wallet(actor, profile_type_ == ProfileType::Old);
+
+    if (profile_type_ == ProfileType::Old) {
+        profile.rename_wallet(actor.id(), wallet_name);
+    }
+
     node->actorIndex()->store_new_actor(actor.to_public());
     return actor;
 }
@@ -81,7 +103,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
     return actor;
 }
 
-void AccountController::import_profile(const ImportedUser &imported_profile, const std::string &hash) {
+void AccountController::import_old_profile(const ImportedUser &imported_profile, const std::string &hash) {
     auto              profile = PrivateProfile::import(imported_profile, hash, node);
     Actor<KeyPrivate> actor   = profile.system();
 
@@ -128,6 +150,13 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
                 break;
             }
         }
+
+        if (!profile.has_value()) {
+            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+            if (try_new.has_value()) {
+                count++;
+            }
+        }
     }
 
     if (count > 1) {
@@ -150,7 +179,12 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
 }
 
 bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
-    auto profile = PrivateProfile::load(actor_id, hash, node);
+    auto key_result = Cryptography::key_from_password(hash);
+    if (!key_result.has_value()) {
+        return false;
+    }
+
+    auto profile = PrivateProfile::load(actor_id, hash, node, key_result.value());
 
     if (profile.loaded()) {
         const auto &actors = profile.actors();
@@ -165,6 +199,29 @@ bool AccountController::load_profile(const ActorId &actor_id, const std::string 
         node->start();            // TODO: remove
         autologinHash.save(hash); // TODO: add arg
         return true;
+    } else {
+        auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+        if (try_new.has_value()) {
+
+            auto profile = PrivateProfile::create(try_new->actors()[0], try_new->actors()[1], hash, node, false);
+
+            const auto actors = try_new->generate_other(node);
+            if (!actors.empty()) {
+                for (const auto &actor : actors) {
+                    profile.add_wallet(actor, false);
+                }
+            }
+
+            m_profiles.push_back(profile);
+            m_currentProfile = try_new->actors()[0].id();
+            insert_to_profile_set(try_new->actors()[0].id());
+            autologinHash.save(hash); // TODO: add arg
+
+            this->profile_seed = try_new.value();
+            profile_type_      = ProfileType::New;
+            node->start();
+            return true;
+        }
     }
 
     return false;
@@ -289,4 +346,84 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     file.open(QFile::WriteOnly);
     file.write(json);
     file.close();
+}
+
+std::string AccountController::seed_hex() {
+    if (Utils::is_container_empty(profile_seed.seed())) {
+        return "";
+    }
+
+    std::string hex;
+    auto        hash = currentProfile().hash();
+    if (hash.empty()) {
+        return "";
+    }
+
+    auto encrypt_result =
+        Cryptography::symmetric_encrypt_password(ByteArray(profile_seed.seed()).toBytes(), hash, true);
+    if (!encrypt_result.has_value()) {
+        return "";
+    }
+
+    hex = Utils::to_hex(ByteArray(encrypt_result.value()).toBytes());
+
+    return hex;
+}
+
+bool AccountController::import_seed_phrase(const std::string &login,
+                                           const std::string &password,
+                                           const std::string &phrase) {
+    auto seed = Cryptography::restore_seed_from_mnemonic(phrase);
+    if (!seed.has_value()) {
+        return false;
+    }
+
+    return import_seed(login, password, seed.value());
+}
+
+bool AccountController::import_seed_hex(const std::string &login,
+                                        const std::string &password,
+                                        const std::string &seed_hex) {
+    auto hash            = Utils::calculate_hash(login + password);
+    auto bytes           = Utils::from_hex(seed_hex);
+    auto encrypted_bytes = ByteArray(bytes).toBytes();
+
+    auto seed = Cryptography::symmetric_decrypt_password(encrypted_bytes, hash, true);
+    if (!seed.has_value()) {
+        return false;
+    }
+
+    return import_seed(login, password, ByteArray(seed.value()).toArray<32>());
+}
+
+bool AccountController::import_seed(const std::string &login,
+                                    const std::string &password,
+                                    const MasterSeed  &seed) {
+    SeedProfile seed_profile;
+    seed_profile.set(seed);
+    seed_profile.generate();
+    // profile_seed.generate_other(node);
+    auto hash = Utils::calculate_hash(login + password);
+    auto res  = seed_profile.save(hash);
+
+    insert_to_profile_set(seed_profile.actors().front().id());
+    return res.has_value();
+}
+
+void AccountController::dogenerate() {
+    if (profile_type_ == ProfileType::Old) {
+        return;
+    }
+
+    const auto actors = profile_seed.generate_other(node);
+
+    if (actors.empty()) {
+        return;
+    }
+
+    for (const auto &actor : actors) {
+        getProfile(m_currentProfile).add_wallet(actor, false);
+    }
+
+    emit dogenerated();
 }

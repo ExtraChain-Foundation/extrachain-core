@@ -1113,7 +1113,7 @@ void Dag::network_request_light(const Responder &responder) {
         timer.start();
         std::vector<Transaction> txs;
 
-        if (cache().section() == BigNumber(-1)) {
+        if (cache().section() == BigNumber(-1) && current_section_ > 100) {
             return;
         }
 

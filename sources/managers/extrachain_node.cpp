@@ -169,9 +169,9 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
 
     eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calculate_hash(login + password);
-    auto first       = m_accountController->createProfile(consoleHash, ActorType::DAppMaster);
-    m_actorIndex->set_network_id(first.id());
-    m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
+    auto first       = m_accountController->create_profile(consoleHash, ActorType::DAppMaster);
+    m_actorIndex->set_network_id(first.actors().front().id());
+    // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
     create_new_dag();
 
@@ -601,6 +601,12 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
 }
 
 std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
+    if (m_accountController->profile_type() == ProfileType::New) {
+        QFile file(m_accountController->profile_seed.filename().c_str());
+        file.open(QFile::ReadOnly);
+        return file.readAll().toStdString();
+    }
+
     const auto& current_profile = m_accountController->currentProfile();
 
     auto imported_user = ImportedUser { .version       = extrachain_version,
@@ -642,6 +648,11 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
         return std::unexpected(ImportProfileError::DecryptError);
     }
 
+    if (data.size() < 100) {
+        m_accountController->import_seed(login, password, ByteArray(json.value()).toArray<32>());
+        return hash;
+    }
+
     auto imported_user = Json::deserialize<ImportedUser>(json.value());
     if (!imported_user.has_value()) {
         return std::unexpected(ImportProfileError::IncorrectJson);
@@ -649,10 +660,7 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
 
     eLog("imported_user", imported_user.value());
 
-    // TODO: network id check
-
-    m_accountController->import_profile(imported_user.value(), hash);
-
+    m_accountController->import_old_profile(imported_user.value(), hash);
     return hash;
 }
 

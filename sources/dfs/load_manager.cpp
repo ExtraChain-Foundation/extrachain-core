@@ -33,7 +33,7 @@ LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     : QObject(parent)
     , node(node) {
     m_timer = new QTimer(this);
-    connect(m_timer, &QTimer::timeout, this, [=]() {
+    connect(m_timer, &QTimer::timeout, this, [this]() {
         timer_runner();
     });
     m_timer->start(5000);

@@ -757,7 +757,15 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
                                                                                   const char (&content)[N]);
 
-    std::string to_hex(std::vector<unsigned char> &data);
+    std::string to_hex_impl(const unsigned char *data, size_t size);
+
+    template <typename T>
+    std::string to_hex(const std::vector<T> &data) {
+        static_assert(std::is_same_v<T, unsigned char> || std::is_same_v<T, uint8_t>,
+                      "T must be unsigned char or uint8_t");
+        return to_hex_impl(reinterpret_cast<const unsigned char *>(data.data()), data.size());
+    }
+
     std::string to_hex(const std::string &data);
     std::string from_hex(const std::string &data);
 
