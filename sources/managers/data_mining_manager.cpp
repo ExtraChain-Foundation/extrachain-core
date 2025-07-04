@@ -81,8 +81,9 @@ void DataMiningManager::requestCoinReward() {
     //      node->dag count stored);
 
     if (amount <= 0) {
-        eLog("[Reward] Can't send amount, because amount = 0");
-        return;
+        // eLog("[Reward] Can't send amount, because amount = 0");
+        // return;
+        amount = BigNumberFloat("0.151", NumeralBase::Dec);
     }
 
     amount.truncate();
