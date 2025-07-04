@@ -643,14 +643,20 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
     }
 
     auto hash = Utils::calculate_hash(login_password);
-    auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash);
-    if (!json.has_value()) {
-        return std::unexpected(ImportProfileError::DecryptError);
-    }
 
     if (data.size() < 100) {
-        m_accountController->import_seed(login, password, ByteArray(json.value()).toArray<32>());
+        auto decrypted = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, true);
+        if (!decrypted.has_value()) {
+            return std::unexpected(ImportProfileError::DecryptError);
+        }
+
+        m_accountController->import_seed(login, password, ByteArray(decrypted.value()).toArray<32>());
         return hash;
+    }
+
+    auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, false);
+    if (!json.has_value()) {
+        return std::unexpected(ImportProfileError::DecryptError);
     }
 
     auto imported_user = Json::deserialize<ImportedUser>(json.value());
