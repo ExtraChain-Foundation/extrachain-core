@@ -425,6 +425,12 @@ void AccountController::dogenerate() {
         return;
     }
 
+    static bool dogenerated = false;
+    if (dogenerated) {
+        return;
+    }
+
+    dogenerated       = true;
     const auto actors = profile_seed.generate_other(node);
 
     if (actors.empty()) {
@@ -435,5 +441,5 @@ void AccountController::dogenerate() {
         getProfile(m_currentProfile).add_wallet(actor, false);
     }
 
-    emit dogenerated();
+    emit this->dogenerated();
 }

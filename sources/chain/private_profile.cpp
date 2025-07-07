@@ -424,6 +424,14 @@ std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node)
 
         bool exists = node->actorIndex()->exists(actor.id());
         if (exists) {
+            auto actor_id   = actor.id();
+            bool vec_exists = std::any_of(actors_.begin(), actors_.end(), [actor_id](const auto &actor) {
+                return actor.id() == actor_id;
+            });
+            if (vec_exists) {
+                continue;
+            }
+
             actor_ids.push_back(actor);
             actors_.push_back(actor);
         } else {
