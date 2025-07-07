@@ -240,6 +240,11 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
         auto profile = PrivateProfile::read(actor_id, hash, node, key_result.value());
         if (profile.has_value()) {
             multiple_profiles.insert(actor_id);
+        } else {
+            auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
+            if (try_new.has_value()) {
+                multiple_profiles.insert(actor_id);
+            }
         }
     }
 
