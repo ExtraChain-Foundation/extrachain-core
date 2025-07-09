@@ -39,6 +39,12 @@ constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and p
 
 using Balances = std::map<std::pair<ActorId, TokenId>, BigNumberFloat>;
 
+struct CacheResult {
+    bool      result;
+    BigNumber from;
+    BigNumber to;
+};
+
 /**
  * @brief DagCache - Manages caching of actor balances for chain
  *
@@ -166,7 +172,9 @@ public:
      * @return true If cache was updated
      * @return false If no update was needed or update failed
      */
-    bool check_and_update_cache(const BigNumber& current_section);
+    CacheResult check_and_update_cache(const BigNumber& current_section);
+
+    void check_and_update_cache_thread(const BigNumber& current_section);
 
     /**
      * @brief Update cache to a specific genesis section
@@ -178,10 +186,11 @@ public:
      * @return true If update was successful
      * @return false If update failed
      */
-    bool update_to_genesis_section(const BigNumber&                                        genesis_section,
-                                   const BigNumber&                                        current_section,
-                                   const BigNumber&                                        first_saved_section,
-                                   std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    std::pair<bool, BigNumber> update_to_genesis_section(
+        const BigNumber&                                        genesis_section,
+        const BigNumber&                                        current_section,
+        const BigNumber&                                        first_saved_section,
+        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
 
     /**
      * @brief Initialize database connection

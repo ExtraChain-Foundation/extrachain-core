@@ -1689,6 +1689,17 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DagIntervalHash: {
+        auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
+        if (!hash_interval.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
+            break;
+        }
+
+        node->dag()->network_hash_interval(hash_interval.value(), responder);
+        break;
+    }
+
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,

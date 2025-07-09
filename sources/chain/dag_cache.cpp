@@ -20,7 +20,10 @@
 #include "chain/dag_cache.h"
 #include "chain/dag.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 #include "utils/db_connector.h"
+
+#include "utils/thread_pool_boost.h"
 
 DagCache::DagCache(ExtraChainNode* node, Dag* dag)
     : node(node)
@@ -314,15 +317,14 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     return balances;
 }
 
-bool DagCache::check_and_update_cache(const BigNumber& current_section) {
+CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
     if (current_section < BigNumber(CACHE_LAG_SECTIONS)) {
-        // If we don't have enough sections yet, don't cache anything
         // eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
         //      current_section,
         //      CACHE_LAG_SECTIONS);
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // First, calculate the section with lag
@@ -340,13 +342,13 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Don't update if already at or ahead of safe section
     if (cached_section_ != BigNumber(-1) && safe_genesis_section <= cached_section_) {
         // eLog("[DagCache] No cache update needed: safe_genesis_section <= cached_section_");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // Don't update if would be moving backwards
     if (cached_section_ > safe_genesis_section) {
         eLog("[DagCache] Invalid cache update: cached_section_ > safe_genesis_section");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // Don't update if the distance between the current cache section and the new safe section
@@ -354,7 +356,7 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     if (cached_section_ != BigNumber(-1)
         && (safe_genesis_section - cached_section_) < BigNumber(CACHE_LAG_SECTIONS)) {
         // eLog("[DagCache] Skipping cache update: not enough new sections since last update");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
@@ -368,32 +370,57 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     };
 
     // Update cache to safe section (genesis + lag)
-    bool result = update_to_genesis_section(safe_genesis_section,
-                                            current_section,
-                                            dag->first_saved_section(),
-                                            read_section_callback);
+    auto [result, start_section] = update_to_genesis_section(safe_genesis_section,
+                                                             current_section,
+                                                             dag->first_saved_section(),
+                                                             read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
         dag->update_range();
-        return true;
+        return CacheResult { .result = true, .from = start_section, .to = safe_genesis_section };
     }
 
-    return false;
+    return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
 }
 
-bool DagCache::update_to_genesis_section(
+void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
+    if (dag->status() != DagStatus::Ready) {
+        ThreadPoolBoost::instance()->post([this] {
+            auto res = this->check_and_update_cache(dag->current_section());
+
+            if (res.result) {
+                dag->update_range();
+                // send
+            }
+        });
+    } else {
+        auto res = this->check_and_update_cache(dag->current_section());
+
+        if (res.result) {
+            dag->update_range();
+
+            ThreadPoolBoost::instance()->post([this, res] {
+                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = "" };
+                hash_interval.hash = node->dag()->hash_interval(hash_interval.from, hash_interval.to);
+                node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
+            });
+        }
+    }
+}
+
+std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     const BigNumber&                                        genesis_section,
     const BigNumber&                                        current_section,
     const BigNumber&                                        first_saved_section,
     std::function<std::optional<Section>(const BigNumber&)> read_section_callback) {
     // If trying to update to same section, nothing to do
     if (cached_section_ == genesis_section) {
-        return true;
+        return { true, BigNumber(-1) };
     }
     eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
 
-    BigNumber start_section;
+    SectionId start_section;
     if (cached_section_ != BigNumber(-1)) {
         start_section = cached_section_ + 1;
     } else {
@@ -432,7 +459,7 @@ bool DagCache::update_to_genesis_section(
     // Initialize DB
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
-        return false;
+        return { false, BigNumber(-1) };
     }
 
     // Start a transaction for efficiency
@@ -445,7 +472,7 @@ bool DagCache::update_to_genesis_section(
     if (!cached_balances_opt.has_value()) {
         eLog("[DagCache] Failed to read cached balances");
         db_->query("ROLLBACK");
-        return false;
+        return { false, BigNumber(-1) };
     }
 
     Balances& balances  = cached_balances_opt.value().second;
@@ -479,7 +506,7 @@ bool DagCache::update_to_genesis_section(
     cached_section_ = genesis_section;
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
-    return true;
+    return { true, start_section };
 }
 
 void DagCache::process_transaction(const Transaction& tx, Balances& balances) {

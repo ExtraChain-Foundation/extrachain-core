@@ -41,6 +41,7 @@ enum class MessageType {
     DagTransactionResult = 31,
     DagSections          = 32,
     DagLightData         = 33,
+    DagIntervalHash      = 34,
 
     DagSyncLastInfo = 39,
 
