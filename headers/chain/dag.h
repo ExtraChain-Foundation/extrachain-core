@@ -460,6 +460,8 @@ private:
      */
     std::optional<bool> write_section(const Section &section);
 
+    void timer_tick();
+
 public:
     /**
      * @brief Save a transaction to storage

@@ -29,6 +29,9 @@ Dag::Dag(ExtraChainNode *node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
     timer_sync = new QTimer();
+    QObject::connect(timer_sync, &QTimer::timeout, [this]() {
+        this->timer_tick();
+    });
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -458,6 +461,14 @@ std::optional<bool> Dag::write_section(const Section &section) {
 
     update_range();
     return true;
+}
+
+void Dag::timer_tick() {
+    eLog("[Dag] Timer tick");
+    this->timer_sync->stop();
+    this->set_status(DagStatus::Maybe);
+    this->sync_status_ = DagSyncStatus::None;
+    this->start_sync();
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
@@ -933,8 +944,8 @@ void Dag::start_sync() {
     }
 
     if (mode_ == DagMode::Light) {
-        // timer_sync->stop();
-        // timer_sync->start(15000);
+        timer_sync->stop();
+        timer_sync->start(15000);
     }
 
     if (status_ != DagStatus::Sync) {
@@ -1204,6 +1215,11 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 }
 
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
+    if (status_ != DagStatus::Ready) {
+        eLog("[Dag] Hash interval check: ignore", hash_interval);
+        return;
+    }
+
     auto current_hash = this->hash_interval(hash_interval.from, hash_interval.to);
 
     if (current_hash != hash_interval.hash) {
