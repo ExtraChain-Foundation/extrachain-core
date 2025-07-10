@@ -264,6 +264,16 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         auto tx = transaction;
         tx.set_prev_hashs({ "hashs" });
         eLog("[Dag] Transaction not approved: {} {}", tx, res);
+
+        if (res == TransactionProveError::TooSectionDiff) {
+            eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
+
+                 this->current_section().to_string(NumeralBase::Dec),
+                 this->current_section(),
+                 this->status(),
+                 transaction.section().to_string(NumeralBase::Dec),
+                 transaction.section());
+        }
     } else {
         eLog("[Dag] Transaction from network approved: {}", transaction);
     }
