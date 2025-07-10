@@ -484,7 +484,7 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
     this->timer_sync->stop();
-    this->set_status(DagStatus::Maybe);
+    this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
     this->start_sync();
 }
@@ -1245,9 +1245,13 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     auto current_hash = this->hash_interval(hash_interval.from, hash_interval.to);
 
     if (current_hash != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false, request sections. {}", hash_interval);
+        eLog("[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). {}", hash_interval);
 
         if (current_section_ < hash_interval.to) {
+            if (status_ != DagStatus::Ready) {
+                status_ = DagStatus::Maybe;
+            }
+
             this->start_sync();
         } else {
             request_sections(hash_interval.from, hash_interval.to, responder);
