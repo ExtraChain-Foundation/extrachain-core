@@ -83,7 +83,7 @@ void DataMiningManager::requestCoinReward() {
     if (amount <= 0) {
         // eLog("[Reward] Can't send amount, because amount = 0");
         // return;
-        amount = BigNumberFloat("0.151", NumeralBase::Dec);
+        amount = BigNumberFloat("0.015", NumeralBase::Dec);
     }
 
     amount.truncate();
