@@ -982,7 +982,7 @@ void Dag::start_sync() {
 
 void Dag::start_check() {
     // temp
-#ifndef IS_RC
+#ifndef IS_R
     if (status_ == DagStatus::Ready) {
         return;
     }
@@ -1012,6 +1012,10 @@ void Dag::network_status_sync_request(const Responder &responder) {
 #ifdef IS_RC
     return;
 #endif
+
+    if (mode_ == DagMode::Light) {
+        return;
+    }
 
     auto      section      = this->read_section(current_section_);
     BigNumber section_id   = section.has_value() ? section->id : BigNumber(-1);
@@ -1533,7 +1537,7 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
 
     for (SectionId i = from; i <= to; i++) { // - 1
-        auto section = read_section(i); // or just get local section control?
+        auto section = read_section(i);      // or just get local section control?
         // eLog("Hash interval section: {}", section.value());
 
         // i == from - 1
