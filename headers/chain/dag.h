@@ -44,7 +44,7 @@ using SectionId = BigNumber;
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control;
+    std::optional<std::string> control; // hash, calc on start
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
@@ -59,7 +59,7 @@ struct Section {
 
     std::string calculate_hash();
 };
-BOOST_DESCRIBE_STRUCT(Section, (), (transactions))
+BOOST_DESCRIBE_STRUCT(Section, (), (transactions, control))
 
 /**
  * @brief Represents the result of a transaction validation
@@ -460,6 +460,8 @@ private:
      */
     std::optional<bool> write_section(const Section &section);
 
+    std::optional<bool> write_control(const SectionId &section_id, const std::string &hash);
+
     void timer_tick();
 
 public:
@@ -508,4 +510,5 @@ public:
     std::string hash_interval(const SectionId &from, const SectionId &to);
 
     friend class ExtraChainNode;
+    friend class DagCache;
 };

@@ -403,6 +403,8 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
             ThreadPoolBoost::instance()->post([this, res] {
                 auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = "" };
                 hash_interval.hash = node->dag()->hash_interval(hash_interval.from, hash_interval.to);
+                // dag->write_control(res.to, hash_interval.hash);
+                eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             });
         }

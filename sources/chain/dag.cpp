@@ -159,6 +159,10 @@ void Dag::set_mode(DagMode mode) {
 void Dag::set_status(DagStatus status) {
     this->status_ = status;
     emit node->dagStatus(status_);
+
+    if (status == DagStatus::Ready) {
+        this->timer_sync->stop();
+    }
 }
 
 TransactionCache &Dag::transaction_cache() {
@@ -461,6 +465,20 @@ std::optional<bool> Dag::write_section(const Section &section) {
 
     update_range();
     return true;
+}
+
+std::optional<bool> Dag::write_control(const SectionId &section_id, const std::string &hash) {
+    return std::nullopt;
+    auto section = this->read_section(section_id);
+    if (!section.has_value()) {
+        return std::nullopt;
+    }
+
+    // if not genesis -> return
+
+    eLog("[Dag] Write control to {}", section_id);
+    section->control = hash;
+    return this->write_section(section.value());
 }
 
 void Dag::timer_tick() {
@@ -1249,7 +1267,7 @@ void Dag::send_sync_request() {
 
     bool need_sync = false;
 
-    eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
+    // eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
@@ -1345,13 +1363,19 @@ void Dag::send_sync_request() {
     auto sync_index = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
     sync_last_index = nodes_by_block.front().second;
 
-    if (current_section_ > sync_last_index) {
-        eLog("Not need sync");
-        start_check();
+    if (current_section_ >= sync_last_index) {
+        eLog("[Dag] Not need sync");
+
+        set_status(DagStatus::Ready);
+        set_sync_status(DagSyncStatus::None);
+        check_status_ = DagSyncStatus::None;
+        // start_check();
         return;
     }
 
-    eLog("sync_last_index: 0x{} / {} sections", sync_last_index, sync_last_index.to_string(NumeralBase::Dec));
+    eLog("[Dag] sync_last_index: 0x{} / {} sections",
+         sync_last_index,
+         sync_last_index.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
@@ -1508,8 +1532,16 @@ std::map<TokenId, BigNumberFloat> Dag::sum() {
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
 
-    for (SectionId i = from; i <= to; i++) {
-        auto section = read_section(i);
+    for (SectionId i = from; i <= to; i++) { // - 1
+        auto section = read_section(i); // or just get local section control?
+        // eLog("Hash interval section: {}", section.value());
+
+        // i == from - 1
+        if (section->control.has_value()) {
+            tx_hashs += section->control.value();
+            continue;
+        }
+
         if (!section.has_value()) {
             continue;
         }
