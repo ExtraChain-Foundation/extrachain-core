@@ -27,7 +27,7 @@
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_utils.h"
 
-static const int MINING_TIMER_TICK = 5000;
+static const int MINING_TIMER_TICK = 60000;
 
 class DataMiningManager : public QObject {
     Q_OBJECT
