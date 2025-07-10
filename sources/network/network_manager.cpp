@@ -1581,9 +1581,9 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        if (res.has_value()) {
-            sendBrodcastMessageFurther(package_data);
-        }
+        // if (res.has_value()) {
+        sendBrodcastMessageFurther(package_data);
+        // }
         break;
     }
 
