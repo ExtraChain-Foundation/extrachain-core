@@ -162,6 +162,7 @@ void Dag::set_status(DagStatus status) {
 
     if (status == DagStatus::Ready) {
         this->timer_sync->stop();
+        min_req_count = 5;
     }
 }
 
@@ -496,6 +497,11 @@ void Dag::timer_tick() {
     this->timer_sync->stop();
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
+
+    if (min_req_count > 1) {
+        min_req_count -= 1;
+    }
+
     this->start_sync();
 }
 
@@ -1059,7 +1065,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         // removeAll(false, true);
     }
 
-    int count = std::min(requests_count, 1);
+    int count = std::min(requests_count, min_req_count);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 

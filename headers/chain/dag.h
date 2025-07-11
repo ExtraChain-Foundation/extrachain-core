@@ -427,8 +427,9 @@ private:
     DagSyncStatus                                check_status_ = DagSyncStatus::None; // Current check status
     SectionId                                    sync_last_index;                     // Last section index to sync
     int                                          requests_count = 0; // Number of outstanding requests
-    std::unordered_map<std::string, DagLastInfo> last_info_;         // Last chain info from peers
-    QTimer                                      *timer_sync;         // Timer for sync operations
+    int                                          min_req_count  = 5;
+    std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
+    QTimer                                      *timer_sync; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
