@@ -1059,7 +1059,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         // removeAll(false, true);
     }
 
-    int count = std::min(requests_count, 5);
+    int count = std::min(requests_count, 1);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
