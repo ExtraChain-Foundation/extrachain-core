@@ -431,7 +431,7 @@ void Dag::add_to_cached_tx(const Transaction &transaction) {
         auto guard_mut = cached_txs_.lock_mut();
         guard_mut->insert(transaction);
 
-        eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
+        // eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
     }
 }
 
@@ -1027,6 +1027,10 @@ void Dag::network_status_sync_request(const Responder &responder) {
         return;
     }
 
+    if (status_ != DagStatus::Ready) {
+        return;
+    }
+
     auto      section      = this->read_section(current_section_);
     BigNumber section_id   = section.has_value() ? section->id : BigNumber(-1);
     auto      hashs        = section.has_value() ? section->hashs() : std::set<std::string> {};
@@ -1128,6 +1132,8 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
+    timer_sync->stop();
+
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
@@ -1409,7 +1415,8 @@ void Dag::send_sync_request() {
     // request from to
     check_status_ = DagSyncStatus::None;
     emit node->dagSyncStart(sync_index, sync_last_index);
-    eLog("syncStart");
+    timer_sync->start(30000);
+    eLog("syncStart, timer 30 secs");
 }
 
 void Dag::clear_dag() {
