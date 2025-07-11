@@ -977,10 +977,10 @@ void Dag::start_sync() {
         return;
     }
 
-    if (mode_ == DagMode::Light) {
-        timer_sync->stop();
-        timer_sync->start(15000);
-    }
+    // if (mode_ == DagMode::Light) {
+    timer_sync->stop();
+    timer_sync->start(15000);
+    // }
 
     if (status_ != DagStatus::Sync) {
         status_ = DagStatus::Sync;
@@ -1288,6 +1288,7 @@ void Dag::set_sync_status(DagSyncStatus status) {
 }
 
 void Dag::send_sync_request() {
+    timer_sync->stop();
     auto section = this->read_section(current_section_);
 
     if (last_info_.empty()) {
@@ -1331,7 +1332,7 @@ void Dag::send_sync_request() {
         set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         process_cached_transactions();
-        timer_sync->stop();
+        // timer_sync->stop();
 
         // emit syncEnd();
 
@@ -1355,7 +1356,7 @@ void Dag::send_sync_request() {
         set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         process_cached_transactions();
-        timer_sync->stop();
+        // timer_sync->stop();
 
         // emit syncEnd();
 
