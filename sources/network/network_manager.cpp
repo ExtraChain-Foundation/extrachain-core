@@ -1581,9 +1581,9 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        if (res.has_value()) {
-            sendBrodcastMessageFurther(package_data);
-        }
+        // if (res.has_value()) {
+        sendBrodcastMessageFurther(package_data);
+        // }
         break;
     }
 
@@ -1686,6 +1686,17 @@ void NetworkManager::messageReceived(const std::string &message,
 
             node->dag()->network_status_sync_response(last_info_result.value(), responder);
         }
+        break;
+    }
+
+    case MessageType::DagIntervalHash: {
+        auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
+        if (!hash_interval.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
+            break;
+        }
+
+        node->dag()->network_hash_interval(hash_interval.value(), responder);
         break;
     }
 

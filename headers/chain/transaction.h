@@ -186,7 +186,7 @@ public:
      * @brief Get token contract address
      * @return Token actor ID
      */
-    ActorId token() const;
+    TokenId token() const;
 
     /**
      * @brief Get transaction type

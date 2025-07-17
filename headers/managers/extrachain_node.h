@@ -273,6 +273,7 @@ signals:
     void dagStatus(DagStatus);
     void dagSyncStart(BigNumber, BigNumber);
     void dagSyncProgress(BigNumber);
+    void dagTimerStart();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

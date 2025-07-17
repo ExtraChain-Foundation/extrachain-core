@@ -258,6 +258,7 @@ namespace detail {
     [[noreturn]] inline void terminate_application(const std::string& message) {
         fmt::println("{}", message);
         std::abort();
+        std::exit(0);
     }
 #endif
 

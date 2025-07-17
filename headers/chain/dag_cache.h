@@ -39,6 +39,12 @@ constexpr int CACHE_LAG_SECTIONS = 15; // Safe lag between current section and p
 
 using Balances = std::map<std::pair<ActorId, TokenId>, BigNumberFloat>;
 
+struct CacheResult {
+    bool      result;
+    BigNumber from;
+    BigNumber to;
+};
+
 /**
  * @brief DagCache - Manages caching of actor balances for chain
  *
@@ -166,7 +172,9 @@ public:
      * @return true If cache was updated
      * @return false If no update was needed or update failed
      */
-    bool check_and_update_cache(const BigNumber& current_section);
+    CacheResult check_and_update_cache(const BigNumber& current_section);
+
+    void check_and_update_cache_thread(const BigNumber& current_section);
 
     /**
      * @brief Update cache to a specific genesis section
@@ -178,10 +186,11 @@ public:
      * @return true If update was successful
      * @return false If update failed
      */
-    bool update_to_genesis_section(const BigNumber&                                        genesis_section,
-                                   const BigNumber&                                        current_section,
-                                   const BigNumber&                                        first_saved_section,
-                                   std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    std::pair<bool, BigNumber> update_to_genesis_section(
+        const BigNumber&                                        genesis_section,
+        const BigNumber&                                        current_section,
+        const BigNumber&                                        first_saved_section,
+        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
 
     /**
      * @brief Initialize database connection
@@ -199,11 +208,28 @@ public:
     std::set<ActorId> local_clear_less_balances(const BigNumber& from           = BigNumber(2),
                                                 const Balances&  start_balances = Balances());
 
+    void write_index(const ActorId&   sender,
+                     const ActorId&   receiver,
+                     const BigNumber& section_id,
+                     std::uint64_t    timestamp_ms);
+
+    std::vector<BigNumber> read_index(const ActorId& actor);
+
+    bool has_section(const ActorId& actor, const BigNumber& section_id) const;
+
+    std::uint64_t count_sections(const ActorId& actor) const;
+
+    std::vector<ActorId> get_actors_with_section(const BigNumber& section_id) const;
+
+    bool has_daily_activity(const ActorId& actor, const std::string& time_period) const;
+
+    bool has_daily_activity_ms(const ActorId& actor, std::uint64_t period_ms) const;
+
 private:
     ExtraChainNode*              node;                            // Node reference
     Dag*                         dag;                             // Dag reference
     BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
-    std::unique_ptr<DbConnector> db_;                             // Database connection
+    std::unique_ptr<DbConnector> cache_db_;                       // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized
 
 public:
@@ -219,4 +245,11 @@ public:
      * @param balances Map of actor-token balances to update
      */
     void process_transaction(const Transaction& transaction, Balances& balances);
+
+private:
+    mutable std::unique_ptr<DbConnector> index_db_;
+    mutable std::once_flag               init_flag_;
+
+    void         ensure_index_db_initialized() const;
+    std::int64_t get_or_create_actor_pk(const std::string& actor_id) const;
 };

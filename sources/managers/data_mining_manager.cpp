@@ -68,6 +68,11 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
+    if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
+        && koef_to_koef == BigNumberFloat(1)) {
+        return;
+    }
+
     const auto actor      = node->accountController()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
     auto       amount     = calculateRewardAmount();
@@ -83,7 +88,7 @@ void DataMiningManager::requestCoinReward() {
     if (amount <= 0) {
         // eLog("[Reward] Can't send amount, because amount = 0");
         // return;
-        amount = BigNumberFloat("0.151", NumeralBase::Dec);
+        amount = BigNumberFloat("0.015", NumeralBase::Dec);
     }
 
     amount.truncate();
@@ -112,7 +117,7 @@ void DataMiningManager::requestCoinReward() {
     tx_conv.set_meta(ActorId().to_string());
     tx_conv.set_amount(transaction.amount());
     tx_conv.set_token(
-        ActorId("468faf2f1be6504a9a26f7f027"
+        TokenId("468faf2f1be6504a9a26f7f027"
                 "f7e43380b0d77d"));
 
     auto tx_result2 = node->dag()->prepare_transaction(tx_conv, actor);

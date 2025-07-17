@@ -1088,3 +1088,83 @@ void Utils::prepare_extrachain() {
     pthread_sigmask(SIG_BLOCK, &set, nullptr);
 #endif
 }
+
+std::expected<std::uint64_t, Utils::TimeParseError> Utils::parse_time_string(const std::string &time_str) {
+    if (time_str.empty()) {
+        return std::unexpected(TimeParseError::EmptyString);
+    }
+
+    std::regex  time_regex(R"((?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?)");
+    std::smatch matches;
+
+    if (!std::regex_match(time_str, matches, time_regex)) {
+        return std::unexpected(TimeParseError::InvalidFormat);
+    }
+
+    bool has_any_unit = false;
+    for (size_t i = 1; i < matches.size(); ++i) {
+        if (matches[i].matched) {
+            has_any_unit = true;
+            break;
+        }
+    }
+
+    if (!has_any_unit) {
+        return std::unexpected(TimeParseError::InvalidFormat);
+    }
+
+    std::uint64_t total_milliseconds = 0;
+
+    try {
+        if (matches[1].matched) {
+            std::uint64_t           days       = std::stoull(matches[1].str());
+            constexpr std::uint64_t ms_per_day = 24ULL * 60 * 60 * 1000;
+
+            if (days > UINT64_MAX / ms_per_day) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += days * ms_per_day;
+        }
+
+        if (matches[2].matched) {
+            std::uint64_t           hours       = std::stoull(matches[2].str());
+            constexpr std::uint64_t ms_per_hour = 60ULL * 60 * 1000;
+
+            if (hours > (UINT64_MAX - total_milliseconds) / ms_per_hour) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += hours * ms_per_hour;
+        }
+
+        if (matches[3].matched) {
+            std::uint64_t           minutes       = std::stoull(matches[3].str());
+            constexpr std::uint64_t ms_per_minute = 60ULL * 1000;
+
+            if (minutes > (UINT64_MAX - total_milliseconds) / ms_per_minute) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += minutes * ms_per_minute;
+        }
+
+        if (matches[4].matched) {
+            std::uint64_t           seconds       = std::stoull(matches[4].str());
+            constexpr std::uint64_t ms_per_second = 1000ULL;
+
+            if (seconds > (UINT64_MAX - total_milliseconds) / ms_per_second) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += seconds * ms_per_second;
+        }
+
+    } catch (const std::invalid_argument &) {
+        return std::unexpected(TimeParseError::InvalidNumber);
+    } catch (const std::out_of_range &) {
+        return std::unexpected(TimeParseError::Overflow);
+    }
+
+    return total_milliseconds;
+}
