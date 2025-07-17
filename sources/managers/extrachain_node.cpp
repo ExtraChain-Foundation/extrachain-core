@@ -537,7 +537,7 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     transaction.set_receiver(owner_id);
     transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
 #ifdef QT_DEBUG
-    transaction.set_amount(BigNumberFloat("1.123", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("0.112", NumeralBase::Dec));
 #endif
     transaction.set_token(token_id); // TODO: get token_id from json
     transaction.set_meta(std::to_string(type));
