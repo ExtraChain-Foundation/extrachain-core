@@ -115,8 +115,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
         return std::unexpected(Dfs::DfsError::NotFile);
     }
 
-    constexpr uintmax_t MB_500 = 500ULL * 1024 * 1024; // 524'288'000
-    if (file_size_.value() > MB_500) {
+    constexpr uintmax_t MB_700 = 700ULL * 1024 * 1024; // 734'003'200
+    if (file_size_.value() > MB_700) {
         return std::unexpected(Dfs::DfsError::MaxFileSize);
     }
 
