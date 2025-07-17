@@ -101,6 +101,7 @@ void DataMiningManager::requestCoinReward() {
     transaction.set_receiver(actor.id());
     transaction.set_amount(amount);
     transaction.set_type(TransactionType::Reward);
+    transaction.set_token(TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
     // transaction.set_section(node->dag()->current_section() + 1);
     // transaction.sign(actor);
 
@@ -110,32 +111,15 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-    Transaction tx_conv;
-    tx_conv.set_sender(actor.id());
-    tx_conv.set_receiver(actor.id());
-    tx_conv.set_type(TransactionType::Conversion);
-    tx_conv.set_meta(ActorId().to_string());
-    tx_conv.set_amount(transaction.amount());
-    tx_conv.set_token(
-        TokenId("468faf2f1be6504a9a26f7f027"
-                "f7e43380b0d77d"));
-
-    auto tx_result2 = node->dag()->prepare_transaction(tx_conv, actor);
-    if (!tx_result2.has_value()) {
-        eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
-        return;
-    }
-
     auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = Dfs::Reward::Base,
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored       = node->dag()->current_section(),
-                                                      .transaction        = tx_result.value(),
-                                                      .convert            = tx_result2.value() };
+                                                      .transaction        = tx_result.value() };
 
     node->dag()->add_transaction_sended(tx_result.value());
-    node->dag()->add_transaction_sended(tx_result2.value());
+    // node->dag()->add_transaction_sended(tx_result2.value());
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
@@ -238,9 +222,8 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 
         // eLog("[Reward] Add request: {}", requestReward);
         auto res1 = node->dag()->network_transaction(requestReward.transaction, responder);
-        auto res2 = node->dag()->network_transaction(requestReward.convert, responder);
 
-        if (!res1.has_value() || !res2.has_value()) {
+        if (!res1.has_value()) {
             return false;
         }
 
