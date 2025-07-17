@@ -246,7 +246,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
             actors.push_back(actor.value());
 
             if (actors.size() > 99) {
-                eLog("[ActorIndex] Send {} actors", actors.size());
+                // eLog("[ActorIndex] Send {} actors", actors.size());
                 responder.with_new_message_id().send_response(actors,
                                                               MessageType::Actors,
                                                               SendMode::Focused,
@@ -260,7 +260,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
             return;
         }
 
-        eLog("[ActorIndex] Send {} actors", actors.size());
+        // eLog("[ActorIndex] Send {} actors", actors.size());
         responder.with_new_message_id().send_response(actors,
                                                       MessageType::Actors,
                                                       SendMode::Focused,

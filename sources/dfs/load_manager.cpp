@@ -506,9 +506,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                      file_link.file_id,
                                                                                      dir_row.hash);
                         if (!is_downloaded) {
-                            eLog(
-                                "[Fragment] Ooops, something wrong. Need to implement Fragments checks (not "
-                                "downloaded)");
+                            eLog("[Fragment] Ooops, something wrong. File not downloaded");
                             timer_runner(file_link);
                             return;
                         }

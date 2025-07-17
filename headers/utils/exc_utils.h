@@ -920,6 +920,16 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT bool is_newer_version(const std::string &current, const std::string &latest);
 
+    enum class TimeParseError {
+        InvalidFormat,
+        EmptyString,
+        InvalidUnit,
+        InvalidNumber,
+        Overflow
+    };
+
+    // format: "2d5h3m30s"
+    EXTRACHAIN_EXPORT std::expected<std::uint64_t, TimeParseError> parse_time_string(const std::string &time_str);
 } // namespace Utils
 
 namespace ChainConst {

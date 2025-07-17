@@ -32,6 +32,10 @@ Dag::Dag(ExtraChainNode *node)
     QObject::connect(timer_sync, &QTimer::timeout, [this]() {
         this->timer_tick();
     });
+    QObject::connect(node, &ExtraChainNode::dagTimerStart, [this]() {
+        timer_sync->stop();
+        timer_sync->start(15000);
+    });
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -575,8 +579,8 @@ bool Dag::local_remove_transaction(const BigNumber &section_id, const std::strin
         });
 
     if (it == section->transactions.end()) {
-        eFatal("WTF?!");
-        return false;
+        // eFatal("WTF?!");
+        return true;
     }
 
     section->transactions.erase(it);
@@ -1127,7 +1131,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
     //     return;
     // }
 
-    eLog("[Dag] Send sections from {} to {}", from, to);
+    // eLog("[Dag] Send sections from {} to {}", from, to);
 
     auto ser      = MessagePack::serialize(std::make_pair(to, txs));
     auto compress = qCompress(QByteArray::fromStdString(ser));
@@ -1173,6 +1177,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         set_current_section(txs->first);
         // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
         // 100);
+
+        // timer_sync->start();
+        emit node->dagTimerStart();
         request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
     });
 }
@@ -1537,6 +1544,32 @@ void Dag::tx_list_log(const ActorId &actor_id) {
     }
 
     eLog("End tx_list_log");
+}
+
+void Dag::cache_log() {
+    const auto [cached_section, balances] = cache_.read_cached_balances();
+
+    std::vector<std::pair<std::pair<ActorId, TokenId>, BigNumberFloat>> sorted_balances(balances.begin(),
+                                                                                        balances.end());
+
+    std::sort(sorted_balances.begin(), sorted_balances.end(), [](const auto &a, const auto &b) {
+        return a.second > b.second;
+    });
+
+    eLog("=== Cached Balances (sorted by amount, descending) ===");
+    eLog("Total entries: {}", sorted_balances.size());
+
+    for (const auto &[key, balance] : sorted_balances) {
+        const auto &[actor_id, token_id] = key;
+
+        eLog("ActorId: {}, TokenId: {}, Balance: {} (hex: {})",
+             actor_id,
+             token_id,
+             balance.to_string(NumeralBase::Dec),
+             balance.to_string());
+    }
+
+    eLog("=== End of cached balances ===");
 }
 
 std::map<TokenId, BigNumberFloat> Dag::sum() {

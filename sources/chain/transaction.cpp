@@ -182,7 +182,7 @@ std::string Transaction::hash() const {
     return this->hash_;
 }
 
-ActorId Transaction::token() const {
+TokenId Transaction::token() const {
     return this->token_;
 }
 

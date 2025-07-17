@@ -506,6 +506,7 @@ public:
     void clear_dag();
 
     void                              tx_list_log(const ActorId &actor_id);
+    void                              cache_log();
     std::map<TokenId, BigNumberFloat> sum();
 
     std::string hash_interval(const SectionId &from, const SectionId &to);
