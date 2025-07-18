@@ -33,8 +33,9 @@ Dag::Dag(ExtraChainNode *node)
         this->timer_tick();
     });
     QObject::connect(node, &ExtraChainNode::dagTimerStart, [this]() {
-        timer_sync->stop();
-        timer_sync->start(15000);
+        // eLog("Timer start");
+        //  timer_sync->stop();
+        //  timer_sync->start(15000);
     });
 
     auto settings = Utils::read_settings();
@@ -167,6 +168,7 @@ void Dag::set_status(DagStatus status) {
     if (status == DagStatus::Ready) {
         this->timer_sync->stop();
         min_req_count = 5;
+        emit node->dagStatus(DagStatus::Ready);
     }
 }
 
@@ -278,6 +280,10 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
                  this->status(),
                  transaction.section().to_string(NumeralBase::Dec),
                  transaction.section());
+
+            if (tx.section() < this->current_section()) {
+                // sync
+            }
         }
     } else {
         eLog("[Dag] Transaction from network approved: {}", transaction);
@@ -984,6 +990,7 @@ void Dag::start_sync() {
     // if (mode_ == DagMode::Light) {
     timer_sync->stop();
     timer_sync->start(15000);
+    // eLog("Timer start");
     // }
 
     if (status_ != DagStatus::Sync) {
@@ -1143,6 +1150,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
     timer_sync->stop();
+    // eLog("Timer stop");
 
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
         const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
@@ -1430,6 +1438,7 @@ void Dag::send_sync_request() {
     check_status_ = DagSyncStatus::None;
     emit node->dagSyncStart(sync_index, sync_last_index);
     timer_sync->start(30000);
+    // eLog("Timer start");
     eLog("syncStart, timer 30 secs");
 }
 

@@ -386,7 +386,7 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 
 void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
     if (dag->status() != DagStatus::Ready) {
-        ThreadPoolBoost::instance()->post([this] {
+        ThreadPoolBoost::instance()->post([this] { // remove
             auto res = this->check_and_update_cache(dag->current_section());
 
             if (res.result) {
