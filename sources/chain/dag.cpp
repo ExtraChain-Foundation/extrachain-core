@@ -1451,28 +1451,29 @@ void Dag::clear_dag() {
         if (parent_dir.rename(old_name, new_name)) {
             to_delete << QString::fromStdString(ChainConst::DAG_FOLDER) + "/" + new_name;
         }
+    }
 
-        if (!to_delete.isEmpty()) {
+    if (!to_delete.isEmpty()) {
         #ifdef Q_OS_WIN
-            QString cmd = "cmd /C \"";
-            for (const QString &path : to_delete) {
-                cmd += "rmdir /S /Q \"" + QDir::toNativeSeparators(path) + "\" & ";
-            }
-            cmd.chop(3); // remove last " & "
-            cmd += "\"";
-            if (!QProcess::startDetached(cmd)) {
-                for (const QString &path : to_delete) {
-                    QDir(path).removeRecursively();
-                }
-            }
-        #else
-            if (!QProcess::startDetached("rm", QStringList() << "-rf" << to_delete)) {
-                for (const QString &path : to_delete) {
-                    QDir(path).removeRecursively();
-                }
-            }
-        #endif
+        QString cmd = "cmd /C \"";
+        for (const QString &path : to_delete) {
+            cmd += "rmdir /S /Q \"" + QDir::toNativeSeparators(path) + "\" & ";
         }
+        cmd.chop(3); // remove last " & "
+        cmd += "\"";
+        if (!QProcess::startDetached(cmd)) {
+            for (const QString &path : to_delete) {
+                QDir(path).removeRecursively();
+            }
+        }
+        #else
+        if (!QProcess::startDetached("rm", QStringList() << "-rf" << to_delete)) {
+            for (const QString &path : to_delete) {
+                QDir(path).removeRecursively();
+            }
+        }
+        #endif
+    }
     #endif
 
     QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
@@ -1584,6 +1585,7 @@ std::map<TokenId, BigNumberFloat> Dag::sum() {
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
 
+    eLog("temp 1");
     for (SectionId i = from; i <= to; i++) { // - 1
         auto section = read_section(i);      // or just get local section control?
         // eLog("Hash interval section: {}", section.value());
@@ -1601,6 +1603,7 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
         tx_hashs += section->calculate_hash();
     }
 
+    eLog("temp 2");
     return Utils::calculate_hash(tx_hashs);
 }
 
