@@ -99,10 +99,6 @@ Dag::Dag(ExtraChainNode *node)
 
     timestamp_bigger_sync_start_ = 0;
 
-#ifndef IS_R
-    status_ = DagStatus::Ready;
-#endif
-
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
@@ -997,13 +993,6 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    // temp
-#ifndef IS_R
-    if (status_ == DagStatus::Ready) {
-        return;
-    }
-#endif
-
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
         // QTimer::singleShot(3000, [this]() {
@@ -1033,6 +1022,7 @@ void Dag::network_status_sync_request(const Responder &responder) {
         return;
     }
 
+    //
     if (status_ != DagStatus::Ready) {
         return;
     }
@@ -1461,29 +1451,28 @@ void Dag::clear_dag() {
         if (parent_dir.rename(old_name, new_name)) {
             to_delete << QString::fromStdString(ChainConst::DAG_FOLDER) + "/" + new_name;
         }
-    }
 
-    if (!to_delete.isEmpty()) {
+        if (!to_delete.isEmpty()) {
         #ifdef Q_OS_WIN
-        QString cmd = "cmd /C \"";
-        for (const QString &path : to_delete) {
-            cmd += "rmdir /S /Q \"" + QDir::toNativeSeparators(path) + "\" & ";
-        }
-        cmd.chop(3); // remove last " & "
-        cmd += "\"";
-        if (!QProcess::startDetached(cmd)) {
+            QString cmd = "cmd /C \"";
             for (const QString &path : to_delete) {
-                QDir(path).removeRecursively();
+                cmd += "rmdir /S /Q \"" + QDir::toNativeSeparators(path) + "\" & ";
             }
-        }
+            cmd.chop(3); // remove last " & "
+            cmd += "\"";
+            if (!QProcess::startDetached(cmd)) {
+                for (const QString &path : to_delete) {
+                    QDir(path).removeRecursively();
+                }
+            }
         #else
-        if (!QProcess::startDetached("rm", QStringList() << "-rf" << to_delete)) {
-            for (const QString &path : to_delete) {
-                QDir(path).removeRecursively();
+            if (!QProcess::startDetached("rm", QStringList() << "-rf" << to_delete)) {
+                for (const QString &path : to_delete) {
+                    QDir(path).removeRecursively();
+                }
             }
-        }
         #endif
-    }
+        }
     #endif
 
     QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
