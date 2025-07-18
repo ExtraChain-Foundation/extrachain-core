@@ -252,58 +252,62 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         }
     }
 
-    auto                  section = read_section(transaction.section());
-    TransactionProveError res =
-        this->prove_transaction(transaction,
-                                section.has_value() ? section->transactions : std::set<Transaction> {});
-    TransactionResult transaction_result { .hash = transaction.hash(), .result = res };
+    auto tx   = transaction;
+    auto resp = responder;
+    ThreadPoolBoost::instance()->post([this, transaction = tx, responder = resp]() {
+        auto                  section = read_section(transaction.section());
+        TransactionProveError res =
+            this->prove_transaction(transaction,
+                                    section.has_value() ? section->transactions : std::set<Transaction> {});
+        TransactionResult transaction_result { .hash = transaction.hash(), .result = res };
 
-    if (res != TransactionProveError::NoError) {
-        auto tx = transaction;
-        tx.set_prev_hashs({ "hashs" });
-        eLog("[Dag] Transaction not approved: {} {}", tx, res);
+        if (res != TransactionProveError::NoError) {
+            auto tx = transaction;
+            tx.set_prev_hashs({ "hashs" });
+            eLog("[Dag] Transaction not approved: {} {}", tx, res);
 
-        if (res == TransactionProveError::TooSectionDiff) {
-            eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
+            if (res == TransactionProveError::TooSectionDiff) {
+                eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
 
-                 this->current_section().to_string(NumeralBase::Dec),
-                 this->current_section(),
-                 this->status(),
-                 transaction.section().to_string(NumeralBase::Dec),
-                 transaction.section());
+                     this->current_section().to_string(NumeralBase::Dec),
+                     this->current_section(),
+                     this->status(),
+                     transaction.section().to_string(NumeralBase::Dec),
+                     transaction.section());
 
-            if (tx.section() < this->current_section()) {
-                // sync
+                if (tx.section() < this->current_section()) {
+                    // sync
+                }
             }
-        }
-    } else {
-        eLog("[Dag] Transaction from network approved: {}", transaction);
-    }
-
-    if (res == TransactionProveError::NoError) {
-        auto save_result = save_transaction(transaction);
-        if (!save_result) {
-            transaction_result.result = TransactionProveError::NoSectionAdded;
-            // send response
-            return std::unexpected(false);
+        } else {
+            eLog("[Dag] Transaction from network approved: {}", transaction);
         }
 
-        set_current_section(transaction.section());
-        update_range();
-    }
+        if (res == TransactionProveError::NoError) {
+            auto save_result = save_transaction(transaction);
+            if (!save_result) {
+                transaction_result.result = TransactionProveError::NoSectionAdded;
+                // send response
+                return; // std::unexpected(false);
+            }
 
-    if (!responder.identifiers().empty()) {
-        responder.send_response(transaction_result,
-                                MessageType::DagTransactionResult,
-                                SendMode::Focused,
-                                MessageStatus::Response);
-    }
+            set_current_section(transaction.section());
+            update_range();
+        }
 
-    if (res != TransactionProveError::NoError) {
-        return std::unexpected(false);
-    }
+        if (!responder.identifiers().empty()) {
+            responder.send_response(transaction_result,
+                                    MessageType::DagTransactionResult,
+                                    SendMode::Focused,
+                                    MessageStatus::Response);
+        }
 
-    check_self(transaction);
+        if (res != TransactionProveError::NoError) {
+            return; // std::unexpected(false);
+        }
+
+        check_self(transaction);
+    });
 
     return {};
 }
