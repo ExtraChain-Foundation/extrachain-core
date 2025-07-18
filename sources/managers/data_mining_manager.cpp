@@ -68,10 +68,12 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
+#ifndef QT_DEBUG
     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
         && koef_to_koef == BigNumberFloat(1)) {
         return;
     }
+#endif
 
     const auto actor      = node->accountController()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
