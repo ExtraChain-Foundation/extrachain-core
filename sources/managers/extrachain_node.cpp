@@ -950,6 +950,10 @@ void ExtraChainNode::connectSignals() {
     });
 
     // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
+
+    connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
+    connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
+    connect(dag_->timer_sync, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -1015,4 +1019,19 @@ void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
 
 std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
     return m_initPublicIPAndCountry;
+}
+
+void ExtraChainNode::dagTimerStarting(int ms) {
+    eLog("[Dag] Timer start, {} ms", ms);
+    dag_->timer_sync->stop();
+    dag_->timer_sync->start(ms);
+}
+
+void ExtraChainNode::dagTimerStoping() {
+    eLog("[Dag] Timer stop");
+    dag_->timer_sync->stop();
+}
+
+void ExtraChainNode::dagTimerTick() {
+    dag_->timer_tick();
 }

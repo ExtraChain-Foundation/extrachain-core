@@ -273,7 +273,8 @@ signals:
     void dagStatus(DagStatus);
     void dagSyncStart(BigNumber, BigNumber);
     void dagSyncProgress(BigNumber);
-    void dagTimerStart();
+    void dagTimerStart(int ms = 15000);
+    void dagTimerStop();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);
@@ -295,4 +296,8 @@ public slots:
     void calculateBlockCount();
     void cleanUp();
     void process();
+
+    void dagTimerStarting(int ms);
+    void dagTimerStoping();
+    void dagTimerTick();
 };

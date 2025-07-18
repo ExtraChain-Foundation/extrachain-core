@@ -29,14 +29,6 @@ Dag::Dag(ExtraChainNode *node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
     timer_sync = new QTimer();
-    QObject::connect(timer_sync, &QTimer::timeout, [this]() {
-        this->timer_tick();
-    });
-    QObject::connect(node, &ExtraChainNode::dagTimerStart, [this]() {
-        // eLog("Timer start");
-        //  timer_sync->stop();
-        //  timer_sync->start(15000);
-    });
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -166,9 +158,8 @@ void Dag::set_status(DagStatus status) {
     emit node->dagStatus(status_);
 
     if (status == DagStatus::Ready) {
-        this->timer_sync->stop();
+        emit node->dagTimerStop();
         min_req_count = 5;
-        emit node->dagStatus(DagStatus::Ready);
     }
 }
 
@@ -426,8 +417,7 @@ void Dag::process_cached_transactions() {
     }
 
     timestamp_bigger_sync_start_ = 0;
-    status_                      = DagStatus::Ready;
-    emit node->dagStatus(status_);
+    set_status(DagStatus::Ready);
     set_sync_status(DagSyncStatus::None);
 }
 
@@ -504,7 +494,7 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
 
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
-    this->timer_sync->stop();
+    this->timer_sync->stop(); // no need emit?
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
 
@@ -988,8 +978,7 @@ void Dag::start_sync() {
     }
 
     // if (mode_ == DagMode::Light) {
-    timer_sync->stop();
-    timer_sync->start(15000);
+    emit node->dagTimerStart(15001);
     // eLog("Timer start");
     // }
 
@@ -1000,7 +989,7 @@ void Dag::start_sync() {
 
     last_info_.clear();
     set_sync_status(DagSyncStatus::LastInfo);
-    requests_count = node->network()->active_connections_count();
+    requests_count = std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1026,7 +1015,7 @@ void Dag::start_check() {
 
     last_info_.clear();
     check_status_  = DagSyncStatus::LastInfo;
-    requests_count = node->network()->active_connections_count();
+    requests_count = std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1149,7 +1138,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 }
 
 void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
-    timer_sync->stop();
+    emit node->dagTimerStop();
     // eLog("Timer stop");
 
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
@@ -1187,7 +1176,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         // 100);
 
         // timer_sync->start();
-        emit node->dagTimerStart();
+        emit node->dagTimerStart(15002);
         request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
     });
 }
@@ -1289,7 +1278,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
                 status_ = DagStatus::Maybe;
             }
 
-            this->start_sync();
+            this->start_check(); // TODO: warning: check or sync?
         } else {
             request_sections(hash_interval.from, hash_interval.to, responder);
         }
@@ -1303,7 +1292,7 @@ void Dag::set_sync_status(DagSyncStatus status) {
 }
 
 void Dag::send_sync_request() {
-    timer_sync->stop();
+    emit node->dagTimerStop();
     auto section = this->read_section(current_section_);
 
     if (last_info_.empty()) {
@@ -1437,7 +1426,7 @@ void Dag::send_sync_request() {
     // request from to
     check_status_ = DagSyncStatus::None;
     emit node->dagSyncStart(sync_index, sync_last_index);
-    timer_sync->start(30000);
+    emit node->dagTimerStart(30000);
     // eLog("Timer start");
     eLog("syncStart, timer 30 secs");
 }
