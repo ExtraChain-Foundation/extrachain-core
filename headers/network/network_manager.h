@@ -263,8 +263,8 @@ public:
     void        setNetworkVPNHash() noexcept;
 
     // protected:
-    // quint16 tcpPort = 2222;
-    const quint16 wsPort = 2222;
+    // quint16 tcpPort = 17593;
+    const quint16 wsPort = 17593;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
