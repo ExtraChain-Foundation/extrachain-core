@@ -1596,6 +1596,60 @@ std::map<TokenId, BigNumberFloat> Dag::sum() {
     return token_sums;
 }
 
+std::set<ActorId> Dag::last_month() {
+    eLog("Start reward month scanning...");
+    std::set<ActorId> actors;
+
+    // Получаем текущее время в миллисекундах
+    auto now = Utils::current_date_ms();
+
+    // Время месяц назад (30 дней * 24 часа * 60 минут * 60 секунд * 1000 мс)
+    auto month_ago = now - (30LL * 24 * 60 * 60 * 1000);
+
+    for (SectionId i = current_section_; i >= BigNumber(0); i--) {
+        auto section = read_section(i);
+        if (!section.has_value()) {
+            continue;
+        }
+
+        bool found_older = false;
+
+        for (const auto &tx : section->transactions) {
+            if (tx.type() != TransactionType::Reward) {
+                continue;
+            }
+
+            auto timestamp = tx.timestamp(); // предполагаю, что возвращает ms
+
+            // Если транзакция старше месяца, можем прекратить поиск
+            if (timestamp < month_ago) {
+                found_older = true;
+                break;
+            }
+
+            // Если транзакция в пределах последнего месяца, добавляем актора
+            ActorId sender = tx.sender();
+            actors.insert(sender);
+        }
+
+        // Если нашли транзакции старше месяца, можем прекратить просмотр секций
+        if (found_older) {
+            eLog("Stop at section {}", i);
+            break;
+        }
+    }
+
+    eLog("Last month reward actors summary:");
+    eLog("  Total count: {}", actors.size());
+    if (!actors.empty()) {
+        eLog("  Actor ids: {}", fmt::join(actors, ", "));
+    } else {
+        eLog("  No reward actors found in the last 30 days");
+    }
+
+    return actors;
+}
+
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
 

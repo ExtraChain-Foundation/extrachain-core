@@ -190,7 +190,7 @@ void NetworkManager::reconnection() {
             }
 
             if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
-                eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
+                // eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
                 // to_close.insert(el);
             }
         }
@@ -1770,14 +1770,25 @@ void NetworkManager::socketError(Network::SocketServiceError error,
 
 void NetworkManager::localInizialization() {
     eLog("Doesn't find service. Start find local service");
-    connect(&m_networkStatus, &NetworkStatus::statusChanged, [](NetworkStatus::Status status) {
+    connect(&m_networkStatus, &NetworkStatus::statusChanged, [this](NetworkStatus::Status status) {
         switch (status) {
         case NetworkStatus::Status::Online:
             eInfo("World network is online");
             break;
-        case NetworkStatus::Status::Offline:
+        case NetworkStatus::Status::Offline: {
             eInfo("Warning: World network is offline");
+            std::set<SocketService *> copied;
+            {
+                auto connectionsLocked = *m_connections;
+                copied                 = **m_connections;
+            }
+
+            for (const auto &connection : copied) {
+                connection->flush();
+                emit connection->close();
+            }
             break;
+        }
         case NetworkStatus::Status::Local:
             eInfo("Warning: Local network only");
             break;

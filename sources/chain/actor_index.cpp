@@ -225,7 +225,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
     eLog("hhhh actor_ids {}", actor_ids.size());
 
     if (records >= count) {
-        eInfo("firstSyncEnded");
+        // eInfo("firstSyncEnded");
         emit firstSyncEnded();
         sync_first_done = true;
         node->accountController()->dogenerate();
