@@ -50,7 +50,7 @@
 // #include "managers/data_mining_manager.h"
 #include "dfs/dfs_utils.h"
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     #include <signal.h>
 #endif
 
@@ -1081,7 +1081,7 @@ bool Utils::is_newer_version(const std::string &current, const std::string &late
 }
 
 void Utils::prepare_extrachain() {
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGPIPE);
