@@ -510,8 +510,11 @@ public:
     std::map<TokenId, BigNumberFloat> sum();
     std::set<ActorId>                 last_month();
 
-    std::optional<std::pair<SectionId, std::string>> find_last_control();
+    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = BigNumber(-1));
+    std::optional<std::string>                       read_control(const SectionId &section_id);
 
+    void        generate_hash_for_interval(const SectionId &start, std::string &last_hash);
+    bool        generate_hash_from_section(const SectionId &start);
     bool        generate_hash();
     std::string hash_interval(const SectionId &from, const SectionId &to);
     void        start_control();

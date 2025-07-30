@@ -1644,17 +1644,17 @@ std::set<ActorId> Dag::last_month() {
     return actors;
 }
 
-std::optional<std::pair<SectionId, std::string>> Dag::find_last_control() {
+std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from) {
     int j = 0;
 
-    for (SectionId i = current_section_; i >= BigNumber(0); i--) {
+    for (SectionId i = from < 0 ? current_section_ : from; i >= BigNumber(0); i--) {
         auto section = read_section(i);
         if (!section.has_value()) {
             continue;
         }
 
         if (section->control.has_value()) {
-            return std::pair { i, section->control.value() };
+            return std::make_pair(i, section->control.value());
         }
 
         j += 1;
@@ -1666,34 +1666,64 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control() {
     return std::nullopt;
 }
 
+std::optional<std::string> Dag::read_control(const SectionId &section_id) {
+    auto section = read_section(section_id);
+    if (!section.has_value()) {
+        return std::nullopt;
+    }
+
+    return section->control;
+}
+
+void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
+    SectionId interval_end = (start == SectionId(0)) ? SectionId(0) : start + SectionId(19);
+
+    std::string interval_hash = hash_interval(start, interval_end);
+    last_hash                 = Utils::calculate_hash(last_hash + interval_hash);
+
+    auto section = read_section(interval_end);
+    if (section.has_value()) {
+        section.value().control = last_hash;
+        write_section(section.value());
+        eLog("---> interval [{}, {}]. Control hash: {}",
+             start.to_string(NumeralBase::Dec),
+             interval_end.to_string(NumeralBase::Dec),
+             last_hash);
+    }
+}
+
+bool Dag::generate_hash_from_section(const SectionId &start) {
+    std::string last_hash = "";
+
+    if (start > SectionId(0)) {
+        auto last_control = find_last_control(start - SectionId(1));
+        if (last_control.has_value()) {
+            last_hash = last_control.value().second;
+        } else {
+            return false;
+        }
+    }
+
+    if (start == SectionId(0)) {
+        generate_hash_for_interval(SectionId(0), last_hash);
+    }
+
+    SectionId current_start = (start == SectionId(0)) ? SectionId(1) : start;
+    for (; current_start <= current_section_; current_start = current_start + SectionId(20)) {
+        generate_hash_for_interval(current_start, last_hash);
+    }
+
+    return true;
+}
+
 bool Dag::generate_hash() {
     eLog("[Dag] Generate AcyclicChain control hashs...");
     node->dagControlStarted();
 
-    auto current_int = current_section_.to_int();
-    if (!current_int.has_value()) {
-        node->dagControlEnded();
-        return false;
-    }
-
-    std::string last_hash = "";
-
-    for (int start = 0; start <= current_int.value(); start = (start == 0) ? 1 : start + 20) {
-        int end = (start == 0) ? 0 : std::min(start + 19, current_int.value());
-
-        std::string interval_hash = hash_interval(BigNumber(start), BigNumber(end));
-        last_hash                 = Utils::calculate_hash(last_hash + interval_hash);
-
-        auto section = read_section(BigNumber(end));
-        if (section.has_value()) {
-            section.value().control = last_hash;
-            write_section(section.value());
-            eLog("---> interval [{}, {}]. Control hash: {}", start, end, last_hash);
-        }
-    }
+    bool result = generate_hash_from_section(SectionId(0));
 
     node->dagControlEnded();
-    return true;
+    return result;
 }
 
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
