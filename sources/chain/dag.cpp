@@ -1669,30 +1669,26 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control() {
 bool Dag::generate_hash() {
     eLog("[Dag] Generate AcyclicChain control hashs...");
     node->dagControlStarted();
-    std::string hash_temp;
+
+    auto current_int = current_section_.to_int();
+    if (!current_int.has_value()) {
+        node->dagControlEnded();
+        return false;
+    }
+
     std::string last_hash = "";
 
-    for (int i = 0; i <= current_section_.to_int(); i++) {
-        auto section = read_section(BigNumber(i));
-        // eLog("-> {}", i.to_string(NumeralBase::Dec));
+    for (int start = 0; start <= current_int.value(); start = (start == 0) ? 1 : start + 20) {
+        int end = (start == 0) ? 0 : std::min(start + 19, current_int.value());
 
-        if (!section.has_value()) {
-            continue;
-        }
+        std::string interval_hash = hash_interval(BigNumber(start), BigNumber(end));
+        last_hash                 = Utils::calculate_hash(last_hash + interval_hash);
 
-        auto hash = section->calculate_hash();
-        hash_temp += hash;
-
-        if (i % 20 == 0) {
-            hash_temp = Utils::calculate_hash(last_hash + hash_temp);
-            last_hash = hash_temp;
-
-            section->control = hash_temp;
+        auto section = read_section(BigNumber(end));
+        if (section.has_value()) {
+            section.value().control = last_hash;
             write_section(section.value());
-            eLog("---> i {}. Typo write: {}", i, hash_temp);
-
-            hash_temp = "";
-            hash_temp.clear();
+            eLog("---> interval [{}, {}]. Control hash: {}", start, end, last_hash);
         }
     }
 
@@ -1700,11 +1696,13 @@ bool Dag::generate_hash() {
     return true;
 }
 
-// использовать hash_interval?
-// влепить ласт контрол туда?
-
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
+    eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
+         from.to_string(NumeralBase::Dec),
+         to.to_string(NumeralBase::Dec),
+         from,
+         to);
 
     for (SectionId i = from; i <= to; i++) { // - 1
         auto section = read_section(i);      // or just get local section control?
@@ -1778,5 +1776,5 @@ std::string Section::calculate_hash() {
     for (const auto &transaction : transactions) {
         tx_hashs += transaction.hash();
     }
-    return Utils::calculate_hash(tx_hashs);
+    return Utils::calculate_hash(id.to_string(NumeralBase::Dec) + tx_hashs);
 }

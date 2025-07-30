@@ -121,7 +121,7 @@ enum class DagStatus {
  */
 struct DagLastInfo {
     SectionId             last_section_id;
-    std::set<std::string> last_hash;
+    std::set<std::string> last_hash; // last control, last control id
     std::uint64_t         zero_date;
 };
 BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
