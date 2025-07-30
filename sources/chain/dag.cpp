@@ -1600,10 +1600,7 @@ std::set<ActorId> Dag::last_month() {
     eLog("Start reward month scanning...");
     std::set<ActorId> actors;
 
-    // Получаем текущее время в миллисекундах
-    auto now = Utils::current_date_ms();
-
-    // Время месяц назад (30 дней * 24 часа * 60 минут * 60 секунд * 1000 мс)
+    auto now       = Utils::current_date_ms();
     auto month_ago = now - (30LL * 24 * 60 * 60 * 1000);
 
     for (SectionId i = current_section_; i >= BigNumber(0); i--) {
@@ -1619,20 +1616,17 @@ std::set<ActorId> Dag::last_month() {
                 continue;
             }
 
-            auto timestamp = tx.timestamp(); // предполагаю, что возвращает ms
+            auto timestamp = tx.timestamp();
 
-            // Если транзакция старше месяца, можем прекратить поиск
             if (timestamp < month_ago) {
                 found_older = true;
                 break;
             }
 
-            // Если транзакция в пределах последнего месяца, добавляем актора
             ActorId sender = tx.sender();
             actors.insert(sender);
         }
 
-        // Если нашли транзакции старше месяца, можем прекратить просмотр секций
         if (found_older) {
             eLog("Stop at section {}", i);
             break;
@@ -1650,6 +1644,65 @@ std::set<ActorId> Dag::last_month() {
     return actors;
 }
 
+std::optional<std::pair<SectionId, std::string>> Dag::find_last_control() {
+    int j = 0;
+
+    for (SectionId i = current_section_; i >= BigNumber(0); i--) {
+        auto section = read_section(i);
+        if (!section.has_value()) {
+            continue;
+        }
+
+        if (section->control.has_value()) {
+            return std::pair { i, section->control.value() };
+        }
+
+        j += 1;
+        if (j > 25) {
+            break;
+        }
+    }
+
+    return std::nullopt;
+}
+
+bool Dag::generate_hash() {
+    eLog("[Dag] Generate AcyclicChain control hashs...");
+    node->dagControlStarted();
+    std::string hash_temp;
+    std::string last_hash = "";
+
+    for (int i = 0; i <= current_section_.to_int(); i++) {
+        auto section = read_section(BigNumber(i));
+        // eLog("-> {}", i.to_string(NumeralBase::Dec));
+
+        if (!section.has_value()) {
+            continue;
+        }
+
+        auto hash = section->calculate_hash();
+        hash_temp += hash;
+
+        if (i % 20 == 0) {
+            hash_temp = Utils::calculate_hash(last_hash + hash_temp);
+            last_hash = hash_temp;
+
+            section->control = hash_temp;
+            write_section(section.value());
+            eLog("---> i {}. Typo write: {}", i, hash_temp);
+
+            hash_temp = "";
+            hash_temp.clear();
+        }
+    }
+
+    node->dagControlEnded();
+    return true;
+}
+
+// использовать hash_interval?
+// влепить ласт контрол туда?
+
 std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
 
@@ -1657,13 +1710,13 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
         auto section = read_section(i);      // or just get local section control?
         // eLog("Hash interval section: {}", section.value());
 
-        // i == from - 1
-        if (section->control.has_value()) {
-            tx_hashs += section->control.value();
+        if (!section.has_value()) {
             continue;
         }
 
-        if (!section.has_value()) {
+        // i == from - 1
+        if (section->control.has_value()) {
+            tx_hashs += section->control.value();
             continue;
         }
 
@@ -1671,6 +1724,18 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
     }
 
     return Utils::calculate_hash(tx_hashs);
+}
+
+void Dag::start_control() {
+    auto find_result = find_last_control();
+    if (find_result.has_value()) {
+        auto section_id = find_result->first;
+        eLog("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        return;
+    }
+
+    generate_hash();
+    // ThreadPoolBoost::instance()->post([this]() {});
 }
 
 std::set<std::string> Section::prev_hashs() {

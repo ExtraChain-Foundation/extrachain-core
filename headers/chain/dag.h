@@ -510,7 +510,11 @@ public:
     std::map<TokenId, BigNumberFloat> sum();
     std::set<ActorId>                 last_month();
 
+    std::optional<std::pair<SectionId, std::string>> find_last_control();
+
+    bool        generate_hash();
     std::string hash_interval(const SectionId &from, const SectionId &to);
+    void        start_control();
 
     friend class ExtraChainNode;
     friend class DagCache;

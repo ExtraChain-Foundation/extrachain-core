@@ -276,6 +276,9 @@ signals:
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
 
+    void dagControlStarted();
+    void dagControlEnded();
+
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);
     void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
