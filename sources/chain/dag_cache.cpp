@@ -401,9 +401,15 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
             dag->update_range();
 
             ThreadPoolBoost::instance()->post([this, res] {
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = "" };
-                hash_interval.hash = node->dag()->hash_interval(hash_interval.from, hash_interval.to);
-                // dag->write_control(res.to, hash_interval.hash);
+                node->dag()->generate_hash_from_section(res.to);
+                auto control_hash = node->dag()->read_control(res.to);
+                if (!control_hash.has_value()) {
+                    //
+                }
+
+                auto hash_interval =
+                    HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value_or("") };
+                eLog("--------> Cache {} {}", res.from.to_int(), res.to.to_int());
                 eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             });

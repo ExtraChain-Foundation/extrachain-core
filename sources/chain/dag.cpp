@@ -1277,15 +1277,16 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     if (current_hash != hash_interval.hash) {
         eLog("[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). {}", hash_interval);
 
-        if (current_section_ < hash_interval.to) {
-            if (status_ != DagStatus::Ready) {
-                status_ = DagStatus::Maybe;
-            }
+        this->request_control_section(hash_interval.from);
+        // if (current_section_ < hash_interval.to) {
+        //     if (status_ != DagStatus::Ready) {
+        //         status_ = DagStatus::Maybe;
+        //     }
 
-            this->start_check(); // TODO: warning: check or sync?
-        } else {
-            request_sections(hash_interval.from, hash_interval.to, responder);
-        }
+        //     this->start_check(); // TODO: warning: check or sync?
+        // } else {
+        //     request_sections(hash_interval.from, hash_interval.to, responder);
+        // }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -1675,8 +1676,28 @@ std::optional<std::string> Dag::read_control(const SectionId &section_id) {
     return section->control;
 }
 
+std::optional<std::string> Dag::read_control_prev(const SectionId &section_id) {
+    for (SectionId i = section_id; i >= BigNumber(0); i--) {
+        if (i % CONTROL_INTERVAL_MOD == 0) {
+            return read_control(i);
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Dag::read_control_next(const SectionId &section_id) {
+    for (SectionId i = section_id; i <= current_section_; i++) {
+        if (i % CONTROL_INTERVAL_MOD == 0) {
+            return read_control(i);
+        }
+    }
+
+    return std::nullopt;
+}
+
 void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
-    SectionId interval_end = (start == SectionId(0)) ? SectionId(0) : start + SectionId(19);
+    SectionId interval_end = (start == SectionId(0)) ? SectionId(0) : start + CONTROL_INTERVAL_DIFF;
 
     std::string interval_hash = hash_interval(start, interval_end);
     last_hash                 = Utils::calculate_hash(last_hash + interval_hash);
@@ -1685,10 +1706,10 @@ void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_h
     if (section.has_value()) {
         section.value().control = last_hash;
         write_section(section.value());
-        eLog("---> interval [{}, {}]. Control hash: {}",
-             start.to_string(NumeralBase::Dec),
-             interval_end.to_string(NumeralBase::Dec),
-             last_hash);
+        // eLog("---> interval [{}, {}]. Control hash: {}",
+        //      start.to_string(NumeralBase::Dec),
+        //      interval_end.to_string(NumeralBase::Dec),
+        //      last_hash);
     }
 }
 
@@ -1709,7 +1730,7 @@ bool Dag::generate_hash_from_section(const SectionId &start) {
     }
 
     SectionId current_start = (start == SectionId(0)) ? SectionId(1) : start;
-    for (; current_start <= current_section_; current_start = current_start + SectionId(20)) {
+    for (; current_start <= current_section_; current_start = current_start + CONTROL_INTERVAL) {
         generate_hash_for_interval(current_start, last_hash);
     }
 
@@ -1734,21 +1755,22 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
          from,
          to);
 
-    for (SectionId i = from; i <= to; i++) { // - 1
-        auto section = read_section(i);      // or just get local section control?
-        // eLog("Hash interval section: {}", section.value());
+    // current or to?
+
+    for (SectionId i = from; i <= to; i++) {
+        auto section = read_section(i);
 
         if (!section.has_value()) {
+            tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec));
             continue;
         }
 
-        // i == from - 1
         if (section->control.has_value()) {
             tx_hashs += section->control.value();
             continue;
         }
 
-        tx_hashs += section->calculate_hash();
+        tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
     }
 
     return Utils::calculate_hash(tx_hashs);
@@ -1764,6 +1786,38 @@ void Dag::start_control() {
 
     generate_hash();
     // ThreadPoolBoost::instance()->post([this]() {});
+}
+
+void Dag::request_control_section(const SectionId &section_id) {
+    auto dag_control = DagControl { .section_id = section_id, .hash = this->read_control(section_id) };
+    node->network()->send_message(dag_control, MessageType::DagControl, SendMode::Neighbours);
+}
+
+void Dag::network_request_control_section(const DagControl &dag_control, const Responder &responder) {
+    if (dag_control.section_id > current_section_) {
+        // sitation must save global sync with hashs stats
+        return;
+    }
+
+    if (!dag_control.hash.has_value()) {
+        // request interval control sync
+    }
+
+    if (dag_control.hash.has_value()) {
+        auto control = this->read_control(dag_control.section_id);
+
+        if (control.value() == dag_control.hash.value()) {
+            if (current_section_ - 40 < dag_control.section_id) {
+                // request
+            } else {
+                // okay
+            }
+        } else {
+            request_control_section(dag_control.section_id - CONTROL_INTERVAL);
+        }
+    }
+
+    // що робити, якщо 1 повний і 2 ні, а не обидва? все одно?
 }
 
 std::set<std::string> Section::prev_hashs() {
@@ -1806,5 +1860,5 @@ std::string Section::calculate_hash() {
     for (const auto &transaction : transactions) {
         tx_hashs += transaction.hash();
     }
-    return Utils::calculate_hash(id.to_string(NumeralBase::Dec) + tx_hashs);
+    return Utils::calculate_hash(tx_hashs);
 }

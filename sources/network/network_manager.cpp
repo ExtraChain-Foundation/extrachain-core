@@ -1700,6 +1700,17 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DagControl: {
+        auto dag_control = MessagePack::deserialize<DagControl>(serialized);
+        if (!dag_control.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dag control", type);
+            break;
+        }
+
+        node->dag()->network_request_control_section(dag_control.value(), responder);
+        break;
+    }
+
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,

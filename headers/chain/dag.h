@@ -33,7 +33,10 @@
 
 class ExtraChainNode;
 class Responder;
-using SectionId = BigNumber;
+
+static const BigNumber CONTROL_INTERVAL      = BigNumber(20);
+static const int       CONTROL_INTERVAL_MOD  = 20;
+static const BigNumber CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
 /**
  * @brief Represents a section in the chain
@@ -91,6 +94,12 @@ struct HashInterval {
     std::string hash;
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
+
+struct DagControl {
+    SectionId                  section_id;
+    std::optional<std::string> hash;
+};
+BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, hash))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -512,12 +521,17 @@ public:
 
     std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = BigNumber(-1));
     std::optional<std::string>                       read_control(const SectionId &section_id);
+    std::optional<std::string>                       read_control_prev(const SectionId &section_id);
+    std::optional<std::string>                       read_control_next(const SectionId &section_id);
 
     void        generate_hash_for_interval(const SectionId &start, std::string &last_hash);
     bool        generate_hash_from_section(const SectionId &start);
     bool        generate_hash();
     std::string hash_interval(const SectionId &from, const SectionId &to);
     void        start_control();
+
+    void request_control_section(const SectionId &section_id);
+    void network_request_control_section(const DagControl &dag_control, const Responder &responder);
 
     friend class ExtraChainNode;
     friend class DagCache;
