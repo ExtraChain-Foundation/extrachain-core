@@ -175,7 +175,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
     }
 
     if (!sync_first_done && synch_count <= records) {
-        eLog("firstSyncEnded");
+        // eLog("firstSyncEnded");
         emit firstSyncEnded();
         sync_first_done = true;
         node->accountController()->dogenerate();

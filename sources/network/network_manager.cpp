@@ -393,7 +393,7 @@ void NetworkManager::checkConnectionsStatus() {
 }
 
 void NetworkManager::startNetwork() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "Else"));
+    eLog("[NetworkManager] Start servers... {}", (wsPort == 17593 ? "Network" : "Else"));
 
     if (!local) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -448,8 +448,10 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
         }
     }
 
-    if (ip.isEmpty())
+    if (ip.isEmpty()) {
+        // eLog("Ip is empty");
         return;
+    }
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
     eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
