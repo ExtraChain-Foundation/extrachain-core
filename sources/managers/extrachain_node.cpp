@@ -372,6 +372,53 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     return true;
 }
 
+bool ExtraChainNode::create_renames_template() {
+    auto system_actor_id = accountController()->system_actor().id();
+
+    auto chat_template = Dfs::CollectionTemplate::create("Renames").value().use_id().add_fields(
+        { Dfs::Field::Json("name").not_null() });
+
+    auto chat_result = dfs()->store_template(system_actor_id, chat_template);
+    if (!chat_result.has_value()) {
+        eCritical("Can't create renames template, because {}", chat_result.error());
+        return false;
+    }
+
+    eSuccess("Renames template created");
+    return true;
+}
+
+bool ExtraChainNode::create_renames_vector() {
+    const auto main_actor_id = this->accountController()->currentProfile().main_id();
+    auto       network_id    = this->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "Renames");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
+    auto store_chat_res = this->dfs()->store_vector(main_actor_id,
+                                                    main_actor_id,
+                                                    "Renames",
+                                                    network_id,
+                                                    search_result->file_id,
+                                                    Dfs::DataSecurity::Self,
+                                                    security_actor);
+
+    if (!store_chat_res.has_value()) {
+        return false;
+    }
+
+    return true;
+}
+
 void ExtraChainNode::start() {
     if (!started) {
         QTimer::singleShot(10, this, &ExtraChainNode::ready);
