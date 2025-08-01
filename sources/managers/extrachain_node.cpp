@@ -191,7 +191,7 @@ bool ExtraChainNode::create_new_dag() {
     tx.set_receiver(actor.id());
     tx.set_type(TransactionType::Genesis);
 
-    auto prepared_tx = dag_->prepare_transaction(tx, actor);
+    auto prepared_tx = dag_->prepare_transaction(tx, actor, true);
     if (!prepared_tx.has_value()) {
         eCritical("[Node] Can't prepare transaction for new network");
         std::exit(-10);
@@ -204,6 +204,7 @@ bool ExtraChainNode::create_new_dag() {
         std::exit(-11);
     }
 
+    dag_->generate_hash();
     dag_->set_status(DagStatus::Ready);
 
     m_actorIndex->set_network_id(actor.id());
@@ -875,7 +876,7 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Dag] {} (0x{}) sections, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
+    eLog("[Dag] Last: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
@@ -883,6 +884,10 @@ void ExtraChainNode::timer_info_print() {
          dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
+
+    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section() - 1).has_value()) {
+        eCritical("[Dag] No last section");
+    }
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {

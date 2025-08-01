@@ -249,10 +249,12 @@ public:
      *
      * @param transaction The transaction to prepare
      * @param signer The actor who will sign the transaction
+     * @param ignore_zero Param for dag genesis
      * @return std::expected<Transaction, TransactionError> The prepared transaction or an error
      */
     std::expected<Transaction, TransactionError> prepare_transaction(const Transaction       &transaction,
-                                                                     const Actor<KeyPrivate> &signer);
+                                                                     const Actor<KeyPrivate> &signer,
+                                                                     bool                     ignore_zero = false);
 
     /**
      * @brief Send a transaction to the network

@@ -191,9 +191,14 @@ std::string Dag::file_path(const BigNumber &section) const {
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
-                                                                      const Actor<KeyPrivate> &signer) {
+                                                                      const Actor<KeyPrivate> &signer,
+                                                                      bool                     ignore_zero) {
     auto tx = transaction;
     tx.set_section(current_section_ + 1);
+
+    if (tx.section() == 0 && !ignore_zero) {
+        return std::unexpected(TransactionError::NoLastSection);
+    }
 
     auto section = read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
@@ -483,7 +488,7 @@ std::optional<bool> Dag::write_section(const Section &section) {
 }
 
 std::optional<bool> Dag::write_control(const SectionId &section_id, const std::string &hash) {
-    return std::nullopt;
+    // return std::nullopt;
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
@@ -1258,21 +1263,26 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         //     max = std::max(tx.section(), max);
         //     save_transaction(tx);
         // }
-        save_transactions(dag_light.txs);
+        this->save_transactions(dag_light.txs);
 
         // if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
         //     first_saved_section_ = min;
         //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         // }
 
-        update_range();
+        if (dag_light.cache_section == -1) {
+            this->first_saved_section_ = 0;
+        }
+
+        this->update_range();
 
         eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
              dag_light.cache_section,
-             first_saved_section_,
-             current_section_);
+             this->first_saved_section_,
+             this->current_section_);
 
-        process_cached_transactions();
+        this->process_cached_transactions();
+        this->start_control();
         // TIMER_END(network_response_light)
     });
 }
@@ -1714,6 +1724,10 @@ void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_h
 
     auto section = read_section(interval_end);
     if (section.has_value()) {
+        if (section.value().control == last_hash) {
+            return;
+        }
+
         section.value().control = last_hash;
         write_section(section.value());
         // eLog("---> interval [{}, {}]. Control hash: {}",
@@ -1737,6 +1751,7 @@ bool Dag::generate_hash_from_section(const SectionId &start) {
 
     if (start == SectionId(0)) {
         generate_hash_for_interval(SectionId(0), last_hash);
+        return true;
     }
 
     SectionId current_start = (start == SectionId(0)) ? SectionId(1) : start;
@@ -1772,11 +1787,6 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
 
         if (!section.has_value()) {
             tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec));
-            continue;
-        }
-
-        if (section->control.has_value()) {
-            tx_hashs += section->control.value();
             continue;
         }
 

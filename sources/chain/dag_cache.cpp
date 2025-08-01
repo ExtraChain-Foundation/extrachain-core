@@ -259,7 +259,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
                                       const BigNumber&            current_section,
                                       const BigNumber&            first_saved_section,
                                       std::optional<BigNumber>    to_section) {
-    eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
+    // eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
     if (current_section == BigNumber(-1) || actor_ids.empty()) {
@@ -312,7 +312,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
     });
 
-    eLog("-----> {}", balances);
+    eLog("[Dag] Calculating balances: {}", balances);
 
     return balances;
 }
@@ -404,7 +404,7 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
                 node->dag()->generate_hash_from_section(res.to);
                 auto control_hash = node->dag()->read_control(res.to);
                 if (!control_hash.has_value()) {
-                    //
+                    eFatal("Critical problem with control hash");
                 }
 
                 auto hash_interval =
@@ -431,6 +431,9 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     SectionId start_section;
     if (cached_section_ != BigNumber(-1)) {
         start_section = cached_section_ + 1;
+        // if (cached_section_ == 0 && current_section < 20) {
+        //     start_section = 0; // ?
+        // }
     } else {
         start_section = first_saved_section;
     }
