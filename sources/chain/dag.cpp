@@ -810,6 +810,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Special transaction types that don't require balance check
     if (tx.type() == TransactionType::Reward) {
+        if (tx.amount() > 3) {
+            return TransactionProveError::BigReward;
+        }
+
         return TransactionProveError::NoError;
     }
 
@@ -1111,6 +1115,10 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
+    if (to - from >= 150) {
+        // return;
+    }
+
     std::set<Transaction> txs;
 
     for (BigNumber i = from; i <= to; i++) {
@@ -1120,6 +1128,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         }
 
         if (section->transactions.empty()) {
+            continue;
         }
 
         for (const auto &tx : section->transactions) {
@@ -1170,7 +1179,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         if (current_section_ >= sync_last_index - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
 
-            process_cached_transactions();
+            if (this->status_ != DagStatus::Ready) {
+                process_cached_transactions();
+            }
             return;
         }
 
@@ -1277,16 +1288,15 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     if (current_hash != hash_interval.hash) {
         eLog("[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). {}", hash_interval);
 
-        this->request_control_section(hash_interval.from);
-        // if (current_section_ < hash_interval.to) {
-        //     if (status_ != DagStatus::Ready) {
-        //         status_ = DagStatus::Maybe;
-        //     }
+        if (current_section_ < hash_interval.to) {
+            if (status_ != DagStatus::Ready) {
+                status_ = DagStatus::Maybe;
+            }
 
-        //     this->start_check(); // TODO: warning: check or sync?
-        // } else {
-        //     request_sections(hash_interval.from, hash_interval.to, responder);
-        // }
+            this->start_check(); // TODO: warning: check or sync?
+        } else {
+            this->request_control_section(hash_interval.from, responder.with_new_message_id());
+        }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
@@ -1788,12 +1798,20 @@ void Dag::start_control() {
     // ThreadPoolBoost::instance()->post([this]() {});
 }
 
-void Dag::request_control_section(const SectionId &section_id) {
+void Dag::request_control_section(const SectionId &section_id, const Responder &responder) {
     auto dag_control = DagControl { .section_id = section_id, .hash = this->read_control(section_id) };
-    node->network()->send_message(dag_control, MessageType::DagControl, SendMode::Neighbours);
+    node->network()->send_message(dag_control,
+                                  MessageType::DagControl,
+                                  SendMode::Neighbours,
+                                  MessageStatus::Request,
+                                  responder);
 }
 
 void Dag::network_request_control_section(const DagControl &dag_control, const Responder &responder) {
+    if (dag_control.section_id % 20 != 0) {
+        return;
+    }
+
     if (dag_control.section_id > current_section_) {
         // sitation must save global sync with hashs stats
         return;
@@ -1801,19 +1819,26 @@ void Dag::network_request_control_section(const DagControl &dag_control, const R
 
     if (!dag_control.hash.has_value()) {
         // request interval control sync
+        request_sections(dag_control.section_id, dag_control.section_id + CONTROL_INTERVAL, responder); // ?
     }
 
     if (dag_control.hash.has_value()) {
         auto control = this->read_control(dag_control.section_id);
 
         if (control.value() == dag_control.hash.value()) {
-            if (current_section_ - 40 < dag_control.section_id) {
-                // request
+            // 40: recheck. maybe 30?
+            if (current_section_ - 40 >= dag_control.section_id) { // 60 >= 50
+                // request sections?
+                // TODO: set last sync?
+                sync_last_index = current_section_;
+                request_sections(dag_control.section_id,
+                                 std::min(current_section_, dag_control.section_id + 100),
+                                 responder);
             } else {
                 // okay
             }
         } else {
-            request_control_section(dag_control.section_id - CONTROL_INTERVAL);
+            request_control_section(dag_control.section_id - CONTROL_INTERVAL, responder);
         }
     }
 

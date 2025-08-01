@@ -530,7 +530,7 @@ public:
     std::string hash_interval(const SectionId &from, const SectionId &to);
     void        start_control();
 
-    void request_control_section(const SectionId &section_id);
+    void request_control_section(const SectionId &section_id, const Responder &responder);
     void network_request_control_section(const DagControl &dag_control, const Responder &responder);
 
     friend class ExtraChainNode;
