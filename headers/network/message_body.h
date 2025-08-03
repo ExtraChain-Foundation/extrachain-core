@@ -215,6 +215,7 @@ inline MessageBody make_init_message(const std::string& data,
 }
 
 struct VPNMessage {
+    bool                     is_wireguard = false;
     std::string              initialSender;
     std::set<std::string>    allSenders;
     std::string              initialSenderNetworkIdentifier;
@@ -234,7 +235,11 @@ struct VPNMessage {
     std::string              senderID;
     std::set<std::string>    blockedSenders;
 
-    MSGPACK_DEFINE(initialSender,
+    std::string              sing_uuid;
+    std::vector<std::string> short_ids;
+
+    MSGPACK_DEFINE(is_wireguard,
+                   initialSender,
                    allSenders,
                    initialSenderNetworkIdentifier,
                    vpnCommand,
@@ -251,5 +256,7 @@ struct VPNMessage {
                    uuid,
                    allIPsToSet,
                    senderID,
-                   blockedSenders)
+                   blockedSenders,
+                   sing_uuid,
+                   short_ids)
 };

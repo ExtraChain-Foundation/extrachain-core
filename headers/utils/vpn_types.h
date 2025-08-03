@@ -46,6 +46,7 @@ struct VPNConfigStorage {
         std::vector<std::string> allIPsToSet;
         std::string              requesterPublicKey;
         std::string              nextPublicKey;
+        bool                     is_wireguard;
     };
 
     struct VPNWorkers {
