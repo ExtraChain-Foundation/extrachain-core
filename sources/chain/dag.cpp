@@ -116,6 +116,8 @@ Dag::Dag(ExtraChainNode *node)
         cache_.init_db();
     }
 
+    this->start_control();
+
     eLog("[Dag] Done. Mode: {}", mode_);
 }
 
@@ -393,7 +395,7 @@ void Dag::network_section(const Section &section) {
 }
 
 Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                       std::optional<BigNumber>    to_section) {
+                                       std::optional<SectionId>    to_section) {
     // Use DagCache to calculate balances
     return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_, to_section);
 }
@@ -495,6 +497,11 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
     }
 
     // if not genesis -> return
+
+    if (section->control == hash) {
+        eLog("[Dag] No need writing control to {}", section_id);
+        return true;
+    }
 
     eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
@@ -1696,11 +1703,20 @@ std::set<ActorId> Dag::last_month() {
     return actors;
 }
 
-std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from) {
+std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from, bool disable_braek) {
     int j = 0;
 
-    for (SectionId i = from < 0 ? current_section_ : from; i >= BigNumber(0); i--) {
-        auto section = read_section(i);
+    if (disable_braek) {
+        auto section = this->read_section(SectionId(0));
+        if (section.has_value()) {
+            if (!section->control.has_value()) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
+        auto section = this->read_section(i);
         if (!section.has_value()) {
             continue;
         }
@@ -1710,7 +1726,7 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const Se
         }
 
         j += 1;
-        if (j > 25) {
+        if (!disable_braek && j > 25) {
             break;
         }
     }
@@ -1748,11 +1764,11 @@ std::optional<std::string> Dag::read_control_next(const SectionId &section_id) {
 }
 
 std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
-    SectionId interval_end = (start == SectionId(0) && current_section_ < 20)
+    SectionId interval_end = (start == SectionId(0) /*&& current_section_ < 20*/)
                                  ? SectionId(0)
                                  : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
 
-    auto interval_hash = hash_interval(start, interval_end);
+    auto interval_hash = this->hash_interval(start, interval_end);
     if (!interval_hash.has_value()) {
         return std::nullopt;
     }
@@ -1767,29 +1783,19 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
         return std::nullopt;
     }
 
-    auto section = read_section(interval_end);
-    if (section.has_value()) {
-        if (section.value().control == last_hash) {
-            return last_hash;
-        }
-
-        section.value().control = last_hash;
-        write_section(section.value());
-        // eLog("---> interval [{}, {}]. Control hash: {}",
-        //      start.to_string(NumeralBase::Dec),
-        //      interval_end.to_string(NumeralBase::Dec),
-        //      last_hash);
-        return last_hash;
+    auto res = this->write_control(interval_end, last_hash);
+    if (!res.has_value()) {
+        return std::nullopt;
     }
 
-    return std::nullopt;
+    return last_hash;
 }
 
-std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start) {
+std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start, bool full_generation) {
     std::string last_hash = "";
 
     if (start > SectionId(0)) {
-        auto last_control = find_last_control(start - SectionId(1));
+        auto last_control = this->find_last_control(start - SectionId(1));
         eLog("LL 1 {}", last_control);
         if (last_control.has_value()) {
             last_hash = last_control.value().second;
@@ -1798,9 +1804,11 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         }
     }
 
-    if (start == SectionId(0)) {
-        generate_hash_for_interval(SectionId(0), last_hash);
-        return last_hash;
+    if (full_generation || start == SectionId(0)) {
+        this->generate_hash_for_interval(SectionId(0), last_hash);
+        if (!full_generation) {
+            return last_hash;
+        }
     }
 
     SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
@@ -1810,17 +1818,17 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
             break;
         }
 
-        generate_hash_for_interval(current_start, last_hash);
+        this->generate_hash_for_interval(current_start, last_hash);
     }
 
     return last_hash;
 }
 
-bool Dag::generate_hash() {
-    eLog("[Dag] Generate AcyclicChain control hashs...");
+bool Dag::generate_hash(const SectionId &start_section) {
+    eLog("[Dag] Generate AcyclicChain controls...");
     node->dagControlStarted();
 
-    auto result = generate_hash_from_section(SectionId(0));
+    auto result = this->generate_hash_from_section(start_section, true);
 
     node->dagControlEnded();
     return result.has_value();
@@ -1841,7 +1849,7 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     }
 
     for (SectionId i = from; i <= to; i++) {
-        auto section = read_section(i);
+        auto section = this->read_section(i);
 
         if (!section.has_value()) {
             tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec));
@@ -1855,7 +1863,13 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
 }
 
 void Dag::start_control() {
-    auto find_result = find_last_control();
+    // for tests
+    // generate_hash();
+    // return;
+
+    eLog("[Dag] Check controls...");
+
+    auto find_result = this->find_last_control();
     if (find_result.has_value()) {
         auto section_id = find_result->first;
         // write last control?
@@ -1867,8 +1881,8 @@ void Dag::start_control() {
         return;
     }
 
-    generate_hash();
-    // ThreadPoolBoost::instance()->post([this]() {});
+    auto find_result2 = this->find_last_control(current_section_, true);
+    generate_hash(find_result2.has_value() ? find_result2->first : SectionId(0));
 }
 
 void Dag::request_control_section(const SectionId &section_id, const Responder &responder) {

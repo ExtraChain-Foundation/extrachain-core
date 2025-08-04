@@ -34,9 +34,9 @@
 class ExtraChainNode;
 class Responder;
 
-static const BigNumber CONTROL_INTERVAL      = BigNumber(20);
+static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
-static const BigNumber CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
+static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
 /**
  * @brief Represents a section in the chain
@@ -305,7 +305,7 @@ public:
      * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor IDs to balances
      */
     Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                      std::optional<BigNumber>    to_section = std::nullopt);
+                                      std::optional<SectionId>    to_section = std::nullopt);
 
     /**
      * @brief Add a transaction to the sent transactions list
@@ -522,14 +522,15 @@ public:
     std::map<TokenId, BigNumberFloat> sum();
     std::set<ActorId>                 last_month();
 
-    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = BigNumber(-1));
+    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = SectionId(-1),
+                                                                       bool            disable_braek = false);
     std::optional<std::string>                       read_control(const SectionId &section_id);
     std::optional<std::string>                       read_control_prev(const SectionId &section_id);
     std::optional<std::string>                       read_control_next(const SectionId &section_id);
 
     std::optional<std::string> generate_hash_for_interval(const SectionId &start, std::string &last_hash);
-    std::optional<std::string> generate_hash_from_section(const SectionId &start);
-    bool                       generate_hash();
+    std::optional<std::string> generate_hash_from_section(const SectionId &start, bool full_generation = false);
+    bool                       generate_hash(const SectionId &start_section = SectionId(0));
     std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
     void                       start_control();
 
