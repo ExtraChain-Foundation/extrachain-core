@@ -116,6 +116,7 @@ Dag::Dag(ExtraChainNode *node)
         cache_.init_db();
     }
 
+    // TODO: timer tick? one secs
     this->start_control();
 
     eLog("[Dag] Done. Mode: {}", mode_);
@@ -637,7 +638,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
             }
 
             set_current_section(section_id);
-            cache_.check_and_update_cache(current_section_);
+            cache_.check_and_update_cache_thread(current_section_);
 
             update_range();
 
