@@ -1343,7 +1343,9 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
             this->start_check(); // TODO: warning: check or sync?
         } else {
-            this->request_control_section(hash_interval.from, responder.with_new_message_id());
+            request_sections(hash_interval.from, hash_interval.to, responder);
+            // TODO: need add full network check
+            // this->request_control_section(hash_interval.from, responder.with_new_message_id());
         }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
