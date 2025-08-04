@@ -42,6 +42,10 @@ BigNumber DagCache::section() const {
 }
 
 void DagCache::set_section(const BigNumber& section_id) {
+    if (cached_section_ >= section_id) {
+        return;
+    }
+
     cached_section_ = section_id;
 }
 
@@ -320,6 +324,10 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
+    // BigNumber cache_boundary = (current_section / 20) * 20;
+    // BigNumber threshold      = cache_boundary + CACHE_LAG_SECTIONS;
+
+    // if (current_section < threshold) {
     if (current_section < BigNumber(CACHE_LAG_SECTIONS)) {
         // eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
         //      current_section,
@@ -332,6 +340,10 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 
     // Then, find the nearest genesis section (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
     BigNumber safe_genesis_section = calculate_genesis_section(safe_section_with_lag);
+
+    if (safe_genesis_section > dag->current_section()) {
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
+    }
 
     // eLog("[DagCache] Checking cache update: current={}, with_lag={}, cached={}, safe_genesis={}",
     //      current_section,
@@ -386,14 +398,13 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 
 void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
     if (dag->status() != DagStatus::Ready) {
-        ThreadPoolBoost::instance()->post([this] { // remove
-            auto res = this->check_and_update_cache(dag->current_section());
+        // ThreadPoolBoost::instance()->post([this] { // remove
+        auto res = this->check_and_update_cache(dag->current_section());
 
-            if (res.result) {
-                dag->update_range();
-                // send
-            }
-        });
+        if (res.result) {
+            dag->update_range();
+        }
+        // });
     } else {
         auto res = this->check_and_update_cache(dag->current_section());
 
@@ -401,14 +412,18 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
             dag->update_range();
 
             ThreadPoolBoost::instance()->post([this, res] {
-                node->dag()->generate_hash_from_section(res.to);
+                auto last_hash    = node->dag()->generate_hash_from_section(res.from); // need to fix
                 auto control_hash = node->dag()->read_control(res.to);
                 if (!control_hash.has_value()) {
-                    eFatal("Critical problem with control hash");
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                    return;
+                }
+                if (!last_hash.has_value()) {
+                    eCritical("[DagCache] No last hash");
+                    return;
                 }
 
-                auto hash_interval =
-                    HashInterval { .from = res.from, .to = res.to, .hash = control_hash.value_or("") };
+                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
                 eLog("--------> Cache {} {}", res.from.to_int(), res.to.to_int());
                 eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
@@ -518,7 +533,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Commit transaction
     cache_db_->query("COMMIT");
     // Update cached section
-    cached_section_ = genesis_section;
+    // cached_section_ = genesis_section;
+    set_section(genesis_section);
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
     return { true, start_section };

@@ -1205,7 +1205,8 @@ void Dag::network_request_light(const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
-        std::vector<Transaction> txs;
+        std::vector<Transaction>                       txs;
+        std::vector<std::pair<SectionId, std::string>> controls;
 
         if (cache().section() == BigNumber(-1) && current_section_ > 100) {
             return;
@@ -1216,6 +1217,7 @@ void Dag::network_request_light(const Responder &responder) {
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
+            controls.push_back({ SectionId(0), section->control.value() });
             for (const auto &tx : section->transactions) {
                 txs.push_back(tx);
             }
@@ -1225,6 +1227,10 @@ void Dag::network_request_light(const Responder &responder) {
             auto section = this->read_section(i);
             if (!section.has_value()) {
                 continue;
+            }
+
+            if (section->control.has_value()) {
+                controls.push_back({ i, section->control.value() });
             }
 
             for (const auto &tx : section->transactions) {
@@ -1237,7 +1243,8 @@ void Dag::network_request_light(const Responder &responder) {
             return;
         }
 
-        auto dag_light = DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs };
+        auto dag_light =
+            DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs, .controls = controls };
 
         node->network()->send_message(dag_light,
                                       MessageType::DagLightData,
@@ -1270,8 +1277,12 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         // }
 
-        if (dag_light.cache_section == -1) {
+        if (dag_light.cache_section == -1 || dag_light.cache_section == 0) {
             this->first_saved_section_ = 0;
+        }
+
+        for (const auto &[section_id, control] : dag_light.controls) {
+            write_control(section_id, control);
         }
 
         this->update_range();
@@ -1282,7 +1293,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
              this->current_section_);
 
         this->process_cached_transactions();
-        this->start_control();
+        // start check hash
         // TIMER_END(network_response_light)
     });
 }
@@ -1293,10 +1304,30 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    auto current_hash = this->hash_interval(hash_interval.from, hash_interval.to);
+    auto last_control = this->find_last_control(hash_interval.to - 1);
+    if (!last_control.has_value()) {
+        eCritical("[Dag] No last control");
+        return;
+    }
 
-    if (current_hash != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). {}", hash_interval);
+    eLog("Last control: {}", last_control);
+
+    auto interval_hash = this->hash_interval(hash_interval.from, hash_interval.to);
+    if (!interval_hash.has_value()) {
+        return;
+    }
+
+    if (!(hash_interval.to == last_control->first && hash_interval.from == last_control->first)) {
+        interval_hash = Utils::calculate_hash(last_control->second + interval_hash.value());
+    }
+
+    if (interval_hash != hash_interval.hash) {
+        eLog(
+            "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {}, interval: {}, "
+            "last: {}",
+            hash_interval,
+            interval_hash,
+            last_control);
 
         if (current_section_ < hash_interval.to) {
             if (status_ != DagStatus::Ready) {
@@ -1461,6 +1492,9 @@ void Dag::clear_dag() {
     eLog("[Dag] Clearing...");
     auto max_section = file_section(current_section_);
 
+    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
+    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
         QString path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
@@ -1510,9 +1544,6 @@ void Dag::clear_dag() {
         #endif
     }
     #endif
-
-    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
 
     auto guard = cached_txs_.lock_mut();
     guard->clear();
@@ -1716,16 +1747,30 @@ std::optional<std::string> Dag::read_control_next(const SectionId &section_id) {
     return std::nullopt;
 }
 
-void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
-    SectionId interval_end = (start == SectionId(0)) ? SectionId(0) : start + CONTROL_INTERVAL_DIFF;
+std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
+    SectionId interval_end = (start == SectionId(0) && current_section_ < 20)
+                                 ? SectionId(0)
+                                 : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
 
-    std::string interval_hash = hash_interval(start, interval_end);
-    last_hash                 = Utils::calculate_hash(last_hash + interval_hash);
+    auto interval_hash = hash_interval(start, interval_end);
+    if (!interval_hash.has_value()) {
+        return std::nullopt;
+    }
+
+    if (start != BigNumber(0)) {
+        last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
+    } else {
+        last_hash = interval_hash.value();
+    }
+
+    if (last_hash.empty()) {
+        return std::nullopt;
+    }
 
     auto section = read_section(interval_end);
     if (section.has_value()) {
         if (section.value().control == last_hash) {
-            return;
+            return last_hash;
         }
 
         section.value().control = last_hash;
@@ -1734,45 +1779,53 @@ void Dag::generate_hash_for_interval(const SectionId &start, std::string &last_h
         //      start.to_string(NumeralBase::Dec),
         //      interval_end.to_string(NumeralBase::Dec),
         //      last_hash);
+        return last_hash;
     }
+
+    return std::nullopt;
 }
 
-bool Dag::generate_hash_from_section(const SectionId &start) {
+std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start) {
     std::string last_hash = "";
 
     if (start > SectionId(0)) {
         auto last_control = find_last_control(start - SectionId(1));
+        eLog("LL 1 {}", last_control);
         if (last_control.has_value()) {
             last_hash = last_control.value().second;
         } else {
-            return false;
+            return std::nullopt;
         }
     }
 
     if (start == SectionId(0)) {
         generate_hash_for_interval(SectionId(0), last_hash);
-        return true;
+        return last_hash;
     }
 
-    SectionId current_start = (start == SectionId(0)) ? SectionId(1) : start;
+    SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
     for (; current_start <= current_section_; current_start = current_start + CONTROL_INTERVAL) {
+        if (current_start < current_section_) {
+            break;
+        }
+
         generate_hash_for_interval(current_start, last_hash);
     }
 
-    return true;
+    return last_hash;
 }
 
 bool Dag::generate_hash() {
     eLog("[Dag] Generate AcyclicChain control hashs...");
     node->dagControlStarted();
 
-    bool result = generate_hash_from_section(SectionId(0));
+    auto result = generate_hash_from_section(SectionId(0));
 
     node->dagControlEnded();
-    return result;
+    return result.has_value();
 }
 
-std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
+std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
     eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
          from.to_string(NumeralBase::Dec),
@@ -1781,6 +1834,10 @@ std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
          to);
 
     // current or to?
+    if (to > current_section_) {
+        eCritical("[Dag] Section to (0x{}) > current (0x{})", to, current_section_);
+        return std::nullopt;
+    }
 
     for (SectionId i = from; i <= to; i++) {
         auto section = read_section(i);
@@ -1800,7 +1857,12 @@ void Dag::start_control() {
     auto find_result = find_last_control();
     if (find_result.has_value()) {
         auto section_id = find_result->first;
+        // write last control?
         eLog("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+
+        if (section_id % 20 != 0) {
+            eCritical("[Dag] Incorrect control section % 20 != 0: {}", section_id);
+        }
         return;
     }
 

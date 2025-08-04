@@ -885,7 +885,7 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 
-    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section() - 1).has_value()) {
+    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section()).has_value()) {
         eCritical("[Dag] No last section");
     }
 }

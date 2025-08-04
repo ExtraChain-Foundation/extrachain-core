@@ -44,6 +44,7 @@ struct CacheResult {
     BigNumber from;
     BigNumber to;
 };
+BOOST_DESCRIBE_STRUCT(CacheResult, (), (result, from, to))
 
 /**
  * @brief DagCache - Manages caching of actor balances for chain

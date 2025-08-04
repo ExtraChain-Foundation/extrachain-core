@@ -142,11 +142,12 @@ BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
  * and transactions needed for light mode synchronization
  */
 struct DagLightPackage {
-    Balances                 cache;         // Cached account balances
-    SectionId                cache_section; // ID of the section corresponding to the cache
-    std::vector<Transaction> txs;           // Transactions since the cached section
+    Balances                                       cache;         // Cached account balances
+    SectionId                                      cache_section; // Id of the section corresponding to the cache
+    std::vector<Transaction>                       txs;           // Transactions since the cached section
+    std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
 };
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs))
+BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -526,11 +527,11 @@ public:
     std::optional<std::string>                       read_control_prev(const SectionId &section_id);
     std::optional<std::string>                       read_control_next(const SectionId &section_id);
 
-    void        generate_hash_for_interval(const SectionId &start, std::string &last_hash);
-    bool        generate_hash_from_section(const SectionId &start);
-    bool        generate_hash();
-    std::string hash_interval(const SectionId &from, const SectionId &to);
-    void        start_control();
+    std::optional<std::string> generate_hash_for_interval(const SectionId &start, std::string &last_hash);
+    std::optional<std::string> generate_hash_from_section(const SectionId &start);
+    bool                       generate_hash();
+    std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
+    void                       start_control();
 
     void request_control_section(const SectionId &section_id, const Responder &responder);
     void network_request_control_section(const DagControl &dag_control, const Responder &responder);
