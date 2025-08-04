@@ -1804,8 +1804,9 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
     }
 
     SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
-    for (; current_start <= current_section_; current_start = current_start + CONTROL_INTERVAL) {
-        if (current_start < current_section_) {
+    for (; current_start <= current_section_ && current_start < current_section_;
+         current_start += CONTROL_INTERVAL) {
+        if (current_start + CONTROL_INTERVAL > current_section_) {
             break;
         }
 
