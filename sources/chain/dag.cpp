@@ -526,7 +526,7 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
         return true;
     }
 
-    // eLog("[Dag] Write control to {}", section_id);
+    eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
     return this->write_section(section.value());
 }
@@ -1746,9 +1746,9 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const Se
     for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
         auto section = this->read_section(i);
         if (!section.has_value()) {
-            // if (section->id % CONTROL_INTERVAL_MOD == 0) {
-            //     j = 0;
-            // }
+            if (section->id % CONTROL_INTERVAL_MOD == 0) {
+                j = 0;
+            }
             continue;
         }
 
@@ -1898,8 +1898,8 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
 
 void Dag::start_control() {
     // for tests
-    // generate_hash();
-    // return;
+    generate_hash();
+    return;
 
     eLog("[Dag] Check controls...");
 
