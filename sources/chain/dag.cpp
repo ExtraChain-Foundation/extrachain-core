@@ -99,10 +99,6 @@ Dag::Dag(ExtraChainNode *node)
 
     timestamp_bigger_sync_start_ = 0;
 
-#ifndef IS_R
-    this->set_status(DagStatus::Ready);
-#endif
-
     auto section = this->read_section(BigNumber(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
@@ -1043,13 +1039,6 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    // temp
-#ifndef IS_R
-    if (status_ == DagStatus::Ready) {
-        return;
-    }
-#endif
-
     if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
         start_sync();
         // QTimer::singleShot(3000, [this]() {
