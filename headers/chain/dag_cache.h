@@ -253,4 +253,6 @@ private:
 
     void         ensure_index_db_initialized() const;
     std::int64_t get_or_create_actor_pk(const std::string& actor_id) const;
+
+    friend Dag;
 };

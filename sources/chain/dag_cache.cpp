@@ -397,6 +397,9 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 }
 
 void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
+    if (dag == nullptr) {
+        return;
+    }
     if (dag->status() != DagStatus::Ready) {
         // ThreadPoolBoost::instance()->post([this] { // remove
         auto res = this->check_and_update_cache(dag->current_section());
@@ -442,7 +445,11 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     if (cached_section_ == genesis_section) {
         return { true, BigNumber(-1) };
     }
-    eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
+
+    bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
+    if (show) {
+        eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
+    }
 
     SectionId start_section;
     if (cached_section_ != BigNumber(-1)) {
@@ -481,7 +488,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
     }
 
-    eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
+    // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
 
     // Initialize DB
     if (!init_db()) {

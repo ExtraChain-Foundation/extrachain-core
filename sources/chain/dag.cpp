@@ -100,7 +100,7 @@ Dag::Dag(ExtraChainNode *node)
     timestamp_bigger_sync_start_ = 0;
 
 #ifndef IS_R
-    status_ = DagStatus::Ready;
+    this->set_status(DagStatus::Ready);
 #endif
 
     auto section = this->read_section(BigNumber(0));
@@ -120,6 +120,7 @@ Dag::Dag(ExtraChainNode *node)
 }
 
 Dag::~Dag() {
+    cache_.dag = nullptr;
     timer_sync->deleteLater();
 }
 
@@ -400,8 +401,12 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
 
 void Dag::process_cached_transactions() {
     {
-        auto guard = cached_txs_.lock();
-        eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+        try {
+            auto guard = cached_txs_.lock();
+            eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in process cached: " << e.what() << std::endl;
+        }
     }
 
     status_                      = DagStatus::Final;
@@ -410,13 +415,17 @@ void Dag::process_cached_transactions() {
     while (true) {
         std::set<Transaction> txs_to_process;
         {
-            auto guard_mut = cached_txs_.lock_mut();
-            if (guard_mut->empty()) {
-                break;
-            }
+            try {
+                auto guard_mut = cached_txs_.lock_mut();
+                if (guard_mut->empty()) {
+                    break;
+                }
 
-            txs_to_process = std::move(*guard_mut);
-            guard_mut->clear();
+                txs_to_process = std::move(*guard_mut);
+                guard_mut->clear();
+            } catch (const std::system_error &e) {
+                std::cerr << "[Dag] Caught system_error in process cached 2: " << e.what() << std::endl;
+            }
         }
 
         for (const auto &tx : txs_to_process) {
@@ -433,20 +442,32 @@ void Dag::process_cached_transactions() {
 void Dag::add_to_cached_tx(const Transaction &transaction) {
     bool exists = false;
     {
-        auto guard = cached_txs_.lock();
-        exists     = guard->find(transaction) != guard->end();
+        try {
+            auto guard = cached_txs_.lock();
+            exists     = guard->find(transaction) != guard->end();
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in add_to_cached_tx: " << e.what() << std::endl;
+        }
     }
 
     if (!exists) {
-        auto guard_mut = cached_txs_.lock_mut();
-        guard_mut->insert(transaction);
+        try {
+            auto guard_mut = cached_txs_.lock_mut();
+            guard_mut->insert(transaction);
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in add_to_cached_tx 2: " << e.what() << std::endl;
+        }
 
         // eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
     }
 }
 
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
-    std::shared_lock<std::shared_mutex> lock(section_mutex_);
+    try {
+        std::shared_lock<std::shared_mutex> lock(section_mutex_);
+    } catch (const std::system_error &e) {
+        return std::nullopt;
+    }
 
     auto p    = this->file_path(section_id);
     auto path = FsPath::create(p);
@@ -465,7 +486,11 @@ std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
-    std::unique_lock<std::shared_mutex> lock(section_mutex_);
+    try {
+        std::unique_lock<std::shared_mutex> lock(section_mutex_);
+    } catch (const std::system_error &e) {
+        return std::nullopt;
+    }
 
     auto folder = this->file_folder(section.id);
     if (!std::filesystem::exists(folder)) {
@@ -501,7 +526,7 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
         return true;
     }
 
-    eLog("[Dag] Write control to {}", section_id);
+    // eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
     return this->write_section(section.value());
 }
@@ -926,7 +951,12 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
 }
 
 void Dag::update_range() {
-    std::lock_guard<std::mutex> lock(range_mutex_);
+    try {
+        std::lock_guard<std::mutex> lock(range_mutex_);
+    } catch (const std::system_error &e) {
+        // eCritical("[Dag] Caught system_error in update range: {}", e.what());
+        return;
+    }
 
     std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
                                                       .last        = current_section_.to_string(),
@@ -1001,8 +1031,7 @@ void Dag::start_sync() {
     // }
 
     if (status_ != DagStatus::Sync) {
-        status_ = DagStatus::Sync;
-        emit node->dagStatus(status_);
+        this->set_status(DagStatus::Sync);
     }
 
     last_info_.clear();
@@ -1106,7 +1135,9 @@ void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Res
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
+    // if (status_ != DagStatus::Sync) {
     eLog("[Dag] Request sections from {} to {}", range.first, range.last);
+    // }
 }
 
 void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
@@ -1327,12 +1358,9 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     }
 
     if (interval_hash != hash_interval.hash) {
-        eLog(
-            "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {}, interval: {}, "
-            "last: {}",
-            hash_interval,
-            interval_hash,
-            last_control);
+        // eLog(
+        //     "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {}, interval:
+        //     {}, " "last: {}", hash_interval, interval_hash, last_control);
 
         if (current_section_ < hash_interval.to) {
             if (status_ != DagStatus::Ready) {
@@ -1718,6 +1746,9 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const Se
     for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
         auto section = this->read_section(i);
         if (!section.has_value()) {
+            // if (section->id % CONTROL_INTERVAL_MOD == 0) {
+            //     j = 0;
+            // }
             continue;
         }
 
@@ -1796,7 +1827,7 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
 
     if (start > SectionId(0)) {
         auto last_control = this->find_last_control(start - SectionId(1));
-        eLog("LL 1 {}", last_control);
+        // eLog("LL 1 {}", last_control);
         if (last_control.has_value()) {
             last_hash = last_control.value().second;
         } else {
@@ -1836,11 +1867,14 @@ bool Dag::generate_hash(const SectionId &start_section) {
 
 std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string tx_hashs;
-    eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-         from.to_string(NumeralBase::Dec),
-         to.to_string(NumeralBase::Dec),
-         from,
-         to);
+
+    if (status_ != DagStatus::Sync) {
+        eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
+             from.to_string(NumeralBase::Dec),
+             to.to_string(NumeralBase::Dec),
+             from,
+             to);
+    }
 
     // current or to?
     if (to > current_section_) {

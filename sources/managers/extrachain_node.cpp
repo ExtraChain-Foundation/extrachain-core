@@ -1075,13 +1075,13 @@ std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
 }
 
 void ExtraChainNode::dagTimerStarting(int ms) {
-    eLog("[Dag] Timer start, {} ms", ms);
+    // eLog("[Dag] Timer start, {} ms", ms);
     dag_->timer_sync->stop();
     dag_->timer_sync->start(ms);
 }
 
 void ExtraChainNode::dagTimerStoping() {
-    eLog("[Dag] Timer stop");
+    // eLog("[Dag] Timer stop");
     dag_->timer_sync->stop();
 }
 
