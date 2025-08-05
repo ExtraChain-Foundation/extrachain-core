@@ -24,6 +24,7 @@
 
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dfs;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
+static std::shared_ptr<ThreadPoolBoost> thread_pool_prove;
 static boost::detail::spinlock          mutex;
 
 ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
@@ -64,6 +65,16 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dfs(const size_t thre
     }
 
     return thread_pool_dfs;
+}
+
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_prove(size_t threads_count) {
+    boost::detail::spinlock::scoped_lock lock(mutex);
+
+    if (!thread_pool_prove) {
+        thread_pool_prove = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    }
+
+    return thread_pool_prove;
 }
 
 std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count) {

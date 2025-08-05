@@ -33,7 +33,10 @@
 
 class ExtraChainNode;
 class Responder;
-using SectionId = BigNumber;
+
+static const SectionId CONTROL_INTERVAL      = SectionId(20);
+static const int       CONTROL_INTERVAL_MOD  = 20;
+static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
 /**
  * @brief Represents a section in the chain
@@ -85,12 +88,25 @@ struct SectionRange {
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
+struct SectionSync {
+    BigNumber                                      to;
+    std::set<Transaction>                          txs;
+    std::vector<std::pair<SectionId, std::string>> controls;
+};
+BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
+
 struct HashInterval {
     SectionId   from;
     SectionId   to;
     std::string hash;
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
+
+struct DagControl {
+    SectionId                  section_id;
+    std::optional<std::string> hash;
+};
+BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, hash))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -121,7 +137,7 @@ enum class DagStatus {
  */
 struct DagLastInfo {
     SectionId             last_section_id;
-    std::set<std::string> last_hash;
+    std::set<std::string> last_hash; // last control, last control id
     std::uint64_t         zero_date;
 };
 BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
@@ -133,11 +149,12 @@ BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
  * and transactions needed for light mode synchronization
  */
 struct DagLightPackage {
-    Balances                 cache;         // Cached account balances
-    SectionId                cache_section; // ID of the section corresponding to the cache
-    std::vector<Transaction> txs;           // Transactions since the cached section
+    Balances                                       cache;         // Cached account balances
+    SectionId                                      cache_section; // Id of the section corresponding to the cache
+    std::set<Transaction>                          txs;           // Transactions since the cached section
+    std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
 };
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs))
+BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -240,10 +257,12 @@ public:
      *
      * @param transaction The transaction to prepare
      * @param signer The actor who will sign the transaction
+     * @param ignore_zero Param for dag genesis
      * @return std::expected<Transaction, TransactionError> The prepared transaction or an error
      */
     std::expected<Transaction, TransactionError> prepare_transaction(const Transaction       &transaction,
-                                                                     const Actor<KeyPrivate> &signer);
+                                                                     const Actor<KeyPrivate> &signer,
+                                                                     bool                     ignore_zero = false);
 
     /**
      * @brief Send a transaction to the network
@@ -293,7 +312,7 @@ public:
      * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor IDs to balances
      */
     Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                      std::optional<BigNumber>    to_section = std::nullopt);
+                                      std::optional<SectionId>    to_section = std::nullopt);
 
     /**
      * @brief Add a transaction to the sent transactions list
@@ -488,7 +507,7 @@ public:
      * @param transactions Vector of transactions to save
      * @return bool True if all transactions were saved successfully, false otherwise
      */
-    std::optional<std::pair<SectionId, SectionId>> save_transactions(const std::vector<Transaction> &transactions);
+    std::optional<std::pair<SectionId, SectionId>> save_transactions(const std::set<Transaction> &transactions);
 
     void check_self(const Transaction &transaction);
 
@@ -508,8 +527,22 @@ public:
     void                              tx_list_log(const ActorId &actor_id);
     void                              cache_log();
     std::map<TokenId, BigNumberFloat> sum();
+    std::set<ActorId>                 last_month();
 
-    std::string hash_interval(const SectionId &from, const SectionId &to);
+    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = SectionId(-1),
+                                                                       bool            disable_braek = false);
+    std::optional<std::string>                       read_control(const SectionId &section_id);
+    std::optional<std::string>                       read_control_prev(const SectionId &section_id);
+    std::optional<std::string>                       read_control_next(const SectionId &section_id);
+
+    std::optional<std::string> generate_hash_for_interval(const SectionId &start, std::string &last_hash);
+    std::optional<std::string> generate_hash_from_section(const SectionId &start, bool full_generation = false);
+    bool                       generate_hash(const SectionId &start_section = SectionId(0));
+    std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
+    void                       start_control();
+
+    void request_control_section(const SectionId &section_id, const Responder &responder);
+    void network_request_control_section(const DagControl &dag_control, const Responder &responder);
 
     friend class ExtraChainNode;
     friend class DagCache;
