@@ -116,9 +116,6 @@ Dag::Dag(ExtraChainNode *node)
         cache_.init_db();
     }
 
-    // TODO: timer tick? one secs
-    this->start_control();
-
     eLog("[Dag] Done. Mode: {}", mode_);
 }
 
