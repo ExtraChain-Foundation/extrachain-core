@@ -2072,9 +2072,9 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
 #ifdef IS_RC
-        request.setTransferTimeout(300);
+        request.setTransferTimeout(5000);
 #else
-        request.setTransferTimeout(2500);
+        request.setTransferTimeout(5000);
 #endif
         QNetworkReply *reply = manager.get(request);
 
