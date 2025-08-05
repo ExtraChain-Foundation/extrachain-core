@@ -624,8 +624,7 @@ bool Dag::local_remove_transaction(const BigNumber &section_id, const std::strin
     return true;
 }
 
-std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
-    const std::vector<Transaction> &transactions) {
+std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std::set<Transaction> &transactions) {
     if (transactions.empty()) {
         return std::nullopt;
     }
@@ -1160,12 +1159,17 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         // return;
     }
 
-    std::set<Transaction> txs;
+    std::set<Transaction>                          txs;
+    std::vector<std::pair<SectionId, std::string>> controls;
 
     for (BigNumber i = from; i <= to; i++) {
         auto section = this->read_section(i);
         if (!section.has_value()) {
             continue;
+        }
+
+        if (section->control.has_value()) {
+            controls.push_back({ section->id, section->control.value() });
         }
 
         if (section->transactions.empty()) {
@@ -1183,7 +1187,9 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 
     // eLog("[Dag] Send sections from {} to {}", from, to);
 
-    auto ser      = MessagePack::serialize(std::make_pair(to, txs));
+    auto section_sync = SectionSync { .to = to, .txs = txs, .controls = controls };
+
+    auto ser      = MessagePack::serialize(section_sync);
     auto compress = qCompress(QByteArray::fromStdString(ser));
     responder.send_response(compress.toStdString(),
                             MessageType::DagSections,
@@ -1196,17 +1202,17 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     // eLog("Timer stop");
 
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
-        const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
+        const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
-        if (!txs.has_value()) {
+        if (!section_sync.has_value()) {
             // eLog("network_request_sections_response 1");
             // eLog("sysync 2");
             return;
         }
 
-        if (!txs->second.empty()) {
-            auto res = save_transactions(txs->second);
+        if (!section_sync->txs.empty()) {
+            auto res = save_transactions(section_sync->txs);
             if (!res.has_value()) {
                 // eLog("network_request_sections_response 2");
                 // eLog("sysync 3");
@@ -1227,13 +1233,17 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         emit node->dagSyncProgress(current_section_);
-        set_current_section(txs->first);
+        this->set_current_section(section_sync->to);
         // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
         // 100);
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
+        this->request_sections(current_section_, std::min(sync_last_index, section_sync->to + 100), responder);
+
+        for (const auto &[section_id, control] : section_sync->controls) {
+            this->write_control(section_id, control);
+        }
     });
 }
 
@@ -1241,7 +1251,7 @@ void Dag::network_request_light(const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
-        std::vector<Transaction>                       txs;
+        std::set<Transaction>                          txs;
         std::vector<std::pair<SectionId, std::string>> controls;
 
         if (cache().section() == BigNumber(-1) && current_section_ > 100) {
@@ -1249,13 +1259,13 @@ void Dag::network_request_light(const Responder &responder) {
         }
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
-        txs.reserve(20);
+        // txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
             controls.push_back({ SectionId(0), section->control.value() });
             for (const auto &tx : section->transactions) {
-                txs.push_back(tx);
+                txs.insert(tx);
             }
         }
 
@@ -1270,7 +1280,7 @@ void Dag::network_request_light(const Responder &responder) {
             }
 
             for (const auto &tx : section->transactions) {
-                txs.push_back(tx);
+                txs.insert(tx);
             }
         }
 
@@ -1318,7 +1328,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         }
 
         for (const auto &[section_id, control] : dag_light.controls) {
-            write_control(section_id, control);
+            this->write_control(section_id, control);
         }
 
         this->update_range();
@@ -1359,7 +1369,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
     if (interval_hash != hash_interval.hash) {
         // eLog(
-        //     "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {}, interval:
+        //     "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {},
+        //     interval:
         //     {}, " "last: {}", hash_interval, interval_hash, last_control);
 
         if (current_section_ < hash_interval.to) {

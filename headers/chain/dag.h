@@ -88,6 +88,13 @@ struct SectionRange {
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
+struct SectionSync {
+    BigNumber                                      to;
+    std::set<Transaction>                          txs;
+    std::vector<std::pair<SectionId, std::string>> controls;
+};
+BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
+
 struct HashInterval {
     SectionId   from;
     SectionId   to;
@@ -144,7 +151,7 @@ BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
 struct DagLightPackage {
     Balances                                       cache;         // Cached account balances
     SectionId                                      cache_section; // Id of the section corresponding to the cache
-    std::vector<Transaction>                       txs;           // Transactions since the cached section
+    std::set<Transaction>                          txs;           // Transactions since the cached section
     std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
 };
 BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
@@ -500,7 +507,7 @@ public:
      * @param transactions Vector of transactions to save
      * @return bool True if all transactions were saved successfully, false otherwise
      */
-    std::optional<std::pair<SectionId, SectionId>> save_transactions(const std::vector<Transaction> &transactions);
+    std::optional<std::pair<SectionId, SectionId>> save_transactions(const std::set<Transaction> &transactions);
 
     void check_self(const Transaction &transaction);
 
