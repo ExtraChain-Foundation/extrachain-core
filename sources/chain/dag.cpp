@@ -522,11 +522,11 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
     // if not genesis -> return
 
     if (section->control == hash) {
-        eLog("[Dag] No need writing control to {}", section_id);
+        // eLog("[Dag] No need writing control to {}", section_id);
         return true;
     }
 
-    eLog("[Dag] Write control to {}", section_id);
+    // eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
     return this->write_section(section.value());
 }
@@ -747,7 +747,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Validate transaction amount
-    if (tx.amount() == 0) {
+    if (tx.amount() == BigNumberFloat(0)) {
         return TransactionProveError::AmountZero;
     }
 
@@ -1910,8 +1910,8 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
 
 void Dag::start_control() {
     // for tests
-    generate_hash();
-    return;
+    // generate_hash();
+    // return;
 
     eLog("[Dag] Check controls...");
 
