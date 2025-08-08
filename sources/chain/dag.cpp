@@ -485,6 +485,16 @@ std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     return std::nullopt;
 }
 
+bool Dag::exists_section_file(const SectionId &section_id) const {
+    auto p    = this->file_path(section_id);
+    auto path = FsPath::create(p);
+    if (path.has_value()) {
+        return path->exists();
+    }
+
+    return false;
+}
+
 std::optional<bool> Dag::write_section(const Section &section) {
     try {
         std::unique_lock<std::shared_mutex> lock(section_mutex_);
@@ -512,23 +522,56 @@ std::optional<bool> Dag::write_section(const Section &section) {
     return true;
 }
 
-std::optional<bool> Dag::write_control(const SectionId &section_id, const std::string &hash) {
-    // return std::nullopt;
+std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> Dag::write_section_diff(const Section &section) {
+    std::optional<SectionDiff> section_diff;
+    auto                       existing_section = this->read_section(section.id);
+
+    if (existing_section.has_value()) {
+        if (existing_section->transactions.size() == section.transactions.size()
+            && existing_section->calculate_hash() == section.calculate_hash()) {
+            return std::pair { WriteResult::NoChanges, section_diff };
+        }
+        section_diff = this->calculate_section_diff(*existing_section, section);
+    } else {
+        SectionDiff diff;
+        diff.added_transactions.reserve(section.transactions.size());
+        for (const auto &transaction : section.transactions) {
+            diff.added_transactions.push_back(transaction);
+        }
+        section_diff = std::move(diff);
+    }
+
+    auto write_result = write_section(section);
+    if (!write_result.has_value()) {
+        return std::nullopt;
+    }
+
+    return std::pair { WriteResult::Write, section_diff };
+}
+
+std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const std::string &hash) {
+    if (section_id % CONTROL_INTERVAL_MOD != 0) {
+        return std::nullopt;
+    }
+
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
     }
 
-    // if not genesis -> return
-
     if (section->control == hash) {
         // eLog("[Dag] No need writing control to {}", section_id);
-        return true;
+        return WriteResult::NoChanges;
     }
 
     // eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
-    return this->write_section(section.value());
+    auto res         = this->write_section(section.value());
+    if (!res.has_value()) {
+        return std::nullopt;
+    }
+
+    return WriteResult::Write;
 }
 
 void Dag::timer_tick() {
@@ -542,6 +585,41 @@ void Dag::timer_tick() {
     }
 
     this->start_sync();
+}
+
+SectionDiff Dag::calculate_section_diff(const Section &old_section, const Section &new_section) {
+    SectionDiff diff;
+
+    auto old_it  = old_section.transactions.begin();
+    auto new_it  = new_section.transactions.begin();
+    auto old_end = old_section.transactions.end();
+    auto new_end = new_section.transactions.end();
+
+    // O(n + m)
+    while (old_it != old_end && new_it != new_end) {
+        if (*old_it < *new_it) {
+            diff.removed_transactions.push_back(*old_it);
+            ++old_it;
+        } else if (*new_it < *old_it) {
+            diff.added_transactions.push_back(*new_it);
+            ++new_it;
+        } else {
+            ++old_it;
+            ++new_it;
+        }
+    }
+
+    while (old_it != old_end) {
+        diff.removed_transactions.push_back(*old_it);
+        ++old_it;
+    }
+
+    while (new_it != new_end) {
+        diff.added_transactions.push_back(*new_it);
+        ++new_it;
+    }
+
+    return diff;
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
@@ -661,7 +739,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             set_current_section(section_id);
             cache_.check_and_update_cache_thread(current_section_);
 
-            update_range();
+            this->update_range();
 
             if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
                 auto network_id = section_txs[0].sender();
@@ -1978,7 +2056,7 @@ void Dag::network_request_control_section(const DagControl &dag_control, const R
     // що робити, якщо 1 повний і 2 ні, а не обидва? все одно?
 }
 
-std::set<std::string> Section::prev_hashs() {
+std::set<std::string> Section::prev_hashs() const {
     std::set<std::string> hashs;
 
     for (const auto &tx : transactions) {
@@ -1989,7 +2067,7 @@ std::set<std::string> Section::prev_hashs() {
     return hashs;
 }
 
-std::set<std::string> Section::hashs() {
+std::set<std::string> Section::hashs() const {
     std::set<std::string> hashs;
 
     for (const auto &tx : transactions) {
@@ -1999,7 +2077,7 @@ std::set<std::string> Section::hashs() {
     return hashs;
 }
 
-std::uint64_t Section::middle() {
+std::uint64_t Section::middle() const {
     if (transactions.empty()) {
         return 0;
     }
@@ -2013,7 +2091,7 @@ std::uint64_t Section::middle() {
     return sum / transactions.size();
 }
 
-std::string Section::calculate_hash() {
+std::string Section::calculate_hash() const {
     std::string tx_hashs;
     for (const auto &transaction : transactions) {
         tx_hashs += transaction.hash();
