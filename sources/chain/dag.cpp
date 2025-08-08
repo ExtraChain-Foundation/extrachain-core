@@ -714,9 +714,9 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
     }
 
     bool      all_saved   = true;
+    bool      has_changes = false;
     BigNumber min_section = BigNumber(-1);
     BigNumber max_section;
-    bool      first_iteration = true;
 
     for (const auto &[section_id, section_txs] : section_transactions) {
         if (min_section == BigNumber(-1)) {
@@ -727,7 +727,8 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             max_section = std::max(section_id, max_section);
         }
 
-        auto section = this->read_section(section_id);
+        auto   section  = this->read_section(section_id);
+        size_t old_size = section.has_value() ? section->transactions.size() : 0;
 
         if (!section.has_value()) {
             Section new_section { .id = section_id, .transactions = {} };
@@ -735,6 +736,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             for (const auto &tx : section_txs) {
                 new_section.transactions.insert(tx);
             }
+            has_changes = true;
 
             set_current_section(section_id);
             cache_.check_and_update_cache_thread(current_section_);
@@ -761,6 +763,18 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
                 section->transactions.insert(tx);
             }
 
+            size_t new_size = section->transactions.size();
+            if (new_size != old_size) {
+                has_changes = true;
+
+                if (section_id % 20 == 0) {
+                    eLog("[Dag] Control section {} changed: {} -> {} transactions",
+                         section_id,
+                         old_size,
+                         new_size);
+                }
+            }
+
             set_current_section(section_id);
             cache_.check_and_update_cache(current_section_);
 
@@ -779,6 +793,12 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
 
     if (!all_saved) {
         return std::nullopt;
+    }
+
+    if (has_changes) {
+        eLog("[Dag] Saved sections from {} to {} with changes", min_section, max_section);
+    } else {
+        eLog("[Dag] Saved sections from {} to {} - no changes", min_section, max_section);
     }
 
     return std::make_pair(min_section, max_section);
@@ -1289,6 +1309,8 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
+        bool has_changes = false; // Флаг для отслеживания изменений
+
         if (!section_sync->txs.empty()) {
             auto res = save_transactions(section_sync->txs);
             if (!res.has_value()) {
@@ -1298,7 +1320,32 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             }
 
             const auto &[min, max] = res.value();
-            // eLog("[Dag] Saved sections from {} to {}", min, max);
+            has_changes            = true;
+        }
+
+        for (const auto &[section_id, control] : section_sync->controls) {
+            if (section_id % 20 == 0) {
+                auto existing_section = this->read_section(section_id);
+                if (existing_section.has_value()) {
+                    if (existing_section->control != control) {
+                        has_changes = true;
+                        eLog("[Dag] Control changed for section {}: {} -> {}",
+                             section_id,
+                             existing_section->control.value_or("none"),
+                             control);
+                    }
+                } else {
+                    has_changes = true;
+                    eLog("[Dag] New control for section {}: {}", section_id, control);
+                }
+            }
+            // this->write_control(section_id, control);
+        }
+
+        if (has_changes) {
+            eLog("[Dag] Network sync completed with changes");
+        } else {
+            eLog("[Dag] Network sync completed - no changes detected");
         }
 
         if (current_section_ >= sync_last_index - 1) {
@@ -1318,10 +1365,6 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         // timer_sync->start();
         emit node->dagTimerStart(15002);
         this->request_sections(current_section_, std::min(sync_last_index, section_sync->to + 100), responder);
-
-        for (const auto &[section_id, control] : section_sync->controls) {
-            this->write_control(section_id, control);
-        }
     });
 }
 

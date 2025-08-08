@@ -47,7 +47,7 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control; // hash, calc on start
+    std::optional<std::string> control; // hash, interval 1-20, 21-40, ..
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
