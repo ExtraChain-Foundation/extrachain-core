@@ -136,6 +136,21 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
     }
 }
 
+bool NetworkManager::is_first_node(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty()) {
+        return false;
+    }
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier && el->ip() == first_node_) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void NetworkManager::process() {
     if (!node->isClientApp())
         return;
@@ -858,8 +873,9 @@ bool NetworkManager::is_connection_exists(const std::string &identifier) {
 
 bool NetworkManager::isActiveConnectionExists() {
     auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+    if (connectionsLocked->empty()) {
         return false;
+    }
 
     for (const auto &el : *connectionsLocked) {
         if (el->is_active()) {
@@ -872,8 +888,9 @@ bool NetworkManager::isActiveConnectionExists() {
 
 int NetworkManager::active_connections_count() {
     auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+    if (connectionsLocked->empty()) {
         return 0;
+    }
 
     int count = 0;
     for (const auto &el : *connectionsLocked) {
@@ -1596,7 +1613,8 @@ void NetworkManager::messageReceived(const std::string &message,
             break;
         }
 
-        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
+        bool isF = is_first_node(identifier);
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result, isF);
         break;
     }
 

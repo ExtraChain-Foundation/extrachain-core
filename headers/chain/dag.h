@@ -328,7 +328,7 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result);
+    void network_transaction_result(const std::string hash, TransactionProveError result, bool isF);
 
     /**
      * @brief Process a section received from the network
@@ -468,10 +468,19 @@ public:
      */
     void process_cached_transactions();
 
+    std::unordered_map<std::string, Transaction> sended_transactions() {
+        return sended_transactions_;
+    }
+
+    std::unordered_map<std::string, Transaction> failed_transactions() {
+        return failed_transactions_;
+    }
+
 private:
     ExtraChainNode                              *node;                 // Parent node reference
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet confirmed
+    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
+    std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
     DagCache                                     cache_;               // Balance cache for fast calculations
 
     mutable std::shared_mutex section_mutex_; //

@@ -318,9 +318,14 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     return {};
 }
 
-void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
+void Dag::network_transaction_result(const std::string hash, TransactionProveError result, bool isF) {
     if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
+        return;
+    }
+
+    if (!isF) {
+        eLog("[Dag] Check: {}", isF);
         return;
     }
 
@@ -333,11 +338,16 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
              transaction.section().to_string(NumeralBase::Dec),
              transaction.hash(),
              result);
-        // this->sended_transactions.erase(hash);
+
+        // if not approved > min (connections, 5)
+        this->sended_transactions_.erase(hash);
+        this->failed_transactions_.insert({ hash, transaction });
+        emit node->dagTxNotApproved(hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
         this->sended_transactions_.erase(hash);
+        emit node->dagTxApproved(hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -1343,7 +1353,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         }
 
         if (has_changes) {
-            eLog("[Dag] Network sync completed with changes");
+            // eLog("[Dag] Network sync completed with changes");
         } else {
             eLog("[Dag] Network sync completed - no changes detected");
         }

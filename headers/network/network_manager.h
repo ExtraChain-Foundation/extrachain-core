@@ -279,6 +279,7 @@ private:
     void clearNetworkCaches();
 
     void addAllServicesIdentifiersToMessage(MessageBody& msg);
+    bool is_first_node(const std::string& identifier); // detect for safety
 
 public:
     SafePtr<std::set<SocketService*>> connections() const;
