@@ -566,16 +566,35 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
-        return std::nullopt;
+        section = Section { .id = section_id };
     }
 
     if (section->control == hash) {
-        // eLog("[Dag] No need writing control to {}", section_id);
+        eLog("[Dag] No need writing control to {}", section_id);
         return WriteResult::NoChanges;
     }
 
-    // eLog("[Dag] Write control to {}", section_id);
+    eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
+    auto res         = this->write_section(section.value());
+    if (!res.has_value()) {
+        return std::nullopt;
+    }
+
+    return WriteResult::Write;
+}
+
+std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
+    auto section = this->read_section(section_id);
+    if (!section.has_value()) {
+        return std::nullopt;
+    }
+
+    if (!section->control.has_value()) {
+        return std::nullopt;
+    }
+
+    section->control = std::nullopt;
     auto res         = this->write_section(section.value());
     if (!res.has_value()) {
         return std::nullopt;
@@ -1416,6 +1435,13 @@ void Dag::network_request_light(const Responder &responder) {
             }
         }
 
+        auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
+        if (section_before.has_value()) {
+            if (section_before->control.has_value()) {
+                controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
+            }
+        }
+
         if (txs.empty()) {
             eLog("[Dag] No transactions to send in light mode");
             return;
@@ -1430,8 +1456,10 @@ void Dag::network_request_light(const Responder &responder) {
                                       MessageStatus::Response,
                                       responder);
 
-        eLog("DONE SENDING {}", timer.elapsed());
-        eLog("[Dag] Sent light data: cache section {}, transactions count: {}", cache_section, txs.size());
+        eLog("[Dag] Sent light data: cache section {}, transactions count: {}, time: {}",
+             cache_section,
+             txs.size(),
+             timer.elapsed());
     });
 }
 
@@ -1482,13 +1510,24 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
+    / eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
         eCritical("[Dag] No last control");
         return;
     }
 
-    eLog("Last control: {}", last_control);
+    eLog("[Dag] Last control: {}", last_control);
+
+    if (hash_interval.to > current_section_) {
+        eLog("[Dag] Hash interval check: ignore #2");
+        return;
+    }
+
+    if (hash_interval.to + 100 < current_section_) {
+        eLog("[Dag] Hash interval check: ignore #3");
+        return;
+    }
 
     auto interval_hash = this->hash_interval(hash_interval.from, hash_interval.to);
     if (!interval_hash.has_value()) {
@@ -1512,7 +1551,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
             this->start_check(); // TODO: warning: check or sync?
         } else {
-            request_sections(hash_interval.from, hash_interval.to, responder);
+            this->request_sections(hash_interval.from, hash_interval.to, responder);
             // TODO: need add full network check
             // this->request_control_section(hash_interval.from, responder.with_new_message_id());
         }
@@ -1874,10 +1913,12 @@ std::set<ActorId> Dag::last_month() {
     return actors;
 }
 
-std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from, bool disable_braek) {
-    int j = 0;
+std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from, bool disable_break) {
+    int j  = 0;
+    int jj = 0;
+    eLog("[Dag] find_last_control: {}, current: {}", from, current_section_);
 
-    if (disable_braek) {
+    if (disable_break) {
         auto section = this->read_section(SectionId(0));
         if (section.has_value()) {
             if (!section->control.has_value()) {
@@ -1886,22 +1927,33 @@ std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const Se
         }
     }
 
-    for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
+    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+        if (i < first_saved_section_) {
+            eCritical("[Dag] Try to find section < current first");
+            break;
+        }
+
         auto section = this->read_section(i);
         if (!section.has_value()) {
-            eLog("NO SECTION ---> {}", i);
             if (i % CONTROL_INTERVAL_MOD == 0) {
+                eLog("[Dag] No section: {}", i);
                 j = 0;
+                // jj++;
             }
             continue;
         }
 
         if (section->control.has_value()) {
+            if (section->id % CONTROL_INTERVAL_MOD != 0) {
+                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
+                continue;
+            }
+
             return std::make_pair(i, section->control.value());
         }
 
         j += 1;
-        if (!disable_braek && j > 25) {
+        if (!disable_break && (j > 25 || jj > 10)) {
             break;
         }
     }
@@ -2045,6 +2097,9 @@ void Dag::start_control() {
     // generate_hash();
     // return;
 
+    // for tests 2
+    // this->clear_controls();
+
     eLog("[Dag] Check controls...");
 
     auto find_result = this->find_last_control();
@@ -2060,7 +2115,23 @@ void Dag::start_control() {
     }
 
     auto find_result2 = this->find_last_control(current_section_, true);
-    generate_hash(find_result2.has_value() ? find_result2->first : SectionId(0));
+    generate_hash(find_result2.has_value()
+                      ? find_result2->first % 20 == 0 ? find_result2->first + 1 : find_result2->first
+                      : SectionId(0));
+}
+
+void Dag::clear_controls() {
+    eLog("[Dag] Clear all controls..."); // TODO: % 20?
+    for (BigNumber i = BigNumber(0); i <= current_section_; i++) {
+        auto section = read_section(i);
+        if (!section.has_value()) {
+            continue;
+        }
+
+        if (section->control.has_value()) {
+            remove_control(i);
+        }
+    }
 }
 
 void Dag::request_control_section(const SectionId &section_id, const Responder &responder) {
@@ -2084,7 +2155,8 @@ void Dag::network_request_control_section(const DagControl &dag_control, const R
 
     if (!dag_control.hash.has_value()) {
         // request interval control sync
-        request_sections(dag_control.section_id, dag_control.section_id + CONTROL_INTERVAL, responder); // ?
+        request_sections(dag_control.section_id, dag_control.section_id + CONTROL_INTERVAL,
+                         responder); // ?
     }
 
     if (dag_control.hash.has_value()) {

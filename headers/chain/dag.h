@@ -545,6 +545,13 @@ private:
     std::optional<WriteResult> write_control(const SectionId &section_id, const std::string &hash);
 
     /**
+     * @brief remove_control
+     * @param section_id
+     * @return
+     */
+    std::optional<WriteResult> remove_control(const SectionId &section_id);
+
+    /**
      * @brief timer_tick
      */
     void timer_tick();
@@ -626,8 +633,8 @@ public:
      * @param disable_braek
      * @return
      */
-    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = SectionId(-1),
-                                                                       bool            disable_braek = false);
+    std::optional<std::pair<SectionId, std::string>> find_last_control(SectionId from = SectionId(-1),
+                                                                       bool            disable_break = false);
 
     /**
      * @brief read_control
@@ -685,6 +692,8 @@ public:
      * @brief start_control
      */
     void start_control();
+
+    void clear_controls();
 
     /**
      * @brief request_control_section

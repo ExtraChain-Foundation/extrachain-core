@@ -358,7 +358,7 @@ public:
     bool isActiveConnectionExists();
     int  active_connections_count();
 
-    void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
+    void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 
     QString foundCurrentIdentifier(QString ip, quint16 port);
 

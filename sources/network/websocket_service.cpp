@@ -298,7 +298,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
     }
 
     if (!mess.isEmpty()) {
-        node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
+        node->network()->message_received(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
         eCritical("[WS] Message is empty after prepare");
         emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString());
