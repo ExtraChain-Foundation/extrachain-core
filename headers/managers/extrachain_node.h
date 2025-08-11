@@ -283,6 +283,7 @@ signals:
     void dagSyncProgress(BigNumber);
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
+    void dagTxSended(std::string hash);
     void dagTxApproved(std::string hash);
     void dagTxNotApproved(std::string hash);
 

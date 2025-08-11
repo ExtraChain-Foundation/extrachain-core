@@ -1055,6 +1055,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions_.insert({ transaction.hash(), transaction });
+    emit node->dagTxSended(transaction.hash());
 }
 
 void Dag::update_range() {
