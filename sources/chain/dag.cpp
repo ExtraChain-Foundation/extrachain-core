@@ -1284,6 +1284,13 @@ void Dag::network_request_light(const Responder &responder) {
             }
         }
 
+        auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
+        if (section_before.has_value()) {
+            if (section_before->control.has_value()) {
+                controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
+            }
+        }
+
         if (txs.empty()) {
             eLog("[Dag] No transactions to send in light mode");
             return;
