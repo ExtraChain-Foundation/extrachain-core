@@ -470,13 +470,12 @@ namespace Dfs {
             std::uint64_t   BytesReceived;
             BigNumber       BlocksStored;
             Transaction     transaction;
-            Transaction     convert;
         };
 
         BOOST_DESCRIBE_STRUCT(
             RequestReward,
             (),
-            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction, convert))
+            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction))
     } // namespace Reward
 
     namespace Tables {

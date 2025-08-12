@@ -134,3 +134,5 @@ public:
 };
 
 MAKE_CUSTOM_MAGICAL(BigNumber)
+
+using SectionId = BigNumber;

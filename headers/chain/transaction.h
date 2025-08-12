@@ -91,7 +91,8 @@ enum class TransactionProveError {
     GenesisOnlyZeroSection,       ///< Genesis transaction must use section zero
     SectionTooBig,                ///< Section number exceeds limits
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
-    TooSectionDiff                ///< Section difference too large
+    TooSectionDiff,               ///< Section difference too large
+    BigReward
 };
 
 /**

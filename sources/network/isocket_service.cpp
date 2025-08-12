@@ -165,13 +165,14 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                 continue;
             }
 
-            if (el->is_active()) {
-                duplicate = true;
-            }
+            // if (el->is_active()) {
+            // duplicate = true;
+            // }
 
-            if (!el->is_active()) {
-                el->closeSocket();
-            }
+            // if (!el->is_active()) {
+            el->closeSocket();
+            break;
+            // }
         }
     }
 

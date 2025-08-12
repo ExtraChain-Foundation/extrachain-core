@@ -191,7 +191,7 @@ bool ExtraChainNode::create_new_dag() {
     tx.set_receiver(actor.id());
     tx.set_type(TransactionType::Genesis);
 
-    auto prepared_tx = dag_->prepare_transaction(tx, actor);
+    auto prepared_tx = dag_->prepare_transaction(tx, actor, true);
     if (!prepared_tx.has_value()) {
         eCritical("[Node] Can't prepare transaction for new network");
         std::exit(-10);
@@ -204,6 +204,7 @@ bool ExtraChainNode::create_new_dag() {
         std::exit(-11);
     }
 
+    dag_->generate_hash();
     dag_->set_status(DagStatus::Ready);
 
     m_actorIndex->set_network_id(actor.id());
@@ -366,6 +367,53 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     auto sub_res =
         dfs()->store_vector(system_actor_id, system_actor_id, file_name, network_id, search_result->file_id);
     if (!sub_res.has_value()) {
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_renames_template() {
+    auto system_actor_id = accountController()->system_actor().id();
+
+    auto chat_template = Dfs::CollectionTemplate::create("Renames").value().use_id().add_fields(
+        { Dfs::Field::Json("name").not_null() });
+
+    auto chat_result = dfs()->store_template(system_actor_id, chat_template);
+    if (!chat_result.has_value()) {
+        eCritical("Can't create renames template, because {}", chat_result.error());
+        return false;
+    }
+
+    eSuccess("Renames template created");
+    return true;
+}
+
+bool ExtraChainNode::create_renames_vector() {
+    const auto main_actor_id = this->accountController()->currentProfile().main_id();
+    auto       network_id    = this->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "Renames");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
+    auto store_chat_res = this->dfs()->store_vector(main_actor_id,
+                                                    main_actor_id,
+                                                    "Renames",
+                                                    network_id,
+                                                    search_result->file_id,
+                                                    Dfs::DataSecurity::Self,
+                                                    security_actor);
+
+    if (!store_chat_res.has_value()) {
         return false;
     }
 
@@ -828,7 +876,7 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Dag] {} (0x{}) sections, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
+    eLog("[Dag] Last: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
@@ -836,6 +884,10 @@ void ExtraChainNode::timer_info_print() {
          dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
+
+    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section()).has_value()) {
+        eCritical("[Dag] No last section");
+    }
 }
 
 void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
@@ -904,7 +956,8 @@ void ExtraChainNode::dfsConnection() {
 }
 
 void ExtraChainNode::connectSignals() {
-    connect(this, &ExtraChainNode::ready, []() {
+    connect(this, &ExtraChainNode::ready, [this]() {
+        dag_->start_control();
         eInfo("Your node successfully started");
     });
 
@@ -1022,13 +1075,13 @@ std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
 }
 
 void ExtraChainNode::dagTimerStarting(int ms) {
-    eLog("[Dag] Timer start, {} ms", ms);
+    // eLog("[Dag] Timer start, {} ms", ms);
     dag_->timer_sync->stop();
     dag_->timer_sync->start(ms);
 }
 
 void ExtraChainNode::dagTimerStoping() {
-    eLog("[Dag] Timer stop");
+    // eLog("[Dag] Timer stop");
     dag_->timer_sync->stop();
 }
 

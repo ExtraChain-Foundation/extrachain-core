@@ -95,6 +95,12 @@ struct SubscriptionRow {
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
+struct RenameRow {
+    std::string id;
+    std::string name;
+};
+BOOST_DESCRIBE_STRUCT(RenameRow, (), (id, name))
+
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
@@ -157,6 +163,8 @@ public:
     bool create_subscription_template();
     bool create_token_template();
     bool create_token_vector();
+    bool create_renames_template();
+    bool create_renames_vector();
 
     // not only for the one
     bool create_subscription_vector(const std::string& file_name);
@@ -275,6 +283,9 @@ signals:
     void dagSyncProgress(BigNumber);
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
+
+    void dagControlStarted();
+    void dagControlEnded();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

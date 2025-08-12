@@ -100,7 +100,7 @@ Dag::Dag(ExtraChainNode *node)
     timestamp_bigger_sync_start_ = 0;
 
 #ifndef IS_R
-    status_ = DagStatus::Ready;
+    this->set_status(DagStatus::Ready);
 #endif
 
     auto section = this->read_section(BigNumber(0));
@@ -120,6 +120,7 @@ Dag::Dag(ExtraChainNode *node)
 }
 
 Dag::~Dag() {
+    cache_.dag = nullptr;
     timer_sync->deleteLater();
 }
 
@@ -191,9 +192,14 @@ std::string Dag::file_path(const BigNumber &section) const {
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
-                                                                      const Actor<KeyPrivate> &signer) {
+                                                                      const Actor<KeyPrivate> &signer,
+                                                                      bool                     ignore_zero) {
     auto tx = transaction;
     tx.set_section(current_section_ + 1);
+
+    if (tx.section() == 0 && !ignore_zero) {
+        return std::unexpected(TransactionError::NoLastSection);
+    }
 
     auto section = read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
@@ -252,6 +258,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
         }
     }
 
+    auto tx   = transaction;
+    auto resp = responder;
+    // ThreadPoolBoost::instance()->post([this, transaction = tx, responder = resp]() {
     auto                  section = read_section(transaction.section());
     TransactionProveError res =
         this->prove_transaction(transaction,
@@ -304,6 +313,7 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     }
 
     check_self(transaction);
+    // });
 
     return {};
 }
@@ -384,15 +394,19 @@ void Dag::network_section(const Section &section) {
 }
 
 Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
-                                       std::optional<BigNumber>    to_section) {
+                                       std::optional<SectionId>    to_section) {
     // Use DagCache to calculate balances
     return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_, to_section);
 }
 
 void Dag::process_cached_transactions() {
     {
-        auto guard = cached_txs_.lock();
-        eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+        try {
+            auto guard = cached_txs_.lock();
+            eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in process cached: " << e.what() << std::endl;
+        }
     }
 
     status_                      = DagStatus::Final;
@@ -401,13 +415,17 @@ void Dag::process_cached_transactions() {
     while (true) {
         std::set<Transaction> txs_to_process;
         {
-            auto guard_mut = cached_txs_.lock_mut();
-            if (guard_mut->empty()) {
-                break;
-            }
+            try {
+                auto guard_mut = cached_txs_.lock_mut();
+                if (guard_mut->empty()) {
+                    break;
+                }
 
-            txs_to_process = std::move(*guard_mut);
-            guard_mut->clear();
+                txs_to_process = std::move(*guard_mut);
+                guard_mut->clear();
+            } catch (const std::system_error &e) {
+                std::cerr << "[Dag] Caught system_error in process cached 2: " << e.what() << std::endl;
+            }
         }
 
         for (const auto &tx : txs_to_process) {
@@ -424,20 +442,32 @@ void Dag::process_cached_transactions() {
 void Dag::add_to_cached_tx(const Transaction &transaction) {
     bool exists = false;
     {
-        auto guard = cached_txs_.lock();
-        exists     = guard->find(transaction) != guard->end();
+        try {
+            auto guard = cached_txs_.lock();
+            exists     = guard->find(transaction) != guard->end();
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in add_to_cached_tx: " << e.what() << std::endl;
+        }
     }
 
     if (!exists) {
-        auto guard_mut = cached_txs_.lock_mut();
-        guard_mut->insert(transaction);
+        try {
+            auto guard_mut = cached_txs_.lock_mut();
+            guard_mut->insert(transaction);
+        } catch (const std::system_error &e) {
+            std::cerr << "[Dag] Caught system_error in add_to_cached_tx 2: " << e.what() << std::endl;
+        }
 
         // eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
     }
 }
 
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
-    std::shared_lock<std::shared_mutex> lock(section_mutex_);
+    try {
+        std::shared_lock<std::shared_mutex> lock(section_mutex_);
+    } catch (const std::system_error &e) {
+        return std::nullopt;
+    }
 
     auto p    = this->file_path(section_id);
     auto path = FsPath::create(p);
@@ -456,7 +486,11 @@ std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
-    std::unique_lock<std::shared_mutex> lock(section_mutex_);
+    try {
+        std::unique_lock<std::shared_mutex> lock(section_mutex_);
+    } catch (const std::system_error &e) {
+        return std::nullopt;
+    }
 
     auto folder = this->file_folder(section.id);
     if (!std::filesystem::exists(folder)) {
@@ -479,7 +513,7 @@ std::optional<bool> Dag::write_section(const Section &section) {
 }
 
 std::optional<bool> Dag::write_control(const SectionId &section_id, const std::string &hash) {
-    return std::nullopt;
+    // return std::nullopt;
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
@@ -487,7 +521,12 @@ std::optional<bool> Dag::write_control(const SectionId &section_id, const std::s
 
     // if not genesis -> return
 
-    eLog("[Dag] Write control to {}", section_id);
+    if (section->control == hash) {
+        // eLog("[Dag] No need writing control to {}", section_id);
+        return true;
+    }
+
+    // eLog("[Dag] Write control to {}", section_id);
     section->control = hash;
     return this->write_section(section.value());
 }
@@ -585,8 +624,7 @@ bool Dag::local_remove_transaction(const BigNumber &section_id, const std::strin
     return true;
 }
 
-std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
-    const std::vector<Transaction> &transactions) {
+std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std::set<Transaction> &transactions) {
     if (transactions.empty()) {
         return std::nullopt;
     }
@@ -621,7 +659,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(
             }
 
             set_current_section(section_id);
-            cache_.check_and_update_cache(current_section_);
+            cache_.check_and_update_cache_thread(current_section_);
 
             update_range();
 
@@ -709,7 +747,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Validate transaction amount
-    if (tx.amount() == 0) {
+    if (tx.amount() == BigNumberFloat(0)) {
         return TransactionProveError::AmountZero;
     }
 
@@ -806,6 +844,10 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Special transaction types that don't require balance check
     if (tx.type() == TransactionType::Reward) {
+        if (tx.amount() > 3) {
+            return TransactionProveError::BigReward;
+        }
+
         return TransactionProveError::NoError;
     }
 
@@ -908,7 +950,12 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
 }
 
 void Dag::update_range() {
-    std::lock_guard<std::mutex> lock(range_mutex_);
+    try {
+        std::lock_guard<std::mutex> lock(range_mutex_);
+    } catch (const std::system_error &e) {
+        // eCritical("[Dag] Caught system_error in update range: {}", e.what());
+        return;
+    }
 
     std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
                                                       .last        = current_section_.to_string(),
@@ -983,8 +1030,7 @@ void Dag::start_sync() {
     // }
 
     if (status_ != DagStatus::Sync) {
-        status_ = DagStatus::Sync;
-        emit node->dagStatus(status_);
+        this->set_status(DagStatus::Sync);
     }
 
     last_info_.clear();
@@ -1088,7 +1134,9 @@ void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Res
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
+    // if (status_ != DagStatus::Sync) {
     eLog("[Dag] Request sections from {} to {}", range.first, range.last);
+    // }
 }
 
 void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
@@ -1107,7 +1155,12 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
         return;
     }
 
-    std::set<Transaction> txs;
+    if (to - from >= 150) {
+        // return;
+    }
+
+    std::set<Transaction>                          txs;
+    std::vector<std::pair<SectionId, std::string>> controls;
 
     for (BigNumber i = from; i <= to; i++) {
         auto section = this->read_section(i);
@@ -1115,7 +1168,12 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
             continue;
         }
 
+        if (section->control.has_value()) {
+            controls.push_back({ section->id, section->control.value() });
+        }
+
         if (section->transactions.empty()) {
+            continue;
         }
 
         for (const auto &tx : section->transactions) {
@@ -1129,7 +1187,9 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
 
     // eLog("[Dag] Send sections from {} to {}", from, to);
 
-    auto ser      = MessagePack::serialize(std::make_pair(to, txs));
+    auto section_sync = SectionSync { .to = to, .txs = txs, .controls = controls };
+
+    auto ser      = MessagePack::serialize(section_sync);
     auto compress = qCompress(QByteArray::fromStdString(ser));
     responder.send_response(compress.toStdString(),
                             MessageType::DagSections,
@@ -1142,17 +1202,17 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     // eLog("Timer stop");
 
     ThreadPoolBoost::instance()->post([this, compressed, responder]() {
-        const auto txs = MessagePack::deserialize<std::pair<BigNumber, std::vector<Transaction>>>(
+        const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
-        if (!txs.has_value()) {
+        if (!section_sync.has_value()) {
             // eLog("network_request_sections_response 1");
             // eLog("sysync 2");
             return;
         }
 
-        if (!txs->second.empty()) {
-            auto res = save_transactions(txs->second);
+        if (!section_sync->txs.empty()) {
+            auto res = save_transactions(section_sync->txs);
             if (!res.has_value()) {
                 // eLog("network_request_sections_response 2");
                 // eLog("sysync 3");
@@ -1166,18 +1226,24 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         if (current_section_ >= sync_last_index - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
 
-            process_cached_transactions();
+            if (this->status_ != DagStatus::Ready) {
+                process_cached_transactions();
+            }
             return;
         }
 
         emit node->dagSyncProgress(current_section_);
-        set_current_section(txs->first);
+        this->set_current_section(section_sync->to);
         // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
         // 100);
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        request_sections(current_section_, std::min(sync_last_index, txs->first + 100), responder);
+        this->request_sections(current_section_, std::min(sync_last_index, section_sync->to + 100), responder);
+
+        for (const auto &[section_id, control] : section_sync->controls) {
+            this->write_control(section_id, control);
+        }
     });
 }
 
@@ -1185,19 +1251,21 @@ void Dag::network_request_light(const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
-        std::vector<Transaction> txs;
+        std::set<Transaction>                          txs;
+        std::vector<std::pair<SectionId, std::string>> controls;
 
         if (cache().section() == BigNumber(-1) && current_section_ > 100) {
             return;
         }
 
         auto [cache_section, cache] = this->cache().read_cached_balances();
-        txs.reserve(20);
+        // txs.reserve(20);
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
+            controls.push_back({ SectionId(0), section->control.value() });
             for (const auto &tx : section->transactions) {
-                txs.push_back(tx);
+                txs.insert(tx);
             }
         }
 
@@ -1207,8 +1275,19 @@ void Dag::network_request_light(const Responder &responder) {
                 continue;
             }
 
+            if (section->control.has_value()) {
+                controls.push_back({ i, section->control.value() });
+            }
+
             for (const auto &tx : section->transactions) {
-                txs.push_back(tx);
+                txs.insert(tx);
+            }
+        }
+
+        auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
+        if (section_before.has_value()) {
+            if (section_before->control.has_value()) {
+                controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
             }
         }
 
@@ -1217,7 +1296,8 @@ void Dag::network_request_light(const Responder &responder) {
             return;
         }
 
-        auto dag_light = DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs };
+        auto dag_light =
+            DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs, .controls = controls };
 
         node->network()->send_message(dag_light,
                                       MessageType::DagLightData,
@@ -1243,21 +1323,30 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         //     max = std::max(tx.section(), max);
         //     save_transaction(tx);
         // }
-        save_transactions(dag_light.txs);
+        this->save_transactions(dag_light.txs);
 
         // if (first_saved_section_ == BigNumber(-1) && min >= BigNumber(0)) {
         //     first_saved_section_ = min;
         //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         // }
 
-        update_range();
+        if (dag_light.cache_section == -1 || dag_light.cache_section == 0) {
+            this->first_saved_section_ = 0;
+        }
+
+        for (const auto &[section_id, control] : dag_light.controls) {
+            this->write_control(section_id, control);
+        }
+
+        this->update_range();
 
         eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
              dag_light.cache_section,
-             first_saved_section_,
-             current_section_);
+             this->first_saved_section_,
+             this->current_section_);
 
-        process_cached_transactions();
+        this->process_cached_transactions();
+        // start check hash
         // TIMER_END(network_response_light)
     });
 }
@@ -1268,10 +1357,28 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    auto current_hash = this->hash_interval(hash_interval.from, hash_interval.to);
+    auto last_control = this->find_last_control(hash_interval.to - 1);
+    if (!last_control.has_value()) {
+        eCritical("[Dag] No last control");
+        return;
+    }
 
-    if (current_hash != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). {}", hash_interval);
+    eLog("Last control: {}", last_control);
+
+    auto interval_hash = this->hash_interval(hash_interval.from, hash_interval.to);
+    if (!interval_hash.has_value()) {
+        return;
+    }
+
+    if (!(hash_interval.to == last_control->first && hash_interval.from == last_control->first)) {
+        interval_hash = Utils::calculate_hash(last_control->second + interval_hash.value());
+    }
+
+    if (interval_hash != hash_interval.hash) {
+        // eLog(
+        //     "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {},
+        //     interval:
+        //     {}, " "last: {}", hash_interval, interval_hash, last_control);
 
         if (current_section_ < hash_interval.to) {
             if (status_ != DagStatus::Ready) {
@@ -1281,6 +1388,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
             this->start_check(); // TODO: warning: check or sync?
         } else {
             request_sections(hash_interval.from, hash_interval.to, responder);
+            // TODO: need add full network check
+            // this->request_control_section(hash_interval.from, responder.with_new_message_id());
         }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
@@ -1436,6 +1545,9 @@ void Dag::clear_dag() {
     eLog("[Dag] Clearing...");
     auto max_section = file_section(current_section_);
 
+    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
+    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     for (BigNumber i = BigNumber(0); i <= max_section; ++i) {
         QString path = QString::fromStdString(ChainConst::DAG_FOLDER + "/" + i.to_string());
@@ -1485,9 +1597,6 @@ void Dag::clear_dag() {
         #endif
     }
     #endif
-
-    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
 
     auto guard = cached_txs_.lock_mut();
     guard->clear();
@@ -1592,27 +1701,288 @@ std::map<TokenId, BigNumberFloat> Dag::sum() {
     return token_sums;
 }
 
-std::string Dag::hash_interval(const SectionId &from, const SectionId &to) {
-    std::string tx_hashs;
+std::set<ActorId> Dag::last_month() {
+    eLog("Start reward month scanning...");
+    std::set<ActorId> actors;
 
-    for (SectionId i = from; i <= to; i++) { // - 1
-        auto section = read_section(i);      // or just get local section control?
-        // eLog("Hash interval section: {}", section.value());
+    auto now       = Utils::current_date_ms();
+    auto month_ago = now - (30LL * 24 * 60 * 60 * 1000);
 
-        // i == from - 1
-        if (section->control.has_value()) {
-            tx_hashs += section->control.value();
-            continue;
-        }
-
+    for (SectionId i = current_section_; i >= BigNumber(0); i--) {
+        auto section = read_section(i);
         if (!section.has_value()) {
             continue;
         }
 
-        tx_hashs += section->calculate_hash();
+        bool found_older = false;
+
+        for (const auto &tx : section->transactions) {
+            if (tx.type() != TransactionType::Reward) {
+                continue;
+            }
+
+            auto timestamp = tx.timestamp();
+
+            if (timestamp < month_ago) {
+                found_older = true;
+                break;
+            }
+
+            ActorId sender = tx.sender();
+            actors.insert(sender);
+        }
+
+        if (found_older) {
+            eLog("Stop at section {}", i);
+            break;
+        }
+    }
+
+    eLog("Last month reward actors summary:");
+    eLog("  Total count: {}", actors.size());
+    if (!actors.empty()) {
+        eLog("  Actor ids: {}", fmt::join(actors, ", "));
+    } else {
+        eLog("  No reward actors found in the last 30 days");
+    }
+
+    return actors;
+}
+
+std::optional<std::pair<SectionId, std::string>> Dag::find_last_control(const SectionId from, bool disable_braek) {
+    int j = 0;
+
+    if (disable_braek) {
+        auto section = this->read_section(SectionId(0));
+        if (section.has_value()) {
+            if (!section->control.has_value()) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
+        auto section = this->read_section(i);
+        if (!section.has_value()) {
+            eLog("NO SECTION ---> {}", i);
+            if (i % CONTROL_INTERVAL_MOD == 0) {
+                j = 0;
+            }
+            continue;
+        }
+
+        if (section->control.has_value()) {
+            return std::make_pair(i, section->control.value());
+        }
+
+        j += 1;
+        if (!disable_braek && j > 25) {
+            break;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Dag::read_control(const SectionId &section_id) {
+    auto section = read_section(section_id);
+    if (!section.has_value()) {
+        return std::nullopt;
+    }
+
+    return section->control;
+}
+
+std::optional<std::string> Dag::read_control_prev(const SectionId &section_id) {
+    for (SectionId i = section_id; i >= BigNumber(0); i--) {
+        if (i % CONTROL_INTERVAL_MOD == 0) {
+            return read_control(i);
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Dag::read_control_next(const SectionId &section_id) {
+    for (SectionId i = section_id; i <= current_section_; i++) {
+        if (i % CONTROL_INTERVAL_MOD == 0) {
+            return read_control(i);
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &start, std::string &last_hash) {
+    SectionId interval_end = (start == SectionId(0) /*&& current_section_ < 20*/)
+                                 ? SectionId(0)
+                                 : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
+
+    auto interval_hash = this->hash_interval(start, interval_end);
+    if (!interval_hash.has_value()) {
+        return std::nullopt;
+    }
+
+    if (start != BigNumber(0)) {
+        last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
+    } else {
+        last_hash = interval_hash.value();
+    }
+
+    if (last_hash.empty()) {
+        return std::nullopt;
+    }
+
+    auto res = this->write_control(interval_end, last_hash);
+    if (!res.has_value()) {
+        return std::nullopt;
+    }
+
+    return last_hash;
+}
+
+std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start, bool full_generation) {
+    std::string last_hash = "";
+
+    if (start > SectionId(0)) {
+        auto last_control = this->find_last_control(start - SectionId(1));
+        // eLog("LL 1 {}", last_control);
+        if (last_control.has_value()) {
+            last_hash = last_control.value().second;
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    if (full_generation || start == SectionId(0)) {
+        this->generate_hash_for_interval(SectionId(0), last_hash);
+        if (!full_generation) {
+            return last_hash;
+        }
+    }
+
+    SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
+    for (; current_start <= current_section_ && current_start < current_section_;
+         current_start += CONTROL_INTERVAL) {
+        if (current_start + CONTROL_INTERVAL > current_section_) {
+            break;
+        }
+
+        this->generate_hash_for_interval(current_start, last_hash);
+    }
+
+    return last_hash;
+}
+
+bool Dag::generate_hash(const SectionId &start_section) {
+    eLog("[Dag] Generate AcyclicChain controls...");
+    node->dagControlStarted();
+
+    auto result = this->generate_hash_from_section(start_section, true);
+
+    node->dagControlEnded();
+    return result.has_value();
+}
+
+std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
+    std::string tx_hashs;
+
+    if (status_ != DagStatus::Sync) {
+        eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
+             from.to_string(NumeralBase::Dec),
+             to.to_string(NumeralBase::Dec),
+             from,
+             to);
+    }
+
+    // current or to?
+    if (to > current_section_) {
+        eCritical("[Dag] Section to (0x{}) > current (0x{})", to, current_section_);
+        return std::nullopt;
+    }
+
+    for (SectionId i = from; i <= to; i++) {
+        auto section = this->read_section(i);
+
+        if (!section.has_value()) {
+            tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            continue;
+        }
+
+        tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
     }
 
     return Utils::calculate_hash(tx_hashs);
+}
+
+void Dag::start_control() {
+    // for tests
+    // generate_hash();
+    // return;
+
+    eLog("[Dag] Check controls...");
+
+    auto find_result = this->find_last_control();
+    if (find_result.has_value()) {
+        auto section_id = find_result->first;
+        // write last control?
+        eLog("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+
+        if (section_id % 20 != 0) {
+            eCritical("[Dag] Incorrect control section % 20 != 0: {}", section_id);
+        }
+        return;
+    }
+
+    auto find_result2 = this->find_last_control(current_section_, true);
+    generate_hash(find_result2.has_value() ? find_result2->first : SectionId(0));
+}
+
+void Dag::request_control_section(const SectionId &section_id, const Responder &responder) {
+    auto dag_control = DagControl { .section_id = section_id, .hash = this->read_control(section_id) };
+    node->network()->send_message(dag_control,
+                                  MessageType::DagControl,
+                                  SendMode::Neighbours,
+                                  MessageStatus::Request,
+                                  responder);
+}
+
+void Dag::network_request_control_section(const DagControl &dag_control, const Responder &responder) {
+    if (dag_control.section_id % 20 != 0) {
+        return;
+    }
+
+    if (dag_control.section_id > current_section_) {
+        // sitation must save global sync with hashs stats
+        return;
+    }
+
+    if (!dag_control.hash.has_value()) {
+        // request interval control sync
+        request_sections(dag_control.section_id, dag_control.section_id + CONTROL_INTERVAL, responder); // ?
+    }
+
+    if (dag_control.hash.has_value()) {
+        auto control = this->read_control(dag_control.section_id);
+
+        if (control.value() == dag_control.hash.value()) {
+            // 40: recheck. maybe 30?
+            if (current_section_ - 40 >= dag_control.section_id) { // 60 >= 50
+                // request sections?
+                // TODO: set last sync?
+                sync_last_index = current_section_;
+                request_sections(dag_control.section_id,
+                                 std::min(current_section_, dag_control.section_id + 100),
+                                 responder);
+            } else {
+                // okay
+            }
+        } else {
+            request_control_section(dag_control.section_id - CONTROL_INTERVAL, responder);
+        }
+    }
+
+    // що робити, якщо 1 повний і 2 ні, а не обидва? все одно?
 }
 
 std::set<std::string> Section::prev_hashs() {

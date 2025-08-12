@@ -104,6 +104,8 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
     std::string adding_query;
     if (reward_hidden) {
         adding_query = fmt::format("AND type != '{}'", int(TransactionType::Conversion));
+        adding_query += " ";
+        adding_query += fmt::format("AND type != '{}'", int(TransactionType::Reward));
     }
 
     if (from_time == 0) {

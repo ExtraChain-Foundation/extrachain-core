@@ -42,6 +42,10 @@ BigNumber DagCache::section() const {
 }
 
 void DagCache::set_section(const BigNumber& section_id) {
+    if (cached_section_ >= section_id) {
+        return;
+    }
+
     cached_section_ = section_id;
 }
 
@@ -259,7 +263,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
                                       const BigNumber&            current_section,
                                       const BigNumber&            first_saved_section,
                                       std::optional<BigNumber>    to_section) {
-    eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
+    // eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
     if (current_section == BigNumber(-1) || actor_ids.empty()) {
@@ -312,7 +316,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
     });
 
-    eLog("-----> {}", balances);
+    eLog("[Dag] Calculating balances: {}", balances);
 
     return balances;
 }
@@ -320,6 +324,10 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
 CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
+    // BigNumber cache_boundary = (current_section / 20) * 20;
+    // BigNumber threshold      = cache_boundary + CACHE_LAG_SECTIONS;
+
+    // if (current_section < threshold) {
     if (current_section < BigNumber(CACHE_LAG_SECTIONS)) {
         // eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
         //      current_section,
@@ -332,6 +340,10 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 
     // Then, find the nearest genesis section (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
     BigNumber safe_genesis_section = calculate_genesis_section(safe_section_with_lag);
+
+    if (safe_genesis_section > dag->current_section()) {
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
+    }
 
     // eLog("[DagCache] Checking cache update: current={}, with_lag={}, cached={}, safe_genesis={}",
     //      current_section,
@@ -385,15 +397,18 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
 }
 
 void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
+    if (dag == nullptr) {
+        return;
+    }
     if (dag->status() != DagStatus::Ready) {
-        ThreadPoolBoost::instance()->post([this] { // remove
-            auto res = this->check_and_update_cache(dag->current_section());
+        // ThreadPoolBoost::instance()->post([this] { // remove
+        auto res = this->check_and_update_cache(dag->current_section());
 
-            if (res.result) {
-                dag->update_range();
-                // send
-            }
-        });
+        if (res.result) {
+            dag->update_range();
+            node->dag()->generate_hash_from_section(res.from);
+        }
+        // });
     } else {
         auto res = this->check_and_update_cache(dag->current_section());
 
@@ -401,9 +416,19 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
             dag->update_range();
 
             ThreadPoolBoost::instance()->post([this, res] {
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = "" };
-                hash_interval.hash = node->dag()->hash_interval(hash_interval.from, hash_interval.to);
-                // dag->write_control(res.to, hash_interval.hash);
+                auto last_hash    = node->dag()->generate_hash_from_section(res.from);
+                auto control_hash = node->dag()->read_control(res.to);
+                if (!control_hash.has_value()) {
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                    return;
+                }
+                if (!last_hash.has_value()) {
+                    eCritical("[DagCache] No last hash");
+                    return;
+                }
+
+                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                eLog("--------> Cache {} {}", res.from.to_int(), res.to.to_int());
                 eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             });
@@ -420,11 +445,18 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     if (cached_section_ == genesis_section) {
         return { true, BigNumber(-1) };
     }
-    eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
+
+    bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
+    if (show) {
+        eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
+    }
 
     SectionId start_section;
     if (cached_section_ != BigNumber(-1)) {
         start_section = cached_section_ + 1;
+        // if (cached_section_ == 0 && current_section < 20) {
+        //     start_section = 0; // ?
+        // }
     } else {
         start_section = first_saved_section;
     }
@@ -456,7 +488,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
     }
 
-    eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
+    // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
 
     // Initialize DB
     if (!init_db()) {
@@ -509,7 +541,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Commit transaction
     cache_db_->query("COMMIT");
     // Update cached section
-    cached_section_ = genesis_section;
+    // cached_section_ = genesis_section;
+    set_section(genesis_section);
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
     return { true, start_section };
