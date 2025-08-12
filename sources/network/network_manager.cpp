@@ -103,7 +103,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
 
-    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::messageReceived);
+    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::message_received);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -134,6 +134,21 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
         if (!ident.empty())
             msg.nodes_identifiers_to_ignore_later.emplace(ident);
     }
+}
+
+bool NetworkManager::is_first_node(const std::string &identifier) {
+    auto connectionsLocked = *m_connections;
+    if (connectionsLocked->empty()) {
+        return false;
+    }
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier && el->ip() == first_node_) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void NetworkManager::process() {
@@ -858,8 +873,9 @@ bool NetworkManager::is_connection_exists(const std::string &identifier) {
 
 bool NetworkManager::isActiveConnectionExists() {
     auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+    if (connectionsLocked->empty()) {
         return false;
+    }
 
     for (const auto &el : *connectionsLocked) {
         if (el->is_active()) {
@@ -872,8 +888,9 @@ bool NetworkManager::isActiveConnectionExists() {
 
 int NetworkManager::active_connections_count() {
     auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+    if (connectionsLocked->empty()) {
         return 0;
+    }
 
     int count = 0;
     for (const auto &el : *connectionsLocked) {
@@ -906,9 +923,9 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     return flag_result;
 }
 
-void NetworkManager::messageReceived(const std::string &message,
-                                     const std::string &ip,
-                                     const std::string &identifier) {
+void NetworkManager::message_received(const std::string &message,
+                                      const std::string &ip,
+                                      const std::string &identifier) {
     // eLog("node_enabled {}", node_enabled.load());
     if (!node_enabled.load()) {
         return;
@@ -964,8 +981,9 @@ void NetworkManager::messageReceived(const std::string &message,
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
     std::string   serialized = message_body.data;
-    std::string   messId     = message_body.message_id;
-    std::string   messageId(messId.begin(), messId.end());
+    std::string   mess_id    = message_body.message_id;
+    std::string   message_id(mess_id.begin(), mess_id.end());
+    bool          is_first_node = ip == first_node_;
 
     if (ip == first_node_) {
         // eLog("---> {} {}", type, serialized.size());
@@ -976,7 +994,7 @@ void NetworkManager::messageReceived(const std::string &message,
                               || type == MessageType::CoinReward);
 
         if (!should_ignore
-            && (m_messages->contains(messageId)
+            && (m_messages->contains(message_id)
                 || message_body.init_sender_id == node->accountController()->system_actor().id())) {
             // eWarning(
             //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
@@ -985,7 +1003,7 @@ void NetworkManager::messageReceived(const std::string &message,
             //     type);
             return;
         }
-        auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
+        auto res = m_messages->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
             //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
@@ -996,7 +1014,7 @@ void NetworkManager::messageReceived(const std::string &message,
         }
     } else if (status == MessageStatus::Response) {
         auto network_forwarded_messages_locked = *m_network_forwarded_messages;
-        auto searchRes                         = network_forwarded_messages_locked->find(messageId);
+        auto searchRes                         = network_forwarded_messages_locked->find(message_id);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
             message_edited.sender_id   = node->accountController()->system_actor().id();
@@ -1018,7 +1036,7 @@ void NetworkManager::messageReceived(const std::string &message,
     const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
 
     Responder responder(this);
-    responder.set_message_id(messageId);
+    responder.set_message_id(message_id);
     responder.add_identifier(identifier);
     responder.set_message_type(type);
 
@@ -1029,7 +1047,7 @@ void NetworkManager::messageReceived(const std::string &message,
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
              status,
-             messId,
+             mess_id,
              (std::stringstream() << deserialized).str());
     }
 #endif
@@ -1039,6 +1057,9 @@ void NetworkManager::messageReceived(const std::string &message,
     if (type == MessageType::DagLightData) {
         eLog("DagLight {}", status);
     }
+
+    // QElapsedTimer timer;
+    // timer.start();
 
     // try {
     switch (type) {
@@ -1067,7 +1088,7 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
-            eLog("Achieved ShareConnections(Request) {}", messageId);
+            eLog("Achieved ShareConnections(Request) {}", message_id);
             std::vector<std::string> available_ips;
 
             {
@@ -1089,7 +1110,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                               responder);
             }
         } else if (status == MessageStatus::Response) {
-            eLog("Achieved ShareConnections(Response) {}", messageId);
+            eLog("Achieved ShareConnections(Response) {}", message_id);
             auto serialized_ips_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
             if (!serialized_ips_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for ips vector in {} state", type, status);
@@ -1590,6 +1611,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto transaction_result = MessagePack::deserialize<TransactionResult>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction result", type);
@@ -1629,6 +1656,12 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
+#ifdef IS_RC
+            if (!is_first_node) {
+                return;
+            }
+#endif
+
             auto range = MessagePack::deserialize<bool>(serialized);
             if (!range.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
@@ -1671,6 +1704,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
@@ -1692,6 +1731,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DagIntervalHash: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
         if (!hash_interval.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
@@ -1703,6 +1748,12 @@ void NetworkManager::messageReceived(const std::string &message,
     }
 
     case MessageType::DagControl: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto dag_control = MessagePack::deserialize<DagControl>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
@@ -1720,6 +1771,8 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
     }
+
+    // eLog("Timer: {} ms for {}", timer.elapsed(), type);
 }
 
 void NetworkManager::removeWsConnection() {

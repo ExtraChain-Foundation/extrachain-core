@@ -94,7 +94,7 @@ void TransactionCache::adding(const Transaction &transaction) {
     db.close();
 
     if (res) {
-        emit node->selfTxAdded(transaction);
+        emit node->selfTxAdded(transaction, StatusTrx::StatusTrxType::Approved);
     }
 }
 
