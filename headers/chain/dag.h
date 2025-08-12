@@ -328,7 +328,7 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result, bool isF);
+    void network_transaction_result(const std::string hash, TransactionProveError result);
 
     /**
      * @brief Process a section received from the network
@@ -633,8 +633,8 @@ public:
      * @param disable_braek
      * @return
      */
-    std::optional<std::pair<SectionId, std::string>> find_last_control(SectionId from = SectionId(-1),
-                                                                       bool            disable_break = false);
+    std::optional<std::pair<SectionId, std::string>> find_last_control(SectionId from          = SectionId(-1),
+                                                                       bool      disable_break = false);
 
     /**
      * @brief read_control

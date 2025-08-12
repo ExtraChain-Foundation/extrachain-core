@@ -1611,15 +1611,19 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
+#ifdef IS_R
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto transaction_result = MessagePack::deserialize<TransactionResult>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction result", type);
             break;
         }
 
-        node->dag()->network_transaction_result(transaction_result->hash,
-                                                transaction_result->result,
-                                                is_first_node);
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
         break;
     }
 
@@ -1651,6 +1655,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagLightData: {
+#ifdef IS_R
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         if (status == MessageStatus::Request) {
             auto range = MessagePack::deserialize<bool>(serialized);
             if (!range.has_value()) {
@@ -1694,6 +1704,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
+#ifdef IS_R
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
@@ -1715,6 +1731,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagIntervalHash: {
+#ifdef IS_R
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
         if (!hash_interval.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
@@ -1726,6 +1748,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControl: {
+#ifdef IS_R
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
         auto dag_control = MessagePack::deserialize<DagControl>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);

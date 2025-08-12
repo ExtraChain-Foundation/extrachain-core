@@ -318,14 +318,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     return {};
 }
 
-void Dag::network_transaction_result(const std::string hash, TransactionProveError result, bool isF) {
+void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
     if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
-        return;
-    }
-
-    if (!isF) {
-        eLog("[Dag] Check: {}", isF);
         return;
     }
 
@@ -1189,7 +1184,7 @@ void Dag::start_check() {
 
     last_info_.clear();
     check_status_  = DagSyncStatus::LastInfo;
-    requests_count = std::max(1, node->network()->active_connections_count() - 1);
+    requests_count = 1; // std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1618,7 +1613,7 @@ void Dag::send_sync_request() {
     }
 
     int connections = requests_count;
-    int max_nodes   = std::min(connections, 5);
+    int max_nodes   = std::min(connections, 1);
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
