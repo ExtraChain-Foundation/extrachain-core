@@ -1056,38 +1056,45 @@ struct EXTRACHAIN_EXPORT Notification {
 struct EXTRACHAIN_EXPORT StatusTrx {
     enum StatusTrxType {
         None = -1,
-        Sended,
-        Error
+        Approved,
+        Processing,
+        Failed
     };
 
     static StatusTrxType fromInt(int value) {
         switch (value) {
         case 0:
-            return Sended;
+            return Approved;
         case 1:
-            return Error;
+            return Processing;
+        case 2:
+            return Failed;
         }
         return None;
     }
 
     static int toInt(StatusTrxType value) {
         switch (value) {
-        case Sended:
+        case Approved:
             return 0;
-        case Error:
+        case Processing:
             return 1;
+        case Failed:
+            return 2;
         case None:
-            break;
+            return -1;
         }
         return -1;
     }
 
     static std::string toString(int value) {
         switch (value) {
-        case Sended:
-            return "0";
-        case Error:
-            return "1";
+        case 0:
+            return "Approved";
+        case 1:
+            return "Processing";
+        case 2:
+            return "Failed";
         case None:
             return "-1";
         }
