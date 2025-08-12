@@ -47,22 +47,41 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control; // hash, calc on start
+    std::optional<std::string> control; // hash, interval 1-20, 21-40, ..
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
      *
      * @return std::set<std::string> Set of previous transaction hashes
      */
-    std::set<std::string> prev_hashs();
+    std::set<std::string> prev_hashs() const;
 
-    std::set<std::string> hashs();
+    /**
+     * @brief hashs
+     * @return
+     */
+    std::set<std::string> hashs() const;
 
-    std::uint64_t middle();
+    /**
+     * @brief middle
+     * @return
+     */
+    std::uint64_t middle() const;
 
-    std::string calculate_hash();
+    /**
+     * @brief calculate_hash
+     * @return
+     */
+    std::string calculate_hash() const;
 };
 BOOST_DESCRIBE_STRUCT(Section, (), (transactions, control))
+
+struct SectionDiff {
+    std::vector<Transaction> added_transactions;
+    std::vector<Transaction> removed_transactions;
+    std::vector<Transaction> modified_transactions;
+};
+BOOST_DESCRIBE_STRUCT(SectionDiff, (), (added_transactions, removed_transactions, modified_transactions))
 
 /**
  * @brief Represents the result of a transaction validation
@@ -129,6 +148,11 @@ enum class DagStatus {
     Timered, // DAG is processing timed operations
 };
 
+enum class WriteResult {
+    Write,
+    NoChanges
+};
+
 /**
  * @brief Information about the last state of the chain
  *
@@ -181,6 +205,10 @@ public:
      */
     SectionId current_section() const;
 
+    /**
+     * @brief set_current_section
+     * @param new_current_section
+     */
     void set_current_section(const SectionId &new_current_section);
 
     /**
@@ -232,6 +260,11 @@ public:
      */
     SectionId first_saved_section();
 
+    /**
+     * @brief file_section
+     * @param section
+     * @return
+     */
     SectionId file_section(const SectionId &section) const;
 
     /**
@@ -347,6 +380,13 @@ public:
     std::optional<Section> read_section(const SectionId &section_id) const;
 
     /**
+     * @brief exists_section_file
+     * @param section_id
+     * @return
+     */
+    bool exists_section_file(const SectionId &section_id) const;
+
+    /**
      * @brief Start chain synchronization
      *
      * Initiates the process of synchronizing with the network.
@@ -411,6 +451,11 @@ public:
      */
     void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
 
+    /**
+     * @brief network_hash_interval
+     * @param hash_interval
+     * @param responder
+     */
     void network_hash_interval(const HashInterval &hash_interval, const Responder &responder);
 
     /**
@@ -428,14 +473,23 @@ public:
      */
     void process_cached_transactions();
 
+    std::unordered_map<std::string, Transaction> sended_transactions() {
+        return sended_transactions_;
+    }
+
+    std::unordered_map<std::string, Transaction> failed_transactions() {
+        return failed_transactions_;
+    }
+
 private:
     ExtraChainNode                              *node;                 // Parent node reference
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet confirmed
+    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
+    std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
     DagCache                                     cache_;               // Balance cache for fast calculations
 
-    mutable std::shared_mutex section_mutex_;
-    mutable std::mutex        range_mutex_;
+    mutable std::shared_mutex section_mutex_; //
+    mutable std::mutex        range_mutex_;   //
 
     SectionId current_section_     = SectionId(-1);      // Current (latest) section ID
     SectionId first_saved_section_ = SectionId(-1);      // First section ID saved in the chain
@@ -480,9 +534,40 @@ private:
      */
     std::optional<bool> write_section(const Section &section);
 
-    std::optional<bool> write_control(const SectionId &section_id, const std::string &hash);
+    /**
+     * @brief write_section_diff
+     * @param section
+     * @return
+     */
+    std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> write_section_diff(const Section &section);
 
+    /**
+     * @brief write_control
+     * @param section_id
+     * @param hash
+     * @return
+     */
+    std::optional<WriteResult> write_control(const SectionId &section_id, const std::string &hash);
+
+    /**
+     * @brief remove_control
+     * @param section_id
+     * @return
+     */
+    std::optional<WriteResult> remove_control(const SectionId &section_id);
+
+    /**
+     * @brief timer_tick
+     */
     void timer_tick();
+
+    /**
+     * @brief calculate_section_diff
+     * @param old_section
+     * @param new_section
+     * @return
+     */
+    SectionDiff calculate_section_diff(const Section &old_section, const Section &new_section);
 
 public:
     /**
@@ -524,24 +609,109 @@ public:
 
     void clear_dag();
 
-    void                              tx_list_log(const ActorId &actor_id);
-    void                              cache_log();
+    /**
+     * @brief tx_list_log
+     * @param actor_id
+     */
+    void tx_list_log(const ActorId &actor_id);
+
+    /**
+     * @brief cache_log
+     */
+    void cache_log();
+
+    /**
+     * @brief sum
+     * @return
+     */
     std::map<TokenId, BigNumberFloat> sum();
-    std::set<ActorId>                 last_month();
 
-    std::optional<std::pair<SectionId, std::string>> find_last_control(const SectionId from = SectionId(-1),
-                                                                       bool            disable_braek = false);
-    std::optional<std::string>                       read_control(const SectionId &section_id);
-    std::optional<std::string>                       read_control_prev(const SectionId &section_id);
-    std::optional<std::string>                       read_control_next(const SectionId &section_id);
+    /**
+     * @brief last_month
+     * @return
+     */
+    std::set<ActorId> last_month();
 
+    /**
+     * @brief find_last_control
+     * @param from
+     * @param disable_braek
+     * @return
+     */
+    std::optional<std::pair<SectionId, std::string>> find_last_control(SectionId from          = SectionId(-1),
+                                                                       bool      disable_break = false);
+
+    /**
+     * @brief read_control
+     * @param section_id
+     * @return
+     */
+    std::optional<std::string> read_control(const SectionId &section_id);
+
+    /**
+     * @brief read_control_prev
+     * @param section_id
+     * @return
+     */
+    std::optional<std::string> read_control_prev(const SectionId &section_id);
+
+    /**
+     * @brief read_control_next
+     * @param section_id
+     * @return
+     */
+    std::optional<std::string> read_control_next(const SectionId &section_id);
+
+    /**
+     * @brief generate_hash_for_interval
+     * @param start
+     * @param last_hash
+     * @return
+     */
     std::optional<std::string> generate_hash_for_interval(const SectionId &start, std::string &last_hash);
-    std::optional<std::string> generate_hash_from_section(const SectionId &start, bool full_generation = false);
-    bool                       generate_hash(const SectionId &start_section = SectionId(0));
-    std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
-    void                       start_control();
 
+    /**
+     * @brief generate_hash_from_section
+     * @param start
+     * @param full_generation
+     * @return
+     */
+    std::optional<std::string> generate_hash_from_section(const SectionId &start, bool full_generation = false);
+
+    /**
+     * @brief generate_hash
+     * @param start_section
+     * @return
+     */
+    bool generate_hash(const SectionId &start_section = SectionId(0));
+
+    /**
+     * @brief hash_interval
+     * @param from
+     * @param to
+     * @return
+     */
+    std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
+
+    /**
+     * @brief start_control
+     */
+    void start_control();
+
+    void clear_controls();
+
+    /**
+     * @brief request_control_section
+     * @param section_id
+     * @param responder
+     */
     void request_control_section(const SectionId &section_id, const Responder &responder);
+
+    /**
+     * @brief network_request_control_section
+     * @param dag_control
+     * @param responder
+     */
     void network_request_control_section(const DagControl &dag_control, const Responder &responder);
 
     friend class ExtraChainNode;

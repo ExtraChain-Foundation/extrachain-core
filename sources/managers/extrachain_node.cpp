@@ -993,7 +993,15 @@ void ExtraChainNode::connectSignals() {
                 m_actorIndex->send_system_actor(responder);
 
                 m_networkManager->sendFromCache();
+
+                #ifdef IS_RC
+                if (ip == m_networkManager->first_node()) {
+                    dag_->start_check();
+                }
+                #else
                 dag_->start_check();
+                #endif
+                
                 m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
