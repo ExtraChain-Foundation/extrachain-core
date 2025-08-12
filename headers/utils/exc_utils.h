@@ -374,8 +374,8 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         static const std::string cacheStatusTransactionTable = "CacheStatusTransactions";
         static const std::string cacheStatusTransactionTableCreate = "CREATE TABLE IF NOT EXISTS " + cacheStatusTransactionTable
                                                            + " ("
-                                                           "hash            TEXT   NOT NULL, "
-                                                           "type            INT    NOT NULL"
+                                                           "hash              TEXT   NOT NULL, "
+                                                           "status            INT    NOT NULL"
                                                            ");";
 
         // How many files one section folder will store
