@@ -275,7 +275,7 @@ signals:
     void vpnDisconnect();
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
-    void selfTxAdded(const Transaction& tx);
+    void selfTxAdded(const Transaction& tx, StatusTrx::StatusTrxType);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
