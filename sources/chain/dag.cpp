@@ -1510,7 +1510,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    / eLog("Hash interval: {}", hash_interval);
+    // eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
         eCritical("[Dag] No last control");
