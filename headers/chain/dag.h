@@ -379,6 +379,11 @@ public:
      */
     std::optional<Section> read_section(const SectionId &section_id) const;
 
+    /**
+     * @brief exists_section_file
+     * @param section_id
+     * @return
+     */
     bool exists_section_file(const SectionId &section_id) const;
 
     /**

@@ -1611,7 +1611,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1655,13 +1655,13 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagLightData: {
-#ifdef IS_R
-        if (!is_first_node) {
-            return;
-        }
+        if (status == MessageStatus::Request) {
+#ifdef IS_RC
+            if (!is_first_node) {
+                return;
+            }
 #endif
 
-        if (status == MessageStatus::Request) {
             auto range = MessagePack::deserialize<bool>(serialized);
             if (!range.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
@@ -1704,7 +1704,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1731,7 +1731,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagIntervalHash: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1748,7 +1748,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControl: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
