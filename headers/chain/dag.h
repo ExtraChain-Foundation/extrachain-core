@@ -38,6 +38,26 @@ static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
+// Вспомогалки
+static inline bool is_aligned20(const SectionId &s) {
+    return (s % CONTROL_INTERVAL_MOD) == 0; // CONTROL_INTERVAL_MOD == 20
+}
+static inline SectionId align_down20(const SectionId &s) {
+    auto m = s % CONTROL_INTERVAL_MOD;
+    return m == 0 ? s : (s - m);
+}
+static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
+    return (a < b) ? b : a; // BigNumber даёт сравнения, ок
+}
+
+// Сгенерировать список контрольных секций [from..to] с шагом 20
+static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to) {
+    std::vector<SectionId> v;
+    for (SectionId s = from; s <= to; s += CONTROL_INTERVAL_MOD)
+        v.push_back(s);
+    return v;
+}
+
 /**
  * @brief Represents a section in the chain
  *
@@ -47,7 +67,8 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control; // hash, interval 1-20, 21-40, ..
+    std::optional<std::string> control;    // hash, interval 1-20, 21-40, ..
+    std::optional<std::string> hash_cache; // ?
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
@@ -179,6 +200,20 @@ struct DagLightPackage {
     std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
 };
 BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
+
+struct DagControlRangeRequest {
+    SectionId from; // включительно, кратно 20
+    SectionId to;   // включительно, кратно 20, to >= from
+};
+BOOST_DESCRIBE_STRUCT(DagControlRangeRequest, (), (from, to))
+
+struct DagControlRangeResponse {
+    SectionId from; // echo
+    SectionId to;   // echo
+    // Контролы для каждой кратной 20 секции в [from..to]
+    std::vector<std::pair<SectionId, std::string>> cps;
+};
+BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, cps))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -713,6 +748,10 @@ public:
      * @param responder
      */
     void network_request_control_section(const DagControl &dag_control, const Responder &responder);
+
+    void handle_control_range_response(const DagControlRangeResponse &resp, const Responder &responder);
+
+    void network_request_control_section(const DagControlRangeRequest &req, const Responder &responder);
 
     friend class ExtraChainNode;
     friend class DagCache;

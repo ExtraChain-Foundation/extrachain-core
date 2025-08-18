@@ -470,24 +470,24 @@ void Dag::add_to_cached_tx(const Transaction &transaction) {
 std::optional<Section> Dag::read_section(const BigNumber &section_id) const {
     try {
         std::shared_lock<std::shared_mutex> lock(section_mutex_);
+
+        auto p    = this->file_path(section_id);
+        auto path = FsPath::create(p);
+        if (path.has_value()) {
+            auto content = Utils::read_file_content(path.value());
+            if (content.has_value()) {
+                auto section = Json::deserialize<Section>(content.value());
+                if (section.has_value()) {
+                    section->id = section_id;
+                    return section.value();
+                }
+            }
+        }
+
+        return std::nullopt;
     } catch (const std::system_error &e) {
         return std::nullopt;
     }
-
-    auto p    = this->file_path(section_id);
-    auto path = FsPath::create(p);
-    if (path.has_value()) {
-        auto content = Utils::read_file_content(path.value());
-        if (content.has_value()) {
-            auto section = Json::deserialize<Section>(content.value());
-            if (section.has_value()) {
-                section->id = section_id;
-                return section.value();
-            }
-        }
-    }
-
-    return std::nullopt;
 }
 
 bool Dag::exists_section_file(const SectionId &section_id) const {
@@ -503,28 +503,28 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 std::optional<bool> Dag::write_section(const Section &section) {
     try {
         std::unique_lock<std::shared_mutex> lock(section_mutex_);
+
+        auto folder = this->file_folder(section.id);
+        if (!std::filesystem::exists(folder)) {
+            std::filesystem::create_directory(folder);
+        }
+
+        auto p    = this->file_path(section.id);
+        auto path = FsPath::create(p);
+        if (!path.has_value()) {
+            return std::nullopt;
+        }
+
+        auto res = Utils::write_file_content(path.value(), Json::serialize(section));
+        if (!res.has_value()) {
+            return std::nullopt;
+        }
+
+        update_range();
+        return true;
     } catch (const std::system_error &e) {
         return std::nullopt;
     }
-
-    auto folder = this->file_folder(section.id);
-    if (!std::filesystem::exists(folder)) {
-        std::filesystem::create_directory(folder);
-    }
-
-    auto p    = this->file_path(section.id);
-    auto path = FsPath::create(p);
-    if (!path.has_value()) {
-        return std::nullopt;
-    }
-
-    auto res = Utils::write_file_content(path.value(), Json::serialize(section));
-    if (!res.has_value()) {
-        return std::nullopt;
-    }
-
-    update_range();
-    return true;
 }
 
 std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> Dag::write_section_diff(const Section &section) {
@@ -1075,33 +1075,33 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
 void Dag::update_range() {
     try {
         std::lock_guard<std::mutex> lock(range_mutex_);
+
+        std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
+                                                          .last        = current_section_.to_string(),
+                                                          .last_cached = cache_.section().to_string() });
+
+        // eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
+        //      first_saved_section_,
+        //      current_section_,
+        //      cache_.section());
+
+        QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
+        if (file.open(QFile::WriteOnly)) {
+            file.write(json.data());
+            file.close();
+
+            QFile check_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
+            if (check_file.open(QFile::ReadOnly)) {
+                auto content = check_file.readAll();
+                // eLog("[Dag] Range file written: {}", content.toStdString());
+                check_file.close();
+            }
+        } else {
+            eLog("[Dag] Failed to open range file for writing");
+        }
     } catch (const std::system_error &e) {
         // eCritical("[Dag] Caught system_error in update range: {}", e.what());
         return;
-    }
-
-    std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
-                                                      .last        = current_section_.to_string(),
-                                                      .last_cached = cache_.section().to_string() });
-
-    // eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
-    //      first_saved_section_,
-    //      current_section_,
-    //      cache_.section());
-
-    QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-    if (file.open(QFile::WriteOnly)) {
-        file.write(json.data());
-        file.close();
-
-        QFile check_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-        if (check_file.open(QFile::ReadOnly)) {
-            auto content = check_file.readAll();
-            // eLog("[Dag] Range file written: {}", content.toStdString());
-            check_file.close();
-        }
-    } else {
-        eLog("[Dag] Failed to open range file for writing");
     }
 }
 
@@ -1990,6 +1990,21 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
                                  ? SectionId(0)
                                  : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
 
+    if (start != 0 && start % 20 == 0) {
+        eFatal("DAG ERROR 1: {} {}", start, interval_end);
+    }
+    if (start != 0 && (start - 1) % 20 != 0) {
+        eFatal("DAG ERROR 2: {} {}", start, interval_end);
+    }
+
+    // SectionId interval_end;
+    // if (start == 0) {
+    //     interval_end = 0;
+    // } else {
+    //     // start = 1,21,41,...
+    //     interval_end = start + 19; // => 1..20, 21..40, ...
+    // }
+
     auto interval_hash = this->hash_interval(start, interval_end);
     if (!interval_hash.has_value()) {
         return std::nullopt;
@@ -2129,13 +2144,118 @@ void Dag::clear_controls() {
     }
 }
 
-void Dag::request_control_section(const SectionId &section_id, const Responder &responder) {
-    auto dag_control = DagControl { .section_id = section_id, .hash = this->read_control(section_id) };
-    node->network()->send_message(dag_control,
-                                  MessageType::DagControl,
+void Dag::request_control_section(const SectionId &hint_top, const Responder &responder) {
+    SectionId hi = align_down20(hint_top < current_section_ ? hint_top : current_section_);
+
+    // хотим 16 контрольных точек: hi, hi-20, ..., hi-15*20
+    const int       COUNT = 16;
+    const SectionId step  = SectionId(CONTROL_INTERVAL_MOD); // 20
+    const SectionId total = step * (COUNT - 1);              // 15*20
+
+    SectionId lo;
+    if (hi >= total) {
+        lo = hi - total; // включительно даст ровно 16 точек
+    } else {
+        lo = SectionId(0);
+    }
+
+    DagControlRangeRequest req { .from = lo, .to = hi };
+    node->network()->send_message(req,
+                                  MessageType::DagControlRangeRequest,
                                   SendMode::Neighbours,
                                   MessageStatus::Request,
                                   responder);
+}
+
+void Dag::network_request_control_section(const DagControlRangeRequest &req, const Responder &responder) {
+    if (!is_aligned20(req.from) || !is_aligned20(req.to) || req.to < req.from)
+        return;
+
+    DagControlRangeResponse resp { .from = req.from, .to = req.to };
+    for (SectionId s = req.from; s <= req.to; s += CONTROL_INTERVAL_MOD) {
+        if (auto h = read_control(s)) {
+            resp.cps.emplace_back(s, *h);
+        }
+        // если нет контрола — просто не добавляем; «на лету» не считаем
+    }
+
+    responder.send_response(resp,
+                            MessageType::DagControlRangeResponse,
+                            SendMode::Focused,
+                            MessageStatus::Response);
+}
+
+void Dag::handle_control_range_response(const DagControlRangeResponse &resp, const Responder &responder) {
+    if (!is_aligned20(resp.from) || !is_aligned20(resp.to) || resp.to < resp.from)
+        return;
+
+    SectionId lastMatch  = SectionId(-1);
+    SectionId hiMismatch = SectionId(-1);
+
+    // идём сверху вниз: ищем первое несоответствие и ближайшее ниже совпадение
+    for (auto it = resp.cps.rbegin(); it != resp.cps.rend(); ++it) {
+        const SectionId    sid   = it->first;
+        const std::string &their = it->second;
+        auto               ours  = read_control(sid);
+
+        if (ours.has_value() && *ours == their) {
+            lastMatch = sid;
+        } else {
+            hiMismatch = sid;
+            break;
+        }
+    }
+
+    // Всё совпало в окне → сдвинуться ниже и продолжить «лестницу»
+    if (hiMismatch == SectionId(-1)) {
+        if (resp.from > 0) {
+            SectionId next_hi =
+                (resp.from >= CONTROL_INTERVAL_MOD) ? (resp.from - CONTROL_INTERVAL_MOD) : SectionId(0);
+            const int       COUNT = 16;
+            const SectionId step  = SectionId(CONTROL_INTERVAL_MOD);
+            const SectionId total = step * (COUNT - 1);
+
+            SectionId next_lo = (next_hi >= total) ? (next_hi - total) : SectionId(0);
+
+            DagControlRangeRequest req { .from = next_lo, .to = next_hi };
+            node->network()->send_message(req,
+                                          MessageType::DagControlRangeRequest,
+                                          SendMode::Neighbours,
+                                          MessageStatus::Request,
+                                          responder.with_new_message_id());
+        }
+        return;
+    }
+
+    // Есть расхождение: имеем скобки [lastMatch .. hiMismatch]
+    SectionId lo = (lastMatch >= 0)
+                       ? lastMatch
+                       : (resp.from >= CONTROL_INTERVAL_MOD ? resp.from - CONTROL_INTERVAL_MOD : SectionId(0));
+
+    // Если разница больше 20 — бинарное сужение ещё одним интервалом
+    if (hiMismatch - lo > CONTROL_INTERVAL_MOD) {
+        // середина вниз, выровненная к 20
+        SectionId half = (hiMismatch - lo) / 2; // деление на long long поддержано
+        SectionId mid  = align_down20(lo + half);
+        if (mid <= lo)
+            mid = lo + CONTROL_INTERVAL_MOD; // страхуемся
+
+        DagControlRangeRequest req { .from = mid, .to = hiMismatch };
+        node->network()->send_message(req,
+                                      MessageType::DagControlRangeRequest,
+                                      SendMode::Neighbours,
+                                      MessageStatus::Request,
+                                      responder.with_new_message_id());
+        return;
+    }
+
+    // Длина окна ≤ 20 → тянем сами секции и мёржим
+    SectionId from = lo + SectionId(CONTROL_INTERVAL_MOD); // первая после совпавшей
+    SectionId to   = hiMismatch;
+    if (from <= to) {
+        // TODO: update new last sync
+        // request_sections(from, to, responder.with_new_message_id());
+    }
 }
 
 void Dag::network_request_control_section(const DagControl &dag_control, const Responder &responder) {
