@@ -399,9 +399,20 @@ public:
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();
 
+    // TODO: use for store files?
+    std::expected<Dfs::DirRow, Dfs::DfsError> find_file_self(const ActorId &owner_id, const std::string &dfs_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const std::string &dfs_name); // TODO: add folder
+
+    void add_to_waiting_file(const ActorId &actor_id, const std::string &file_id) {
+        files_waiting_.insert({ actor_id, file_id });
+    }
+
 private:
     DirsManager dirs_manager_;
     LoadManager load_manager_;
+
+    std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
+    std::set<std::pair<ActorId, std::string>>    files_waiting_;
 
     void check_all_files(std::string identifier);
 
@@ -451,6 +462,7 @@ signals:
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
+    void waitDownloaded(ActorId owner_id, Dfs::DirRow dirRow);
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);

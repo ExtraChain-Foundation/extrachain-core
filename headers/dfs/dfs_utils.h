@@ -624,6 +624,12 @@ namespace Dfs {
     void initialize_actor_folder(const ActorId& actor_id);
 } // namespace Dfs
 
+enum class DfsFileStatus {
+    Created,
+    Existed,
+    CantCreate
+};
+
 MAKE_CUSTOM_MAGICAL(Dfs::FileId)
 
 namespace DfsP = Dfs::Packets;
