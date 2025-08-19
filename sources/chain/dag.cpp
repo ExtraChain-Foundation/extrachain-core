@@ -1508,7 +1508,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     // eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
-        eCritical("[Dag] No last control");
+        eLog("[Dag] No last control");
+        this->start_control();
         return;
     }
 
@@ -2125,9 +2126,9 @@ void Dag::start_control() {
     }
 
     auto find_result2 = this->find_last_control(current_section_, true);
-    generate_hash(find_result2.has_value()
-                      ? find_result2->first % 20 == 0 ? find_result2->first + 1 : find_result2->first
-                      : SectionId(0));
+    this->generate_hash(find_result2.has_value()
+                            ? find_result2->first % 20 == 0 ? find_result2->first + 1 : find_result2->first
+                            : SectionId(0));
 }
 
 void Dag::clear_controls() {

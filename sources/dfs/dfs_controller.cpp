@@ -44,6 +44,19 @@ DfsController::DfsController(ExtraChainNode *node)
         Dfs::initialize_actor_folder(actor_id);
     });
 
+    connect(this, &DfsController::downloaded, [this](const ActorId &owner_id, const Dfs::DirRow &dir_row) {
+        if (files_waiting_.empty()) {
+            return;
+        }
+
+        auto pair = std::make_pair(owner_id, dir_row.file_id);
+
+        if (files_waiting_.contains(pair)) {
+            files_waiting_.erase(pair);
+            emit this->waitDownloaded(owner_id, dir_row);
+        }
+    });
+
 #ifdef IS_RC
     set_mode(DfsMode::Light);
 #endif
@@ -839,6 +852,63 @@ void DfsController::refresh_calculate() {
     auto dfs_size  = calculate_size();
     m_sizeTaken    = dfs_size.local;
     m_totalDfsSize = dfs_size.all;
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const ActorId     &owner_id,
+                                                                        const std::string &dfs_name) {
+
+    auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dfs_name);
+    if (row.has_value()) {
+        return row;
+    }
+
+    auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+    if (!actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoOwnerActor);
+    }
+
+    auto rows = Dfs::Tables::ActorDirFile::get_dir_rows(owner_id);
+    if (!rows.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotExists);
+    }
+
+    for (const auto &row : rows.value()) {
+        auto bytes = ByteArray::fromBase64(row.name).toBytes();
+        auto res   = actor->get().key().decrypt_self(bytes);
+
+        if (!res.has_value()) {
+            continue;
+        }
+
+        auto result = ByteArray(res.value()).toString();
+
+        if (result == dfs_name) {
+            return row;
+        }
+    }
+
+    // TODO: select 50-100
+
+    return std::unexpected(Dfs::DfsError::NotExists);
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status(const std::string &dfs_name) {
+    auto it = files_ready_status_.find(dfs_name);
+    if (it != files_ready_status_.end()) {
+        return it->second;
+    }
+
+    auto row = this->find_file_self(node->accountController()->currentProfile().main_id(), dfs_name);
+    if (row.has_value()) {
+        if (row->state != Dfs::FileState::Ready) {
+            return row;
+        }
+
+        files_ready_status_[dfs_name] = row.value();
+        return row;
+    } else {
+        return std::unexpected(row.error());
+    }
 }
 
 ExpectedDirHistoricalRow DfsController::add_collection_row(const ActorId               &owner_id,
