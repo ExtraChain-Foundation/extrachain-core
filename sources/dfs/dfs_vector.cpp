@@ -461,7 +461,7 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
     }
 
     if (collection_template_.primary.has_value()) {
-        to_hash += row.at(collection_template_.primary->name());
+        to_hash += row.at(collection_template_.primary->name()); // TODO: crash?
     }
 
     const auto &fields = collection_template_.fields();

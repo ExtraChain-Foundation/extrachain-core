@@ -371,6 +371,13 @@ CREATE TABLE IF NOT EXISTS balance_cache (
                                                      "message         TEXT"
                                                      ");";
 
+        static const std::string cacheStatusTransactionTable = "CacheStatusTransactions";
+        static const std::string cacheStatusTransactionTableCreate = "CREATE TABLE IF NOT EXISTS " + cacheStatusTransactionTable
+                                                           + " ("
+                                                           "hash              TEXT   NOT NULL, "
+                                                           "status            INT    NOT NULL"
+                                                           ");";
+
         // How many files one section folder will store
         static const BigNumber SECTION_SIZE = BigNumber(10000);
 
@@ -393,7 +400,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
         // responses
         static const int NECESSARY_RESPONSE_COUNT = 1; // 3
-    } // namespace Net
+    }                                                  // namespace Net
 } // namespace Config
 
 namespace Serialization {
@@ -509,7 +516,8 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
     // Notifications
-    static const std::string NOTIFIACATION_CACHE = "tmp/NotificationCache.db";
+    static const std::string NOTIFIACATION_CACHE      = "tmp/NotificationCache.db";
+    static const std::string TRANSACTION_STATUS_CACHE = "tmp/TrxCache.db";
 
     // static std::uint64_t current_date_secs() {
     //     using namespace std::chrono;
@@ -830,7 +838,7 @@ namespace Utils {
      * @see isAllValue for a more general version that can check against any value
      */
     template <Container C>
-        requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
+    requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
     constexpr bool is_container_empty(const C &container) {
         return is_container_value(container, std::ranges::range_value_t<C> { '\0' });
     }
@@ -1043,6 +1051,55 @@ struct EXTRACHAIN_EXPORT Notification {
     std::uint64_t time;
     NotifyType    type;
     QByteArray    data = "";
+};
+
+struct EXTRACHAIN_EXPORT StatusTrx {
+    enum StatusTrxType {
+        None = -1,
+        Approved,
+        Processing,
+        Failed
+    };
+
+    static StatusTrxType fromInt(int value) {
+        switch (value) {
+        case 0:
+            return Approved;
+        case 1:
+            return Processing;
+        case 2:
+            return Failed;
+        }
+        return None;
+    }
+
+    static int toInt(StatusTrxType value) {
+        switch (value) {
+        case Approved:
+            return 0;
+        case Processing:
+            return 1;
+        case Failed:
+            return 2;
+        case None:
+            return -1;
+        }
+        return -1;
+    }
+
+    static std::string toString(int value) {
+        switch (value) {
+        case 0:
+            return "Approved";
+        case 1:
+            return "Processing";
+        case 2:
+            return "Failed";
+        case None:
+            return "-1";
+        }
+        return "";
+    }
 };
 
 #define TIMER_START(name)                                                                                         \
