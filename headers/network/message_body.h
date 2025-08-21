@@ -42,9 +42,11 @@ enum class MessageType {
     DagSections          = 32,
     DagLightData         = 33,
     DagIntervalHash      = 34,
-    DagControl           = 35,
 
     DagSyncLastInfo = 39,
+
+    DagControlRangeRequest  = 40,
+    DagControlRangeResponse = 41,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
@@ -62,18 +64,16 @@ enum class MessageType {
     DfsFileRemove                = 62,
     DfsFileRequestContinueUpload = 63,
 
-    DfsCollectionRequest    = 70,
-    DfsCollectionContent    = 71,
-    DfsCollectionHistory    = 72,
-    DfsCollectionRowChange  = 73,
-    DfsVectorCreation       = 74,
-    DfsVectorContent        = 75,
-    DfsVectorAdd            = 76,
-    DfsDictionaryContent    = 77,
-    DfsDictionaryAdd        = 78,
-    DfsDictionaryRemove     = 79,
-    DagControlRangeRequest  = 80,
-    DagControlRangeResponse = 81,
+    DfsCollectionRequest   = 70,
+    DfsCollectionContent   = 71,
+    DfsCollectionHistory   = 72,
+    DfsCollectionRowChange = 73,
+    DfsVectorCreation      = 74,
+    DfsVectorContent       = 75,
+    DfsVectorAdd           = 76,
+    DfsDictionaryContent   = 77,
+    DfsDictionaryAdd       = 78,
+    DfsDictionaryRemove    = 79,
 
     DfsTempSyncAll = 89,
 

@@ -191,6 +191,10 @@ public:
         return responder;
     }
 
+    bool empty() const {
+        return identifiers_.empty() && message_id_.empty();
+    }
+
     Responder& operator=(const Responder&) = default;
 
 private:

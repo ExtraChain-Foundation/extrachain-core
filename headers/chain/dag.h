@@ -181,11 +181,15 @@ enum class WriteResult {
  * and the timestamp of the genesis section / transaction
  */
 struct DagLastInfo {
-    SectionId             last_section_id;
-    std::set<std::string> last_hash; // last control, last control id
-    std::uint64_t         zero_date;
+    SectionId     last_section_id;
+    std::string   last_control_hash;
+    SectionId     last_control_section;
+    std::uint64_t zero_date;
+    DagStatus     status;
 };
-BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
+BOOST_DESCRIBE_STRUCT(DagLastInfo,
+                      (),
+                      (last_section_id, last_control_hash, last_control_section, zero_date, status))
 
 /**
  * @brief Package of data for light mode synchronization
@@ -202,18 +206,17 @@ struct DagLightPackage {
 BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
 
 struct DagControlRangeRequest {
-    SectionId from; // включительно, кратно 20
-    SectionId to;   // включительно, кратно 20, to >= from
+    SectionId from;
+    SectionId to; // to >= from
 };
 BOOST_DESCRIBE_STRUCT(DagControlRangeRequest, (), (from, to))
 
 struct DagControlRangeResponse {
-    SectionId from; // echo
-    SectionId to;   // echo
-    // Контролы для каждой кратной 20 секции в [from..to]
-    std::vector<std::pair<SectionId, std::string>> cps;
+    SectionId                                      from;
+    SectionId                                      to;
+    std::vector<std::pair<SectionId, std::string>> controls;
 };
-BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, cps))
+BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -559,7 +562,7 @@ private:
      *
      * Determines what to sync based on peer information and sends appropriate requests.
      */
-    void send_sync_request();
+    void handle_sync_request();
 
     /**
      * @brief Write a section to storage
@@ -740,7 +743,7 @@ public:
      * @param section_id
      * @param responder
      */
-    void request_control_section(const SectionId &section_id, const Responder &responder);
+    void request_control_section(const SectionId &from_top, const Responder &responder);
 
     /**
      * @brief network_request_control_section
@@ -749,9 +752,11 @@ public:
      */
     void network_request_control_section(const DagControl &dag_control, const Responder &responder);
 
-    void handle_control_range_response(const DagControlRangeResponse &resp, const Responder &responder);
+    void network_request_control_section(const DagControlRangeRequest &control_request,
+                                         const Responder              &responder);
 
-    void network_request_control_section(const DagControlRangeRequest &req, const Responder &responder);
+    void network_control_range_response(const DagControlRangeResponse &control_response,
+                                        const Responder               &responder);
 
     friend class ExtraChainNode;
     friend class DagCache;

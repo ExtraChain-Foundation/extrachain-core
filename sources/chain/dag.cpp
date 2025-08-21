@@ -799,7 +799,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
                 }
             }
 
-            set_current_section(section_id);
+            this->set_current_section(section_id);
             cache_.check_and_update_cache(current_section_);
 
             if (first_saved_section_ == BigNumber(-1) && section_id >= BigNumber(0)) {
@@ -809,9 +809,9 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
                 eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
             }
 
-            update_range();
+            this->update_range();
 
-            all_saved &= write_section(section.value()).has_value();
+            all_saved &= this->write_section(section.value()).has_value();
         }
     }
 
@@ -1202,22 +1202,29 @@ void Dag::network_status_sync_request(const Responder &responder) {
         return;
     }
 
-    if (status_ != DagStatus::Ready) {
-        return;
-    }
+    // if (status_ != DagStatus::Ready) {
+    //     return;
+    // }
 
     auto      section      = this->read_section(current_section_);
     BigNumber section_id   = section.has_value() ? section->id : BigNumber(-1);
     auto      hashs        = section.has_value() ? section->hashs() : std::set<std::string> {};
     auto      zero_section = this->read_section(BigNumber(0));
 
+    auto last_control = this->find_last_control();
+    if (!last_control.has_value()) {
+        return;
+    }
+
     std::uint64_t zero_timestamp =
         zero_section.has_value() ? (zero_section->transactions.size() == 1 ? zero_section->middle() : 0) : 0;
 
-    auto last_info = DagLastInfo { .last_section_id = section_id,
-                                   .last_hash       = hashs,
-                                   .zero_date       = zero_section.has_value() ? zero_timestamp : 0 };
-    // eLog("network_status_sync_request, send: {}", last_info);
+    auto last_info = DagLastInfo { .last_section_id      = section_id,
+                                   .last_control_hash    = last_control->second,
+                                   .last_control_section = last_control->first,
+                                   .zero_date            = zero_section.has_value() ? zero_timestamp : 0,
+                                   .status               = status_ };
+    // eLog("network_status_sync_request, send: {}", last_info);,
     responder.send_response(last_info, MessageType::DagSyncLastInfo, SendMode::Focused, MessageStatus::Response);
 }
 
@@ -1227,11 +1234,14 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
     }
     // min(connections size, 5)
 
+    if (last_info.status != DagStatus::Ready) {
+        return;
+    }
+
     auto zero_section = read_section(BigNumber(0));
-    if (zero_section.has_value() && !last_info.last_hash.empty() && last_info.last_section_id != BigNumber(-1)
+    if (zero_section.has_value() && last_info.last_section_id != BigNumber(-1)
         && zero_section->middle() < last_info.zero_date) {
-        // TODO: need to remove
-        // removeAll(false, true);
+        // TODO: clear dag?
     }
 
     int count = std::min(requests_count, min_req_count);
@@ -1242,17 +1252,20 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         set_sync_status(DagSyncStatus::Sections);
         check_status_ = DagSyncStatus::None;
         eLog("BC 6 sync status");
-        send_sync_request();
+        this->handle_sync_request();
+        return;
     }
 
     if (check_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
         check_status_ = DagSyncStatus::Sections;
         eLog("BC 7 check status");
-        send_sync_request();
+        this->handle_sync_request();
     }
 }
 
 void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder) {
+    // TODO: auto add sync_last_index = to, also auto from, from + 100
+
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
@@ -1510,7 +1523,11 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     if (!last_control.has_value()) {
         eLog("[Dag] No last control");
         this->start_control();
-        return;
+
+        last_control = this->find_last_control(hash_interval.to - 1);
+        if (!last_control.has_value()) {
+            return;
+        }
     }
 
     eLog("[Dag] Last control: {}", last_control);
@@ -1560,7 +1577,7 @@ void Dag::set_sync_status(DagSyncStatus status) {
     sync_status_ = status;
 }
 
-void Dag::send_sync_request() {
+void Dag::handle_sync_request() {
     emit node->dagTimerStop();
     auto section = this->read_section(current_section_);
 
@@ -1569,14 +1586,17 @@ void Dag::send_sync_request() {
         return;
     }
 
-    bool need_sync = false;
+    bool need_sync      = false;
+    bool need_recontrol = false;
 
     // eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
+
+    auto last_control = this->find_last_control();
 
     if (!section.has_value()) {
         for (const auto &[_, info] : last_info_) {
             // eLog("----- {}", info);
-            if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
+            if (info.last_section_id >= 0 || (info.last_section_id == BigNumber(0))) {
                 need_sync = true;
                 break;
             }
@@ -1585,20 +1605,27 @@ void Dag::send_sync_request() {
         const auto my_index = section->id;
         const auto my_hash  = section->prev_hashs();
 
+        // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
                 need_sync = true;
-                // remove_last_block();
-                // blockIndex.removeById(my_index);
                 break;
             }
-            if (info.last_section_id == my_index && info.last_hash != my_hash) {
+
+            if (!last_control.has_value()) {
                 need_sync = true;
-                // remove_last_block();
-                // blockIndex.removeById(my_index);
+                continue;
+            }
+            if (last_control->first == info.last_section_id && last_control->second != info.last_control_hash) {
+                need_recontrol = true;
                 break;
             }
         }
+    }
+
+    if (need_recontrol) {
+        this->request_control_section(last_control->first, Responder());
+        return;
     }
 
     if (!need_sync) {
@@ -1618,7 +1645,7 @@ void Dag::send_sync_request() {
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
     for (const auto &[id, info] : last_info_) {
-        if (info.last_section_id >= 0 && (info.last_section_id == BigNumber(0) || !info.last_hash.empty())) {
+        if (info.last_section_id >= 0 || (info.last_section_id == BigNumber(0))) {
             nodes_by_block.emplace_back(id, info.last_section_id);
         }
     }
@@ -2140,22 +2167,20 @@ void Dag::clear_controls() {
         }
 
         if (section->control.has_value()) {
-            remove_control(i);
+            this->remove_control(i);
         }
     }
 }
 
-void Dag::request_control_section(const SectionId &hint_top, const Responder &responder) {
-    SectionId hi = align_down20(hint_top < current_section_ ? hint_top : current_section_);
+void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {
+    SectionId hi = align_down20(from_top < current_section_ ? from_top : current_section_);
 
-    // хотим 16 контрольных точек: hi, hi-20, ..., hi-15*20
-    const int       COUNT = 16;
-    const SectionId step  = SectionId(CONTROL_INTERVAL_MOD); // 20
-    const SectionId total = step * (COUNT - 1);              // 15*20
+    const int       COUNT = 16;                             // temp?
+    const SectionId TOTAL = CONTROL_INTERVAL * (COUNT - 1); // 15*20
 
     SectionId lo;
-    if (hi >= total) {
-        lo = hi - total; // включительно даст ровно 16 точек
+    if (hi >= TOTAL) {
+        lo = hi - TOTAL;
     } else {
         lo = SectionId(0);
     }
@@ -2163,38 +2188,54 @@ void Dag::request_control_section(const SectionId &hint_top, const Responder &re
     DagControlRangeRequest req { .from = lo, .to = hi };
     node->network()->send_message(req,
                                   MessageType::DagControlRangeRequest,
-                                  SendMode::Neighbours,
+                                  responder.empty() ? SendMode::Neighbours : SendMode::Focused,
                                   MessageStatus::Request,
                                   responder);
 }
 
-void Dag::network_request_control_section(const DagControlRangeRequest &req, const Responder &responder) {
-    if (!is_aligned20(req.from) || !is_aligned20(req.to) || req.to < req.from)
+void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
+                                          const Responder              &responder) {
+    if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
+        || control_request.to < control_request.from) {
+        eLog("[Dag] network_request_control_section Can't send control from {} to {}",
+             control_request.to,
+             control_request.from);
         return;
-
-    DagControlRangeResponse resp { .from = req.from, .to = req.to };
-    for (SectionId s = req.from; s <= req.to; s += CONTROL_INTERVAL_MOD) {
-        if (auto h = read_control(s)) {
-            resp.cps.emplace_back(s, *h);
-        }
-        // если нет контрола — просто не добавляем; «на лету» не считаем
     }
 
-    responder.send_response(resp,
+    DagControlRangeResponse control_response { .from = control_request.from, .to = control_request.to };
+
+    for (SectionId s = control_request.from; s <= control_request.to; s += CONTROL_INTERVAL_MOD) {
+        auto control_hash = read_control(s);
+        if (control_hash.has_value()) {
+            eLog("[Dag] network_request_control_section Can't send control {}", s);
+            return;
+        }
+
+        control_response.controls.emplace_back(s, control_hash.value());
+    }
+
+    responder.send_response(control_response,
                             MessageType::DagControlRangeResponse,
                             SendMode::Focused,
                             MessageStatus::Response);
 }
 
-void Dag::handle_control_range_response(const DagControlRangeResponse &resp, const Responder &responder) {
-    if (!is_aligned20(resp.from) || !is_aligned20(resp.to) || resp.to < resp.from)
+void Dag::network_control_range_response(const DagControlRangeResponse &control_response,
+                                         const Responder               &responder) {
+    if (!is_aligned20(control_response.from) || !is_aligned20(control_response.to)
+        || control_response.to < control_response.from) {
+        eLog("[Dag] network_request_control_section Can't read control from {} to {}",
+             control_response.to,
+             control_response.from);
         return;
+    }
 
     SectionId lastMatch  = SectionId(-1);
     SectionId hiMismatch = SectionId(-1);
 
     // идём сверху вниз: ищем первое несоответствие и ближайшее ниже совпадение
-    for (auto it = resp.cps.rbegin(); it != resp.cps.rend(); ++it) {
+    for (auto it = control_response.controls.rbegin(); it != control_response.controls.rend(); ++it) {
         const SectionId    sid   = it->first;
         const std::string &their = it->second;
         auto               ours  = read_control(sid);
@@ -2209,12 +2250,15 @@ void Dag::handle_control_range_response(const DagControlRangeResponse &resp, con
 
     // Всё совпало в окне → сдвинуться ниже и продолжить «лестницу»
     if (hiMismatch == SectionId(-1)) {
-        if (resp.from > 0) {
-            SectionId next_hi =
-                (resp.from >= CONTROL_INTERVAL_MOD) ? (resp.from - CONTROL_INTERVAL_MOD) : SectionId(0);
-            const int       COUNT = 16;
-            const SectionId step  = SectionId(CONTROL_INTERVAL_MOD);
-            const SectionId total = step * (COUNT - 1);
+        if (control_response.from > 0) {
+            // TODO: replace to request function?
+
+            SectionId       next_hi = (control_response.from >= CONTROL_INTERVAL_MOD)
+                                          ? (control_response.from - CONTROL_INTERVAL_MOD)
+                                          : SectionId(0);
+            const int       COUNT   = 16;
+            const SectionId step    = SectionId(CONTROL_INTERVAL_MOD);
+            const SectionId total   = step * (COUNT - 1);
 
             SectionId next_lo = (next_hi >= total) ? (next_hi - total) : SectionId(0);
 
@@ -2225,18 +2269,20 @@ void Dag::handle_control_range_response(const DagControlRangeResponse &resp, con
                                           MessageStatus::Request,
                                           responder.with_new_message_id());
         }
+
         return;
     }
 
     // Есть расхождение: имеем скобки [lastMatch .. hiMismatch]
-    SectionId lo = (lastMatch >= 0)
-                       ? lastMatch
-                       : (resp.from >= CONTROL_INTERVAL_MOD ? resp.from - CONTROL_INTERVAL_MOD : SectionId(0));
+    SectionId lo = (lastMatch >= 0) ? lastMatch
+                                    : (control_response.from >= CONTROL_INTERVAL_MOD
+                                           ? control_response.from - CONTROL_INTERVAL_MOD
+                                           : SectionId(0));
 
     // Если разница больше 20 — бинарное сужение ещё одним интервалом
     if (hiMismatch - lo > CONTROL_INTERVAL_MOD) {
         // середина вниз, выровненная к 20
-        SectionId half = (hiMismatch - lo) / 2; // деление на long long поддержано
+        SectionId half = (hiMismatch - lo) / 2;
         SectionId mid  = align_down20(lo + half);
         if (mid <= lo)
             mid = lo + CONTROL_INTERVAL_MOD; // страхуемся
@@ -2255,7 +2301,8 @@ void Dag::handle_control_range_response(const DagControlRangeResponse &resp, con
     SectionId to   = hiMismatch;
     if (from <= to) {
         // TODO: update new last sync
-        // request_sections(from, to, responder.with_new_message_id());
+        sync_last_index = to;
+        this->request_sections(from, to, responder.with_new_message_id());
     }
 }
 
