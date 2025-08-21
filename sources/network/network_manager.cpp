@@ -54,6 +54,78 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
     return false;
 }
 
+void NetworkManager::startScan() {
+    qDebug() << "Start scan...";
+    IpRange current { QHostAddress("192.160.0.0").toIPv4Address(), QHostAddress("192.161.0.0").toIPv4Address() };
+
+    const QTime startedTime = QDateTime::currentDateTime().time();
+    qDebug() << "Started at: " << startedTime.toString("hh:mm:ss");
+    bool found = false;
+
+    while (current.end < QHostAddress("192.170.0.0").toIPv4Address() || !found) {
+        qDebug() << "Scan next" << QHostAddress(current.start).toString() << QHostAddress(current.end).toString();
+
+        quint32 startIp      = current.start;
+        quint32 endIp        = current.end;
+        int     threadsCount = 4;
+        quint32 step         = (endIp - startIp + 1) / threadsCount;
+
+        QElapsedTimer timer;
+        timer.start();
+
+        QList<QThread *>          threads;
+        QList<DiscoveryScanner *> scanners;
+
+        QEventLoop loop;
+        int        finishedScanners = 0;
+
+        for (int i = 0; i < threadsCount; ++i) {
+            quint32 rangeStart = startIp + i * step;
+            quint32 rangeEnd   = (i == threadsCount - 1) ? endIp : (rangeStart + step - 1);
+
+            QThread          *thread  = new QThread;
+            DiscoveryScanner *scanner = new DiscoveryScanner(rangeStart, rangeEnd);
+            scanners.append(scanner);
+
+            scanner->moveToThread(thread);
+
+            QObject::connect(thread, &QThread::started, scanner, &DiscoveryScanner::run);
+
+            // Коли сканер завершив роботу
+            QObject::connect(scanner, &DiscoveryScanner::finished, thread, &QThread::quit);
+            QObject::connect(scanner, &DiscoveryScanner::finished, [&finishedScanners, &loop, threadsCount]() {
+                finishedScanners++;
+                if (finishedScanners == threadsCount) {
+                    loop.quit();
+                }
+            });
+
+            // Безпечне видалення
+            QObject::connect(thread, &QThread::finished, scanner, &QObject::deleteLater);
+            QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+
+            QObject::connect(scanner,
+                             &DiscoveryScanner::ipFound,
+                             [scanner, &timer, this, &loop, &found](Dfs::Packets::DiscoveryData discoveryData) {
+                                 qDebug() << "Found server"
+                                          << "Elapsed:" << (timer.elapsed() / 1000) << "sec";
+                                 discoveryScanner->setFoundedDiscoveryData(discoveryData);
+                                 found = true;
+                                 loop.quit();
+                             });
+
+            threads.append(thread);
+            thread->start();
+        }
+
+        loop.exec(); // Чекаємо, поки всі сканери завершать роботу
+
+        current = shiftSubnet(current, 1);
+    }
+
+    qDebug() << "Scanning finished";
+}
+
 SafePtr<std::map<NetworkReconnect, QString>> NetworkManager::reconnections() {
     return m_reconnectionsToIdentifier;
 }
@@ -95,6 +167,72 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     m_reconnectTimer             = new QTimer(this);
     m_clear_network_caches_timer = new QTimer(this);
     calculateTraffic             = CalculateTraffic::GetInstance();
+    if (node->isClientApp()) {
+        discoveryScanner = new DiscoveryScanner(this);
+        QTimer::singleShot(1000, this, &NetworkManager::startScan);
+
+        // while (current.end != QHostAddress("192.167.0.0").toIPv4Address()) {
+        //     IpRange next = shiftSubnet(current, 1);
+        //     current      = next;
+        //     qDebug() << "Scan next" << QHostAddress(next.start).toString() << QHostAddress(next.end).toString();
+
+        //     qDebug() << QHostAddress(next.start).toString() << QHostAddress(next.end).toString();
+        //     // quint32 startIp      = QHostAddress("192.165.0.0").toIPv4Address();
+        //     // quint32 endIp        = QHostAddress("192.170.0.0").toIPv4Address();
+        //     quint32 startIp      = current.start;
+        //     quint32 endIp        = current.end;
+        //     int     threadsCount = 4;
+        //     quint32 step         = (endIp - startIp + 1) / threadsCount;
+        //     int     batchSize    = 100;
+
+        //     qDebug() << __FUNCTION__ << startIp << endIp << QHostAddress(startIp).toString()
+        //              << QHostAddress(endIp).toString();
+        //     QElapsedTimer timer;
+        //     timer.start();
+
+        //     for (int i = 0; i < threadsCount; i++) {
+        //         quint32 rangeStart = startIp + i * step;
+        //         quint32 rangeEnd   = (i == threadsCount - 1) ? endIp : (rangeStart + step - 1);
+
+        //         qDebug() << "[print before start] Index: " << i << rangeStart << rangeEnd
+        //                  << (rangeEnd - rangeStart);
+
+        //         QThread *thread  = new QThread;
+        //         auto    *scanner = new DiscoveryScanner(rangeStart, rangeEnd);
+
+        //         scanner->moveToThread(thread);
+
+        //         QObject::connect(thread, &QThread::started, scanner, &DiscoveryScanner::run);
+        //         QObject::connect(scanner, &DiscoveryScanner::finished, thread, &QThread::quit);
+        //         QObject::connect(thread, &QThread::finished, scanner, &QObject::deleteLater);
+        //         QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        //         // QObject::connect(discoveryScanner, &DiscoveryScanner::finished, thread, &QThread::quit);
+
+        //         QObject::connect(scanner,
+        //                          &DiscoveryScanner::ipFound,
+        //                          [=, this](Dfs::Packets::DiscoveryData discoveryData) {
+        //                              qDebug() << "Found server:" << discoveryData.ip;
+        //                              const QTime finishedTime = QDateTime::currentDateTime().time();
+        //                              qint64      elapsed      = (timer.elapsed() / 1000);
+        //                              qDebug() << "Finished at: " << finishedTime.toString("hh:mm:ss") <<
+        //                              elapsed;
+        //                              // discoveryScanner->setFoundedDiscoveryData(discoveryData);
+        //                              QMutexLocker locker(&mutex);
+        //                              resultFound = true;
+        //                              waitCondition.wakeAll();
+        //                          });
+
+        //         thread->start();
+        //     }
+
+        //     QMutexLocker locker(&mutex);
+        //     if (!resultFound) {
+        //         waitCondition.wait(&mutex);
+        //     }
+        // }
+    } else {
+        discoveryResponder = new DiscoveryResponder(this);
+    }
 
     connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
     m_clear_network_caches_timer->start(20000);

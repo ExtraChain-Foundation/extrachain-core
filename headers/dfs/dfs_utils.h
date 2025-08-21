@@ -405,11 +405,26 @@ namespace Dfs {
 
             ReferenceData(std::string _key, std::string _access)
                 : key(_key)
-                , access(_access) { };
+                , access(_access) {};
 
             std::string toString() const {
                 return std::string(fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
             }
+        };
+
+        struct DiscoveryData {
+            std::string message_id;
+            std::string ip;
+            bool        ready_to_connect = true;
+            DiscoveryData()              = default;
+            DiscoveryData(const std::string _message_id,
+                          const std::string _ip               = "",
+                          const bool        _ready_to_connect = true)
+                : message_id(_message_id)
+                , ip(_ip)
+                , ready_to_connect(_ready_to_connect) {
+            }
+            MSGPACK_DEFINE(message_id, ip, ready_to_connect)
         };
     } // namespace Packets
 
