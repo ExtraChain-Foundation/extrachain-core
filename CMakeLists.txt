@@ -87,6 +87,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/websocket_service.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnection.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/network/upnpconnector.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/network/discovery_network.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/autologinhash.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/bignumber_float.h
@@ -145,6 +146,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/websocket_service.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnection.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/upnpconnector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_network.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/autologinhash.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/bignumber_float.cpp

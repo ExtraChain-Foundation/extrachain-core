@@ -33,169 +33,16 @@
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "network/discovery_network.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
-#include <QUdpSocket>
-#include <QWaitCondition>
-#include <QMutex>
 
 class SocketService;
 class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
 
-struct IpRange {
-    quint32 start;
-    quint32 end;
-};
-
-class DiscoveryScanner : public QObject {
-    Q_OBJECT
-
-public:
-    DiscoveryScanner(QObject* parent = nullptr)
-        : QObject(parent) {
-        connect(this, &DiscoveryScanner::startSocket, this, &DiscoveryScanner::initSocket, Qt::QueuedConnection);
-        randomMessageId = Utils::generate_random_hex(10);
-    }
-
-    DiscoveryScanner(quint32 startIp, quint32 endIp, QObject* parent = nullptr)
-        : QObject(parent)
-        , startIpInt(startIp)
-        , endIpInt(endIp)
-        , currentIpInt(startIp) {
-        // connect(socket, &QUdpSocket::readyRead, this, &DiscoveryScanner::onReadyRead);
-        connect(this, &DiscoveryScanner::startSocket, this, &DiscoveryScanner::initSocket, Qt::QueuedConnection);
-        randomMessageId = Utils::generate_random_hex(10);
-    }
-
-    Dfs::Packets::DiscoveryData getFoundedDiscoveryData() const {
-        return foundedDiscoveryData;
-    }
-
-    void setFoundedDiscoveryData(Dfs::Packets::DiscoveryData data) {
-        foundedDiscoveryData = data;
-        emit finished();
-        foundedServer = true;
-    }
-
-signals:
-    void ipFound(Dfs::Packets::DiscoveryData discoveryData);
-    void finished();
-    void startSocket();
-
-public slots:
-    void run() {
-        emit startSocket();
-        QTimer::singleShot(20, this, &DiscoveryScanner::scanNext);
-    }
-
-    void initSocket() {
-        socket = new QUdpSocket(this);
-        socket->bind(QHostAddress::Any, port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
-        connect(socket, &QUdpSocket::readyRead, this, &DiscoveryScanner::onReadyRead);
-    }
-
-    void scanNext() {
-        if (currentIpInt > endIpInt || foundedServer) {
-            qDebug() << "Scan finished for thread";
-            emit finished();
-            return;
-        }
-
-        int                         sent = 0;
-        Dfs::Packets::DiscoveryData discoveryData(randomMessageId);
-        auto                        byteData = QByteArray::fromStdString(MessagePack::serialize(discoveryData));
-        while (sent < batchSize && currentIpInt <= endIpInt && !foundedServer) {
-            QHostAddress addr(currentIpInt);
-            QString      ip = addr.toString();
-            socket->writeDatagram(byteData, addr, port);
-            // qDebug() << "Sent request to" << ip << sent;
-            currentIpInt++;
-            sent++;
-        }
-
-        if (!foundedServer)
-            QTimer::singleShot(intervalMs, this, &DiscoveryScanner::scanNext);
-        else
-            emit finished();
-    }
-
-    void onReadyRead() {
-        while (socket->hasPendingDatagrams()) {
-            QByteArray datagram;
-            datagram.resize(socket->pendingDatagramSize());
-            QHostAddress sender;
-            quint16      senderPort;
-
-            socket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
-            auto discoveryData = MessagePack::deserialize<Dfs::Packets::DiscoveryData>(datagram.toStdString());
-
-            qDebug() << "Response from" << sender.toString() << "| Message ID:" << discoveryData->message_id
-                     << "| Ready to connect:" << discoveryData->ready_to_connect;
-
-            if (discoveryData->ready_to_connect) {
-                foundedServer        = true;
-                foundedDiscoveryData = discoveryData.value();
-
-                emit ipFound(discoveryData.value());
-                emit finished();
-            }
-        }
-    }
-
-private:
-    QUdpSocket*                 socket     = nullptr;
-    quint16                     port       = 17594;
-    int                         batchSize  = 50;
-    int                         intervalMs = 50;
-    quint32                     startIpInt, endIpInt, currentIpInt;
-    bool                        foundedServer;
-    Dfs::Packets::DiscoveryData foundedDiscoveryData;
-    std::string                 randomMessageId;
-};
-
-class DiscoveryResponder : public QObject {
-    Q_OBJECT
-    uint        port = 17594;
-    std::string ip;
-
-public:
-    DiscoveryResponder(QObject* parent = nullptr)
-        : QObject(parent) {
-        socket = new QUdpSocket(this);
-        if (!socket->bind(QHostAddress::Any, port)) {
-            qFatal("Cannot bind UDP socket");
-        }
-
-        connect(socket, &QUdpSocket::readyRead, this, &DiscoveryResponder::onReadyRead);
-        qDebug() << "UDP Server started on port" << port;
-    }
-
-private slots:
-    void onReadyRead() {
-        while (socket->hasPendingDatagrams()) {
-            QByteArray datagram;
-            datagram.resize(socket->pendingDatagramSize());
-            QHostAddress sender;
-            quint16      senderPort;
-
-            socket->readDatagram(datagram.data(), datagram.size(), &sender, &senderPort);
-            auto discoveryData = MessagePack::deserialize<Dfs::Packets::DiscoveryData>(datagram.toStdString());
-
-            qDebug() << "Got request from" << discoveryData->message_id << ":" << datagram;
-            discoveryData->ip = sender.toIPv4Address()
-                                    ? QHostAddress(sender.toIPv4Address()).toString().toStdString()
-                                    : sender.toString().toStdString();
-            socket->writeDatagram(QByteArray::fromStdString(MessagePack::serialize(discoveryData.value())),
-                                  sender,
-                                  senderPort);
-        }
-    }
-
-private:
-    QUdpSocket* socket;
-};
+using namespace Network::Discovery;
 
 class CalculateTraffic {
 private:
@@ -402,9 +249,8 @@ private:
 
     std::string m_networkHashForVPN;
 
-    QMutex         mutex;
-    QWaitCondition waitCondition;
-    bool           resultFound = false;
+    QMutex mutex;
+    bool   resultFound = false;
 
     std::string public_ip_;
     std::string first_node_ =
@@ -450,43 +296,6 @@ public:
     void connect_network() {
         connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
     }
-
-    void    startScan();
-    IpRange shiftSubnet(const IpRange& range, int shift) {
-        quint32 start = range.start;
-        quint32 end   = range.end;
-
-        // Виносимо другий октет у число
-        quint32 firstOctet  = (start >> 24) & 0xFF;
-        quint32 secondOctet = (start >> 16) & 0xFF;
-
-        secondOctet += shift;
-        if (secondOctet > 255) {
-            firstOctet += secondOctet / 256;
-            secondOctet = secondOctet % 256;
-        }
-        if (firstOctet > 255)
-            firstOctet = 255; // захист від переповнення
-
-        // Розмір діапазону у другому октеті
-        quint32 rangeSize = ((end >> 16) & 0xFF) - ((start >> 16) & 0xFF);
-
-        quint32 newEndSecondOctet = secondOctet + rangeSize;
-        quint32 newEndFirstOctet  = firstOctet;
-
-        if (newEndSecondOctet > 255) {
-            newEndFirstOctet += newEndSecondOctet / 256;
-            newEndSecondOctet = newEndSecondOctet % 256;
-        }
-        if (newEndFirstOctet > 255)
-            newEndFirstOctet = 255;
-
-        IpRange newRange;
-        newRange.start = (firstOctet << 24) | (secondOctet << 16);
-        newRange.end   = (newEndFirstOctet << 24) | (newEndSecondOctet << 16);
-
-        return newRange;
-    };
 
 public slots:
     void removeConnection(const QString& identifier);
