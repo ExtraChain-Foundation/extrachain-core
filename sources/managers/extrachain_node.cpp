@@ -1103,7 +1103,7 @@ void ExtraChainNode::connectSignals() {
 
     connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
     connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
-    connect(dag_->timer_sync, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+    connect(dag_->timer_sync_, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
 
     connect(m_dfs, &DfsController::waitDownloaded, [this](ActorId actor_id, Dfs::DirRow dir_row) {
         if (dir_row.file_id == renames_file_id_waiting_) {
@@ -1183,13 +1183,13 @@ std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
 
 void ExtraChainNode::dagTimerStarting(int ms) {
     // eLog("[Dag] Timer start, {} ms", ms);
-    dag_->timer_sync->stop();
-    dag_->timer_sync->start(ms);
+    dag_->timer_sync_->stop();
+    dag_->timer_sync_->start(ms);
 }
 
 void ExtraChainNode::dagTimerStoping() {
     // eLog("[Dag] Timer stop");
-    dag_->timer_sync->stop();
+    dag_->timer_sync_->stop();
 }
 
 void ExtraChainNode::dagTimerTick() {

@@ -28,7 +28,7 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
-    timer_sync = new QTimer();
+    timer_sync_ = new QTimer();
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -116,12 +116,12 @@ Dag::Dag(ExtraChainNode *node)
         cache_.init_db();
     }
 
-    eLog("[Dag] Done. Mode: {}", mode_);
+    eLog("[Dag] Started. Mode: {}", mode_);
 }
 
 Dag::~Dag() {
     cache_.dag = nullptr;
-    timer_sync->deleteLater();
+    timer_sync_->deleteLater();
 }
 
 BigNumber Dag::current_section() const {
@@ -160,7 +160,7 @@ void Dag::set_status(DagStatus status) {
 
     if (status == DagStatus::Ready) {
         emit node->dagTimerStop();
-        min_req_count = 5;
+        min_req_count_ = 5;
     }
 }
 
@@ -250,10 +250,10 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
             if (!sync_timeout)
                 add_to_cached_tx(transaction);
             set_status(DagStatus::Sync);
-            sync_last_index              = transaction.section();
+            sync_last_index_             = transaction.section();
             timestamp_bigger_sync_start_ = Utils::current_date_ms();
-            eLog("[Dag] Section bigger: {}", sync_last_index);
-            request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+            eLog("[Dag] Section bigger: {}", sync_last_index_);
+            request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
             return {};
         }
     }
@@ -405,6 +405,8 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
 }
 
 void Dag::process_cached_transactions() {
+    // TODO: check controls
+
     {
         try {
             auto guard = cached_txs_.lock();
@@ -600,12 +602,12 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 
 void Dag::timer_tick() {
     eLog("[Dag] Timer tick");
-    this->timer_sync->stop(); // no need emit?
+    this->timer_sync_->stop(); // no need emit?
     this->set_status(DagStatus::Timered);
     this->sync_status_ = DagSyncStatus::None;
 
-    if (min_req_count > 1) {
-        min_req_count -= 1;
+    if (min_req_count_ > 1) {
+        min_req_count_ -= 1;
     }
 
     this->start_sync();
@@ -1146,7 +1148,7 @@ void Dag::start_sync() {
 
     last_info_.clear();
     set_sync_status(DagSyncStatus::LastInfo);
-    requests_count = std::max(1, node->network()->active_connections_count() - 1);
+    requests_count_ = std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1171,8 +1173,8 @@ void Dag::start_check() {
     }
 
     last_info_.clear();
-    check_status_  = DagSyncStatus::LastInfo;
-    requests_count = 1; // std::max(1, node->network()->active_connections_count() - 1);
+    check_status_   = DagSyncStatus::LastInfo;
+    requests_count_ = 1; // std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1232,7 +1234,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         // TODO: clear dag?
     }
 
-    int count = std::min(requests_count, min_req_count);
+    int count = std::min(requests_count_, min_req_count_);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -1382,7 +1384,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             eLog("[Dag] Network sync completed - no changes detected");
         }
 
-        if (section_sync->to >= sync_last_index - 1) {
+        if (section_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
 
             if (this->status_ != DagStatus::Ready) {
@@ -1399,7 +1401,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index, section_sync->to + 100), responder);
+        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
     });
 }
 
@@ -1640,12 +1642,7 @@ void Dag::handle_sync_request() {
         }
     }
 
-    if (need_recontrol) {
-        this->request_control_section(last_control->section_id, Responder()); // TODO: need responder!
-        return;
-    }
-
-    if (!need_sync) {
+    if (!need_sync && !need_recontrol) {
         set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
         process_cached_transactions();
@@ -1657,7 +1654,7 @@ void Dag::handle_sync_request() {
         return; // end sync
     }
 
-    int connections = requests_count;
+    int connections = requests_count_;
     int max_nodes   = std::min(connections, 1);
 
     std::vector<std::pair<std::string, BigNumber>> nodes_by_block;
@@ -1707,11 +1704,16 @@ void Dag::handle_sync_request() {
         responder.add_identifier(id);
     }
 
-    auto last_block = this->read_section(current_section_);
-    auto sync_index = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
-    sync_last_index = nodes_by_block.front().second;
+    if (need_recontrol) {
+        this->request_control_section(last_control->section_id, responder);
+        return;
+    }
 
-    if (current_section_exists && current_section_ >= sync_last_index) {
+    auto last_block  = this->read_section(current_section_);
+    auto sync_index  = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
+    sync_last_index_ = nodes_by_block.front().second;
+
+    if (current_section_exists && current_section_ >= sync_last_index_) {
         eLog("[Dag] Not need sync");
 
         set_status(DagStatus::Ready);
@@ -1722,11 +1724,11 @@ void Dag::handle_sync_request() {
     }
 
     eLog("[Dag] sync_last_index: 0x{} / {} sections",
-         sync_last_index,
-         sync_last_index.to_string(NumeralBase::Dec));
+         sync_last_index_,
+         sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_sections(current_section_, std::min(sync_last_index, current_section_ + 100), responder);
+        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -1738,7 +1740,7 @@ void Dag::handle_sync_request() {
 
     // request from to
     check_status_ = DagSyncStatus::None;
-    emit node->dagSyncStart(sync_index, sync_last_index);
+    emit node->dagSyncStart(sync_index, sync_last_index_);
     emit node->dagTimerStart(30000);
     // eLog("Timer start");
     eLog("syncStart, timer 30 secs");
@@ -2322,7 +2324,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         SectionId sync_end = control_response.to;
 
         eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
-        sync_last_index = std::max(current_section_, sync_end);
+        sync_last_index_ = std::max(current_section_, sync_end);
         this->request_sections(sync_from - 20,
                                std::min(sync_from + 100, current_section_),
                                responder.with_new_message_id());
