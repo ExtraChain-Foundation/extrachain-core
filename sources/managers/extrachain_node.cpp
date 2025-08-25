@@ -1056,13 +1056,6 @@ void ExtraChainNode::connectSignals() {
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
 
-    // temp for tests, maybe only for console
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        emit readyInitLocalizationFiles();
-        // m_dfs->requestDirFileAllActors();
-        // m_dfs->requestSync();
-    });
-
     connect(m_networkManager,
             &NetworkManager::newSocketActivatedWithParams,
             [this](const std::string ip, const std::string identifier) {

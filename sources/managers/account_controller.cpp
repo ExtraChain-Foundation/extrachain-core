@@ -169,7 +169,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
     }
 
     for (auto &actor_id : profiles) {
-        auto res = load_profile(actor_id, hash);
+        auto res = this->load_profile(actor_id, hash, key_result.value());
         if (res) {
             return {};
         }
@@ -178,8 +178,10 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
     return std::unexpected(LoadError::Unknown);
 }
 
-bool AccountController::load_profile(const ActorId &actor_id, const std::string &hash) {
-    auto key_result = Cryptography::key_from_password(hash);
+bool AccountController::load_profile(const ActorId                &actor_id,
+                                     const std::string            &hash,
+                                     const std::optional<KeyPass> &key) {
+    auto key_result = key.has_value() ? key.value() : Cryptography::key_from_password(hash);
     if (!key_result.has_value()) {
         return false;
     }
