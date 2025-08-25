@@ -38,7 +38,7 @@ static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
-// Вспомогалки
+// helpers
 static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL_MOD) == 0; // CONTROL_INTERVAL_MOD == 20
 }
@@ -47,10 +47,10 @@ static inline SectionId align_down20(const SectionId &s) {
     return m == 0 ? s : (s - m);
 }
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
-    return (a < b) ? b : a; // BigNumber даёт сравнения, ок
+    return (a < b) ? b : a;
 }
 
-// Сгенерировать список контрольных секций [from..to] с шагом 20
+// generate control sections [from..to] with step 20
 static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to) {
     std::vector<SectionId> v;
     for (SectionId s = from; s <= to; s += CONTROL_INTERVAL_MOD)
@@ -62,7 +62,7 @@ static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to
  * @brief Represents a section in the chain
  *
  * A section contains a collection of transactions and metadata
- * including its ID and timestamp.
+ * including its id and timestamp.
  */
 struct Section {
     SectionId                  id;
@@ -122,16 +122,22 @@ BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
  * the ID of the last cached section
  */
 struct SectionRange {
-    std::string first;       // ID of the first saved section
-    std::string last;        // ID of the current (last) section
-    std::string last_cached; // ID of the last cached section
+    std::string first;       // id of the first saved section
+    std::string last;        // id of the current (last) section
+    std::string last_cached; // id of the last cached section
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
+struct DagControl {
+    SectionId   section_id;
+    std::string control;
+};
+BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, control))
+
 struct SectionSync {
-    BigNumber                                      to;
-    std::set<Transaction>                          txs;
-    std::vector<std::pair<SectionId, std::string>> controls;
+    BigNumber               to;
+    std::set<Transaction>   txs;
+    std::vector<DagControl> controls; // need map?
 };
 BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
 
@@ -141,12 +147,6 @@ struct HashInterval {
     std::string hash;
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
-
-struct DagControl {
-    SectionId                  section_id;
-    std::optional<std::string> hash;
-};
-BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, hash))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -182,14 +182,14 @@ enum class WriteResult {
  */
 struct DagLastInfo {
     SectionId     last_section_id;
+    SectionId     last_control_section_id;
     std::string   last_control_hash;
-    SectionId     last_control_section;
     std::uint64_t zero_date;
     DagStatus     status;
 };
 BOOST_DESCRIBE_STRUCT(DagLastInfo,
                       (),
-                      (last_section_id, last_control_hash, last_control_section, zero_date, status))
+                      (last_section_id, last_control_hash, last_control_section_id, zero_date, status))
 
 /**
  * @brief Package of data for light mode synchronization
@@ -212,9 +212,9 @@ struct DagControlRangeRequest {
 BOOST_DESCRIBE_STRUCT(DagControlRangeRequest, (), (from, to))
 
 struct DagControlRangeResponse {
-    SectionId                                      from;
-    SectionId                                      to;
-    std::vector<std::pair<SectionId, std::string>> controls;
+    SectionId               from;
+    SectionId               to;
+    std::vector<DagControl> controls;
 };
 BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls))
 
@@ -676,29 +676,28 @@ public:
      * @param disable_braek
      * @return
      */
-    std::optional<std::pair<SectionId, std::string>> find_last_control(SectionId from          = SectionId(-1),
-                                                                       bool      disable_break = false);
+    std::optional<DagControl> find_last_control(SectionId from = SectionId(-1), bool disable_break = false);
 
     /**
      * @brief read_control
      * @param section_id
      * @return
      */
-    std::optional<std::string> read_control(const SectionId &section_id);
+    std::optional<DagControl> read_control(const SectionId &section_id);
 
     /**
      * @brief read_control_prev
      * @param section_id
      * @return
      */
-    std::optional<std::string> read_control_prev(const SectionId &section_id);
+    std::optional<DagControl> read_control_prev(const SectionId &section_id);
 
     /**
      * @brief read_control_next
      * @param section_id
      * @return
      */
-    std::optional<std::string> read_control_next(const SectionId &section_id);
+    std::optional<DagControl> read_control_next(const SectionId &section_id);
 
     /**
      * @brief generate_hash_for_interval
@@ -734,7 +733,7 @@ public:
     /**
      * @brief start_control
      */
-    void start_control();
+    void start_control(bool force = false);
 
     void clear_controls();
 
@@ -750,8 +749,7 @@ public:
      * @param dag_control
      * @param responder
      */
-    void network_request_control_section(const DagControl &dag_control, const Responder &responder);
-
+    // void network_request_control_section(const DagControl &dag_control, const Responder &responder);
     void network_request_control_section(const DagControlRangeRequest &control_request,
                                          const Responder              &responder);
 
