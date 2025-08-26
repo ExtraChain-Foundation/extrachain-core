@@ -42,9 +42,11 @@ enum class MessageType {
     DagSections          = 32,
     DagLightData         = 33,
     DagIntervalHash      = 34,
-    DagControl           = 35,
 
     DagSyncLastInfo = 39,
+
+    DagControlRangeRequest  = 40,
+    DagControlRangeResponse = 41,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now

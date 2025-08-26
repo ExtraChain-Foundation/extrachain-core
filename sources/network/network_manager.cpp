@@ -1747,20 +1747,37 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DagControl: {
+    case MessageType::DagControlRangeRequest: {
 #ifdef IS_RC
         if (!is_first_node) {
             return;
         }
 #endif
 
-        auto dag_control = MessagePack::deserialize<DagControl>(serialized);
+        auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
             break;
         }
 
         node->dag()->network_request_control_section(dag_control.value(), responder);
+        break;
+    }
+
+    case MessageType::DagControlRangeResponse: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
+        auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
+        if (!dag_control.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dag control", type);
+            break;
+        }
+
+        node->dag()->network_control_range_response(dag_control.value(), responder);
         break;
     }
 

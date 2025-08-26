@@ -973,8 +973,9 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 
-    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section()).has_value()) {
-        eCritical("[Dag] No last section");
+    if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
+        && !dag_->read_section(dag_->current_section()).has_value()) {
+        eCritical("[Dag] No physical section");
     }
 }
 
@@ -1095,7 +1096,7 @@ void ExtraChainNode::connectSignals() {
 
     connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
     connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
-    connect(dag_->timer_sync, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+    connect(dag_->timer_sync_, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
 
     connect(m_dfs, &DfsController::waitDownloaded, [this](ActorId actor_id, Dfs::DirRow dir_row) {
         if (dir_row.file_id == renames_file_id_waiting_) {
@@ -1175,13 +1176,13 @@ std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
 
 void ExtraChainNode::dagTimerStarting(int ms) {
     // eLog("[Dag] Timer start, {} ms", ms);
-    dag_->timer_sync->stop();
-    dag_->timer_sync->start(ms);
+    dag_->timer_sync_->stop();
+    dag_->timer_sync_->start(ms);
 }
 
 void ExtraChainNode::dagTimerStoping() {
     // eLog("[Dag] Timer stop");
-    dag_->timer_sync->stop();
+    dag_->timer_sync_->stop();
 }
 
 void ExtraChainNode::dagTimerTick() {
