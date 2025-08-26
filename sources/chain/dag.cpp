@@ -1420,7 +1420,10 @@ void Dag::network_request_light(const Responder &responder) {
 
         auto section = this->read_section(BigNumber(0));
         if (section.has_value()) {
-            controls.push_back({ SectionId(0), section->control.value() });
+            if (section->control.has_value()) {
+                controls.push_back({ SectionId(0), section->control.value() });
+            }
+
             for (const auto &tx : section->transactions) {
                 txs.insert(tx);
             }
@@ -2008,6 +2011,10 @@ std::optional<DagControl> Dag::read_control(const SectionId &section_id) {
         return std::nullopt;
     }
 
+    if (!section->control.has_value()) {
+        return std::nullopt;
+    }
+
     return DagControl { .section_id = section_id, .control = section->control.value() };
 }
 
@@ -2183,10 +2190,17 @@ void Dag::start_control(bool force) {
     }
 
     auto find_result2 = this->find_last_control(current_section_, true);
-    this->generate_hash(find_result2.has_value() ? find_result2->section_id % 20 == 0
-                                                       ? find_result2->section_id + 1
-                                                       : find_result->section_id
-                                                 : SectionId(0));
+
+    SectionId start_from = SectionId(0);
+    if (find_result2) {
+        if (find_result2->section_id % 20 == 0) {
+            start_from = find_result2->section_id + 1;
+        } else if (find_result) {
+            start_from = find_result->section_id;
+        }
+    }
+
+    this->generate_hash(start_from);
 }
 
 void Dag::clear_controls() {
