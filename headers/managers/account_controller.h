@@ -67,7 +67,7 @@ public:
     bool rename_wallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     std::expected<void, LoadError> load(const std::string &hash);
-    bool                           load_profile(const ActorId &actor_id, const std::string &hash);
+    bool                           load_profile(const ActorId &actor_id, const std::string &hash, const std::optional<KeyPass> &key);
     std::set<ActorId>              multiple_profiles(const std::string &hash);
 
     // TODO: expected?

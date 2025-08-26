@@ -2055,29 +2055,3 @@ std::uint64_t DfsController::bytesAvailable() {
 bool DfsController::writeAvailable(std::size_t size) {
     return bytesAvailable() > size + 10000;
 }
-
-void DfsController::loadVPNLocalizationFiles() {
-    DbConnector dirsFile(DfsB::dirsPath);
-    dirsFile.open();
-
-    auto actors = dirsFile.select(fmt::format("SELECT actor_id FROM {}", DfsT::DirsFile::TableName));
-    for (const auto &row : actors) {
-        auto        actorId     = ActorId(row.begin()->second);
-        DbConnector actrDirFile = DfsT::ActorDirFile::get_actor_dir_file(actorId);
-
-        auto actorRows =
-            actrDirFile.select(fmt::format("SELECT file_id FROM {} WHERE name='localizationInfo' AND state={}",
-                                           DfsT::ActorDirFile::TableName,
-                                           std::to_string(std::to_underlying(Dfs::FileState::Ready))));
-        for (const auto &actorRow : actorRows) {
-            for (const auto &actorCol : actorRow) {
-                auto fileName = actorCol.second;
-                emit vpnLocalizationLoadedFromStorage(actorId.to_string(), fileName);
-            }
-        }
-
-        actrDirFile.close();
-    }
-
-    dirsFile.close();
-}
