@@ -2181,6 +2181,8 @@ void Dag::start_control(bool force) {
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}", section_id);
+            this->remove_control(section_id);
+            this->start_control(true);
             return;
         }
 
