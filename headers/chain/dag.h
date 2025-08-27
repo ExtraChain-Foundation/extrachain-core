@@ -536,12 +536,13 @@ private:
 
     DagSyncStatus                                sync_status_  = DagSyncStatus::None; // Current sync status
     DagSyncStatus                                check_status_ = DagSyncStatus::None; // Current check status
-    SectionId                                    sync_last_index_;                     // Last section index to sync
+    SectionId                                    sync_last_index_;                    // Last section index to sync
     int                                          requests_count_ = 0; // Number of outstanding requests
     int                                          min_req_count_  = 5;
-    std::unordered_map<std::string, DagLastInfo> last_info_; // Last chain info from peers
+    std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
+    bool                                         search_control_              = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
@@ -646,6 +647,8 @@ public:
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
 
     void clear_dag();
+
+    void remove_sections(const SectionId &from);
 
     /**
      * @brief tx_list_log

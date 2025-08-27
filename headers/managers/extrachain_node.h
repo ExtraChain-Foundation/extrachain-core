@@ -290,6 +290,8 @@ signals:
 
     void dagControlStarted();
     void dagControlEnded();
+    void dagSearchControlStarted();
+    void dagSearchControlEnded();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

@@ -566,12 +566,14 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         section = Section { .id = section_id };
     }
 
-    if (section->control == hash) {
-        eLog("[Dag] No need writing control to {}", section_id);
-        return WriteResult::NoChanges;
+    if (section->control.has_value()) {
+        if (section->control == hash) {
+            eTemp("[Dag] No need writing control to {}", section_id);
+            return WriteResult::NoChanges;
+        }
     }
 
-    eLog("[Dag] Write control to {}", section_id);
+    eTemp("[Dag] Write control to {}", section_id);
     section->control = hash;
     auto res         = this->write_section(section.value());
     if (!res.has_value()) {
@@ -810,10 +812,10 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
     if (!all_saved)
         return std::nullopt;
 
-    if (has_changes)
-        eLog("[Dag] Saved sections from {} to {} with changes", min_section, max_section);
-    else
-        eLog("[Dag] Saved sections from {} to {} - no changes", min_section, max_section);
+    // if (has_changes)
+    //     eTemp("[Dag] Saved sections from {} to {} with changes", min_section, max_section);
+    // else
+    //     eTemp("[Dag] Saved sections from {} to {} - no changes", min_section, max_section);
 
     return std::make_pair(min_section, max_section);
 }
@@ -1261,7 +1263,7 @@ void Dag::request_sections(const BigNumber &from, const BigNumber &to, const Res
     responder_new.send_response(range, MessageType::DagSections, SendMode::Focused, MessageStatus::Request);
 
     // if (status_ != DagStatus::Sync) {
-    eLog("[Dag] Request sections from {} to {}", range.first, range.last);
+    eTemp("[Dag] Request sections from {} to {}", range.first, range.last);
     // }
 }
 
@@ -1357,10 +1359,10 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 if (existing_section.has_value()) {
                     if (existing_section->control != control) {
                         has_changes = true;
-                        eLog("[Dag] Control changed for section {}: {} -> {}",
-                             section_id,
-                             existing_section->control.value_or("none"),
-                             control);
+                        // eTemp("[Dag] Control changed for section {}: {} -> {}",
+                        //      section_id,
+                        //      existing_section->control.value_or("none"),
+                        //      control);
 
                         auto removed = this->remove_control(section_id);
                         if (removed.has_value()) {
@@ -1371,7 +1373,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                     }
                 } else {
                     has_changes = true;
-                    eLog("[Dag] New control for section {}: {}", section_id, control);
+                    // eTemp("[Dag] New control for section {}: {}", section_id, control);
                 }
             }
             // this->write_control(section_id, control);
@@ -1819,6 +1821,35 @@ void Dag::clear_dag() {
 #endif
 }
 
+void Dag::remove_sections(const SectionId &from) {
+    cache_.set_section(align_down20(from));
+    auto to          = current_section_;
+    current_section_ = from;
+    this->update_range();
+
+    eLog("[Dag] Clear from {}", from);
+
+    for (SectionId i = from; i != to; i++) {
+        auto p    = this->file_path(i);
+        auto path = FsPath::create(p);
+
+        if (!path.has_value()) {
+            continue;
+        }
+
+        auto path_str = path.value().string();
+        if (!path_str.has_value()) {
+            continue;
+        }
+
+        QFile::remove(QString::fromStdString(path_str.value()));
+
+        if (i % 10000 == 0) {
+            // remove section folder
+        }
+    }
+}
+
 void Dag::tx_list_log(const ActorId &actor_id) {
     eLog("Start tx_list_log");
     Balances                 balances;
@@ -1960,7 +1991,7 @@ std::set<ActorId> Dag::last_month() {
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
-    eLog("[Dag] find_last_control: from {}, current: {}", from < 0 ? current_section_ : from, current_section_);
+    eTemp("[Dag] find_last_control: from {}, current: {}", from < 0 ? current_section_ : from, current_section_);
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
@@ -1997,7 +2028,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         }
 
         j += 1;
-        if (!disable_break && (j > 25 || jj > 10)) {
+        if (!disable_break && (j > 30 || jj > 10)) {
             break;
         }
     }
@@ -2065,6 +2096,7 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
 
     if (start != BigNumber(0)) {
         last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
+        eTemp("----- {},  {}", last_hash, interval_hash.value());
     } else {
         last_hash = interval_hash.value();
     }
@@ -2133,7 +2165,7 @@ bool Dag::generate_hash(const SectionId &start_section) {
 }
 
 std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
-    std::string tx_hashs;
+    std::string section_hashs;
 
     if (status_ != DagStatus::Sync) {
         eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
@@ -2152,15 +2184,27 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     for (SectionId i = from; i <= to; i++) {
         auto section = this->read_section(i);
 
+        bool is_empty = false;
         if (!section.has_value()) {
-            tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            is_empty = true;
+        }
+        if (section->transactions.empty()) {
+            is_empty = true;
+        }
+
+        if (is_empty) {
+            auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            section_hashs += hash;
+            eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
             continue;
         }
 
-        tx_hashs += Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        section_hashs += hash;
+        eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
     }
 
-    return Utils::calculate_hash(tx_hashs);
+    return Utils::calculate_hash(section_hashs);
 }
 
 void Dag::start_control(bool force) {
@@ -2172,6 +2216,7 @@ void Dag::start_control(bool force) {
     // this->clear_controls();
 
     eLog("[Dag] Check controls...");
+    // TODO: make signal about do something?
 
     auto find_result = this->find_last_control();
     if (find_result.has_value()) {
@@ -2232,6 +2277,9 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
         lo = SectionId(0);
     }
 
+    search_control_ = true;
+    emit node->dagSearchControlStarted();
+
     DagControlRangeRequest req { .from = lo, .to = hi };
     node->network()->send_message(req,
                                   MessageType::DagControlRangeRequest,
@@ -2242,6 +2290,11 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
                                           const Responder              &responder) {
+    if (search_control_) {
+        eTemp("[Dag] No need request control search");
+        return;
+    }
+
     if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
         || control_request.to < control_request.from) {
         eLog("[Dag] network_request_control_section Can't send control from {} to {}",
@@ -2276,6 +2329,8 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         eLog("[Dag] network_request_control_section Can't read control from {} to {}",
              control_response.to,
              control_response.from);
+        search_control_ = false;
+        emit node->dagSearchControlEnded();
         return;
     }
 
@@ -2294,6 +2349,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         if (!local_control.has_value() && i != 0) {
             sync_from = section_id;
+            continue;
             break;
         }
 
@@ -2303,6 +2359,8 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
                 if (i == 0) {
                     force_next = true;
+                } else {
+                    force_next = false;
                 }
 
                 break;
@@ -2311,7 +2369,10 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
     }
 
     if (sync_from == SectionId(-1) && !force_next) {
-        eFatal("[Dag] Sync complete!");
+        // eFatal("[Dag] Sync complete!");
+        search_control_ = false;
+        emit node->dagSearchControlEnded();
+        this->process_cached_transactions();
         return;
     }
 
@@ -2326,12 +2387,14 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
             SectionId       next_lo = (next_hi >= total) ? (next_hi - total) : SectionId(0);
 
             DagControlRangeRequest req { .from = next_lo, .to = next_hi };
+            eTemp("[Dag] Request controls: {}", req);
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,
                                           MessageStatus::Request,
                                           responder.with_new_message_id());
         }
+
         return;
     }
 
@@ -2340,7 +2403,12 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
         sync_last_index_ = std::max(current_section_, sync_end);
-        this->request_sections(sync_from - 20,
+        this->remove_sections(sync_from - 50);
+        check_status_ = DagSyncStatus::None;
+        emit node->dagSyncStart(sync_from - 50, sync_last_index_);
+        search_control_ = false;
+        emit node->dagSearchControlEnded();
+        this->request_sections(sync_from - 50,
                                std::min(sync_from + 100, current_section_),
                                responder.with_new_message_id());
     }
