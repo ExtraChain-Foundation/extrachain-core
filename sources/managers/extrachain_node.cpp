@@ -43,6 +43,8 @@
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
+std::atomic<bool> node_enabled { true };
+
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
                                              bool     allowRunRestApiServer,

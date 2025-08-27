@@ -1611,7 +1611,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_RC
+#ifdef IS_RC // only for ui clients, not for consoles, reputation priority
         if (!is_first_node) {
             return;
         }

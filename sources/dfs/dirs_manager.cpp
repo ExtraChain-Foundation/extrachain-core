@@ -199,6 +199,10 @@ void DirsManager::network_response_dir_rows(
             auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
             this->update_dirs(owner_id, max_value);
 
+            if (!node_enabled.load()) {
+                return;
+            }
+
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
         }
     });

@@ -41,7 +41,7 @@
 
 #include <atomic>
 
-static std::atomic<bool> node_enabled { true };
+extern std::atomic<bool> node_enabled;
 
 class DfsController;
 class ActorIndex;
