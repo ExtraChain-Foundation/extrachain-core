@@ -1635,7 +1635,8 @@ void Dag::handle_sync_request() {
 
             if (last_control->section_id < info.last_control_section_id
                 && info.last_control_section_id <= current_section_) {
-                this->start_control(true);
+                // this->start_control(true);
+                need_recontrol = true;
             }
 
             if (last_control->section_id == info.last_control_section_id
@@ -1829,7 +1830,7 @@ void Dag::remove_sections(const SectionId &from) {
 
     eLog("[Dag] Clear from {}", from);
 
-    for (SectionId i = from; i != to; i++) {
+    for (SectionId i = to; i >= from; --i) {
         auto p    = this->file_path(i);
         auto path = FsPath::create(p);
 
@@ -1844,8 +1845,9 @@ void Dag::remove_sections(const SectionId &from) {
 
         QFile::remove(QString::fromStdString(path_str.value()));
 
-        if (i % 10000 == 0) {
-            // remove section folder
+        if (i % Config::DataStorage::SECTION_SIZE == 0) {
+            QDir dir(QString::fromStdString(this->file_folder(i)));
+            dir.removeRecursively();
         }
     }
 }
@@ -2152,15 +2154,16 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
 
 bool Dag::generate_hash(const SectionId &start_section) {
     eLog("[Dag] Generate AcyclicChain controls...");
-    node->dagControlStarted();
+    emit node->dagControlStarted();
 
     if (start_section > cache_.section()) {
+        emit node->dagControlEnded();
         return true;
     }
 
     auto result = this->generate_hash_from_section(start_section, true);
 
-    node->dagControlEnded();
+    emit node->dagControlEnded();
     return result.has_value();
 }
 
