@@ -1310,7 +1310,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
             controls.push_back(DagControl { .section_id = section->id, .control = section->control.value() });
         }
 
-        if (section->transactions.empty()) {
+        if (section.has_value() && section->transactions.empty()) {
             continue;
         }
 
