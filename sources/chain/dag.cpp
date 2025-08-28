@@ -2362,7 +2362,7 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
         control_response.controls.emplace_back(dag_control.value());
     }
 
-    eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
+    // eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
     responder.send_response(control_response,
                             MessageType::DagControlRangeResponse,
                             SendMode::Focused,
@@ -2434,7 +2434,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
             SectionId       next_lo = (next_hi >= total) ? (next_hi - total) : SectionId(0);
 
             DagControlRangeRequest req { .from = next_lo, .to = next_hi };
-            eTemp("[Dag] Request controls: {}", req);
+            // eTemp("[Dag] Request controls: {}", req);
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,
