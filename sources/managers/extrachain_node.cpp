@@ -1078,7 +1078,7 @@ void ExtraChainNode::connectSignals() {
 
                 m_networkManager->sendFromCache();
 
-#ifdef IS_RC
+#ifdef IS_R
                 if (ip == m_networkManager->first_node()) {
                     dag_->start_check();
                 }
