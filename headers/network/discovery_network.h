@@ -1,7 +1,8 @@
 #pragma once
 
 #include <QObject>
-#include <QUdpSocket>
+#include <QTcpSocket>
+#include <QTcpServer>
 #include <QThread>
 #include "dfs/dfs_utils.h"
 
@@ -18,13 +19,14 @@ namespace Network {
         public:
             DiscoveryScanner(QObject* parent = nullptr);
             DiscoveryScanner(quint32 startIp, QObject* parent = nullptr);
-            DiscoveryScanner(quint32 startIp, quint32 endIp, std::string messageId, QObject* parent = nullptr);
+            DiscoveryScanner(quint32 startIp, quint32 endIp, QObject* parent = nullptr);
+            ~DiscoveryScanner() {
+                socket->deleteLater();
+            }
 
             Dfs::Packets::DiscoveryData getFoundedDiscoveryData() const;
             void                        setFoundedDiscoveryData(const Dfs::Packets::DiscoveryData data);
-            void                        multiThreadScan();
             IpRange                     shiftSubnet(const IpRange& range, int shift);
-            ;
 
         signals:
             void ipFound(Dfs::Packets::DiscoveryData discoveryData);
@@ -33,12 +35,10 @@ namespace Network {
 
         public slots:
             void run();
-            void initSocket();
             void scanNext();
-            void onReadyRead();
 
         private:
-            QUdpSocket*                 socket     = nullptr;
+            QTcpSocket*                 socket     = nullptr;
             quint16                     port       = 17594;
             int                         batchSize  = 100;
             int                         intervalMs = 30;
@@ -57,10 +57,11 @@ namespace Network {
             DiscoveryResponder(QObject* parent = nullptr);
 
         private slots:
+            void onNewConnection();
             void onReadyRead();
 
         private:
-            QUdpSocket* socket;
+            QTcpServer* server;
         };
     } // namespace Discovery
 

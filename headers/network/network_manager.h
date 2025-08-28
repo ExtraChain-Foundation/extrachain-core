@@ -228,10 +228,9 @@ private:
 
     ExtraChainNode*                       node;
     std::shared_ptr<QNetworkAddressEntry> local;
-    QWebSocketServer*                     wsServer               = nullptr;
-    DiscoveryScanner*                     discoveryScanner       = nullptr;
-    DiscoveryResponder*                   discoveryResponder     = nullptr;
-    QThread*                              discoveryScannerThread = nullptr;
+    QWebSocketServer*                     wsServer           = nullptr;
+    DiscoveryScanner*                     discoveryScanner   = nullptr;
+    DiscoveryResponder*                   discoveryResponder = nullptr;
 
     SafePtr<std::set<SocketService*>>            m_connections;
     SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;

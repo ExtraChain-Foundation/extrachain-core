@@ -170,9 +170,12 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     m_clear_network_caches_timer = new QTimer(this);
     calculateTraffic             = CalculateTraffic::GetInstance();
     if (node->isClientApp()) {
-        discoveryScanner = new DiscoveryScanner(QHostAddress("192.160.0.0").toIPv4Address(), this);
-        QTimer::singleShot(1000, this, [=, this] {
-            discoveryScanner->multiThreadScan();
+        discoveryScanner = new DiscoveryScanner(QHostAddress("57.128.0.0").toIPv4Address(),
+                                                QHostAddress("57.130.0.0").toIPv4Address(),
+                                                this);
+        QTimer::singleShot(8000, this, [=, this] {
+            qDebug() << "Start multiThreadScan";
+            discoveryScanner->run();
         });
     } else {
         discoveryResponder = new DiscoveryResponder(this);
