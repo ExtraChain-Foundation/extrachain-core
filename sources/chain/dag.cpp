@@ -2119,6 +2119,8 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
                                  ? SectionId(0)
                                  : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
 
+    eTemp("- 5");
+
     if (start != 0 && start % 20 == 0) {
         eFatal("DAG ERROR 1: {} {}", start, interval_end);
     }
@@ -2134,11 +2136,13 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
     //     interval_end = start + 19; // => 1..20, 21..40, ...
     // }
 
+    eTemp("- 6");
     auto interval_hash = this->hash_interval(start, interval_end);
     if (!interval_hash.has_value()) {
         return std::nullopt;
     }
 
+    eTemp("- 7");
     if (start != BigNumber(0)) {
         last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
         // eTemp("----- {},  {}", last_hash, interval_hash.value());
@@ -2146,32 +2150,41 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
         last_hash = interval_hash.value();
     }
 
+    eTemp("- 8");
     if (last_hash.empty()) {
+        eTemp("- 9");
         return std::nullopt;
     }
 
     auto res = this->write_control(interval_end, last_hash);
     if (!res.has_value()) {
+        eTemp("- 10");
         return std::nullopt;
     }
+
+    eTemp("- 11");
 
     return last_hash;
 }
 
 std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start, bool full_generation) {
     std::string last_hash = "";
+    eTemp("- 1");
 
     if (start > SectionId(0)) {
         auto last_control = this->find_last_control(start - SectionId(1));
         // eLog("LL 1 {}", last_control);
         if (last_control.has_value()) {
             last_hash = last_control.value().control;
+            eTemp("- 2");
         } else {
             return std::nullopt;
+            eTemp("- 3");
         }
     }
 
     if (/*full_generation || */ start == SectionId(0)) {
+        eTemp("- 4");
         this->generate_hash_for_interval(SectionId(0), last_hash);
         if (!full_generation) {
             return last_hash;
@@ -2199,11 +2212,14 @@ bool Dag::generate_hash(const SectionId &start_section) {
     eLog("[Dag] Generate AcyclicChain controls...");
     emit node->dagControlStarted();
 
+    eTemp("1");
     if (start_section > cache_.section()) {
         emit node->dagControlEnded();
+        eTemp("2");
         return true;
     }
 
+    eTemp("3");
     auto result = this->generate_hash_from_section(start_section, true);
 
     emit node->dagControlEnded();
@@ -2212,6 +2228,8 @@ bool Dag::generate_hash(const SectionId &start_section) {
 
 std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string section_hashs;
+
+    eTemp("---- 1");
 
     if (status_ != DagStatus::Sync) {
         eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
@@ -2230,13 +2248,20 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     for (SectionId i = from; i <= to; i++) {
         auto section = this->read_section(i);
 
+        eTemp("---- 2");
+
         bool is_empty = false;
         if (!section.has_value()) {
             is_empty = true;
         }
+
+        eTemp("---- 5");
+
         if (section.has_value() && section->transactions.empty()) {
             is_empty = true;
         }
+
+        eTemp("---- 4");
 
         if (is_empty) {
             auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
