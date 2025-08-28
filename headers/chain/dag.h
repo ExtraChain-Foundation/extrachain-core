@@ -43,7 +43,9 @@ static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL_MOD) == 0; // CONTROL_INTERVAL_MOD == 20
 }
 static inline SectionId align_down20(const SectionId &s) {
-    auto m = s % CONTROL_INTERVAL_MOD;
+    eLog("align_down20 {}", s);
+    SectionId m;
+    m = s % CONTROL_INTERVAL;
     return m == 0 ? s : (s - m);
 }
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {

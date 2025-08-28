@@ -2079,7 +2079,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         }
 
         j += 1;
-        if (!disable_break && (j > 30 || jj > 10)) {
+        if (!disable_break && (j > 37 || jj > 10)) {
             break;
         }
     }

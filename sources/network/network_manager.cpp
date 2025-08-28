@@ -703,7 +703,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     if (serialized_message.size() > 10000
         && (non_serialized_message.message_type != MessageType::DfsFileExistNotification
             && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
-        eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
+        eTemp("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
 
     TIMER_START(kkk)
