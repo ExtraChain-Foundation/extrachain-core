@@ -1656,7 +1656,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_RC
+#ifdef IS_R
             if (!is_first_node) {
                 return;
             }
@@ -1704,13 +1704,13 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
-#ifdef IS_RC
-        if (!is_first_node) {
-            return;
-        }
+        if (status == MessageStatus::Request) {
+#ifdef IS_R
+            if (!is_first_node) {
+                return;
+            }
 #endif
 
-        if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
