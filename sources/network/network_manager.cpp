@@ -1058,8 +1058,8 @@ void NetworkManager::message_received(const std::string &message,
         eLog("DagLight {}", status);
     }
 
-    QElapsedTimer timer;
-    timer.start();
+    // QElapsedTimer timer;
+    // timer.start();
 
     // try {
     switch (type) {
@@ -1789,7 +1789,7 @@ void NetworkManager::message_received(const std::string &message,
     }
     }
 
-    eLog("Timer: {} ms for {}", timer.elapsed(), type);
+    // eLog("Timer: {} ms for {}", timer.elapsed(), type);
 }
 
 void NetworkManager::removeWsConnection() {
