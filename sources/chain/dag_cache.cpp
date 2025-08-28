@@ -416,7 +416,7 @@ void DagCache::check_and_update_cache_thread(const SectionId &current_section) {
             dag->update_range();
 
             ThreadPoolBoost::instance()->post([this, res] {
-                auto last_hash    = node->dag()->generate_hash_from_section(res.from - 1);
+                auto last_hash    = node->dag()->generate_hash_from_section(res.from);
                 auto control_hash = node->dag()->read_control(res.to);
                 if (!control_hash.has_value()) {
                     eCritical("[DagCache] Problem with control hash from {}", res.to);
