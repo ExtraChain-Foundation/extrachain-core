@@ -2239,14 +2239,16 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         }
 
         if (is_empty) {
-            eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
             auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+
             section_hashs += hash;
             continue;
         }
 
-        eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
         auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+
         section_hashs += hash;
     }
 
