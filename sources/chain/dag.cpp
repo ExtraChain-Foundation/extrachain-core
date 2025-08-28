@@ -1210,7 +1210,8 @@ void Dag::network_status_sync_request(const Responder &responder) {
 
     auto last_control = this->find_last_control();
     if (!last_control.has_value()) {
-        return;
+        this->start_control(true);
+        // return;
     }
 
     std::uint64_t zero_timestamp =
