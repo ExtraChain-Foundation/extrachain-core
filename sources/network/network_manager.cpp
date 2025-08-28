@@ -1748,7 +1748,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
-#ifdef IS_RC
+#ifdef IS_R
         if (!is_first_node) {
             return;
         }
