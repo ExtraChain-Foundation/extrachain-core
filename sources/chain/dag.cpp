@@ -1610,6 +1610,12 @@ void Dag::set_sync_status(DagSyncStatus status) {
 
 void Dag::handle_sync_request() {
     emit node->dagTimerStop();
+
+    if (search_control_) {
+        eLog("[Dag] Ignore sync, because search control");
+        return;
+    }
+
     auto section = this->read_section(current_section_);
 
     if (last_info_.empty()) {
@@ -2023,7 +2029,9 @@ std::set<ActorId> Dag::last_month() {
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
-    eTemp("[Dag] find_last_control: from {}, current: {}", from < 0 ? current_section_ : from, current_section_);
+    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
+    //       from < 0 ? current_section_ : from,
+    //       current_section_);
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
@@ -2128,7 +2136,7 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
 
     if (start != BigNumber(0)) {
         last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
-        eTemp("----- {},  {}", last_hash, interval_hash.value());
+        // eTemp("----- {},  {}", last_hash, interval_hash.value());
     } else {
         last_hash = interval_hash.value();
     }
@@ -2228,13 +2236,13 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         if (is_empty) {
             auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
             section_hashs += hash;
-            eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
             continue;
         }
 
         auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
         section_hashs += hash;
-        eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
     }
 
     return Utils::calculate_hash(section_hashs);
