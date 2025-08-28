@@ -1310,7 +1310,7 @@ void Dag::network_request_sections(const BigNumber &from, const BigNumber &to, c
             controls.push_back(DagControl { .section_id = section->id, .control = section->control.value() });
         }
 
-        if (section.has_value() && section->transactions.empty()) {
+        if (section->transactions.empty()) {
             continue;
         }
 
@@ -2234,7 +2234,7 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         if (!section.has_value()) {
             is_empty = true;
         }
-        if (section->transactions.empty()) {
+        if (section.has_value() && section->transactions.empty()) {
             is_empty = true;
         }
 
