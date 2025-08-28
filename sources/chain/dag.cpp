@@ -1611,10 +1611,10 @@ void Dag::set_sync_status(DagSyncStatus status) {
 void Dag::handle_sync_request() {
     emit node->dagTimerStop();
 
-    if (search_control_) {
-        eLog("[Dag] Ignore sync, because search control");
-        return;
-    }
+    // if (search_control_) {
+    //     eLog("[Dag] Ignore sync, because search control");
+    //     return;
+    // }
 
     auto section = this->read_section(current_section_);
 
