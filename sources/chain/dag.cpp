@@ -1215,7 +1215,13 @@ void Dag::network_status_sync_request(const Responder &responder) {
     auto last_control = this->find_last_control();
     if (!last_control.has_value()) {
         this->start_control(true);
+        last_control = this->find_last_control();
         // return;
+    }
+
+    if (!last_control.has_value()) {
+        eCritical("Sync problem, need restart");
+        return;
     }
 
     std::uint64_t zero_timestamp =
