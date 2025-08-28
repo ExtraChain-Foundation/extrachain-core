@@ -509,7 +509,7 @@ public:
      * Processes transactions that were received while the chain
      * was synchronizing with the network.
      */
-    void process_cached_transactions();
+    void process_cached_transactions(bool not_ready = false);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
         return sended_transactions_;

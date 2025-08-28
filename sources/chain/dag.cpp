@@ -404,7 +404,7 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
     return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_, to_section);
 }
 
-void Dag::process_cached_transactions() {
+void Dag::process_cached_transactions(bool not_ready) {
     // TODO: check controls
 
     {
@@ -416,7 +416,9 @@ void Dag::process_cached_transactions() {
         }
     }
 
-    status_                      = DagStatus::Final;
+    if (!not_ready) {
+        status_ = DagStatus::Final;
+    }
     timestamp_bigger_sync_start_ = 0;
 
     while (true) {
@@ -442,8 +444,11 @@ void Dag::process_cached_transactions() {
     }
 
     timestamp_bigger_sync_start_ = 0;
-    set_status(DagStatus::Ready);
-    set_sync_status(DagSyncStatus::None);
+
+    if (!not_ready) {
+        set_status(DagStatus::Ready);
+        set_sync_status(DagSyncStatus::None);
+    }
 }
 
 void Dag::add_to_cached_tx(const Transaction &transaction) {
@@ -1390,7 +1395,24 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
+
+                if (mode_ == DagMode::Light) {
+                    this->process_cached_transactions();
+                    return;
+                }
+
+#ifdef IS_R // only for gui clients for first correction and integration
+                this->process_cached_transactions(true);
+                cache_.reset_db();
+                auto responder_new = responder.with_new_message_id();
+                node->network()->send_message(true,
+                                              MessageType::DagLightData,
+                                              SendMode::Focused,
+                                              MessageStatus::Request,
+                                              responder_new);
+#else
                 this->process_cached_transactions();
+#endif
             }
             return;
         }
@@ -1498,8 +1520,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
             this->first_saved_section_ = 0;
         }
 
-        for (const auto &[section_id, control] : dag_light.controls) {
-            this->write_control(section_id, control);
+        if (mode_ == DagMode::Light) {
+            for (const auto &[section_id, control] : dag_light.controls) {
+                this->write_control(section_id, control);
+            }
         }
 
         this->update_range();
@@ -1508,6 +1532,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
              dag_light.cache_section,
              this->first_saved_section_,
              this->current_section_);
+
+        if (mode_ == DagMode::Full) {
+            this->start_control(true);
+        }
 
         this->process_cached_transactions();
         // start check hash
@@ -1613,7 +1641,8 @@ void Dag::handle_sync_request() {
         // TODO: better cons
         for (const auto &[_, info] : last_info_) {
             if (info.last_section_id > my_index) {
-                need_sync = true;
+                // need_sync = true;
+                need_recontrol = true;
                 break;
             }
 
@@ -1637,6 +1666,7 @@ void Dag::handle_sync_request() {
                 && info.last_control_section_id <= current_section_) {
                 // this->start_control(true);
                 need_recontrol = true;
+                break;
             }
 
             if (last_control->section_id == info.last_control_section_id
@@ -1647,10 +1677,10 @@ void Dag::handle_sync_request() {
         }
     }
 
-    if (!need_sync && !need_recontrol) {
-        set_sync_status(DagSyncStatus::None);
+    if (!need_sync && !need_recontrol && mode_ == DagMode::Full) {
+        this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
-        process_cached_transactions();
+        this->process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -1672,9 +1702,9 @@ void Dag::handle_sync_request() {
     // TODO: recheck
     if (nodes_by_block.empty()) {
         eLog("BC 3");
-        set_sync_status(DagSyncStatus::None);
+        this->set_sync_status(DagSyncStatus::None);
         check_status_ = DagSyncStatus::None;
-        process_cached_transactions();
+        this->process_cached_transactions();
         // timer_sync->stop();
 
         // emit syncEnd();
@@ -1709,7 +1739,7 @@ void Dag::handle_sync_request() {
         responder.add_identifier(id);
     }
 
-    if (need_recontrol) {
+    if (need_recontrol && mode_ == DagMode::Full) {
         this->request_control_section(last_control->section_id, responder);
         return;
     }
