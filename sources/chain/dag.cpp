@@ -49,22 +49,23 @@ Dag::Dag(ExtraChainNode *node)
 
         auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
         if (section_range.has_value()) {
-            auto first_id_result    = BigNumber::create(section_range->first);
-            auto current_id_result  = BigNumber::create(section_range->last);
-            auto last_cached_result = BigNumber::create(section_range->last_cached);
+            auto first_id_result    = SectionId::create(section_range->first);
+            auto current_id_result  = SectionId::create(section_range->last);
+            auto last_cached_result = SectionId::create(section_range->last_cached);
 
             if (!first_id_result.has_value() || !current_id_result.has_value()) {
                 return;
             }
 
-            if (mode_ == DagMode::Full && first_id_result != BigNumber("0")) {
-                current_section_     = current_id_result.value();
+            if (mode_ == DagMode::Full && first_id_result != SectionId("0")) {
+                set_current_section(current_id_result.value());
+
                 first_saved_section_ = first_id_result.value();
                 clear_dag();
                 cache_.reset_db();
                 cache_.init_db();
             } else {
-                current_section_     = current_id_result.value();
+                set_current_section(current_id_result.value());
                 first_saved_section_ = first_id_result.value();
 
                 if (last_cached_result.has_value()) {
@@ -573,12 +574,12 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 
     if (section->control.has_value()) {
         if (section->control == hash) {
-            eTemp("[Dag] No need writing control to {}", section_id);
+            // eTemp("[Dag] No need writing control to {}", section_id);
             return WriteResult::NoChanges;
         }
     }
 
-    eTemp("[Dag] Write control to {}", section_id);
+    // eTemp("[Dag] Write control to {}", section_id);
     section->control = hash;
     auto res         = this->write_section(section.value());
     if (!res.has_value()) {
@@ -765,9 +766,12 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             ++last;
 
         // create or load
-        auto    section_opt = this->read_section(section_id);
-        bool    created     = !section_opt.has_value();
-        Section section     = created ? Section { .id = section_id, .transactions = {} } : *section_opt;
+        // auto    section_opt = this->read_section(section_id);
+        bool    created = true; // !section_opt.has_value();
+        Section section = Section {
+            .id           = section_id,
+            .transactions = {}
+        }; // created ? Section { .id = section_id, .transactions = {} } : *section_opt;
 
         const size_t old_size = section.transactions.size();
         section.transactions.insert(first, last); // без промежуточного вектора
@@ -1348,7 +1352,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         bool has_changes = false; // Флаг для отслеживания изменений
 
         if (!section_sync->txs.empty()) {
-            auto res = save_transactions(section_sync->txs);
+            auto res = this->save_transactions(section_sync->txs);
             if (!res.has_value()) {
                 // eLog("network_request_sections_response 2");
                 // eLog("sysync 3");

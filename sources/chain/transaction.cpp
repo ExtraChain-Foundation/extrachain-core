@@ -178,7 +178,7 @@ BigNumberFloat Transaction::amount() const {
     return this->amount_;
 }
 
-BigNumber Transaction::section() const {
+SectionId Transaction::section() const {
     return this->section_;
 }
 

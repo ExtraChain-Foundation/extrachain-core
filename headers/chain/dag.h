@@ -135,7 +135,7 @@ struct DagControl {
 BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, control))
 
 struct SectionSync {
-    BigNumber               to;
+    SectionId               to;
     std::set<Transaction>   txs;
     std::vector<DagControl> controls; // need map?
 };

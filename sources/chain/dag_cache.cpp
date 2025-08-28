@@ -41,7 +41,7 @@ BigNumber DagCache::section() const {
     return cached_section_;
 }
 
-void DagCache::set_section(const BigNumber& section_id) {
+void DagCache::set_section(const SectionId &section_id) {
     if (cached_section_ >= section_id) {
         return;
     }
@@ -49,7 +49,7 @@ void DagCache::set_section(const BigNumber& section_id) {
     cached_section_ = section_id;
 }
 
-std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
+std::pair<SectionId, Balances> DagCache::read_cached_balances() {
     Balances balances;
 
     if (!init_db()) {
@@ -80,7 +80,7 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     return { cache_section, balances };
 }
 
-std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
+std::optional<std::pair<SectionId, Balances> > DagCache::read_cached_balances(
     const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs) {
     Balances balances;
 
@@ -170,7 +170,7 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
     return balances;
 }
 
-void DagCache::write_cached_balances(const Balances& balances, const std::optional<BigNumber>& section_id) {
+void DagCache::write_cached_balances(const Balances& balances, const std::optional<SectionId> &section_id) {
     // Check if database is initialized
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balances");
@@ -253,16 +253,16 @@ void DagCache::write_cached_balance(const ActorId&        actor_id,
     // }
 }
 
-BigNumber DagCache::calculate_genesis_section(const BigNumber& section_id) const {
+BigNumber DagCache::calculate_genesis_section(const SectionId &section_id) const {
     // Calculate the genesis section (multiple of Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
     return (section_id / Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
-                                      const BigNumber&            current_section,
-                                      const BigNumber&            first_saved_section,
-                                      std::optional<BigNumber>    to_section) {
+                                      const SectionId &current_section,
+                                      const SectionId &first_saved_section,
+                                      std::optional<SectionId> to_section) {
     // eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
@@ -321,7 +321,7 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     return balances;
 }
 
-CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
+CacheResult DagCache::check_and_update_cache(const SectionId &current_section) {
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
     // BigNumber cache_boundary = (current_section / 20) * 20;
@@ -396,7 +396,7 @@ CacheResult DagCache::check_and_update_cache(const BigNumber& current_section) {
     return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
 }
 
-void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
+void DagCache::check_and_update_cache_thread(const SectionId &current_section) {
     if (dag == nullptr) {
         return;
     }
@@ -437,10 +437,10 @@ void DagCache::check_and_update_cache_thread(const BigNumber& current_section) {
 }
 
 std::pair<bool, SectionId> DagCache::update_to_genesis_section(
-    const BigNumber&                                        genesis_section,
-    const BigNumber&                                        current_section,
-    const BigNumber&                                        first_saved_section,
-    std::function<std::optional<Section>(const BigNumber&)> read_section_callback) {
+    const SectionId &genesis_section,
+    const SectionId &current_section,
+    const SectionId &first_saved_section,
+    std::function<std::optional<Section> (const SectionId &)> read_section_callback) {
     // If trying to update to same section, nothing to do
     if (cached_section_ == genesis_section) {
         return { true, BigNumber(-1) };
@@ -510,8 +510,8 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     }
 
     Balances& balances  = cached_balances_opt.value().second;
-    auto      cache_res = read_cached_balances();
-    local_clear_less_balances(cache_res.first, cache_res.second);
+    auto      cache_res = read_cached_balances();                 // ?
+    local_clear_less_balances(cache_res.first, cache_res.second); // ?
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -707,7 +707,7 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     }
 }
 
-std::set<ActorId> DagCache::local_clear_less_balances(const BigNumber& from, const Balances& start_balances) {
+std::set<ActorId> DagCache::local_clear_less_balances(const SectionId &from, const Balances& start_balances) {
     auto              balances = start_balances;
     std::set<ActorId> actors;
 
@@ -831,7 +831,7 @@ std::int64_t DagCache::get_or_create_actor_pk(const std::string& actor_id) const
 
 void DagCache::write_index(const ActorId&   sender,
                            const ActorId&   receiver,
-                           const BigNumber& section_id,
+                           const SectionId &section_id,
                            std::uint64_t    timestamp_ms) {
     ensure_index_db_initialized();
 
@@ -856,7 +856,7 @@ void DagCache::write_index(const ActorId&   sender,
     }
 }
 
-std::vector<BigNumber> DagCache::read_index(const ActorId& actor) {
+std::vector<SectionId> DagCache::read_index(const ActorId& actor) {
     ensure_index_db_initialized();
 
     std::vector<BigNumber> sections;
@@ -884,7 +884,7 @@ std::vector<BigNumber> DagCache::read_index(const ActorId& actor) {
     return sections;
 }
 
-bool DagCache::has_section(const ActorId& actor, const BigNumber& section_id) const {
+bool DagCache::has_section(const ActorId& actor, const SectionId &section_id) const {
     ensure_index_db_initialized();
 
     std::string query = R"(
@@ -920,7 +920,7 @@ std::uint64_t DagCache::count_sections(const ActorId& actor) const {
     return 0;
 }
 
-std::vector<ActorId> DagCache::get_actors_with_section(const BigNumber& section_id) const {
+std::vector<ActorId> DagCache::get_actors_with_section(const SectionId &section_id) const {
     ensure_index_db_initialized();
 
     std::vector<ActorId> actors;
