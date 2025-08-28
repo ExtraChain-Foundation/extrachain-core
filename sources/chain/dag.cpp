@@ -2349,7 +2349,7 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
         control_response.controls.emplace_back(dag_control.value());
     }
 
-    eTemp("[Dag] Sended: {}", control_response);
+    eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
     responder.send_response(control_response,
                             MessageType::DagControlRangeResponse,
                             SendMode::Focused,
