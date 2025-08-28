@@ -40,7 +40,7 @@ static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
-    return (s % CONTROL_INTERVAL_MOD) == 0; // CONTROL_INTERVAL_MOD == 20
+    return (s % CONTROL_INTERVAL) == 0;
 }
 static inline SectionId align_down20(const SectionId &s) {
     eLog("align_down20 {}", s);
