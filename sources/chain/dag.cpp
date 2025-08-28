@@ -2298,6 +2298,11 @@ void Dag::clear_controls() {
 }
 
 void Dag::request_control_section(const SectionId &from_top, const Responder &responder) {
+    if (search_control_) {
+        eTemp("[Dag] No need request control search");
+        return;
+    }
+
     SectionId hi = align_down20(from_top < current_section_ ? from_top : current_section_);
 
     const int       COUNT = 16;                             // temp?
@@ -2323,10 +2328,6 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
                                           const Responder              &responder) {
-    if (search_control_) {
-        eTemp("[Dag] No need request control search");
-        return;
-    }
 
     if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
         || control_request.to < control_request.from) {
