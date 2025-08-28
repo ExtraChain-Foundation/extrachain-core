@@ -1611,7 +1611,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_R // only for ui clients, not for consoles, reputation priority
+#ifdef IS_RC // only for ui clients, not for consoles, reputation priority
         if (!is_first_node) {
             return;
         }
@@ -1656,7 +1656,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_R
+#ifdef IS_RC
             if (!is_first_node) {
                 return;
             }
@@ -1704,7 +1704,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1731,7 +1731,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagIntervalHash: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1748,7 +1748,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
@@ -1765,7 +1765,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeResponse: {
-#ifdef IS_R
+#ifdef IS_RC
         if (!is_first_node) {
             return;
         }
