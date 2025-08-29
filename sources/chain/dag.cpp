@@ -1647,10 +1647,6 @@ void Dag::handle_sync_request() {
     bool need_recontrol         = false;
     bool current_section_exists = false;
 
-    if (mode_ == DagMode::Light) {
-        need_sync = true;
-    }
-
     // eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
 
     auto last_control = this->find_last_control();
@@ -1812,7 +1808,7 @@ void Dag::handle_sync_request() {
 }
 
 void Dag::clear_dag() {
-#ifdef IS_RC
+#ifdef IS_R
     eLog("[Dag] Clearing...");
     auto max_section = file_section(current_section_);
 
