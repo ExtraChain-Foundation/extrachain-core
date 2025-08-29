@@ -1602,7 +1602,9 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     }
 
     if (last_control->control != hash_interval.hash) {
-        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync", hash_interval, last_control);
+        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync",
+             hash_interval,
+             last_control);
 
         // this->start_sync();
         return;
@@ -1644,6 +1646,10 @@ void Dag::handle_sync_request() {
     bool need_sync              = false;
     bool need_recontrol         = false;
     bool current_section_exists = false;
+
+    if (mode_ == DagMode::Light) {
+        need_sync = true;
+    }
 
     // eLog("[Dag] current: {}; send_sync_request, last_info_: {}", current_section_, last_info_);
 
