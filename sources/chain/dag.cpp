@@ -1387,7 +1387,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                         auto removed = this->remove_control(section_id);
                         if (removed.has_value()) {
                             if (removed.value() == WriteResult::Write) {
-                                this->start_control(true);
+                                this->start_control(true, false);
                             }
                         }
                     }
