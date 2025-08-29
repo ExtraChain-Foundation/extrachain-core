@@ -740,7 +740,7 @@ public:
      */
     void start_control(bool force = false);
 
-    void clear_controls();
+    void clear_controls(const BigNumber &from);
 
     /**
      * @brief request_control_section

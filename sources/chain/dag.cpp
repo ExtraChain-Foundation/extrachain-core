@@ -1512,6 +1512,9 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
     ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
         // TIMER_START(network_response_light)
+        cache_.reset_db();
+        cache_.init_db();
+
         cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         // auto min = BigNumber(-1), max = BigNumber(-1);
@@ -1756,14 +1759,14 @@ void Dag::handle_sync_request() {
         responder.add_identifier(id);
     }
 
+    auto last_block  = this->read_section(current_section_);
+    auto sync_index  = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
+    sync_last_index_ = nodes_by_block.front().second;
+
     if (need_recontrol && mode_ == DagMode::Full) {
         this->request_control_section(last_control->section_id, responder);
         return;
     }
-
-    auto last_block  = this->read_section(current_section_);
-    auto sync_index  = last_block.has_value() ? last_block->id + 1 : BigNumber(0);
-    sync_last_index_ = nodes_by_block.front().second;
 
     if (current_section_exists && current_section_ >= sync_last_index_) {
         eLog("[Dag] Not need sync");
@@ -2302,9 +2305,9 @@ void Dag::start_control(bool force) {
     this->generate_hash(start_from);
 }
 
-void Dag::clear_controls() {
+void Dag::clear_controls(const BigNumber &from) {
     eLog("[Dag] Clear all controls..."); // TODO: % 20?
-    for (BigNumber i = BigNumber(0); i <= current_section_; i++) {
+    for (BigNumber i = from; i <= current_section_; i++) {
         auto section = read_section(i);
         if (!section.has_value()) {
             continue;
@@ -2342,12 +2345,12 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
                                   MessageType::DagControlRangeRequest,
                                   responder.empty() ? SendMode::Neighbours : SendMode::Focused,
                                   MessageStatus::Request,
-                                  responder);
+                                  responder.with_new_message_id());
 }
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
                                           const Responder              &responder) {
-
+    // TODO: to thread? with status generated controls
     if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
         || control_request.to < control_request.from) {
         eLog("[Dag] network_request_control_section Can't send control from {} to {}",
@@ -2357,15 +2360,27 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     }
 
     DagControlRangeResponse control_response { .from = control_request.from, .to = control_request.to };
+    SectionId               from = SectionId(-1);
 
     for (SectionId s = control_request.from; s <= control_request.to; s += CONTROL_INTERVAL_MOD) {
         auto dag_control = this->read_control(s);
         if (!dag_control.has_value()) {
-            eLog("[Dag] network_request_control_section Can't send control {}", s);
+            eLog("[Dag] network_request_control_section Can't send control {}, try to regen...", s);
+
+            if (s % 20 == 0) {
+                from = s;
+            }
             return;
         }
 
         control_response.controls.emplace_back(dag_control.value());
+    }
+
+    if (from != -1) {
+        this->clear_controls(from);
+        this->start_control(true);
+        this->network_request_control_section(control_request, responder);
+        return;
     }
 
     // eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
@@ -2395,6 +2410,11 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         auto control       = control_response.controls[i].control;
         auto local_control = this->read_control(section_id);
 
+        // if (section_id > current_section_) {
+        //     sync_from = current_section_;
+        //     break;
+        // }
+
         if (!local_control.has_value() && i == 0) {
             force_next = true;
             break;
@@ -2423,10 +2443,15 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
     if (sync_from == SectionId(-1) && !force_next) {
         // eFatal("[Dag] Sync complete!");
-        search_control_ = false;
-        emit node->dagSearchControlEnded();
-        this->process_cached_transactions();
-        return;
+
+        if (sync_last_index_ <= current_section_) {
+            search_control_ = false;
+            emit node->dagSearchControlEnded();
+            this->process_cached_transactions();
+            return;
+        } else {
+            sync_from = current_section_;
+        }
     }
 
     if (force_next) { // TODO: better search? counter of requests?
@@ -2455,14 +2480,14 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         SectionId sync_end = control_response.to;
 
         eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
-        sync_last_index_ = std::max(current_section_, sync_end);
+        // sync_last_index_ = std::max(current_section_, sync_end);
         this->remove_sections(sync_from - 50);
         check_status_ = DagSyncStatus::None;
         emit node->dagSyncStart(sync_from - 50, sync_last_index_);
         search_control_ = false;
         emit node->dagSearchControlEnded();
         this->request_sections(sync_from - 50,
-                               std::min(sync_from + 100, current_section_),
+                               std::min(sync_from + 100, sync_last_index_),
                                responder.with_new_message_id());
     }
 }
