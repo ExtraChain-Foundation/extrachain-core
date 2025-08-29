@@ -725,7 +725,7 @@ public:
      * @param start_section
      * @return
      */
-    bool generate_hash(const SectionId &start_section = SectionId(0));
+    bool generate_hash(const SectionId &start_section = SectionId(0), bool qt_signals = true);
 
     /**
      * @brief hash_interval
@@ -738,7 +738,7 @@ public:
     /**
      * @brief start_control
      */
-    void start_control(bool force = false);
+    void start_control(bool force = false, bool qt_signals = true);
 
     void clear_controls(const SectionId &from = SectionId(0));
 

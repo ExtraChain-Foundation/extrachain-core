@@ -1373,6 +1373,10 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             if (section_id % 20 == 0) {
                 auto existing_section = this->read_section(section_id);
                 if (existing_section.has_value()) {
+                    if (existing_section->control.has_value()) {
+                        continue;
+                    }
+
                     if (existing_section->control != control) {
                         has_changes = true;
                         // eTemp("[Dag] Control changed for section {}: {} -> {}",
@@ -1383,7 +1387,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                         auto removed = this->remove_control(section_id);
                         if (removed.has_value()) {
                             if (removed.value() == WriteResult::Write) {
-                                // this->start_control();
+                                this->start_control(true);
                             }
                         }
                     }
@@ -1542,10 +1546,14 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
         this->update_range();
 
-        eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
-             dag_light.cache_section,
-             this->first_saved_section_,
-             this->current_section_);
+        if (mode_ == DagMode::Light) {
+            eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
+                 dag_light.cache_section,
+                 this->first_saved_section_,
+                 this->current_section_);
+        } else {
+            eLog("[Dag] Balances updated");
+        }
 
         if (mode_ == DagMode::Full) {
             this->start_control(true);
@@ -2129,9 +2137,19 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
                                  : start + (start == 0 ? CONTROL_INTERVAL_DIFF + 1 : CONTROL_INTERVAL_DIFF);
 
     if (start != 0 && start % 20 == 0) {
+#ifdef IS_RC
+        eCritical("DAG ERROR 1: {} {}", start, interval_end);
+        return std::nullopt;
+#endif
+
         eFatal("DAG ERROR 1: {} {}", start, interval_end);
     }
     if (start != 0 && (start - 1) % 20 != 0) {
+#ifdef IS_RC
+        eCritical("DAG ERROR 2: {} {}", start, interval_end);
+        return std::nullopt;
+#endif
+
         eFatal("DAG ERROR 2: {} {}", start, interval_end);
     }
 
@@ -2204,9 +2222,14 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
     return last_hash;
 }
 
-bool Dag::generate_hash(const SectionId &start_section) {
-    eLog("[Dag] Generate AcyclicChain controls...");
-    emit node->dagControlStarted();
+bool Dag::generate_hash(const SectionId &start_section, bool qt_signals) {
+#ifndef IS_R
+    eTemp("[Dag] Generate AcyclicChain controls from {}...", start_section);
+#endif
+
+    if (qt_signals) {
+        emit node->dagControlStarted();
+    }
 
     if (start_section > cache_.section()) {
         emit node->dagControlEnded();
@@ -2215,7 +2238,10 @@ bool Dag::generate_hash(const SectionId &start_section) {
 
     auto result = this->generate_hash_from_section(start_section, true);
 
-    emit node->dagControlEnded();
+    if (qt_signals) {
+        emit node->dagControlEnded();
+    }
+
     return result.has_value();
 }
 
@@ -2262,7 +2288,7 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     return Utils::calculate_hash(section_hashs);
 }
 
-void Dag::start_control(bool force) {
+void Dag::start_control(bool force, bool qt_signals) {
     // for tests
     // generate_hash();
     // return;
@@ -2270,14 +2296,16 @@ void Dag::start_control(bool force) {
     // for tests 2
     // this->clear_controls();
 
+#ifndef IS_R
     eLog("[Dag] Check controls...");
+#endif
     // TODO: make signal about do something?
 
     auto find_result = this->find_last_control();
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        eLog("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}", section_id);
@@ -2302,7 +2330,7 @@ void Dag::start_control(bool force) {
         }
     }
 
-    this->generate_hash(start_from);
+    this->generate_hash(start_from, qt_signals);
 }
 
 void Dag::clear_controls(const SectionId &from) {
