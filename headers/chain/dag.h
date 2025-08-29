@@ -675,6 +675,8 @@ public:
      */
     std::set<ActorId> last_month();
 
+    BigNumberFloat sum_all_rewards();
+
     /**
      * @brief find_last_control
      * @param from

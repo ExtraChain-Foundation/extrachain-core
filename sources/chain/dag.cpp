@@ -2050,6 +2050,31 @@ std::set<ActorId> Dag::last_month() {
     return actors;
 }
 
+BigNumberFloat Dag::sum_all_rewards() {
+    eLog("Start summing all rewards...");
+    BigNumberFloat total_rewards = BigNumberFloat(0);
+
+    for (SectionId i = SectionId(1); i <= current_section_; i++) {
+        auto section = read_section(i);
+        if (!section.has_value()) {
+            continue;
+        }
+
+        if (i % SectionId(1000) == 0) {
+            eLog("Processing section 0x{} / {} from {}", i, i.to_string(NumeralBase::Dec), current_section_);
+        }
+
+        for (const auto &tx : section->transactions) {
+            if (tx.type() == TransactionType::Reward) {
+                total_rewards += BigNumberFloat(tx.amount());
+            }
+        }
+    }
+
+    eLog("Total rewards sum: {}", total_rewards.to_string(NumeralBase::Dec));
+    return total_rewards;
+}
+
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
