@@ -94,9 +94,13 @@ void Transaction::set_token(const ActorId &value) {
 }
 
 std::string Transaction::calculate_hash() const {
-    auto hashData = section_.to_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-                    + receiver_.to_string() + token_.to_string() + amount_.to_string(NumeralBase::Hex)
-                    + std::to_string(timestamp_) + (meta_.has_value() ? meta_.value() : "");
+    auto hashData =
+        section_.to_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
+        + receiver_.to_string() + token_.to_string() + amount_.to_string(NumeralBase::Hex)
+        + std::to_string(timestamp_)
+        + (meta_.has_value() ? meta_.value() : ""); // TODO: + amount.size() meta.size() + prev_hashs_.size()
+                                                    // TODO: meta max 255 in prove
+    // TODO: секция хеш должна учесть размер секции
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;
@@ -174,7 +178,7 @@ BigNumberFloat Transaction::amount() const {
     return this->amount_;
 }
 
-BigNumber Transaction::section() const {
+SectionId Transaction::section() const {
     return this->section_;
 }
 

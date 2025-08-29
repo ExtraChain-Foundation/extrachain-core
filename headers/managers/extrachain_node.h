@@ -41,7 +41,7 @@
 
 #include <atomic>
 
-static std::atomic<bool> node_enabled { true };
+extern std::atomic<bool> node_enabled;
 
 class DfsController;
 class ActorIndex;
@@ -91,7 +91,7 @@ struct SubscriptionRow {
     int           type       = 0;
     std::uint64_t date_start = 0; // block date
     bool          auto_renew = false;
-    BigNumber     section_id;
+    SectionId     section_id;
     std::string   transaction_hash;
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
@@ -280,8 +280,8 @@ signals:
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
-    void dagSyncStart(BigNumber, BigNumber);
-    void dagSyncProgress(BigNumber);
+    void dagSyncStart(SectionId, SectionId);
+    void dagSyncProgress(SectionId);
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
     void dagTxSended(std::string hash);
@@ -290,6 +290,8 @@ signals:
 
     void dagControlStarted();
     void dagControlEnded();
+    void dagSearchControlStarted();
+    void dagSearchControlEnded();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);

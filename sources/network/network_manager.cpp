@@ -703,7 +703,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     if (serialized_message.size() > 10000
         && (non_serialized_message.message_type != MessageType::DfsFileExistNotification
             && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
-        eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
+        eTemp("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
 
     TIMER_START(kkk)
@@ -1611,7 +1611,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_RC
+#ifdef IS_RC // only for ui clients, not for consoles, reputation priority
         if (!is_first_node) {
             return;
         }
@@ -1656,7 +1656,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_RC
+#ifdef IS_R
             if (!is_first_node) {
                 return;
             }
@@ -1704,13 +1704,13 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
-#ifdef IS_RC
-        if (!is_first_node) {
-            return;
-        }
+        if (status == MessageStatus::Request) {
+#ifdef IS_R
+            if (!is_first_node) {
+                return;
+            }
 #endif
 
-        if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
@@ -1747,20 +1747,37 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
 
-    case MessageType::DagControl: {
-#ifdef IS_RC
+    case MessageType::DagControlRangeRequest: {
+#ifdef IS_R
         if (!is_first_node) {
             return;
         }
 #endif
 
-        auto dag_control = MessagePack::deserialize<DagControl>(serialized);
+        auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
             break;
         }
 
         node->dag()->network_request_control_section(dag_control.value(), responder);
+        break;
+    }
+
+    case MessageType::DagControlRangeResponse: {
+#ifdef IS_RC
+        if (!is_first_node) {
+            return;
+        }
+#endif
+
+        auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
+        if (!dag_control.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dag control", type);
+            break;
+        }
+
+        node->dag()->network_control_range_response(dag_control.value(), responder);
         break;
     }
 
@@ -2147,9 +2164,9 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
 #ifdef IS_RC
-        request.setTransferTimeout(300);
+        request.setTransferTimeout(5000);
 #else
-        request.setTransferTimeout(2500);
+        request.setTransferTimeout(5000);
 #endif
         QNetworkReply *reply = manager.get(request);
 

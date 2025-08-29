@@ -108,7 +108,7 @@ private:
     BigNumberFloat             amount_;     ///< Transaction amount
     std::optional<std::string> meta_;       ///< Optional metadata payload
     ActorId                    token_;      ///< Token contract address
-    BigNumber                  section_;    ///< Chain section ID
+    SectionId                  section_;    ///< Chain section ID
     std::string                hash_;       ///< Transaction hash (Blake3)
     Signature                  signature_;  ///< Digital signature
     TransactionType            type_;       ///< Transaction type
@@ -169,7 +169,7 @@ public:
      * @brief Get chain section
      * @return Section number as BigNumber
      */
-    BigNumber section() const;
+    SectionId section() const;
 
     /**
      * @brief Get optional metadata

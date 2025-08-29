@@ -159,6 +159,10 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
+    if (!node_enabled.load()) {
+        return;
+    }
+
     // Don't add if already in queue or active downloads
     {
         auto active_downloads_locked = *m_active_downloads;
