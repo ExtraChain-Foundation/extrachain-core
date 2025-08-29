@@ -191,6 +191,10 @@ public:
         return responder;
     }
 
+    bool empty() const {
+        return identifiers_.empty() && message_id_.empty();
+    }
+
     Responder& operator=(const Responder&) = default;
 
 private:
@@ -407,7 +411,7 @@ signals:
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
-    void messageCountReceived(BigNumber count);
+    void messageCountReceived(SectionId count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
     void messageReceivedSignal(const std::string& message, const std::string& ip, const std::string& identifier);
 };

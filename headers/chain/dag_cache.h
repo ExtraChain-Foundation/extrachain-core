@@ -41,8 +41,8 @@ using Balances = std::map<std::pair<ActorId, TokenId>, BigNumberFloat>;
 
 struct CacheResult {
     bool      result;
-    BigNumber from;
-    BigNumber to;
+    SectionId from;
+    SectionId to;
 };
 BOOST_DESCRIBE_STRUCT(CacheResult, (), (result, from, to))
 
@@ -79,7 +79,7 @@ public:
      *
      * @param section_id The new section id
      */
-    void set_section(const BigNumber& section_id);
+    void set_section(const SectionId& section_id);
 
     /**
      * @brief Read all cached balances from the database
@@ -89,8 +89,8 @@ public:
      *
      * @return Balances Map of actor-token pairs to their balances
      */
-    std::pair<BigNumber, Balances>                read_cached_balances();
-    std::optional<std::pair<BigNumber, Balances>> read_cached_balances(
+    std::pair<SectionId, Balances>                read_cached_balances();
+    std::optional<std::pair<SectionId, Balances>> read_cached_balances(
         const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs);
 
     std::optional<Balances> get_cached_balances_for_actors(const std::vector<ActorId>& actor_ids);
@@ -106,7 +106,7 @@ public:
      * @param section_id Optional section ID to update the cache section to
      */
     void write_cached_balances(const Balances&                 balances,
-                               const std::optional<BigNumber>& section_id = std::nullopt);
+                               const std::optional<SectionId>& section_id = std::nullopt);
 
     /**
      * @brief Read the balance for a specific actor-token pair from cache
@@ -146,9 +146,9 @@ public:
      * @return std::map<ActorId, BigNumberFloat> Map of actor balances
      */
     Balances calculate_balances(const std::vector<ActorId>& actor_ids,
-                                const BigNumber&            current_section,
-                                const BigNumber&            first_saved_section,
-                                std::optional<BigNumber>    to_section = std::nullopt);
+                                const SectionId&            current_section,
+                                const SectionId&            first_saved_section,
+                                std::optional<SectionId>    to_section = std::nullopt);
 
     /**
      * @brief Calculate the genesis section id for caching
@@ -156,7 +156,7 @@ public:
      * @param section_id Current section id
      * @return BigNumber Genesis section id (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
      */
-    BigNumber calculate_genesis_section(const BigNumber& section_id) const;
+    BigNumber calculate_genesis_section(const SectionId& section_id) const;
 
     /**
      * @brief Check and update cache to latest safe section
@@ -173,9 +173,9 @@ public:
      * @return true If cache was updated
      * @return false If no update was needed or update failed
      */
-    CacheResult check_and_update_cache(const BigNumber& current_section);
+    CacheResult check_and_update_cache(const SectionId& current_section);
 
-    void check_and_update_cache_thread(const BigNumber& current_section);
+    void check_and_update_cache_thread(const SectionId& current_section);
 
     /**
      * @brief Update cache to a specific genesis section
@@ -187,11 +187,11 @@ public:
      * @return true If update was successful
      * @return false If update failed
      */
-    std::pair<bool, BigNumber> update_to_genesis_section(
-        const BigNumber&                                        genesis_section,
-        const BigNumber&                                        current_section,
-        const BigNumber&                                        first_saved_section,
-        std::function<std::optional<Section>(const BigNumber&)> read_section_callback);
+    std::pair<bool, SectionId> update_to_genesis_section(
+        const SectionId&                                        genesis_section,
+        const SectionId&                                        current_section,
+        const SectionId&                                        first_saved_section,
+        std::function<std::optional<Section>(const SectionId&)> read_section_callback);
 
     /**
      * @brief Initialize database connection
@@ -206,21 +206,21 @@ public:
      */
     void reset_db();
 
-    std::set<ActorId> local_clear_less_balances(const BigNumber& from           = BigNumber(2),
+    std::set<ActorId> local_clear_less_balances(const SectionId& from           = SectionId(2),
                                                 const Balances&  start_balances = Balances());
 
     void write_index(const ActorId&   sender,
                      const ActorId&   receiver,
-                     const BigNumber& section_id,
+                     const SectionId& section_id,
                      std::uint64_t    timestamp_ms);
 
-    std::vector<BigNumber> read_index(const ActorId& actor);
+    std::vector<SectionId> read_index(const ActorId& actor);
 
-    bool has_section(const ActorId& actor, const BigNumber& section_id) const;
+    bool has_section(const ActorId& actor, const SectionId& section_id) const;
 
     std::uint64_t count_sections(const ActorId& actor) const;
 
-    std::vector<ActorId> get_actors_with_section(const BigNumber& section_id) const;
+    std::vector<ActorId> get_actors_with_section(const SectionId& section_id) const;
 
     bool has_daily_activity(const ActorId& actor, const std::string& time_period) const;
 
@@ -229,7 +229,7 @@ public:
 private:
     ExtraChainNode*              node;                            // Node reference
     Dag*                         dag;                             // Dag reference
-    BigNumber                    cached_section_ = BigNumber(-1); // Current cached section id (genesis point)
+    SectionId                    cached_section_ = SectionId(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> cache_db_;                       // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized
 

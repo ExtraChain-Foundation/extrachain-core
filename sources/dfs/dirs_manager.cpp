@@ -170,7 +170,7 @@ void DirsManager::network_response_dir_rows(
              }
              */
 
-            // tempsync for removed
+            // for removed
             for (const auto& row : dir_rows) {
                 if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
                     auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
@@ -199,9 +199,18 @@ void DirsManager::network_response_dir_rows(
             auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
             this->update_dirs(owner_id, max_value);
 
+            if (!node_enabled.load()) {
+                return;
+            }
+
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
         }
     });
+
+    if (!node->dfs()->is_dirs_loaded_) {
+        node->dfs()->is_dirs_loaded_ = true;
+        emit node->dfs()->dirsLoaded();
+    }
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {

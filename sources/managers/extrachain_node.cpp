@@ -43,6 +43,8 @@
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
+std::atomic<bool> node_enabled { true };
+
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
                                              bool     isClientApp,
                                              bool     allowRunRestApiServer,
@@ -389,11 +391,16 @@ bool ExtraChainNode::create_renames_template() {
     return true;
 }
 
-bool ExtraChainNode::create_renames_vector() {
+DfsFileStatus ExtraChainNode::create_renames_vector() {
+    auto row = this->dfs()->read_file_status("Renames");
+    if (row.has_value()) {
+        return DfsFileStatus::Existed;
+    }
+
     const auto main_actor_id = this->accountController()->currentProfile().main_id();
     auto       network_id    = this->network_id();
     if (network_id.is_zero()) {
-        return false;
+        return DfsFileStatus::CantCreate;
     }
 
     auto search_result =
@@ -401,7 +408,7 @@ bool ExtraChainNode::create_renames_vector() {
                                                                   Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
                                                                   "Renames");
     if (!search_result.has_value()) {
-        return false;
+        return DfsFileStatus::CantCreate;
     }
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
@@ -414,10 +421,93 @@ bool ExtraChainNode::create_renames_vector() {
                                                     security_actor);
 
     if (!store_chat_res.has_value()) {
-        return false;
+        return DfsFileStatus::CantCreate;
+    }
+
+    return DfsFileStatus::Created;
+}
+
+bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {
+    if (this->accountController()->profile_type() != ProfileType::New) {
+        bool res = this->accountController()->rename_wallet(this->accountController()->system_actor().id(),
+                                                            actor_id,
+                                                            name);
+        return res;
+    }
+
+    auto row = this->dfs()->read_file_status("Renames");
+    if (!row.has_value()) {
+        auto res = this->create_renames_vector();
+
+        if (res != DfsFileStatus::Created) {
+            return false;
+        } else {
+            return write_actor_rename(actor_id, name);
+        }
+    }
+
+    if (row->state != Dfs::FileState::Ready) {
+        this->dfs()->add_to_waiting_file(actor_id, row->file_id);
+        renames_file_id_waiting_ = row->file_id;
+    }
+
+    auto main_id = m_accountController->currentProfile().main_id();
+
+    if (name.empty()) {
+        // TODO: add remove. Need to search for actor, scan and remove
+        // this->dfs()->remove_vector_row(main_id, row->file_id);
+        emit this->actorRenamed(actor_id, name);
+    } else {
+        auto  security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
+        DbRow db_row         = { { "id", actor_id.value() }, { "name", name } };
+
+        bool res = this->dfs()->add_vector_row(main_id, row->file_id, db_row, main_id, security_actor);
+        if (!res) {
+            return false;
+        }
+
+        emit this->actorRenamed(actor_id, name);
     }
 
     return true;
+}
+
+std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames() {
+    auto row     = this->dfs()->read_file_status("Renames");
+    auto main_id = m_accountController->currentProfile().main_id();
+
+    if (!row.has_value()) {
+        return {};
+    }
+
+    if (row->state != Dfs::FileState::Ready) {
+        this->dfs()->add_to_waiting_file(main_id, row->file_id);
+        renames_file_id_waiting_ = row->file_id;
+        return {};
+    }
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
+    auto actors         = this->dfs()->get_vector_rows(main_id, row->file_id, "", security_actor);
+
+    if (!actors.has_value()) {
+        return {};
+    }
+
+    std::vector<std::pair<ActorId, std::string>> renames;
+    for (const auto& row : actors.value()) {
+        if (row.find("id") == row.end() || row.find("name") == row.end()) {
+            continue;
+        }
+
+        auto actor = ActorId::create(row.at("id"));
+        if (!actor.has_value()) {
+            continue;
+        }
+
+        renames.push_back(std::make_pair(actor.value(), row.at("name")));
+    }
+
+    return renames;
 }
 
 void ExtraChainNode::start() {
@@ -885,8 +975,9 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 
-    if (dag_->status() == DagStatus::Ready && !dag_->read_section(dag_->current_section()).has_value()) {
-        eCritical("[Dag] No last section");
+    if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
+        && !dag_->read_section(dag_->current_section()).has_value()) {
+        eCritical("[Dag] No physical section");
     }
 }
 
@@ -967,13 +1058,6 @@ void ExtraChainNode::connectSignals() {
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
 
-    // temp for tests, maybe only for console
-    connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
-        emit readyInitLocalizationFiles();
-        // m_dfs->requestDirFileAllActors();
-        // m_dfs->requestSync();
-    });
-
     connect(m_networkManager,
             &NetworkManager::newSocketActivatedWithParams,
             [this](const std::string ip, const std::string identifier) {
@@ -994,14 +1078,14 @@ void ExtraChainNode::connectSignals() {
 
                 m_networkManager->sendFromCache();
 
-                #ifdef IS_RC
+#ifdef IS_R
                 if (ip == m_networkManager->first_node()) {
                     dag_->start_check();
                 }
-                #else
+#else
                 dag_->start_check();
-                #endif
-                
+#endif
+
                 m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
@@ -1014,7 +1098,17 @@ void ExtraChainNode::connectSignals() {
 
     connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
     connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
-    connect(dag_->timer_sync, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+    connect(dag_->timer_sync_, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+
+    connect(m_dfs, &DfsController::waitDownloaded, [this](ActorId actor_id, Dfs::DirRow dir_row) {
+        if (dir_row.file_id == renames_file_id_waiting_) {
+            emit actorRenamedLoaded();
+
+            for (const auto& [actor_id, name] : renames_todo_) {
+                this->write_actor_rename(actor_id, name);
+            }
+        }
+    });
 }
 
 void ExtraChainNode::prepareFolders() {
@@ -1084,13 +1178,13 @@ std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
 
 void ExtraChainNode::dagTimerStarting(int ms) {
     // eLog("[Dag] Timer start, {} ms", ms);
-    dag_->timer_sync->stop();
-    dag_->timer_sync->start(ms);
+    dag_->timer_sync_->stop();
+    dag_->timer_sync_->start(ms);
 }
 
 void ExtraChainNode::dagTimerStoping() {
     // eLog("[Dag] Timer stop");
-    dag_->timer_sync->stop();
+    dag_->timer_sync_->stop();
 }
 
 void ExtraChainNode::dagTimerTick() {

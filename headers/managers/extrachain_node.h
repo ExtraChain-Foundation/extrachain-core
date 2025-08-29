@@ -31,6 +31,7 @@
 #include "chain/actor_index.h"
 #include "chat/chat.h"
 #include "chat/message.h"
+#include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
 #include "chain/transaction.h"
 #include "chain/private_profile.h"
@@ -40,7 +41,7 @@
 
 #include <atomic>
 
-static std::atomic<bool> node_enabled { true };
+extern std::atomic<bool> node_enabled;
 
 class DfsController;
 class ActorIndex;
@@ -90,16 +91,10 @@ struct SubscriptionRow {
     int           type       = 0;
     std::uint64_t date_start = 0; // block date
     bool          auto_renew = false;
-    BigNumber     section_id;
+    SectionId     section_id;
     std::string   transaction_hash;
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
-
-struct RenameRow {
-    std::string id;
-    std::string name;
-};
-BOOST_DESCRIBE_STRUCT(RenameRow, (), (id, name))
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
@@ -150,21 +145,28 @@ private:
 
     std::optional<SubscriptionRow> subscription_row;
 
+    std::string                              renames_file_id_waiting_;
+    std::unordered_map<ActorId, std::string> renames_todo_;
+
 public:
     std::vector<Actor<KeyPublic>> actors_broadcast_;
 
 public:
     ~ExtraChainNode();
 
-    bool create_new_network(const std::string& login, const std::string& password);
-    bool create_new_dag();
-    bool create_usernames_vector();
-    bool create_chat_templates();
-    bool create_subscription_template();
-    bool create_token_template();
-    bool create_token_vector();
-    bool create_renames_template();
-    bool create_renames_vector();
+    bool          create_new_network(const std::string& login, const std::string& password);
+    bool          create_new_dag();
+    bool          create_usernames_vector();
+    bool          create_chat_templates();
+    bool          create_subscription_template();
+    bool          create_token_template();
+    bool          create_token_vector();
+    bool          create_renames_template();
+    DfsFileStatus create_renames_vector();
+
+    bool write_actor_rename(const ActorId& actor_id, const std::string& name);
+
+    std::vector<std::pair<ActorId, std::string>> read_actor_renames();
 
     // not only for the one
     bool create_subscription_vector(const std::string& file_name);
@@ -270,7 +272,6 @@ signals:
     void ready();
     void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
-    void readyInitLocalizationFiles();
     void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
     void vpnDisconnect();
 
@@ -279,8 +280,8 @@ signals:
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
-    void dagSyncStart(BigNumber, BigNumber);
-    void dagSyncProgress(BigNumber);
+    void dagSyncStart(SectionId, SectionId);
+    void dagSyncProgress(SectionId);
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
     void dagTxSended(std::string hash);
@@ -289,11 +290,16 @@ signals:
 
     void dagControlStarted();
     void dagControlEnded();
+    void dagSearchControlStarted();
+    void dagSearchControlEnded();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);
     void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
     void messageRemoved(ActorId owner_id, std::string file_id, std::string id);
+
+    void actorRenamedLoaded();
+    void actorRenamed(ActorId actor_id, std::string name);
 
 private slots:
     void getAllActorsTimerCall();

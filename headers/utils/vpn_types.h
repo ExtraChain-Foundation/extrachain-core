@@ -46,6 +46,7 @@ struct VPNConfigStorage {
         std::vector<std::string> allIPsToSet;
         std::string              requesterPublicKey;
         std::string              nextPublicKey;
+        bool                     is_wireguard;
     };
 
     struct VPNWorkers {
@@ -58,12 +59,14 @@ struct VPNConfigStorage {
         std::string nextNodeIP;
         std::string nextNodeNetworkIdentifier;
         qint64      lastRunExecuteTS = -1;
-        qint64      lastUpdateRequsterTS;
+        qint64      lastUpdateRequsterTS = -1;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
 
         qint64 lastWGTimestampRequester = -1;
         qint64 lastWGTimestampNext      = -1;
+        qint64 lastSingUploadedBytes = -1;
+        qint64 lastSingDownloadedBytes = -1;
     };
 
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
