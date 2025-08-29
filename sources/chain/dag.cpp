@@ -1879,6 +1879,10 @@ void Dag::clear_dag() {
 }
 
 void Dag::remove_sections(const SectionId &from) {
+#ifndef IS_R
+    return;
+#endif
+
     cache_.set_section(align_down20(from));
     auto to          = current_section_;
     current_section_ = from;
