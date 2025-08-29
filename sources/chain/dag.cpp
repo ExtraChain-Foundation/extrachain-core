@@ -2305,9 +2305,9 @@ void Dag::start_control(bool force) {
     this->generate_hash(start_from);
 }
 
-void Dag::clear_controls(const BigNumber &from) {
-    eLog("[Dag] Clear all controls..."); // TODO: % 20?
-    for (BigNumber i = from; i <= current_section_; i++) {
+void Dag::clear_controls(const SectionId &from) {
+    eLog("[Dag] Clear controls from {}...", from); // TODO: % 20?
+    for (SectionId i = from; i <= current_section_; i++) {
         auto section = read_section(i);
         if (!section.has_value()) {
             continue;
