@@ -2370,7 +2370,8 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
             if (s % 20 == 0) {
                 from = s;
             }
-            // return;
+
+            continue;
         }
 
         control_response.controls.emplace_back(dag_control.value());
