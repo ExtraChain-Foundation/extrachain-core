@@ -1574,8 +1574,9 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     // eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
-        eLog("[Dag] No last control");
-        this->start_control();
+        eWarning("[Dag] Hash interval check: no last control");
+        // return;
+        this->start_control(true);
 
         last_control = this->find_last_control(hash_interval.to - 1);
         if (!last_control.has_value()) {
@@ -1583,7 +1584,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         }
     }
 
-    eLog("[Dag] Last control: {}", last_control);
+    // eLog("[Dag] Last control: {}", last_control);
 
     if (hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
@@ -1595,21 +1596,16 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    auto interval_hash = this->hash_interval(hash_interval.from, hash_interval.to);
-    if (!interval_hash.has_value()) {
+    if (last_control->section_id != hash_interval.to) {
+        eLog("[Dag] Hash interval check: ignore #4");
         return;
     }
 
-    if (!(hash_interval.to == last_control->section_id && hash_interval.from == last_control->section_id)) {
-        interval_hash = Utils::calculate_hash(last_control->control + interval_hash.value());
-    }
+    if (last_control->control != hash_interval.hash) {
+        eLog("[Dag] Hash interval check: false. Hash interval: {}, last control: {}. Need sync", hash_interval, last_control);
 
-    if (interval_hash != hash_interval.hash) {
-        // eLog(
-        //     "[Dag] Hash interval check: false, request sections (NEED RECACHE IMPLMT). network: {},
-        //     interval:
-        //     {}, " "last: {}", hash_interval, interval_hash, last_control);
-
+        // this->start_sync();
+        return;
         if (current_section_ < hash_interval.to) {
             if (status_ != DagStatus::Ready) {
                 status_ = DagStatus::Maybe;
