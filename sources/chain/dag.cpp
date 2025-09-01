@@ -2282,7 +2282,7 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
     eTemp("[Dag] Generate AcyclicChain controls from {}...", start_section);
 #endif
 
-    eTemp("!!! Generate hash from {}", start_section);
+    eTemp("[Dag] Generate hash from {}", start_section);
 
     if (qt_signals == Force::Active) {
         emit node->dagControlStarted();

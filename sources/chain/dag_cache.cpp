@@ -522,9 +522,9 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         return { false, BigNumber(-1) };
     }
 
-    Balances& balances  = cached_balances_opt.value().second;
-    auto      cache_res = read_cached_balances();                 // ?
-    local_clear_less_balances(cache_res.first, cache_res.second); // ?
+    Balances& balances = cached_balances_opt.value().second;
+    // auto      cache_res = read_cached_balances();                 // ?
+    // local_clear_less_balances(cache_res.first, cache_res.second); // ?
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
