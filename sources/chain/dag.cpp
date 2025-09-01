@@ -417,9 +417,9 @@ void Dag::process_cached_transactions(bool not_ready) {
         }
     }
 
-    if (!not_ready) {
-        status_ = DagStatus::Final;
-    }
+    auto current_status = status_;
+    status_             = DagStatus::Final;
+
     timestamp_bigger_sync_start_ = 0;
 
     while (true) {
@@ -445,6 +445,10 @@ void Dag::process_cached_transactions(bool not_ready) {
     }
 
     timestamp_bigger_sync_start_ = 0;
+
+    if (not_ready) {
+        status_ = current_status;
+    }
 
     if (!not_ready) {
         set_status(DagStatus::Ready);
@@ -599,6 +603,10 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
         return WriteResult::Write;
     }
 
+    if (section_id == BigNumber(0)) {
+        return WriteResult::NoChanges;
+    }
+
     section->control = std::nullopt;
     auto res         = this->write_section(section.value());
     if (!res.has_value()) {
@@ -737,8 +745,9 @@ bool Dag::local_remove_transaction(const BigNumber &section_id, const std::strin
 }
 
 std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std::set<Transaction> &transactions) {
-    if (transactions.empty())
+    if (transactions.empty()) {
         return std::nullopt;
+    }
 
     bool      all_saved   = true;
     bool      has_changes = false;
@@ -766,15 +775,23 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             ++last;
 
         // create or load
-        // auto    section_opt = this->read_section(section_id);
         bool    created = true; // !section_opt.has_value();
         Section section = Section {
             .id           = section_id,
             .transactions = {}
         }; // created ? Section { .id = section_id, .transactions = {} } : *section_opt;
 
+        if (mode_ == DagMode::Full && section_id == BigNumber(0)) {
+            auto section_local = this->read_section(section_id);
+            if (section_local.has_value()) {
+                if (section_local->control.has_value()) {
+                    section.control = section_local->control;
+                }
+            }
+        }
+
         const size_t old_size = section.transactions.size();
-        section.transactions.insert(first, last); // без промежуточного вектора
+        section.transactions.insert(first, last);
         const size_t new_size = section.transactions.size();
 
         const bool changed = (new_size != old_size);
@@ -1214,7 +1231,7 @@ void Dag::network_status_sync_request(const Responder &responder) {
 
     auto last_control = this->find_last_control();
     if (!last_control.has_value()) {
-        this->start_control(true);
+        this->start_control(Force::Active);
         last_control = this->find_last_control();
         // return;
     }
@@ -1355,8 +1372,6 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             return;
         }
 
-        bool has_changes = false; // Флаг для отслеживания изменений
-
         if (!section_sync->txs.empty()) {
             auto res = this->save_transactions(section_sync->txs);
             if (!res.has_value()) {
@@ -1366,44 +1381,33 @@ void Dag::network_request_sections_response(const std::string &compressed, const
             }
 
             const auto &[min, max] = res.value();
-            has_changes            = true;
         }
 
-        for (const auto &[section_id, control] : section_sync->controls) {
-            if (section_id % 20 == 0) {
-                auto existing_section = this->read_section(section_id);
-                if (existing_section.has_value()) {
-                    if (existing_section->control.has_value()) {
-                        continue;
-                    }
+        // for (const auto &[section_id, control] : section_sync->controls) {
+        //     if (section_id % 20 == 0) {
+        //         auto existing_section = this->read_section(section_id);
+        //         if (existing_section.has_value()) {
+        //             if (existing_section->control.has_value()) {
+        //                 continue;
+        //             }
 
-                    if (existing_section->control != control) {
-                        has_changes = true;
-                        // eTemp("[Dag] Control changed for section {}: {} -> {}",
-                        //      section_id,
-                        //      existing_section->control.value_or("none"),
-                        //      control);
+        //             if (!existing_section->control.has_value()) {
+        //                 // eTemp("[Dag] Control changed for section {}: {} -> {}",
+        //                 //      section_id,
+        //                 //      existing_section->control.value_or("none"),
+        //                 //      control);
 
-                        auto removed = this->remove_control(section_id);
-                        if (removed.has_value()) {
-                            if (removed.value() == WriteResult::Write) {
-                                this->start_control(true, false);
-                            }
-                        }
-                    }
-                } else {
-                    has_changes = true;
-                    // eTemp("[Dag] New control for section {}: {}", section_id, control);
-                }
-            }
-            // this->write_control(section_id, control);
-        }
-
-        if (has_changes) {
-            // eLog("[Dag] Network sync completed with changes");
-        } else {
-            eLog("[Dag] Network sync completed - no changes detected");
-        }
+        //                 // auto removed = this->remove_control(section_id);
+        //                 // if (removed.has_value()) {
+        //                 // if (removed.value() == WriteResult::Write) {
+        //                 this->start_control(Force::Active, false);
+        //                 // }
+        //                 // }
+        //             }
+        //         }
+        //     }
+        //     // this->write_control(section_id, control);
+        // }
 
         if (section_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] Sync completed, processing cached transactions");
@@ -1416,7 +1420,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                     return;
                 }
 
-#ifdef IS_R // only for gui clients for first correction and integration
+#ifdef IS_R // only for clients for first correction and integration
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -1556,7 +1560,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         }
 
         if (mode_ == DagMode::Full) {
-            this->start_control(true);
+            this->start_control(Force::Active);
         }
 
         this->process_cached_transactions();
@@ -1576,7 +1580,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     if (!last_control.has_value()) {
         eWarning("[Dag] Hash interval check: no last control");
         // return;
-        this->start_control(true);
+        this->start_control(Force::Active);
 
         last_control = this->find_last_control(hash_interval.to - 1);
         if (!last_control.has_value()) {
@@ -1883,14 +1887,15 @@ void Dag::remove_sections(const SectionId &from) {
     return;
 #endif
 
-    cache_.set_section(align_down20(from));
-    auto to          = current_section_;
-    current_section_ = from;
+    cache_.set_section(align_down20(from), Force::Active);
+    auto to           = current_section_;
+    auto correct_from = std::max(BigNumber(0), from);
+    current_section_  = correct_from;
     this->update_range();
 
-    eLog("[Dag] Clear from {}", from);
+    eLog("[Dag] Clear from {}", correct_from);
 
-    for (SectionId i = to; i >= from; --i) {
+    for (SectionId i = to; i >= correct_from; --i) {
         auto p    = this->file_path(i);
         auto path = FsPath::create(p);
 
@@ -2212,7 +2217,15 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
     return last_hash;
 }
 
-std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start, bool full_generation) {
+std::optional<std::string> Dag::generate_hash_from_section(const SectionId &start,
+                                                           Force            full_generation,
+                                                           Force            qt_signals) {
+    static bool generating = false;
+
+    if (generating) {
+        return std::nullopt;
+    }
+
     std::string last_hash = "";
 
     if (start > SectionId(0)) {
@@ -2221,16 +2234,20 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         if (last_control.has_value()) {
             last_hash = last_control.value().control;
         } else {
+            generating = false;
             return std::nullopt;
         }
     }
 
     if (/*full_generation || */ start == SectionId(0)) {
         this->generate_hash_for_interval(SectionId(0), last_hash);
-        if (!full_generation) {
+        if (full_generation == Force::None) {
+            generating = false;
             return last_hash;
         }
     }
+
+    generating = true;
 
     SectionId current_start = start == SectionId(0) ? SectionId(1) : start;
     for (; current_start <= current_section_ && current_start < current_section_;
@@ -2244,17 +2261,30 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         }
 
         this->generate_hash_for_interval(current_start, last_hash);
+
+        if (current_start % 600 == 1) {
+            if (!node_enabled.load()) {
+                return std::nullopt;
+            }
+
+            if (qt_signals == Force::Active) {
+                emit node->dagControlProgress(current_start);
+            }
+        }
     }
 
+    generating = false;
     return last_hash;
 }
 
-bool Dag::generate_hash(const SectionId &start_section, bool qt_signals) {
+bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
 #ifndef IS_R
     eTemp("[Dag] Generate AcyclicChain controls from {}...", start_section);
 #endif
 
-    if (qt_signals) {
+    eTemp("[Dag] Generate hash from {}", start_section);
+
+    if (qt_signals == Force::Active) {
         emit node->dagControlStarted();
     }
 
@@ -2263,9 +2293,9 @@ bool Dag::generate_hash(const SectionId &start_section, bool qt_signals) {
         return true;
     }
 
-    auto result = this->generate_hash_from_section(start_section, true);
+    auto result = this->generate_hash_from_section(start_section, Force::Active, qt_signals);
 
-    if (qt_signals) {
+    if (qt_signals == Force::Active) {
         emit node->dagControlEnded();
     }
 
@@ -2315,7 +2345,7 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     return Utils::calculate_hash(section_hashs);
 }
 
-void Dag::start_control(bool force, bool qt_signals) {
+void Dag::start_control(Force force, Force qt_signals) {
     // for tests
     // generate_hash();
     // return;
@@ -2335,23 +2365,23 @@ void Dag::start_control(bool force, bool qt_signals) {
         // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
 
         if (section_id % 20 != 0) {
-            eCritical("[Dag] Incorrect control section % 20 != 0: {}", section_id);
+            eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);
             this->remove_control(section_id);
-            this->start_control(true);
+            this->start_control(Force::Active);
             return;
         }
 
-        if (!force) {
+        if (force == Force::None) {
             return;
         }
     }
 
-    auto find_result2 = this->find_last_control(current_section_, true);
+    auto find_result_full = this->find_last_control(current_section_, true);
 
     SectionId start_from = SectionId(0);
-    if (find_result2) {
-        if (find_result2->section_id % 20 == 0) {
-            start_from = find_result2->section_id + 1;
+    if (find_result_full) {
+        if (find_result_full->section_id % 20 == 0) {
+            start_from = find_result_full->section_id + 1;
         } else if (find_result) {
             start_from = find_result->section_id;
         }
@@ -2394,6 +2424,7 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 
     search_control_ = true;
     emit node->dagSearchControlStarted();
+    emit node->dagSyncStart(current_section_, current_section_);
 
     DagControlRangeRequest req { .from = lo, .to = hi };
     node->network()->send_message(req,
@@ -2434,7 +2465,7 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
 
     if (from != -1) {
         this->clear_controls(from);
-        this->start_control(true);
+        this->start_control(Force::Active);
         this->network_request_control_section(control_request, responder);
         return;
     }
@@ -2522,6 +2553,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
             DagControlRangeRequest req { .from = next_lo, .to = next_hi };
             // eTemp("[Dag] Request controls: {}", req);
+            emit node->dagControlProgress(next_lo);
             node->network()->send_message(req,
                                           MessageType::DagControlRangeRequest,
                                           SendMode::Neighbours,
@@ -2537,12 +2569,14 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
         // sync_last_index_ = std::max(current_section_, sync_end);
-        this->remove_sections(sync_from - 50);
+
+        auto correct_from = std::max(BigNumber(0), sync_from - 50);
+        this->remove_sections(correct_from);
         check_status_ = DagSyncStatus::None;
-        emit node->dagSyncStart(sync_from - 50, sync_last_index_);
+        emit node->dagSyncStart(correct_from, sync_last_index_);
         search_control_ = false;
         emit node->dagSearchControlEnded();
-        this->request_sections(sync_from - 50,
+        this->request_sections(correct_from,
                                std::min(sync_from + 100, sync_last_index_),
                                responder.with_new_message_id());
     }

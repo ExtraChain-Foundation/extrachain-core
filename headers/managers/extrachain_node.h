@@ -290,6 +290,7 @@ signals:
 
     void dagControlStarted();
     void dagControlEnded();
+    void dagControlProgress(SectionId);
     void dagSearchControlStarted();
     void dagSearchControlEnded();
 

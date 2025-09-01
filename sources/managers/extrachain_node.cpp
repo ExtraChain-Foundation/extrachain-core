@@ -1048,7 +1048,7 @@ void ExtraChainNode::dfsConnection() {
 
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, [this]() {
-        dag_->start_control();
+        dag_->start_control(Force::None);
         eInfo("Your node successfully started");
     });
 
