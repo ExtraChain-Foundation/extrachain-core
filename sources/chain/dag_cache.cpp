@@ -406,6 +406,7 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
 
         if (res.result) {
             dag->update_range();
+            return;
             node->dag()->generate_hash_from_section(res.from);
 
             auto control_hash = node->dag()->read_control(res.to);
