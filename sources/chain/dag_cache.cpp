@@ -41,8 +41,8 @@ BigNumber DagCache::section() const {
     return cached_section_;
 }
 
-void DagCache::set_section(const SectionId& section_id) {
-    if (cached_section_ >= section_id) {
+void DagCache::set_section(const SectionId& section_id, Force force) {
+    if (force == Force::None && cached_section_ >= section_id) {
         return;
     }
 
@@ -411,13 +411,13 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
             auto control_hash = node->dag()->read_control(res.to);
             if (!control_hash.has_value()) {
                 eTemp("[DagCache] Problem with control hash from {}", res.to);
-                dag->start_control(true, false);
+                dag->start_control(Force::Active, Force::None);
                 node->dag()->generate_hash_from_section(res.from);
 
                 auto control_hash = node->dag()->read_control(res.to);
-                if (!control_hash.has_value()) {
-                    eFatal("[DagCache] Problem with control hash from {}", res.to);
-                }
+                // if (!control_hash.has_value()) {
+                //     eFatal("[DagCache] Problem with control hash from {}", res.to);
+                // }
             }
         }
         // });

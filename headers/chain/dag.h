@@ -720,14 +720,16 @@ public:
      * @param full_generation
      * @return
      */
-    std::optional<std::string> generate_hash_from_section(const SectionId &start, bool full_generation = false);
+    std::optional<std::string> generate_hash_from_section(const SectionId &start,
+                                                          Force            full_generation = Force::None,
+                                                          Force            qt_signals      = Force::Active);
 
     /**
      * @brief generate_hash
      * @param start_section
      * @return
      */
-    bool generate_hash(const SectionId &start_section = SectionId(0), bool qt_signals = true);
+    bool generate_hash(const SectionId &start_section = SectionId(0), Force qt_signals = Force::Active);
 
     /**
      * @brief hash_interval
@@ -740,7 +742,7 @@ public:
     /**
      * @brief start_control
      */
-    void start_control(bool force = false, bool qt_signals = true);
+    void start_control(Force force = Force::None, Force qt_signals = Force::Active);
 
     void clear_controls(const SectionId &from = SectionId(0));
 

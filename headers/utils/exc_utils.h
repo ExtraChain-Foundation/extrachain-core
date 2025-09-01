@@ -73,6 +73,11 @@ enum class DfsMode {
     Light
 };
 
+enum class Force {
+    None,
+    Active
+};
+
 struct ExtraChainSettings {
     std::optional<std::string> first_node;
     std::optional<DagMode>     dag_mode;
@@ -400,7 +405,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         // Get Message is considered successful only after NECESSARY_RESPONSE_COUNT
         // responses
         static const int NECESSARY_RESPONSE_COUNT = 1; // 3
-    }                                                  // namespace Net
+    } // namespace Net
 } // namespace Config
 
 namespace Serialization {
@@ -838,7 +843,7 @@ namespace Utils {
      * @see isAllValue for a more general version that can check against any value
      */
     template <Container C>
-    requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
+        requires std::is_arithmetic_v<std::ranges::range_value_t<C>>
     constexpr bool is_container_empty(const C &container) {
         return is_container_value(container, std::ranges::range_value_t<C> { '\0' });
     }

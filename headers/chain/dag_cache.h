@@ -21,13 +21,13 @@
 
 #include <memory>
 #include <map>
-#include <unordered_map>
 #include <set>
 #include <vector>
 #include <optional>
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"
+#include "utils/exc_utils.h"
 
 class ExtraChainNode;
 class Dag;
@@ -79,7 +79,7 @@ public:
      *
      * @param section_id The new section id
      */
-    void set_section(const SectionId& section_id);
+    void set_section(const SectionId& section_id, Force force = Force::None);
 
     /**
      * @brief Read all cached balances from the database
