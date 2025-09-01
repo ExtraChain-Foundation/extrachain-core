@@ -417,9 +417,9 @@ void Dag::process_cached_transactions(bool not_ready) {
         }
     }
 
-    if (!not_ready) {
-        status_ = DagStatus::Final;
-    }
+    auto current_status = status_;
+    status_             = DagStatus::Final;
+
     timestamp_bigger_sync_start_ = 0;
 
     while (true) {
@@ -445,6 +445,10 @@ void Dag::process_cached_transactions(bool not_ready) {
     }
 
     timestamp_bigger_sync_start_ = 0;
+
+    if (not_ready) {
+        status_ = current_status;
+    }
 
     if (!not_ready) {
         set_status(DagStatus::Ready);
@@ -1884,13 +1888,14 @@ void Dag::remove_sections(const SectionId &from) {
 #endif
 
     cache_.set_section(align_down20(from), Force::Active);
-    auto to          = current_section_;
-    current_section_ = from;
+    auto to           = current_section_;
+    auto correct_from = std::max(BigNumber(0), from);
+    current_section_  = correct_from;
     this->update_range();
 
-    eLog("[Dag] Clear from {}", from);
+    eLog("[Dag] Clear from {}", correct_from);
 
-    for (SectionId i = to; i >= from; --i) {
+    for (SectionId i = to; i >= correct_from; --i) {
         auto p    = this->file_path(i);
         auto path = FsPath::create(p);
 
@@ -2564,12 +2569,14 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
 
         eLog("[Dag] Direct request: requesting sections [{}, {}]", sync_from, sync_end);
         // sync_last_index_ = std::max(current_section_, sync_end);
-        this->remove_sections(sync_from - 50);
+
+        auto correct_from = std::max(BigNumber(0), sync_from - 50);
+        this->remove_sections(correct_from);
         check_status_ = DagSyncStatus::None;
-        emit node->dagSyncStart(sync_from - 50, sync_last_index_);
+        emit node->dagSyncStart(correct_from, sync_last_index_);
         search_control_ = false;
         emit node->dagSearchControlEnded();
-        this->request_sections(sync_from - 50,
+        this->request_sections(correct_from,
                                std::min(sync_from + 100, sync_last_index_),
                                responder.with_new_message_id());
     }
