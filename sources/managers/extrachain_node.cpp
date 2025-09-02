@@ -175,7 +175,7 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     m_actorIndex->set_network_id(first.actors().front().id());
     // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    create_new_dag();
+    this->create_new_dag();
 
     eSuccess("[Node] New network created");
     return true;

@@ -2288,7 +2288,7 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
         emit node->dagControlStarted();
     }
 
-    if (start_section > cache_.section()) {
+    if (start_section > cache_.section() && start_section != SectionId(0)) {
         emit node->dagControlEnded();
         return true;
     }
