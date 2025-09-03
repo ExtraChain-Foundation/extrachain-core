@@ -992,6 +992,83 @@ bool Utils::is_valid_ip(const std::string_view ip) {
     return std::regex_match(ip.begin(), ip.end(), ip_regex);
 }
 
+bool Utils::is_external_ip(const QString &ip) {
+    QHostAddress addr(ip);
+
+    if (addr.isNull()) {
+        return false; // Invalid IP
+    }
+
+    if (addr.protocol() == QAbstractSocket::IPv4Protocol) {
+        quint32 ip = addr.toIPv4Address();
+
+        // Local IPv4 ranges:
+        // 127.0.0.0/8 (127.0.0.0 - 127.255.255.255) - Loopback
+        if ((ip & 0xFF000000) == 0x7F000000)
+            return false;
+
+        // 10.0.0.0/8 (10.0.0.0 - 10.255.255.255) - Private Class A
+        if ((ip & 0xFF000000) == 0x0A000000)
+            return false;
+
+        // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255) - Private Class B
+        if ((ip & 0xFFF00000) == 0xAC100000)
+            return false;
+
+        // 192.168.0.0/16 (192.168.0.0 - 192.168.255.255) - Private Class C
+        if ((ip & 0xFFFF0000) == 0xC0A80000)
+            return false;
+
+        // 169.254.0.0/16 (169.254.0.0 - 169.254.255.255) - Link-local
+        if ((ip & 0xFFFF0000) == 0xA9FE0000)
+            return false;
+
+        // 0.0.0.0/8 (0.0.0.0 - 0.255.255.255) - Current network
+        if ((ip & 0xFF000000) == 0x00000000)
+            return false;
+
+        // 100.64.0.0/10 (100.64.0.0 - 100.127.255.255) - Carrier-grade NAT
+        if ((ip & 0xFFC00000) == 0x64400000)
+            return false;
+
+        // 224.0.0.0/4 (224.0.0.0 - 239.255.255.255) - Multicast
+        if ((ip & 0xF0000000) == 0xE0000000)
+            return false;
+
+        // 240.0.0.0/4 (240.0.0.0 - 255.255.255.255) - Reserved
+        if ((ip & 0xF0000000) == 0xF0000000)
+            return false;
+
+        return true; // External IPv4
+    }
+
+    if (addr.protocol() == QAbstractSocket::IPv6Protocol) {
+        // Loopback ::1
+        if (addr == QHostAddress::LocalHostIPv6)
+            return false;
+
+        // Link-local fe80::/10
+        if (addr.isInSubnet(QHostAddress::parseSubnet("fe80::/10")))
+            return false;
+
+        // Unique local fc00::/7 (fc00::/7 and fd00::/8)
+        if (addr.isInSubnet(QHostAddress::parseSubnet("fc00::/7")))
+            return false;
+
+        // Multicast ff00::/8
+        if (addr.isInSubnet(QHostAddress::parseSubnet("ff00::/8")))
+            return false;
+
+        return true; // External IPv6
+    }
+
+    return false; // Unknown protocol
+}
+
+bool Utils::is_external_ip(const std::string &ip) {
+    return is_external_ip(QString::fromStdString(ip));
+}
+
 ExtraChainSettings Utils::read_settings() {
     auto path = FsPath::create(std::string(".settings"));
     if (!path.has_value()) {

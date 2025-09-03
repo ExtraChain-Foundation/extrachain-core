@@ -865,6 +865,8 @@ namespace Utils {
 
     EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
     EXTRACHAIN_EXPORT bool is_valid_ip(const std::string_view ip);
+    EXTRACHAIN_EXPORT bool is_external_ip(const QString &ip);
+    EXTRACHAIN_EXPORT bool is_external_ip(const std::string &ip);
 
     EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
 
