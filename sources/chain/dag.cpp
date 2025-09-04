@@ -338,12 +338,12 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
         // if not approved > min (connections, 5)
         this->sended_transactions_.erase(hash);
         this->failed_transactions_.insert({ hash, transaction });
-        emit node->dagTxNotApproved(hash);
+        emit node->dagTxNotApproved(transaction.section(), hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
         this->sended_transactions_.erase(hash);
-        emit node->dagTxApproved(hash);
+        emit node->dagTxApproved(transaction.section(), hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -918,7 +918,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Check for duplicate transaction
-    auto tx_result = search_transaction(tx_copy.hash());
+    auto tx_result = search_duplicate(tx_copy.hash());
     if (tx_result.has_value()) {
         return TransactionProveError::Duplicate;
     }
@@ -1087,7 +1087,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 void Dag::add_transaction_sended(const Transaction &transaction) {
     // eLog("[Dag] Add to sended: {}", transaction.hash());
     sended_transactions_.insert({ transaction.hash(), transaction });
-    emit node->dagTxSended(transaction.hash());
+    emit node->dagTxSended(transaction.section(), transaction.hash());
 }
 
 void Dag::update_range() {
@@ -1123,7 +1123,7 @@ void Dag::update_range() {
     }
 }
 
-std::optional<Transaction> Dag::search_transaction(const std::string &hash, int deep) const {
+std::optional<Transaction> Dag::search_duplicate(const std::string &hash, int deep) const {
     int count = 0;
 
     for (BigNumber i = current_section_ + 1; i >= first_saved_section_; i--) {
@@ -1176,7 +1176,7 @@ void Dag::start_sync() {
 
     last_info_.clear();
     set_sync_status(DagSyncStatus::LastInfo);
-    requests_count_ = std::max(1, node->network()->active_connections_count() - 1);
+    requests_count_ = 1; // std::max(1, node->network()->active_connections_count() - 1);
     node->network()->send_message(true,
                                   MessageType::DagSyncLastInfo,
                                   SendMode::Neighbours,
@@ -1237,7 +1237,7 @@ void Dag::network_status_sync_request(const Responder &responder) {
     }
 
     if (!last_control.has_value()) {
-        eCritical("Sync problem, need restart");
+        eCritical("[Dag] Sync response problem: no last control");
         return;
     }
 
@@ -1255,11 +1255,13 @@ void Dag::network_status_sync_request(const Responder &responder) {
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
     if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
+        eWarning("[Dag] Sync responce: not last info status");
         return;
     }
     // min(connections size, 5)
 
     if (last_info.status != DagStatus::Ready) {
+        eWarning("[Dag] Sync responce: last info not ready");
         return;
     }
 
@@ -1267,9 +1269,10 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
     if (zero_section.has_value() && last_info.last_section_id != BigNumber(-1)
         && zero_section->middle() < last_info.zero_date) {
         // TODO: clear dag?
+        // this->clear_dag();
     }
 
-    int count = std::min(requests_count_, min_req_count_);
+    int count = 1; // std::min(requests_count_, min_req_count_);
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -1678,7 +1681,14 @@ void Dag::handle_sync_request() {
 
             if (!last_control.has_value()) {
                 // need_sync = true;
-                this->start_control();
+                emit node->dagControlStarted();
+                this->start_control(Force::Active);
+                last_control = this->find_last_control();
+            }
+
+            if (!last_control.has_value()) {
+                need_recontrol = true;
+                break;
             }
 
             eLog("____ {} {} {} {}",
@@ -1774,6 +1784,14 @@ void Dag::handle_sync_request() {
     sync_last_index_ = nodes_by_block.front().second;
 
     if (need_recontrol && mode_ == DagMode::Full) {
+        if (!last_control.has_value()) {
+            last_control = this->find_last_control(current_section_, true);
+        }
+        if (!last_control.has_value()) {
+            eCritical("[Dag] Sync fatal error");
+            return;
+        }
+
         this->request_control_section(last_control->section_id, responder);
         return;
     }
@@ -2086,6 +2104,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
     // eTemp("[Dag] find_last_control: search from {}, current section: {}",
     //       from < 0 ? current_section_ : from,
     //       current_section_);
+    // emit checking local?
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));

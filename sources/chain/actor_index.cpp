@@ -170,16 +170,27 @@ void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const R
 }
 
 void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
-    for (const auto &actor : actors) {
-        this->save_actor(actor);
-    }
+    ThreadPoolBoost::instance()->post([actors, this] {
+        for (const auto &actor : actors) {
+            this->save_actor(actor);
 
-    if (!sync_first_done && synch_count <= records) {
-        // eLog("firstSyncEnded");
-        emit firstSyncEnded();
-        sync_first_done = true;
-        node->accountController()->dogenerate();
-    }
+            if (!node_enabled.load()) {
+                return;
+            }
+        }
+
+        if (!sync_first_done) {
+            if (synch_count <= records + 1) {
+                // eLog("firstSyncEnded");
+                emit this->firstSyncEnded();
+
+                sync_first_done = true;
+                node->accountController()->dogenerate();
+            } else {
+                emit this->firstSyncProgress(records, synch_count);
+            }
+        }
+    });
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
@@ -208,6 +219,10 @@ void ActorIndex::request_actors_hash(const Responder &responder) {
     //     emit firstSyncStarted();
     // }
 
+    if (!sync_first_done) {
+        emit this->firstSyncStarted();
+    }
+
     responder.with_new_message_id().send_response(std::pair { records, sync_request },
                                                   MessageType::ActorsHash,
                                                   SendMode::Focused,
@@ -218,15 +233,17 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
                                              const std::vector<uint8_t> &bits,
                                              const Responder            &responder) {
     // TIMER_START(network_actors_hash_request)
-    synch_count                    = count;
+    synch_count                    = std::max(synch_count, count);
     std::vector<ActorId> actor_ids = synch.process_sync_request(bits);
     // TIMER_END(network_actors_hash_request)
 
-    eLog("hhhh actor_ids {}", actor_ids.size());
+    eLog("[ActorIndex] Diff size: {}, need: {}, local: {}", actor_ids.size(), count, records);
 
-    if (records >= count) {
-        // eInfo("firstSyncEnded");
-        emit firstSyncEnded();
+    if (records + 1 >= count) {
+        if (!sync_first_done) {
+            emit this->firstSyncEnded();
+        }
+
         sync_first_done = true;
         node->accountController()->dogenerate();
     }

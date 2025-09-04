@@ -135,7 +135,7 @@ bool DbConnector::close() {
         if (m_type == DbConnectorType::Compressed) {
             QFile file(m_file.c_str());
             if (!file.open(QFile::ReadOnly)) {
-                eFatal("Can't open db file");
+                eFatal("[DbConnector] Can't open database '{}'", m_file);
             }
             auto  data_compressed = qCompress(file.readAll());
             QFile fileTemp(QString::fromStdString(m_file).mid(0, m_file.size() - 4));
@@ -152,7 +152,7 @@ bool DbConnector::close() {
 std::vector<DbRow> DbConnector::select(std::string query, std::string tableName, DbRow binds) {
     // std::pair with status?
     if (!is_open()) {
-        eFatal("[DbConnector] Database not open");
+        eFatal("[DbConnector] Database '{}' not open", m_file);
     }
 
     dbmutex.lock();

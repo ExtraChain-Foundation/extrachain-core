@@ -149,7 +149,8 @@ private:
     std::unordered_map<ActorId, std::string> renames_todo_;
 
 public:
-    std::vector<Actor<KeyPublic>> actors_broadcast_;
+    std::vector<Actor<KeyPublic>>                 actors_broadcast_;
+    std::set<std::pair<std::string, std::string>> identifiers_after_actors_sync_;
 
 public:
     ~ExtraChainNode();
@@ -284,9 +285,9 @@ signals:
     void dagSyncProgress(SectionId);
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
-    void dagTxSended(std::string hash);
-    void dagTxApproved(std::string hash);
-    void dagTxNotApproved(std::string hash);
+    void dagTxSended(SectionId section_id, std::string hash);
+    void dagTxApproved(SectionId section_id, std::string hash);
+    void dagTxNotApproved(SectionId section_id, std::string hash);
 
     void dagControlStarted();
     void dagControlEnded();

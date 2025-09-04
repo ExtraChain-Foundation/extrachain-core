@@ -149,10 +149,15 @@ public:
                                      const std::vector<uint8_t> &bits,
                                      const Responder            &responder);
 
+    bool is_prepare() {
+        return sync_first_done;
+    }
+
 signals:
     void newActorSaved(ActorId actor_id);
     void actorSaved(ActorId actor_id);
 
     void firstSyncStarted();
     void firstSyncEnded();
+    void firstSyncProgress(int progress, int all);
 };
