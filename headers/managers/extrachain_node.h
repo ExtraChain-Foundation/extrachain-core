@@ -283,6 +283,7 @@ signals:
     void dagStatus(DagStatus);
     void dagSyncStart(SectionId, SectionId);
     void dagSyncProgress(SectionId);
+    void dagSyncFinish();
     void dagTimerStart(int ms = 15000);
     void dagTimerStop();
     void dagTxSended(SectionId section_id, std::string hash);

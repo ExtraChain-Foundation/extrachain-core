@@ -1424,6 +1424,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 }
 
 #ifdef IS_R // only for clients for first correction and integration
+                // emit node->dagSyncFinish();
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -1662,7 +1663,11 @@ void Dag::handle_sync_request() {
         for (const auto &[_, info] : last_info_) {
             // eLog("----- {}", info);
             if (info.last_section_id >= 0 || (info.last_section_id == BigNumber(0))) {
-                need_sync = true;
+                if (mode_ == DagMode::Light) {
+                    need_sync = true;
+                } else {
+                    need_recontrol = true;
+                }
                 break;
             }
         }
@@ -1788,12 +1793,18 @@ void Dag::handle_sync_request() {
             last_control = this->find_last_control(current_section_, true);
         }
         if (!last_control.has_value()) {
-            eCritical("[Dag] Sync fatal error");
-            return;
+            if (current_section_ != SectionId(-1)) {
+                eCritical("[Dag] Sync fatal error");
+                return;
+            }
         }
 
-        this->request_control_section(last_control->section_id, responder);
-        return;
+        if (current_section_ != SectionId(-1)) {
+            this->request_control_section(last_control->section_id, responder);
+            return;
+        } else {
+            need_sync = true;
+        }
     }
 
     if (current_section_exists && current_section_ >= sync_last_index_) {
