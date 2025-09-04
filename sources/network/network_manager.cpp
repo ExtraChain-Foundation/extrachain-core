@@ -1911,7 +1911,10 @@ void NetworkManager::localInizialization() {
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 
     // UPnP v2
-    upnpConnector = std::make_unique<UPnPConnector>(local);
+    QNetworkInterface                     iface = QNetworkInterface::allInterfaces().first();
+    std::shared_ptr<QNetworkAddressEntry> entry =
+        std::make_shared<QNetworkAddressEntry>(iface.addressEntries().first());
+    upnpConnector = std::make_unique<UPnPConnector>(entry);
     QObject::connect(upnpConnector.get(),
                      &UPnPConnector::deviceDiscovered,
                      [&](const QHostAddress &address, const QString &location) {
@@ -1935,21 +1938,22 @@ void NetworkManager::localInizialization() {
         int     internalPort   = 8080;  // The port on your internal application
         int     externalPort   = 8080;  // The external port on your router
         QString protocol       = "TCP"; // Typically TCP
-        QString description    = "MyApp Tunnel";
+        QString description    = "ExtraChain Tunnel";
         QString internalClient = local->ip().toString(); // Your internal IP address
 
         // Call addPortMapping to establish the tunnel.
-        upnpConnector
-            ->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
+        // upnpConnector
+        //     ->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
         // Call getSpecificPortMappingEntry to check if port has been mapped.
-        upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+        // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
 
         // upnpConnector->removePortMapping(controlUrl, externalPort, protocol);
         // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
     });
 
     // Uncomment to start UPnP connection
-    // upnpConnector->discoverDevices();
+    if (Utils::is_external_ip(entry->ip().toString().toStdString()))
+        upnpConnector->discoverDevices();
 }
 
 std::string NetworkManager::getNetworkVPNHash() noexcept {

@@ -38,23 +38,50 @@ UPnPConnector::~UPnPConnector() {
 }
 
 void UPnPConnector::discoverDevices() {
-    std::cout << "UDP socket state before bind: " << udpSocket->state() << std::endl;
-    // You may try port 1900 if you want to follow the standard.
-    if (!udpSocket->bind(localAddress->ip(), 1901, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
-        emit errorOccurred("Failed to bind UDP socket: " + udpSocket->errorString());
+    std::cout << "[UPnPConnector] UDP socket state before bind: " << udpSocket->state() << std::endl;
+
+    if (!udpSocket->bind(QHostAddress::AnyIPv4, 1900, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+        emit errorOccurred("[UPnPConnector] Failed to bind UDP socket: " + udpSocket->errorString());
         return;
     }
 
+    QNetworkInterface chosenIface;
+    for (const QNetworkInterface &iface : QNetworkInterface::allInterfaces()) {
+        if (iface.flags().testFlag(QNetworkInterface::IsUp) && iface.flags().testFlag(QNetworkInterface::IsRunning)
+            && !iface.flags().testFlag(QNetworkInterface::IsLoopBack)) {
+
+            for (const QNetworkAddressEntry &entry : iface.addressEntries()) {
+                if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol) {
+                    chosenIface = iface;
+                    break;
+                }
+            }
+        }
+        if (chosenIface.isValid())
+            break;
+    }
+
+    if (!chosenIface.isValid()) {
+        qWarning() << "No local IPv4 interface found";
+        return;
+    }
+    if (!udpSocket->joinMulticastGroup(QHostAddress("239.255.255.250"), chosenIface)) {
+        qWarning() << "Failed to join multicast group:" << udpSocket->errorString();
+    } else {
+        std::cout << "Joined multicast group on interface: " << chosenIface.humanReadableName().toStdString()
+                  << std::endl;
+    }
     QString searchRequest =
         "M-SEARCH * HTTP/1.1\r\n"
         "HOST: 239.255.255.250:1900\r\n"
         "MAN: \"ssdp:discover\"\r\n"
-        "MX: 5\r\n"
-        "ST: upnp:rootdevice\r\n"
-        "\r\n";
+        "MX: 3\r\n"
+        "ST: upnp:rootdevice\r\n\r\n";
+
     std::cout << "Sending SSDP discovery request..." << std::endl;
     udpSocket->writeDatagram(searchRequest.toUtf8(), QHostAddress("239.255.255.250"), 1900);
-    timeoutTimer->start(5000);
+
+    timeoutTimer->start(20000);
 }
 
 void UPnPConnector::onUdpReadyRead() {
@@ -67,13 +94,12 @@ void UPnPConnector::onUdpReadyRead() {
         QString response = QString::fromUtf8(datagram);
         std::cout << "Received UDP response from: " << sender.toString().toStdString() << "port: " << senderPort
                   << std::endl;
-        std::cout << "Response:" << response.toStdString() << std::endl;
-        int locIndex = response.indexOf("LOCATION: ");
-        if (locIndex != -1) {
-            int     start    = locIndex + QString("LOCATION: ").length();
-            int     end      = response.indexOf("\r\n", start);
-            QString location = response.mid(start, end - start).trimmed();
+        QRegularExpression      re("(?i)^location:\\s*(.*)$", QRegularExpression::MultilineOption);
+        QRegularExpressionMatch match = re.match(response);
+        if (match.hasMatch()) {
+            QString location = match.captured(1).trimmed();
             emit    deviceDiscovered(sender, location);
+            timeoutTimer->stop();
         }
     }
 }
@@ -204,7 +230,7 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
 
         // qInfo() << "Accumulated Data length:" << accumulatedData->size();
         QString xmlContent = QString::fromUtf8(*accumulatedData);
-        qInfo() << "Device Description XML:" << xmlContent;
+        // qInfo() << "Device Description XML:" << xmlContent;
 
         // Parse the XML description using QXmlStreamReader.
         QXmlStreamReader xml(xmlContent);
