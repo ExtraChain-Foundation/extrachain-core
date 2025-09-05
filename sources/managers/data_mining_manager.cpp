@@ -68,7 +68,7 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-#ifndef QT_DEBUG
+#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
         && koef_to_koef == BigNumberFloat(1)) {
         return;
