@@ -176,7 +176,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
             actors_todo_map_[id] = actor;
         }
 
-        eLog("[ActorIndex] ---> {} {}", synch_count, actors_todo_map_.size());
+        // eLog("[ActorIndex] ---> {} {}", synch_count, actors_todo_map_.size());
         if (synch_count
             <= std::max(actors_todo_map_.size() + std::size_t(records), actors_todo_map_.size()) + 15) {
             sync_first_done = true;
