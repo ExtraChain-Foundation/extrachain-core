@@ -170,7 +170,20 @@ void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const R
 }
 
 void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
-    ThreadPoolBoost::instance()->post([actors, this] {
+    if (!sync_first_done) {
+        for (const auto &actor : actors) {
+            auto id              = actor.id().to_string();
+            actors_todo_map_[id] = actor;
+        }
+
+        if (synch_count <= actors_todo_map_.size() + 15) {
+            sync_first_done = true;
+            // eLog("DONE {} {}", synch_count, actors_todo_map_.size());
+            this->save_actors();
+            node->accountController()->dogenerate();
+            emit this->firstSyncEnded();
+        }
+    } else {
         for (const auto &actor : actors) {
             this->save_actor(actor);
 
@@ -178,19 +191,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
                 return;
             }
         }
-
-        if (!sync_first_done) {
-            if (synch_count <= records + 1) {
-                // eLog("firstSyncEnded");
-                emit this->firstSyncEnded();
-
-                sync_first_done = true;
-                node->accountController()->dogenerate();
-            } else {
-                emit this->firstSyncProgress(records, synch_count);
-            }
-        }
-    });
+    }
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
@@ -417,6 +418,48 @@ std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic
 
     synch.apply_received_ids({ actor.id() });
     emit actorSaved(actor.id());
+    return {};
+}
+
+std::expected<void, ActorSaveError> ActorIndex::save_actors() {
+    DbConnector db(folderPath + "actors");
+    if (!db.open()) {
+        return std::unexpected(ActorSaveError::NotOpened);
+    }
+
+    db.query("BEGIN TRANSACTION");
+
+    // QElapsedTimer timer;
+    // timer.start();
+    int i = 0;
+    for (const auto &[id, actor] : actors_todo_map_) {
+        auto result = this->add(actor.id(), actor.toJson());
+        if (!result.has_value()) {
+            eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
+            continue;
+        }
+
+        if (i++ % 100) {
+            emit this->firstSyncProgress(i, synch_count);
+        }
+
+        bool dbInsert =
+            db.insert(Config::DataStorage::actorsTable,
+                      { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
+
+        synch.apply_received_ids({ actor.id() }); // TODO
+    }
+
+    // if (!dbInsert) {
+    //     eCritical("db actor insert error");
+    //     return false;
+    // }
+    db.query("COMMIT");
+    // eLog("Actors timer: {} ms", timer.elapsed());
+
+    records += actors_todo_map_.size();
+    actors_todo_map_.clear();
+
     return {};
 }
 
