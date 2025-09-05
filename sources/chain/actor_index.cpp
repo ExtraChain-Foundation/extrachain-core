@@ -176,10 +176,10 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
             actors_todo_map_[id] = actor;
         }
 
+        // eLog("[ActorIndex] ---> {} {}", synch_count, actors_todo_map_.size());
         if (synch_count
             <= std::max(actors_todo_map_.size() + std::size_t(records), actors_todo_map_.size()) + 15) {
             sync_first_done = true;
-            // eLog("DONE {} {}", synch_count, actors_todo_map_.size());
             this->save_actors();
             node->accountController()->dogenerate();
             emit this->firstSyncEnded();
@@ -432,7 +432,8 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
 
     // QElapsedTimer timer;
     // timer.start();
-    int i = 0;
+    int i          = 0;
+    int to_records = 0;
     for (const auto &[id, actor] : actors_todo_map_) {
         auto result = this->add(actor.id(), actor.toJson());
         if (!result.has_value()) {
@@ -449,6 +450,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
                       { { "id", actor.id().to_string() }, { "type", std::to_string(int(actor.type())) } });
 
         synch.apply_received_ids({ actor.id() }); // TODO
+        to_records++;
     }
 
     // if (!dbInsert) {
@@ -458,7 +460,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
     db.query("COMMIT");
     // eLog("Actors timer: {} ms", timer.elapsed());
 
-    records += actors_todo_map_.size();
+    records += to_records;
     actors_todo_map_.clear();
 
     return {};
