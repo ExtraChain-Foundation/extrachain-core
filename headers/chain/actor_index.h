@@ -92,6 +92,8 @@ private:
     void                                sendGetActorMessage(const ActorId &actorId);
     bool                                save_actor_index(const Actor<KeyPublic> &actor);
 
+    std::map<std::string, Actor<KeyPublic>> actors_todo_map_;
+
 public:
     ActorId network_id();
 
@@ -131,6 +133,7 @@ public:
     std::expected<void, ActorSaveError> store_new_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
+    std::expected<void, ActorSaveError> save_actors();
     std::vector<ActorId>                allActors();
     void network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder);
 
@@ -149,10 +152,15 @@ public:
                                      const std::vector<uint8_t> &bits,
                                      const Responder            &responder);
 
+    bool is_prepare() {
+        return sync_first_done;
+    }
+
 signals:
     void newActorSaved(ActorId actor_id);
     void actorSaved(ActorId actor_id);
 
     void firstSyncStarted();
     void firstSyncEnded();
+    void firstSyncProgress(int progress, int all);
 };

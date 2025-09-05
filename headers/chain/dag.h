@@ -163,12 +163,12 @@ enum class DagSyncStatus {
  * @brief Enumeration of the DAG operational states
  */
 enum class DagStatus {
-    Started, // DAG has been initialized
-    Ready,   // DAG is operational and ready for transactions
-    Final,   // DAG is processing final operations
-    Sync,    // DAG is synchronizing with the network
-    Maybe,   // DAG is in a potential sync state
-    Timered, // DAG is processing timed operations
+    Started, // Dag has been initialized
+    Ready,   // Dag is operational and ready for transactions
+    Final,   // Dag is processing final operations
+    Sync,    // Dag is synchronizing with the network
+    Maybe,   // Dag is in a potential sync state
+    Timered, // Dag is processing timed operations
 };
 
 enum class WriteResult {
@@ -409,7 +409,7 @@ public:
      * @param deep The maximum number of sections to search back (default: 100)
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_transaction(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction> search_duplicate(const std::string &hash, int deep = 100) const;
 
     /**
      * @brief Read a section from storage

@@ -406,7 +406,7 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
 
         if (res.result) {
             dag->update_range();
-            return;
+            // return;
             node->dag()->generate_hash_from_section(res.from);
 
             auto control_hash = node->dag()->read_control(res.to);
@@ -416,9 +416,9 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 node->dag()->generate_hash_from_section(res.from);
 
                 auto control_hash = node->dag()->read_control(res.to);
-                // if (!control_hash.has_value()) {
-                //     eFatal("[DagCache] Problem with control hash from {}", res.to);
-                // }
+                if (!control_hash.has_value()) {
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                }
             }
         }
         // });

@@ -966,7 +966,7 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Dag] Last: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
+    eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
@@ -1048,7 +1048,7 @@ void ExtraChainNode::dfsConnection() {
 
 void ExtraChainNode::connectSignals() {
     connect(this, &ExtraChainNode::ready, [this]() {
-        dag_->start_control(Force::None);
+        // dag_->start_control(Force::None);
         eInfo("Your node successfully started");
     });
 
@@ -1076,7 +1076,12 @@ void ExtraChainNode::connectSignals() {
                 responder.add_identifier(identifier);
                 m_actorIndex->send_system_actor(responder);
 
-                m_networkManager->sendFromCache();
+                m_actorIndex->request_actors_hash(responder);
+
+                if (!m_actorIndex->is_prepare()) {
+                    identifiers_after_actors_sync_.insert({ ip, identifier });
+                    return;
+                }
 
 #ifdef IS_R
                 if (ip == m_networkManager->first_node()) {
@@ -1086,12 +1091,19 @@ void ExtraChainNode::connectSignals() {
                 dag_->start_check();
 #endif
 
-                m_actorIndex->request_actors_hash(responder);
                 m_dfs->sync(identifier);
             });
 
     connect(m_networkManager, &NetworkManager::newSocketActivated, [this]() {
         m_dfs->sendSizeRequestMsg(m_accountController->system_actor().id());
+    });
+
+    connect(m_actorIndex, &ActorIndex::firstSyncEnded, [this]() {
+        dag_->start_check();
+
+        for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {
+            m_dfs->sync(identifier);
+        }
     });
 
     // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
