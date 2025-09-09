@@ -849,9 +849,12 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 }
 
 void DfsController::refresh_calculate() {
-    auto dfs_size  = calculate_size();
-    m_sizeTaken    = dfs_size.local;
-    m_totalDfsSize = dfs_size.all;
+    ThreadPoolBoost::instance_dfs()->post([this]() {
+        auto dfs_size  = calculate_size();
+        m_sizeTaken    = dfs_size.local;
+        m_totalDfsSize = dfs_size.all;
+        // TODO: update prepare status
+    });
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const ActorId     &owner_id,
