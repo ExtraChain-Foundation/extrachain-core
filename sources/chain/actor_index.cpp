@@ -104,52 +104,6 @@ void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &
     }
 }
 
-void ActorIndex::network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder) {
-    if (node->accountController()->empty())
-        return;
-
-    auto result = allActors();
-    result.erase(std::remove(result.begin(), result.end(), ignoredActorId), result.end());
-    if (!result.empty()) {
-        responder.send_response(result, MessageType::ActorAll, SendMode::Focused, MessageStatus::Response);
-    } else {
-        // send empty response
-    }
-    return;
-}
-
-void ActorIndex::getAllActors(ActorId id, bool isUser) {
-    Q_UNUSED(isUser)
-
-    if (!node->accountController()->empty()) {
-        node->network()->send_message(id, MessageType::ActorAll, SendMode::Neighbours, MessageStatus::Request);
-
-        eLog("[ActorIndex] Get all actors request");
-    }
-}
-
-void ActorIndex::network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder) {
-    std::set<ActorId> needed_actors;
-
-    for (const auto &actor_id : actors) {
-        auto actor_result = this->get_actor(actor_id, ActorGetType::NoRequest);
-        if (actor_result.has_value()) {
-            continue;
-        }
-
-        needed_actors.insert(actor_id);
-    }
-
-    if (needed_actors.empty()) {
-        return;
-    }
-
-    responder.with_new_message_id().send_response(needed_actors,
-                                                  MessageType::Actors,
-                                                  SendMode::Neighbours,
-                                                  MessageStatus::Request);
-}
-
 void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const Responder &responder) {
     std::vector<Actor<KeyPublic>> req_actors;
 
@@ -181,7 +135,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
             <= std::max(actors_todo_map_.size() + std::size_t(records), actors_todo_map_.size()) + 15) {
             sync_first_done = true;
             this->save_actors();
-            node->accountController()->dogenerate();
+            node->account_controller()->dogenerate();
             emit this->firstSyncEnded();
         }
     } else {
@@ -196,8 +150,8 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
-    // auto system_actor = node->accountController()->system_actor().to_public();
-    const auto &actors = node->accountController()->currentProfile().actors();
+    // auto system_actor = node->account_controller()->system_actor().to_public();
+    const auto &actors = node->account_controller()->currentProfile().actors();
     for (const auto &actor : actors) {
         responder.send_response(actor.to_public(), MessageType::Actor, SendMode::Focused, MessageStatus::Response);
     }
@@ -247,7 +201,7 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
         }
 
         sync_first_done = true;
-        node->accountController()->dogenerate();
+        node->account_controller()->dogenerate();
     }
 
     auto r = responder;

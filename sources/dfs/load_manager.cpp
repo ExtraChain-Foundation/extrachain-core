@@ -210,7 +210,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 auto res = node->dfs()->make_vector(owner_id,
                                                     dir_row.file_id,
                                                     false,
-                                                    node->accountController()->system_actor().id());
+                                                    node->account_controller()->system_actor().id());
                 if (res.has_value()) {
                     auto& [dir_row, dfs_vector] = res.value();
                     if (row.has_value()) {

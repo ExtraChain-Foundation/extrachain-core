@@ -160,7 +160,7 @@ bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &w
     //     return false;
     // }
 
-    bool is_exists = node->actorIndex()->exists(actor_id);
+    bool is_exists = node->actor_index()->exists(actor_id);
     if (!is_exists) {
         return false;
     }
@@ -278,7 +278,7 @@ void PrivateProfile::load(const std::optional<KeyPass> &key) {
             main_actor.create(ActorType::User);
             this->actors_.insert(this->actors_.begin() + 1, main_actor);
             this->main_ = main_actor.id();
-            node->actorIndex()->store_new_actor(main_actor.to_public());
+            node->actor_index()->store_new_actor(main_actor.to_public());
         }
 
         this->save();
@@ -422,7 +422,7 @@ std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node)
         Actor<KeyPrivate> actor;
         actor.generate_from_seed(seed_, i, ActorType::User);
 
-        bool exists = node->actorIndex()->exists(actor.id());
+        bool exists = node->actor_index()->exists(actor.id());
         if (exists) {
             auto actor_id   = actor.id();
             bool vec_exists = std::any_of(actors_.begin(), actors_.end(), [actor_id](const auto &actor) {

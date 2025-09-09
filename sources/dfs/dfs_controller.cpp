@@ -36,11 +36,12 @@ DfsController::DfsController(ExtraChainNode *node)
     , node(node)
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
+
     refresh_calculate();
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
 
-    connect(node->actorIndex(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
+    connect(node->actor_index(), &ActorIndex::actorSaved, [this](ActorId actor_id) {
         Dfs::initialize_actor_folder(actor_id);
     });
 
@@ -204,7 +205,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            auto actor = node->account_controller()->currentProfile().get_actor(security_self->my_actor);
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
@@ -220,8 +221,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+            auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
             // TODO: checks
             auto res = sender->get().key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
             if (!res.has_value()) {
@@ -288,7 +289,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                             .encryption    = data_security != Dfs::DataSecurity::Public,
                             .state         = Dfs::FileState::Ready };
 
-    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    auto author_actor = node->account_controller()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
@@ -431,7 +432,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
 
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
-    auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
+    auto        actor    = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -446,7 +447,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     auto [collection_hash, collection_size] =
         Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
-    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    auto author_actor = node->account_controller()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
@@ -519,7 +520,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
 
     std::string file_id  = create_file_id_from("db");
     auto        dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
-    auto        actor    = node->accountController()->currentProfile().get_actor(owner_id);
+    auto        actor    = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
     }
@@ -533,7 +534,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     // auto [collection_hash, collection_size] =
     //     Dfs::Tables::ActorDirFile::calculate_collection_hash_size(owner_id, file_id);
 
-    auto author_actor = node->accountController()->currentProfile().get_actor(author_id);
+    auto author_actor = node->account_controller()->currentProfile().get_actor(author_id);
     if (!author_actor.has_value()) {
         return std::unexpected(Dfs::DfsError::NoAuthorActor);
     }
@@ -664,7 +665,7 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
                                                                    const std::string           &primary_data,
                                                                    const Dfs::DataSecurityData &security_data) {
     auto v = DfsVector::load(node,
-                             node->accountController()->currentProfile().main()->get(),
+                             node->account_controller()->currentProfile().main()->get(),
                              owner_id,
                              file_id,
                              Dfs::DataSecurity::Encrypted,
@@ -687,7 +688,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows
     const std::string           &where_statement,
     const Dfs::DataSecurityData &security_data) {
     auto v = DfsVector::load(node,
-                             node->accountController()->system_actor(),
+                             node->account_controller()->system_actor(),
                              owner_id,
                              file_id,
                              Dfs::DataSecurity::Public,
@@ -728,7 +729,7 @@ std::expected<DbRow, CollectionError> DfsController::get_collection_row(
     const std::string           &file_id,
     uint32_t                     id,
     const Dfs::DataSecurityData &security_data) {
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     auto row        = chain->get_collection_rows("WHERE id=" + std::to_string(id));
     return row.value()[0];
@@ -739,7 +740,7 @@ std::expected<std::vector<DbRow>, CollectionError> DfsController::get_collection
     const std::string           &file_id,
     const Dfs::DataSecurityData &security_data,
     const std::string           &where_statement) {
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
@@ -763,7 +764,7 @@ ExpectedDirHistoricalRow DfsController::universal_collection_row(const ActorId  
     // TODO: check fields
 
     // TODO: choose sign actor from args
-    auto main_actor = node->accountController()->currentProfile().system();
+    auto main_actor = node->account_controller()->currentProfile().system();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
@@ -856,13 +857,12 @@ void DfsController::refresh_calculate() {
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const ActorId     &owner_id,
                                                                         const std::string &dfs_name) {
-
     auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dfs_name);
     if (row.has_value()) {
         return row;
     }
 
-    auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+    auto actor = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::NoOwnerActor);
     }
@@ -898,7 +898,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status(const 
         return it->second;
     }
 
-    auto row = this->find_file_self(node->accountController()->currentProfile().main_id(), dfs_name);
+    auto row = this->find_file_self(node->account_controller()->currentProfile().main_id(), dfs_name);
     if (row.has_value()) {
         if (row->state != Dfs::FileState::Ready) {
             return row;
@@ -960,7 +960,7 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
@@ -1006,7 +1006,7 @@ void DfsController::network_response_historical_collection(
     }
     // TODO: check state
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
     // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
     // collection
     auto first_row = historical_rows.begin(); // where id = 0
@@ -1064,7 +1064,7 @@ void DfsController::network_response_content_collection(const ActorId           
     }
     // TODO: check state
 
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
 
     auto chain_opt = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain_opt.has_value()) {
@@ -1122,7 +1122,7 @@ void DfsController::network_change_collection(const ActorId                 &own
                                               const HistoricalCollectionRow &row,
                                               const Responder               &responder) {
     // TODO: need verify
-    auto main_actor = node->accountController()->system_actor();
+    auto main_actor = node->account_controller()->system_actor();
     auto dir_row    = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
 
     if (!dir_row.has_value()) {
@@ -1162,7 +1162,7 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
     }
     auto dirRow = dirRowExp.value();
 
-    auto main_actor = node->accountController()->currentProfile().main()->get();
+    auto main_actor = node->account_controller()->currentProfile().main()->get();
     auto dfs_vector = DfsVector::load(node, main_actor, owner_id, file_id);
 
     if (!dfs_vector.has_value()) {
@@ -1200,8 +1200,8 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     //     return std::unexpected(DfsVectorError::Unknown);
     // }
 
-    auto signer_actor = node->accountController()->currentProfile().get_actor(
-        !signer_id.is_zero() ? signer_id : node->accountController()->currentProfile().main_id());
+    auto signer_actor = node->account_controller()->currentProfile().get_actor(
+        !signer_id.is_zero() ? signer_id : node->account_controller()->currentProfile().main_id());
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
     if (!signer_actor.has_value()) {
@@ -1340,7 +1340,7 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
         return std::unexpected(false);
     }
 
-    auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+    auto actor = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!actor.has_value()) {
         eWarning("[Dfs] Can't remove file, because no owner");
         return std::unexpected(false);
@@ -1386,7 +1386,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     }
     auto dir_row_new = dir_row.value();
 
-    auto actor = node->actorIndex()->get_actor(owner_id);
+    auto actor = node->actor_index()->get_actor(owner_id);
     if (!actor.has_value()) {
         eWarning("[Dfs] Can't remove file, because no owner {}", actor.error());
         return;
@@ -1555,7 +1555,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
 
 // TODO: remove?
 std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std::string &file_name) {
-    auto localOwner = node->accountController()->currentProfile().get_actor(owner_id);
+    auto localOwner = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!localOwner.has_value()) {
         // eFatal("Can't get actor: {}", owner_id);
     }
@@ -1663,7 +1663,7 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
     auto output_path = output_folder;
 
     if (dir_row_result->encryption) {
-        auto actor = node->accountController()->currentProfile().get_actor(owner_id);
+        auto actor = node->account_controller()->currentProfile().get_actor(owner_id);
         if (!actor.has_value()) {
             return std::unexpected(ExportFileError::Unknown);
         }
@@ -1705,7 +1705,7 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
 Dfs::DfsSize DfsController::calculate_size() {
     Dfs::DfsSize dfs_size;
 
-    auto all_actors = node->actorIndex()->allActors();
+    auto all_actors = node->actor_index()->allActors();
     for (const auto &actor_id : all_actors) {
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor_id);
         if (!dir_rows.has_value()) {
@@ -1737,7 +1737,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            auto actor = node->account_controller()->currentProfile().get_actor(security_self->my_actor);
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
@@ -1764,8 +1764,8 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+            auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
 
             auto encrypted_name =
                 sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
@@ -1826,7 +1826,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto actor = node->accountController()->currentProfile().get_actor(security_self->my_actor);
+            auto actor = node->account_controller()->currentProfile().get_actor(security_self->my_actor);
             if (!actor.has_value()) {
                 return std::unexpected(Dfs::DfsError::Unknown);
             }
@@ -1853,8 +1853,8 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->accountController()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actorIndex()->getActor(security_actor->receiver_id);
+            auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
+            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
 
             auto decrypted_name =
                 sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());

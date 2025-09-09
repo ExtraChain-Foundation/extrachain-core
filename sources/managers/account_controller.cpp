@@ -49,8 +49,8 @@ SeedProfile AccountController::create_profile(const std::string               &h
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
     m_profiles.push_back(profile);
     m_currentProfile = system_actor.id();
-    node->actorIndex()->store_new_actor(system_actor.to_public());
-    node->actorIndex()->store_new_actor(main_actor.to_public());
+    node->actor_index()->store_new_actor(system_actor.to_public());
+    node->actor_index()->store_new_actor(main_actor.to_public());
     insert_to_profile_set(system_actor.id());
     autologinHash.save(hash); // TODO: add arg
 
@@ -86,7 +86,7 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, c
         profile.rename_wallet(actor.id(), wallet_name);
     }
 
-    node->actorIndex()->store_new_actor(actor.to_public());
+    node->actor_index()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -99,7 +99,7 @@ Actor<KeyPrivate> AccountController::createService(const ActorId                
         actor.create(ActorType::Service);
     auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
     profile.add_wallet(actor);
-    node->actorIndex()->store_new_actor(actor.to_public());
+    node->actor_index()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -108,10 +108,10 @@ void AccountController::import_old_profile(const ImportedUser &imported_profile,
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
-        node->actorIndex()->save_actor(actor.to_public());
+        node->actor_index()->save_actor(actor.to_public());
     }
     for (const auto &actor : profile.imports()) {
-        node->actorIndex()->save_actor(actor.to_public());
+        node->actor_index()->save_actor(actor.to_public());
     }
 
     insert_to_profile_set(actor.id());
@@ -191,8 +191,8 @@ bool AccountController::load_profile(const ActorId                &actor_id,
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
-            if (node->actorIndex()->getById(actor.id()).isEmpty()) {
-                node->actorIndex()->save_actor(actor.to_public());
+            if (node->actor_index()->getById(actor.id()).isEmpty()) {
+                node->actor_index()->save_actor(actor.to_public());
             }
         }
 

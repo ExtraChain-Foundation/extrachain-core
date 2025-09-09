@@ -82,7 +82,7 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 #endif
 
     if (node->getInitPublicIPAndCountry().first.isEmpty()) {
-        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
+        node->init_public_ip_and_country_ = { QString::fromStdString(public_ip_), "Security" };
     }
 }
 
@@ -160,7 +160,7 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
-    if (node->accountController()->empty()) {
+    if (node->account_controller()->empty()) {
         return;
     }
 
@@ -538,11 +538,11 @@ bool NetworkManager::send_message_checker(MessageType      type,
         eCritical("[Network] Send message error: accountController is bye 1!");
         return false;
     }
-    if (!node->accountController()) {
+    if (!node->account_controller()) {
         eCritical("[Network] Send message error: accountController is bye 2!");
         return false;
     }
-    if (node->accountController()->empty()) {
+    if (node->account_controller()->empty()) {
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
@@ -563,7 +563,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->accountController()->system_actor();
+    auto       &mainActor = node->account_controller()->system_actor();
     MessageBody message =
         make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
@@ -750,10 +750,10 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
         return;
     }
 
-    auto &mainActor = node->accountController()->system_actor();
+    auto &mainActor = node->account_controller()->system_actor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->system_actor().id();
+    message_edited.sender_id   = node->account_controller()->system_actor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     addAllServicesIdentifiersToMessage(message_edited);
 
@@ -995,7 +995,7 @@ void NetworkManager::message_received(const std::string &message,
 
         if (!should_ignore
             && (m_messages->contains(message_id)
-                || message_body.init_sender_id == node->accountController()->system_actor().id())) {
+                || message_body.init_sender_id == node->account_controller()->system_actor().id())) {
             // eWarning(
             //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
             //     messageId,
@@ -1017,7 +1017,7 @@ void NetworkManager::message_received(const std::string &message,
         auto searchRes                         = network_forwarded_messages_locked->find(message_id);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->system_actor().id();
+            message_edited.sender_id   = node->account_controller()->system_actor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(node->network_identifier());
 
             auto serialized = message_edited.serialize();
@@ -1169,7 +1169,7 @@ void NetworkManager::message_received(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for new actor", type);
             return;
         }
-        auto actor_handling_result = node->actorIndex()->network_store_new_actor(new_actor_result.value());
+        auto actor_handling_result = node->actor_index()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
             sendBrodcastMessageFurther(package_data);
         }
@@ -1184,38 +1184,14 @@ void NetworkManager::message_received(const std::string &message,
                 eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
                 break;
             }
-            node->actorIndex()->network_actor_request(actor_id_result.value(), responder);
+            node->actor_index()->network_actor_request(actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             if (!actor_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for Actor in {} state", type, status);
                 break;
             }
-            node->actorIndex()->save_actor(actor_result.value());
-        }
-        break;
-    }
-
-    case MessageType::ActorAll: {
-        break;
-        if (status == MessageStatus::Request) {
-            auto ignored_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
-            if (!ignored_actor_id_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for ignored ActorId in {} state",
-                         type,
-                         status);
-                break;
-            }
-
-            node->actorIndex()->network_actors_all_request(ignored_actor_id_result.value(), responder);
-        } else if (status == MessageStatus::Response) {
-            auto actors_list_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
-            if (!actors_list_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
-                break;
-            }
-
-            node->actorIndex()->network_actors_all_response(actors_list_result.value(), responder);
+            node->actor_index()->save_actor(actor_result.value());
         }
         break;
     }
@@ -1238,7 +1214,7 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_response(actors_list_result.value());
+            node->actor_index()->network_actors_response(actors_list_result.value());
         }
         break;
     }
@@ -1251,7 +1227,7 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_hash_request(actors->first, actors->second, responder);
+            node->actor_index()->network_actors_hash_request(actors->first, actors->second, responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
             if (!actors_list_result.has_value()) {
@@ -1259,7 +1235,7 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_response(actors_list_result.value());
+            node->actor_index()->network_actors_response(actors_list_result.value());
         }
         break;
     }
@@ -1690,7 +1666,7 @@ void NetworkManager::message_received(const std::string &message,
         const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::Request: {
-            auto res = node->dataMiningManager()->network_request_coin_reward(reward_request, responder);
+            auto res = node->data_mining_manager()->network_request_coin_reward(reward_request, responder);
 
             if (res) {
                 sendBrodcastMessageFurther(package_data);
@@ -1965,7 +1941,7 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     key.generate_random();
     m_networkHashForVPN =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->system_actor().id().to_string() + salt,
+                                  + node->account_controller()->system_actor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }

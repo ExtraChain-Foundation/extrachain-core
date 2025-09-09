@@ -91,7 +91,7 @@ bool SocketService::is_closed() {
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] Current network id: {}", node->actorIndex()->network_id());
+    eLog("[Socket] Current network id: {}", node->actor_index()->network_id());
     eLog("[Socket] IP: {}", ip_);
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
@@ -124,12 +124,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 2. Network id check
     ActorId json_network_id         = ActorId(handshake.network_id);
-    ActorId our_network_id          = node->actorIndex()->network_id();
+    ActorId our_network_id          = node->actor_index()->network_id();
     bool    is_network_ids_contains = our_network_id == json_network_id;
     bool    something_empty         = json_network_id.is_zero() || our_network_id.is_zero();
 
     if (our_network_id.is_zero() && !json_network_id.is_zero()) {
-        node->actorIndex()->set_network_id(json_network_id); // TODO: request block 0?
+        node->actor_index()->set_network_id(json_network_id); // TODO: request block 0?
     }
 
     if (!(something_empty || is_network_ids_contains)) {
@@ -214,7 +214,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     activated_ = true;
     Responder responder(node->network());
     responder.add_identifier(identifier_.toStdString());
-    node->actorIndex()->send_system_actor(responder);
+    node->actor_index()->send_system_actor(responder);
     emit activated();
     emit shareConnections(handshake.connections);
 
@@ -228,7 +228,7 @@ void SocketService::closeSocket() {
 }
 
 QByteArray SocketService::generate_first_message() {
-    HandshakeMessage msg { .network_id   = node->actorIndex()->network_id().to_string(),
+    HandshakeMessage msg { .network_id   = node->actor_index()->network_id().to_string(),
                            .version      = extrachain_version,
                            .identifier   = node->network_identifier(),
                            .your_ip      = ip_.toStdString(),

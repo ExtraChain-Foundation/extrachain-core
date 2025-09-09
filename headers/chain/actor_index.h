@@ -135,7 +135,6 @@ public:
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actors();
     std::vector<ActorId>                allActors();
-    void network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder);
 
     void network_actors_request(const std::set<ActorId> &actors, const Responder &responder);
     void network_actors_response(const std::vector<Actor<KeyPublic>> &actors);
@@ -143,8 +142,6 @@ public:
     void send_system_actor(const Responder &responder);
 
     void network_actor_request(const ActorId &actorId, const Responder &responder);
-    void network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder);
-    void getAllActors(ActorId id, bool isUser);
     void getActorCount(const QByteArray &requestHash, const Responder &responder);
 
     void request_actors_hash(const Responder &responder);

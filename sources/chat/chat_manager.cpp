@@ -48,7 +48,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
     });
 
     QObject::connect(node, &ExtraChainNode::ready, [this]() {
-        auto main_id = this->node->accountController()->currentProfile().main_id();
+        auto main_id = this->node->account_controller()->currentProfile().main_id();
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id); // TODO: add where / field
         if (!dir_rows.has_value()) {
@@ -113,7 +113,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     KeyBytes   key           = Cryptography::keygen();
-    const auto main_actor_id = node->accountController()->currentProfile().main_id();
+    const auto main_actor_id = node->account_controller()->currentProfile().main_id();
     chat_actor_              = main_actor_id;
 
     // TODO: my actor = use actor for chats
@@ -129,7 +129,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
 
     auto chat = Chat::Chat { .chat_key = key };
 
-    auto network_id = node->actorIndex()->network_id();
+    auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -204,7 +204,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
 
 std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat) {
     // check if with this person chat exists
-    auto main_actor_id = node->accountController()->currentProfile().main_id();
+    auto main_actor_id = node->account_controller()->currentProfile().main_id();
 
     if (!chat.chat.peer_id.has_value()) {
         return chat;
@@ -249,7 +249,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
 }
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
-    auto main_actor = node->accountController()->currentProfile().main()->get();
+    auto main_actor = node->account_controller()->currentProfile().main()->get();
     auto my_chats   = get_my_chats();
 
     if (!my_chats.has_value()) {
@@ -447,7 +447,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return my_chats_result.value();
     }
 
-    auto network_id = node->actorIndex()->network_id();
+    auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -460,7 +460,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto main_actor_id  = node->accountController()->currentProfile().main_id();
+    auto main_actor_id  = node->account_controller()->currentProfile().main_id();
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
 
     auto store_chats_res = node->dfs()->store_vector(main_actor_id,
@@ -484,7 +484,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
         return my_chats;
     }
 
-    auto main_actor_id = node->accountController()->currentProfile().main_id();
+    auto main_actor_id = node->account_controller()->currentProfile().main_id();
     chat_actor_        = main_actor_id;
     auto rows          = Dfs::Tables::ActorDirFile::get_dir_rows(main_actor_id);
     if (!rows.has_value()) {
@@ -501,7 +501,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
             continue;
         }
 
-        auto actor       = node->accountController()->currentProfile().main()->get();
+        auto actor       = node->account_controller()->currentProfile().main()->get();
         auto name_result = actor.key().decrypt_self(ByteArray(from_base64.value()).toBytes());
         if (!name_result.has_value()) {
             continue;
@@ -575,9 +575,9 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     }
 
     const auto& from_id    = dir_row.actor_id;
-    const auto& main_actor = this->node->accountController()->currentProfile().main()->get();
+    const auto& main_actor = this->node->account_controller()->currentProfile().main()->get();
 
-    auto from_actor_result = this->node->actorIndex()->get_actor(from_id);
+    auto from_actor_result = this->node->actor_index()->get_actor(from_id);
     if (!from_actor_result.has_value()) {
         return false;
     }

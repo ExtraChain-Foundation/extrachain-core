@@ -97,10 +97,10 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 
     Actor<KeyPrivate> token_actor;
     if (predefine_token_id.empty())
-        token_actor = node->accountController()->createService();
+        token_actor = node->account_controller()->createService();
     else {
         auto temp_actor = token_actor.fromJson(QByteArray::fromStdString(predefine_token_id));
-        token_actor     = node->accountController()->createService({}, temp_actor);
+        token_actor     = node->account_controller()->createService({}, temp_actor);
     }
 
     auto token_data = TokenData { .token_id = token_actor.id(),
@@ -112,7 +112,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 
     auto token_data_short = TokenDataShort { .name = token_name, .ticker = ticker, .color = color };
 
-    auto owner_actor = node->accountController()->currentProfile().get_actor(owner_id);
+    auto owner_actor = node->account_controller()->currentProfile().get_actor(owner_id);
     if (!owner_actor.has_value()) {
         return std::unexpected(CreateTokenError::InvalidOwnerId);
     }

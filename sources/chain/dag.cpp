@@ -108,7 +108,7 @@ Dag::Dag(ExtraChainNode *node)
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
         auto network_id = section->transactions.begin()->sender();
-        node->actorIndex()->set_network_id(network_id);
+        node->actor_index()->set_network_id(network_id);
     }
 
     if (mode_ == DagMode::Light) {
@@ -358,7 +358,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
 }
 
 void Dag::check_self(const Transaction &transaction) {
-    const auto my_actors = node->accountController()->accounts_ids();
+    const auto my_actors = node->account_controller()->accounts_ids();
 
     for (const auto &my_actor : my_actors) {
         if (transaction.sender() == my_actor || transaction.receiver() == my_actor) {
@@ -681,7 +681,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
         if (mode_ == DagMode::Light && transaction.section() == BigNumber(0)) {
             auto network_id = transaction.sender();
-            node->actorIndex()->set_network_id(network_id);
+            node->actor_index()->set_network_id(network_id);
         }
 
         // Update first_saved_section_ if this is the first section or has a lower ID
@@ -806,7 +806,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             cache_.check_and_update_cache_thread(current_section_);
             this->update_range();
             if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
-                node->actorIndex()->set_network_id(first->sender());
+                node->actor_index()->set_network_id(first->sender());
                 all_saved &= write_section(section).has_value();
                 it = last;
                 continue;
@@ -898,7 +898,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Get sender and receiver IDs
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->accountController()->system_actor().id();
+    const ActorId &mainActorId    = node->account_controller()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
     // if (tx.type() != TransactionType::Repeatable) {
@@ -929,7 +929,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> senderActor;
-    senderActor = node->actorIndex()->getActor(targetSender);
+    senderActor = node->actor_index()->getActor(targetSender);
     if (senderActor.empty()) {
         return TransactionProveError::SenderNotExists;
     }
@@ -954,7 +954,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> receiverActor;
-    receiverActor = node->actorIndex()->getActor(targetReceiver);
+    receiverActor = node->actor_index()->getActor(targetReceiver);
     if (receiverActor.empty()) {
         return TransactionProveError::ReceiverNotExists;
     }

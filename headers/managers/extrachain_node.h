@@ -123,32 +123,29 @@ public:
 
 private:
     // common object for
-    DfsController*     m_dfs               = nullptr;
-    ActorIndex*        m_actorIndex        = nullptr;
+    DfsController*     dfs_                = nullptr;
+    ActorIndex*        actor_index_        = nullptr;
     Dag*               dag_                = nullptr;
-    NetworkManager*    m_networkManager    = nullptr;
-    AccountController* m_accountController = nullptr;
-    DataMiningManager* m_dmm               = nullptr;
-    TokenManager*      m_tokenManager      = nullptr;
+    NetworkManager*    network_manager_    = nullptr;
+    AccountController* account_controller_ = nullptr;
+    DataMiningManager* dmm_                = nullptr;
+    TokenManager*      token_manager_      = nullptr;
     ChatManager*       chat_manager_       = nullptr;
-    QTimer*            timer               = nullptr;
-    QTimer*            timer_reward        = nullptr;
-    QTimer*            timer_info          = nullptr;
+    QTimer*            timer_reward_       = nullptr;
+    QTimer*            timer_info_         = nullptr;
 
-    bool                        started               = false;
-    bool                        isClientApplication   = false;
-    bool                        allowRunRestApiServer = false;
-    std::uint64_t               blockCount;
-    std::vector<BigNumber>      resiveCounts;
-    VpnFunctionClearType        m_vpnClearFunc = nullptr;
-    std::pair<QString, QString> m_initPublicIPAndCountry;
+    bool                        started_               = false;
+    bool                        is_client_application_ = false;
+    std::vector<BigNumber>      resive_counts_;
+    VpnFunctionClearType        vpn_clear_func_ = nullptr;
+    std::pair<QString, QString> init_public_ip_and_country_;
 
-    std::optional<SubscriptionRow> subscription_row;
+    std::optional<SubscriptionRow> subscription_row_;
 
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
 
-public:
+public: // TODO
     std::vector<Actor<KeyPublic>>                 actors_broadcast_;
     std::set<std::pair<std::string, std::string>> identifiers_after_actors_sync_;
 
@@ -175,17 +172,17 @@ public:
     void start();
 
     bool isClientApp() {
-        return isClientApplication;
+        return is_client_application_;
     };
 
     std::pair<QString, QString> getInitPublicIPAndCountry() const;
 
     Dag*               dag();
     NetworkManager*    network();
-    AccountController* accountController() const;
-    ActorIndex*        actorIndex() const;
+    AccountController* account_controller() const;
+    ActorIndex*        actor_index() const;
     DfsController*     dfs() const;
-    DataMiningManager* dataMiningManager() const;
+    DataMiningManager* data_mining_manager() const;
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
@@ -195,21 +192,21 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    std::expected<Transaction, TransactionError> createTransaction(Transaction tx);
+    std::expected<Transaction, TransactionError> create_transaction(Transaction tx);
 
     /**
-     * @brief Shortcut for another createTransaction method
+     * @brief Shortcut for another create_transaction method
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    std::expected<Transaction, TransactionError> createTransaction(ActorId        receiver,
-                                                                   BigNumberFloat amount,
-                                                                   ActorId        token);
+    std::expected<Transaction, TransactionError> create_transaction(ActorId        receiver,
+                                                                    BigNumberFloat amount,
+                                                                    ActorId        token);
 
-    std::expected<Transaction, TransactionError> createTransactionFrom(ActorId        sender,
-                                                                       ActorId        receiver,
-                                                                       BigNumberFloat amount,
-                                                                       ActorId        token);
+    std::expected<Transaction, TransactionError> create_transaction_from(ActorId        sender,
+                                                                         ActorId        receiver,
+                                                                         BigNumberFloat amount,
+                                                                         ActorId        token);
 
     std::expected<Transaction, TransactionError> send_transaction(const Transaction&       transaction,
                                                                   const Actor<KeyPrivate>& signer);
@@ -231,8 +228,6 @@ public:
     std::string generate_network_identifier();
     std::string network_identifier();
 
-    std::uint64_t getBlockCount() const;
-
     void          InitVPN(VpnFunctionClearType vpnClearFun);
     TokenManager* tokenManager() const;
     bool          isRaccoon;
@@ -250,9 +245,6 @@ public:
 private:
     ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
 
-    friend class ExtraChainNodeWrapper;
-    friend class NetworkManager;
-
     /**
      * @brief Connect signals between NetworkManager and
      */
@@ -264,7 +256,7 @@ private:
     /**
      * @brief Creates folders for work, if they not exist
      */
-    void prepareFolders();
+    void prepare_folders();
 
 signals:
     void InitNode();
@@ -305,7 +297,6 @@ signals:
     void actorRenamed(ActorId actor_id, std::string name);
 
 private slots:
-    void getAllActorsTimerCall();
     void timer_reward_request();
     void timer_info_print();
 
@@ -323,4 +314,7 @@ public slots:
     void dagTimerStarting(int ms);
     void dagTimerStoping();
     void dagTimerTick();
+
+    friend class ExtraChainNodeWrapper;
+    friend class NetworkManager;
 };
