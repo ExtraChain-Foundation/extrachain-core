@@ -577,7 +577,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     const auto& from_id    = dir_row.actor_id;
     const auto& main_actor = this->node->account_controller()->currentProfile().main()->get();
 
-    auto from_actor_result = this->node->actor_index()->get_actor(from_id);
+    auto from_actor_result = this->node->actor_index()->read_actor(from_id);
     if (!from_actor_result.has_value()) {
         return false;
     }

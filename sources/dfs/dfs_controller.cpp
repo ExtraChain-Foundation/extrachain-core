@@ -222,7 +222,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
             auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
+            auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
             // TODO: checks
             auto res = sender->get().key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
             if (!res.has_value()) {
@@ -1389,7 +1389,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     }
     auto dir_row_new = dir_row.value();
 
-    auto actor = node->actor_index()->get_actor(owner_id);
+    auto actor = node->actor_index()->read_actor(owner_id);
     if (!actor.has_value()) {
         eWarning("[Dfs] Can't remove file, because no owner {}", actor.error());
         return;
@@ -1708,7 +1708,7 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
 Dfs::DfsSize DfsController::calculate_size() {
     Dfs::DfsSize dfs_size;
 
-    auto all_actors = node->actor_index()->allActors();
+    auto all_actors = node->actor_index()->read_all_actors_ids();
     for (const auto &actor_id : all_actors) {
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor_id);
         if (!dir_rows.has_value()) {
@@ -1768,7 +1768,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
             auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
+            auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
 
             auto encrypted_name =
                 sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
@@ -1857,7 +1857,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
     if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
             auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
-            auto receiver = node->actor_index()->getActor(security_actor->receiver_id);
+            auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
 
             auto decrypted_name =
                 sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());

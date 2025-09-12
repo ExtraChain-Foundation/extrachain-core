@@ -929,7 +929,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> senderActor;
-    senderActor = node->actor_index()->getActor(targetSender);
+    senderActor = node->actor_index()->read_actor_old(targetSender);
     if (senderActor.empty()) {
         return TransactionProveError::SenderNotExists;
     }
@@ -954,7 +954,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> receiverActor;
-    receiverActor = node->actor_index()->getActor(targetReceiver);
+    receiverActor = node->actor_index()->read_actor_old(targetReceiver);
     if (receiverActor.empty()) {
         return TransactionProveError::ReceiverNotExists;
     }

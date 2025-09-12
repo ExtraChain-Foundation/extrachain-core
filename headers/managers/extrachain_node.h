@@ -99,9 +99,8 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
 
 public:
     ExtraChainNodeWrapper(QObject* parent,
-                          bool     isClientApp           = false,
-                          bool     allowRunRestApiServer = false,
-                          bool     isRaccoon             = false);
+                          bool     is_client_application           = false,
+                          bool     is_custom_app = false);
 
     ~ExtraChainNodeWrapper();
 
@@ -225,7 +224,7 @@ public:
 
     void          init_vpn(VpnFunctionClearType vpnClearFun);
     TokenManager* token_manager() const;
-    bool          is_raccoon_;
+    bool          is_custom_app_;
 
     ChatManager* chat_manager();
 
@@ -238,7 +237,7 @@ public:
                           const TokenId&     token_id);
 
 private:
-    ExtraChainNode(bool isClientApp = false, bool allowRunRestApiServer = false, bool isRaccoon = false);
+    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false);
 
     /**
      * @brief Connect signals between NetworkManager and

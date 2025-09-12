@@ -191,7 +191,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
-            if (node->actor_index()->getById(actor.id()).isEmpty()) {
+            if (node->actor_index()->read_by_id(actor.id()).isEmpty()) {
                 node->actor_index()->save_actor(actor.to_public());
             }
         }

@@ -45,12 +45,9 @@
 
 std::atomic<bool> node_enabled { true };
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent,
-                                             bool     isClientApp,
-                                             bool     allowRunRestApiServer,
-                                             bool     isRaccoonCheck)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app)
     : QObject(parent)
-    , node(new ExtraChainNode(isClientApp, allowRunRestApiServer, isRaccoonCheck)) {
+    , node(new ExtraChainNode(is_client_application, is_custom_app)) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -80,9 +77,9 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
         node->process();
 }
 
-ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, bool isRaccoonCheck)
-    : is_client_application_(isClientApp)
-    , is_raccoon_(isRaccoonCheck) {
+ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app)
+    : is_client_application_(is_client_application)
+    , is_custom_app_(is_custom_app) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -996,7 +993,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto network_id = actor_index_->network_id();
     if (network_id.is_zero())
         return;
-    auto first = actor_index_->getActor(network_id);
+    auto first = actor_index_->read_actor_old(network_id);
     if (first.empty())
         return;
     auto& mainKey   = account_controller_->system_actor().key();

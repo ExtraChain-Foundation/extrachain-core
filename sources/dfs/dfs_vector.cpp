@@ -515,7 +515,7 @@ std::optional<std::pair<std::string, uint64_t>> DfsVector::data_hash_size() {
 
 bool DfsVector::verify(const DbRow &row) {
     auto      actor_id = ActorId(row.at("actor"));
-    auto      actor    = node->actor_index()->getActor(actor_id);
+    auto      actor    = node->actor_index()->read_actor_old(actor_id);
     Signature sign     = ByteArray(row.at("sign")).toArray<crypto_sign_BYTES>();
 
     auto [hash, all_empty] = calculate_hash(row);
@@ -544,7 +544,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::encrypt_data(const DbRow        
         }
     } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
         auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
-        auto receiver = node->actor_index()->get_actor(security_actor->receiver_id);
+        auto receiver = node->actor_index()->read_actor(security_actor->receiver_id);
         if (sender.has_value() && receiver.has_value()) {
             encryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
                 return s.get().key().encrypt(data.toBytes(), r.key().public_key());
@@ -598,7 +598,7 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
         }
     } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
         auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
-        auto receiver = node->actor_index()->get_actor(security_actor->receiver_id);
+        auto receiver = node->actor_index()->read_actor(security_actor->receiver_id);
         if (sender.has_value() && receiver.has_value()) {
             decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
                 return s.get().key().decrypt(data.toBytes(), r.key().public_key());
