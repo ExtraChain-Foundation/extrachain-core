@@ -114,6 +114,9 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                               ? Network::SocketServiceError::VersionTooNew
                               : Network::SocketServiceError::VersionTooOld;
 
+        // TODO: for user
+        eInfo("Please, update client");
+
         eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
         emit error(error_type,
                    QString::fromStdString(handshake.version),
