@@ -161,6 +161,10 @@ public:
         return identifiers_;
     }
 
+    double luminance_weight() const {
+        return luminance_weight_;
+    }
+
     bool add_identifier(const std::string& identifier) {
         if (identifier.empty()) {
             return false;
@@ -182,7 +186,11 @@ public:
     }
 
     void set_message_type(MessageType type) {
-        message_type = type;
+        message_type_ = type;
+    }
+
+    void set_luminance_weight(double new_weight) {
+        luminance_weight_ = new_weight;
     }
 
     Responder with_new_message_id() const {
@@ -203,11 +211,12 @@ private:
                                    SendMode           send_mode,
                                    MessageStatus      status) const;
 
-    MessageType message_type;
-    // MessageStatus                   message_status;
+    MessageType message_type_;
+    // MessageStatus                   message_status_;
     std::unordered_set<std::string> identifiers_;
     std::string                     message_id_;
-    NetworkManager*                 network_manager = nullptr;
+    double                          luminance_weight_ = 1;
+    NetworkManager*                 network_manager   = nullptr;
 };
 
 /**

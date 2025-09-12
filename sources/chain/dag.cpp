@@ -319,7 +319,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     return {};
 }
 
-void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
+void Dag::network_transaction_result(const std::string     hash,
+                                     TransactionProveError result,
+                                     const Responder      &responder) {
     if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
@@ -1254,6 +1256,10 @@ void Dag::network_status_sync_request(const Responder &responder) {
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
+    if (responder.luminance_weight() < 2) {
+        return;
+    }
+
     if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
         eWarning("[Dag] Sync responce: not last info status");
         return;
@@ -1424,7 +1430,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 }
 
 #ifdef IS_R // only for clients for first correction and integration
-                // emit node->dagSyncFinish();
+            // emit node->dagSyncFinish();
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -1576,6 +1582,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
     if (status_ != DagStatus::Ready) {
         eLog("[Dag] Hash interval check: ignore", hash_interval);
+        return;
+    }
+
+    if (responder.luminance_weight() < 2) {
         return;
     }
 
@@ -2466,6 +2476,10 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
                                           const Responder              &responder) {
+    if (mode_ == DagMode::Light) {
+        return;
+    }
+
     // TODO: to thread? with status generated controls
     if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
         || control_request.to < control_request.from) {
@@ -2516,6 +2530,10 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
              control_response.from);
         search_control_ = false;
         emit node->dagSearchControlEnded();
+        return;
+    }
+
+    if (responder.luminance_weight() < 2) {
         return;
     }
 

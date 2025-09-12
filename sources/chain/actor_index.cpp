@@ -151,7 +151,7 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
 
 void ActorIndex::send_system_actor(const Responder &responder) {
     // auto system_actor = node->account_controller()->system_actor().to_public();
-    const auto &actors = node->account_controller()->currentProfile().actors();
+    const auto &actors = node->account_controller()->current_profile().actors();
     for (const auto &actor : actors) {
         responder.send_response(actor.to_public(), MessageType::Actor, SendMode::Focused, MessageStatus::Response);
     }

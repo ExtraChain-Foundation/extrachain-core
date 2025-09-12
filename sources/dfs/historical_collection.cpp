@@ -531,7 +531,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
 
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto myself = node->account_controller()->currentProfile().get_actor(security_self->my_actor);
+            auto myself = node->account_controller()->current_profile().get_actor(security_self->my_actor);
             if (!myself.has_value()) {
                 return DbRow {};
             }
@@ -541,7 +541,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
         }
     } else if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
+            auto sender   = node->account_controller()->current_profile().get_actor(security_actor->sender_id);
             auto receiver = node->actor_index()->read_actor(security_actor->receiver_id);
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};
@@ -586,7 +586,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
     std::function<Cryptography::CryptoResult(const ByteArray &)> decryptor;
     if (data_security == Dfs::DataSecurity::Self) {
         if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
-            auto myself = node->account_controller()->currentProfile().get_actor(security_self->my_actor);
+            auto myself = node->account_controller()->current_profile().get_actor(security_self->my_actor);
             if (!myself.has_value()) {
                 return DbRow {};
             }
@@ -596,7 +596,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
         }
     } else if (data_security == Dfs::DataSecurity::Actor) {
         if (auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
-            auto sender   = node->account_controller()->currentProfile().get_actor(security_actor->sender_id);
+            auto sender   = node->account_controller()->current_profile().get_actor(security_actor->sender_id);
             auto receiver = node->actor_index()->read_actor(security_actor->receiver_id);
             if (!sender.has_value() || !receiver.has_value()) {
                 return DbRow {};

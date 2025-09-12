@@ -1045,6 +1045,10 @@ void NetworkManager::message_received(const std::string &message,
     responder.add_identifier(identifier);
     responder.set_message_type(type);
 
+    if (is_luminance_weight) {
+        responder.set_luminance_weight(3.5);
+    }
+
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
@@ -1598,7 +1602,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_RC // only for ui clients, not for consoles, reputation priority
+#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
         if (!is_luminance_weight) {
             return;
         }
@@ -1610,7 +1614,7 @@ void NetworkManager::message_received(const std::string &message,
             break;
         }
 
-        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result, responder);
         break;
     }
 
@@ -1644,7 +1648,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_R
+#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
             if (!is_luminance_weight) {
                 return;
             }
@@ -1693,12 +1697,6 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagSyncLastInfo: {
         if (status == MessageStatus::Request) {
-#ifdef IS_R
-            if (!is_luminance_weight) {
-                return;
-            }
-#endif
-
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
@@ -1719,12 +1717,6 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagIntervalHash: {
-#ifdef IS_RC
-        if (!is_luminance_weight) {
-            return;
-        }
-#endif
-
         auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
         if (!hash_interval.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
@@ -1736,12 +1728,6 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
-#ifdef IS_R
-        if (!is_luminance_weight) {
-            return;
-        }
-#endif
-
         auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
@@ -1753,12 +1739,6 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeResponse: {
-#ifdef IS_RC
-        if (!is_luminance_weight) {
-            return;
-        }
-#endif
-
         auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);

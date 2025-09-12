@@ -70,14 +70,14 @@ void DataMiningManager::requestCoinReward() {
 
 #if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
-        && koef_to_koef == BigNumberFloat(1)) {
+        && koef_to_koef_ == BigNumberFloat(1)) {
         return;
     }
 #endif
 
     const auto actor      = node->account_controller()->system_actor();
     auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-    auto       amount     = calculateRewardAmount();
+    auto       amount     = calculate_reward_amount();
 
     // eLog("[Reward] Request: Actor: {}, Dfs size: {}, Reward: {}, Traffic sent/received: {}/{}, Blocks: {}",
     //      actor.id(),
@@ -95,8 +95,8 @@ void DataMiningManager::requestCoinReward() {
         amount = BigNumberFloat("0.014", NumeralBase::Dec);
     }
 
-    if (amount > MaxReward) {
-        amount = MaxReward;
+    if (amount > max_reward_) {
+        amount = max_reward_;
     }
 
     Transaction transaction;
@@ -139,7 +139,7 @@ void DataMiningManager::requestCoinReward() {
     // }
 }
 
-BigNumberFloat DataMiningManager::calculateRewardAmount() const {
+BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
     // node->dfs()->refresh_calculate();
     const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
@@ -165,11 +165,11 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
 
     if (node->dfs()->mode() == DfsMode::Full) {
-        res *= KoefRewardDagDfs * koef_to_koef;
+        res *= koef_reward_dag_dfs_ * koef_to_koef_;
     } else if (node->dag()->mode() == DagMode::Full) {
-        res *= KoefRewardDag * koef_to_koef;
+        res *= koef_reward_dag_ * koef_to_koef_;
     } else {
-        res *= KoefReward * koef_to_koef;
+        res *= koef_reward_ * koef_to_koef_;
     }
 
     // res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag * koef_to_koef : KoefReward * koef_to_koef;
@@ -182,8 +182,8 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     return res;
 }
 
-BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
-    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+BigNumberFloat DataMiningManager::calculate_reward_amount(const Dfs::Reward::RequestReward &request_reward) const {
+    if (request_reward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("{} {} {}", "[Reward] Cannot calculate reward due to division by zero. BytesSent, total
         // dfs:"
         //, requestReward.BytesSent, node->dfs()->totalDfsSize());
@@ -206,25 +206,25 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
         current_section = BigNumberFloat(1);
     }
 
-    auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
+    auto res = (BigNumberFloat { request_reward.DataStoredSize } / node->dfs()->totalDfsSize()
                 + 1 / 1 // + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + BigNumberFloat { requestReward.BlocksStored } / current_section * 100);
-    res *= KoefReward;
+                + BigNumberFloat { request_reward.BlocksStored } / current_section * 100);
+    res *= koef_reward_;
     return res;
 }
 
-bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward,
+bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward,
                                                     const Responder                  &responder) {
-    auto calc   = calculateRewardAmount(requestReward);
-    auto amount = requestReward.transaction.amount();
+    auto calc   = calculate_reward_amount(request_reward);
+    auto amount = request_reward.transaction.amount();
 
-    if (amount <= MaxReward || calc - amount <= Dfs::Reward::TOLERANCE) {
-        if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
+    if (amount <= max_reward_ || calc - amount <= Dfs::Reward::TOLERANCE) {
+        if (request_reward.transaction.sender() != request_reward.transaction.receiver()) {
             return false;
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        auto res1 = node->dag()->network_transaction(requestReward.transaction, responder);
+        auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
 
         if (!res1.has_value()) {
             return false;
@@ -238,5 +238,5 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 }
 
 void DataMiningManager::set_koef_to_koef(const BigNumberFloat &koef_to_koef) {
-    this->koef_to_koef = koef_to_koef;
+    this->koef_to_koef_ = koef_to_koef;
 }

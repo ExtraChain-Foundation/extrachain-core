@@ -19,5 +19,5 @@
 
 #include "managers/thread_pool.h"
 
-bool                ThreadPool::isFirst = true;
+bool                ThreadPool::is_first = true;
 std::set<QThread *> ThreadPool::threads = {};

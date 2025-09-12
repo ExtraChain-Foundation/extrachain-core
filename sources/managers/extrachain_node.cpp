@@ -152,7 +152,7 @@ void ExtraChainNode::cleanUp() {
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
-    if (!AccountController::profilesList().empty()) {
+    if (!AccountController::profiles_list().empty()) {
         eLog("Cannot create a new network: existing profile data found");
         return false;
     }
@@ -384,7 +384,7 @@ DfsFileStatus ExtraChainNode::create_renames_vector() {
         return DfsFileStatus::Existed;
     }
 
-    const auto main_actor_id = this->account_controller()->currentProfile().main_id();
+    const auto main_actor_id = this->account_controller()->current_profile().main_id();
     auto       network_id    = this->network_id();
     if (network_id.is_zero()) {
         return DfsFileStatus::CantCreate;
@@ -438,7 +438,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
         renames_file_id_waiting_ = row->file_id;
     }
 
-    auto main_id = account_controller_->currentProfile().main_id();
+    auto main_id = account_controller_->current_profile().main_id();
 
     if (name.empty()) {
         // TODO: add remove. Need to search for actor, scan and remove
@@ -461,7 +461,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
 
 std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames() {
     auto row     = this->dfs()->read_file_status("Renames");
-    auto main_id = account_controller_->currentProfile().main_id();
+    auto main_id = account_controller_->current_profile().main_id();
 
     if (!row.has_value()) {
         return {};
@@ -510,7 +510,7 @@ void ExtraChainNode::start() {
 #ifdef IS_RC
     QThreadPool::globalInstance()->start([this]() {
         auto system_id     = account_controller_->system_actor().id();
-        auto main_id       = account_controller_->currentProfile().main_id();
+        auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
@@ -546,7 +546,7 @@ void ExtraChainNode::start() {
     // Version compatibility: 0.19.2 (temp)
 #ifdef IS_RC
     QThreadPool::globalInstance()->start([this]() {
-        auto main_id       = account_controller_->currentProfile().main_id();
+        auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id);
@@ -612,7 +612,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
-    auto actor = account_controller_->currentWallet();
+    auto actor = account_controller_->current_wallet();
     if (actor.empty()) {
         eWarning("Can not create: {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
@@ -713,7 +713,7 @@ void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(ActorId        receiver,
                                                                                 BigNumberFloat amount,
                                                                                 ActorId        token) {
-    auto actor = account_controller_->currentWallet();
+    auto actor = account_controller_->current_wallet();
 
     Transaction tx;
     tx.set_sender(actor.id());
@@ -736,7 +736,7 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
         return file.readAll().toStdString();
     }
 
-    const auto& current_profile = account_controller_->currentProfile();
+    const auto& current_profile = account_controller_->current_profile();
 
     auto imported_user = ImportedUser { .version       = extrachain_version,
                                         .date          = Utils::current_date_ms(),
@@ -864,10 +864,10 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_
                                                                                      BigNumberFloat amount,
                                                                                      ActorId        token) {
     if (sender == ActorId()) { // TODO: remove hack
-        sender = account_controller_->currentWallet().id();
+        sender = account_controller_->current_wallet().id();
     }
 
-    auto actor = account_controller_->currentProfile().get_actor(sender);
+    auto actor = account_controller_->current_profile().get_actor(sender);
     if (!actor.has_value()) {
         return std::unexpected(TransactionError::NoSender);
     }
