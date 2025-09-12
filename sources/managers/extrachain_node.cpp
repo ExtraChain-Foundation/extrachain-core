@@ -82,7 +82,7 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
 
 ExtraChainNode::ExtraChainNode(bool isClientApp, bool allowRunRestApiServer, bool isRaccoonCheck)
     : is_client_application_(isClientApp)
-    , isRaccoon(isRaccoonCheck) {
+    , is_raccoon_(isRaccoonCheck) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -129,10 +129,10 @@ void ExtraChainNode::process() {
 
     init_public_ip_and_country_ = network_manager_->getPublicIPAndCountry();
 
-    connectSignals();
+    connect_signals();
 
     node_enabled = true;
-    emit NodeInitialised();
+    emit nodeInitialised();
 }
 
 ExtraChainNode::~ExtraChainNode() {
@@ -592,6 +592,10 @@ void ExtraChainNode::start() {
     });
 }
 
+bool ExtraChainNode::is_client_application() {
+    return is_client_application_;
+}
+
 Dag* ExtraChainNode::dag() {
     return dag_;
 }
@@ -641,7 +645,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
     return tx;
 }
 
-TokenManager* ExtraChainNode::tokenManager() const {
+TokenManager* ExtraChainNode::token_manager() const {
     return token_manager_;
 }
 
@@ -920,7 +924,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::send_transaction(co
     return transaction_result;
 }
 
-std::string ExtraChainNode::transactionErrorDescription(const TransactionError& error) {
+std::string ExtraChainNode::transaction_error_description(const TransactionError& error) {
     switch (error) {
     case TransactionError::Unknown:
         return "Unknown error";
@@ -1007,11 +1011,11 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
-void ExtraChainNode::connectActorIndex() {
+void ExtraChainNode::connect_actor_index() {
     // connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
 }
 
-void ExtraChainNode::dfsConnection() {
+void ExtraChainNode::connect_dfs() {
     // init dfs for user
     // connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
     // connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
@@ -1024,15 +1028,15 @@ void ExtraChainNode::dfsConnection() {
     //    &DfsNetworkManager::appendSocket);
 }
 
-void ExtraChainNode::connectSignals() {
+void ExtraChainNode::connect_signals() {
     connect(this, &ExtraChainNode::ready, [this]() {
         // dag_->start_control(Force::None);
         eInfo("Your node successfully started");
     });
 
     //    connectAccountController();
-    connectActorIndex();
-    dfsConnection();
+    connect_actor_index();
+    connect_dfs();
 
     connect(network_manager_,
             &NetworkManager::newSocketActivatedWithParams,
@@ -1156,11 +1160,11 @@ void ExtraChainNode::logout() {
     QCoreApplication::exit(0);
 }
 
-void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
+void ExtraChainNode::init_vpn(VpnFunctionClearType vpnClearFunc) {
     vpn_clear_func_ = vpnClearFunc;
 }
 
-std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
+std::pair<QString, QString> ExtraChainNode::init_public_ip_and_country() const {
     return init_public_ip_and_country_;
 }
 

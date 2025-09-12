@@ -81,7 +81,7 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     return;
 #endif
 
-    if (node->getInitPublicIPAndCountry().first.isEmpty()) {
+    if (node->init_public_ip_and_country().first.isEmpty()) {
         node->init_public_ip_and_country_ = { QString::fromStdString(public_ip_), "Security" };
     }
 }
@@ -152,7 +152,7 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
-    if (!node->isClientApp())
+    if (!node->is_client_application())
         return;
 
     connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
@@ -281,7 +281,16 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             [&](const std::set<SocketService::SocketPair> &connections) {
                 // eLog("shareConnections: {}", connections);
 
-                auto init_ip = node->getInitPublicIPAndCountry().first;
+                auto init_ip = node->init_public_ip_and_country().first;
+
+                /*
+                // for tests
+                std::set<std::string> ips;
+                for (const auto &pair : connections) {
+                    ips.insert(pair.ip);
+                }
+                eLog("{}", ips);
+                */
 
                 if (active_connections_count() >= Network::maxConnections) {
                     eLog("shareConnections ignored by max connections limit");
@@ -1077,7 +1086,7 @@ void NetworkManager::message_received(const std::string &message,
             return;
         }
 
-        if (node->isRaccoon) {
+        if (node->is_raccoon_) {
             emit customMessageReceived(package_data, custom_deserialize_result.value());
         } else {
             sendBrodcastMessageFurther(package_data);

@@ -22,6 +22,7 @@
 #include <memory>
 #include <functional>
 #include <expected>
+#include <atomic>
 
 #include <QCoreApplication>
 #include <QMap>
@@ -38,10 +39,6 @@
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 #include "chain/dag.h"
-
-#include <atomic>
-
-extern std::atomic<bool> node_enabled;
 
 class DfsController;
 class ActorIndex;
@@ -66,7 +63,6 @@ enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
-// class RestApiServerManager;
 
 enum class ImportProfileError {
     DataEmpty,
@@ -95,6 +91,8 @@ struct SubscriptionRow {
     std::string   transaction_hash;
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
+
+extern std::atomic<bool> node_enabled;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
@@ -152,30 +150,27 @@ public: // TODO
 public:
     ~ExtraChainNode();
 
-    bool          create_new_network(const std::string& login, const std::string& password);
-    bool          create_new_dag();
-    bool          create_usernames_vector();
-    bool          create_chat_templates();
-    bool          create_subscription_template();
-    bool          create_token_template();
-    bool          create_token_vector();
-    bool          create_renames_template();
+    bool create_new_network(const std::string& login, const std::string& password);
+    bool create_new_dag();
+    bool create_usernames_vector();
+    bool create_chat_templates();
+    bool create_subscription_template();
+    bool create_token_template();
+    bool create_token_vector();
+    bool create_renames_template();
+    //
     DfsFileStatus create_renames_vector();
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
-
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
 
     // not only for the one
     bool create_subscription_vector(const std::string& file_name);
-
     void start();
+    bool is_client_application();
+    ;
 
-    bool isClientApp() {
-        return is_client_application_;
-    };
-
-    std::pair<QString, QString> getInitPublicIPAndCountry() const;
+    std::pair<QString, QString> init_public_ip_and_country() const;
 
     Dag*               dag();
     NetworkManager*    network();
@@ -211,7 +206,7 @@ public:
     std::expected<Transaction, TransactionError> send_transaction(const Transaction&       transaction,
                                                                   const Actor<KeyPrivate>& signer);
 
-    std::string transactionErrorDescription(const TransactionError& error);
+    std::string transaction_error_description(const TransactionError& error);
 
     std::expected<std::string, ImportError>        export_profile();
     std::expected<std::string, ImportProfileError> import_profile(const std::string& data,
@@ -228,9 +223,9 @@ public:
     std::string generate_network_identifier();
     std::string network_identifier();
 
-    void          InitVPN(VpnFunctionClearType vpnClearFun);
-    TokenManager* tokenManager() const;
-    bool          isRaccoon;
+    void          init_vpn(VpnFunctionClearType vpnClearFun);
+    TokenManager* token_manager() const;
+    bool          is_raccoon_;
 
     ChatManager* chat_manager();
 
@@ -249,9 +244,9 @@ private:
      * @brief Connect signals between NetworkManager and
      */
     //    void connectAccountController();
-    void connectActorIndex();
-    void dfsConnection();
-    void connectSignals();
+    void connect_actor_index();
+    void connect_dfs();
+    void connect_signals();
     //    void dfsConnection();
     /**
      * @brief Creates folders for work, if they not exist
@@ -259,11 +254,10 @@ private:
     void prepare_folders();
 
 signals:
-    void InitNode();
+    void initNode();
     void finished();
-    void NodeInitialised();
+    void nodeInitialised();
     void ready();
-    void coinResponse(ActorId receiver, BigNumberFloat amount, ActorId plsr);
     void pushNotification(QString actorId, Notification notification);
     void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
     void vpnDisconnect();
