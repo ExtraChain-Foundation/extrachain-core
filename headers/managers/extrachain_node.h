@@ -98,9 +98,7 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent,
-                          bool     is_client_application           = false,
-                          bool     is_custom_app = false);
+    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false);
 
     ~ExtraChainNodeWrapper();
 
@@ -167,7 +165,6 @@ public:
     bool create_subscription_vector(const std::string& file_name);
     void start();
     bool is_client_application();
-    ;
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 
