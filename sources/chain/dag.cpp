@@ -583,7 +583,7 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         }
     }
 
-    // eTemp("[Dag] Write control to {}", section_id);
+    eTemp("[Dag] Write control to {}", section_id);
     section->control = hash;
     auto res         = this->write_section(section.value());
     if (!res.has_value()) {
@@ -2112,9 +2112,9 @@ BigNumberFloat Dag::sum_all_rewards() {
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     int j  = 0;
     int jj = 0;
-    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
-    //       from < 0 ? current_section_ : from,
-    //       current_section_);
+    eTemp("[Dag] find_last_control: search from {}, current section: {}",
+          from < 0 ? current_section_ : from,
+          current_section_);
     // emit checking local?
 
     if (disable_break) {
@@ -2392,7 +2392,7 @@ void Dag::start_control(Force force, Force qt_signals) {
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);
