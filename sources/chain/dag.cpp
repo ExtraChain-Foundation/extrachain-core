@@ -1424,7 +1424,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 }
 
 #ifdef IS_R // only for clients for first correction and integration
-                // emit node->dagSyncFinish();
+            // emit node->dagSyncFinish();
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -2230,7 +2230,7 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
 
     if (start != BigNumber(0)) {
         last_hash = Utils::calculate_hash(last_hash + interval_hash.value());
-        // eTemp("----- {},  {}", last_hash, interval_hash.value());
+        eTemp("----- {},  {}", last_hash, interval_hash.value());
     } else {
         last_hash = interval_hash.value();
     }
@@ -2363,13 +2363,13 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         if (is_empty) {
             auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
             section_hashs += hash;
-            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+            eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
             continue;
         }
 
         auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
         section_hashs += hash;
-        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+        eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
     }
 
     return Utils::calculate_hash(section_hashs);
