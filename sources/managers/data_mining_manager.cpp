@@ -76,7 +76,7 @@ void DataMiningManager::requestCoinReward() {
 #endif
 
     const auto actor      = node->account_controller()->system_actor();
-    auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+    auto       totalBytes = node->network()->calculate_traffic()->totalBytes();
     auto       amount     = calculate_reward_amount();
 
     // eLog("[Reward] Request: Actor: {}, Dfs size: {}, Reward: {}, Traffic sent/received: {}/{}, Blocks: {}",
@@ -142,7 +142,7 @@ void DataMiningManager::requestCoinReward() {
 BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
     // node->dfs()->refresh_calculate();
-    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+    const auto &totalBytes = node->network()->calculate_traffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",

@@ -54,7 +54,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
                                                                       const BigNumberFloat &token_count,
                                                                       const std::string    &color,
                                                                       const std::string    &predefine_token_id) {
-    if (!node->network()->isActiveConnectionExists()) {
+    if (!node->network()->is_active_connection_exists()) {
         eLog("[TokenManager] No connections");
         return std::unexpected(CreateTokenError::NoConnections);
     }

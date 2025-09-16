@@ -124,7 +124,7 @@ void ExtraChainNode::process() {
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
     timer_info_->start(10000);
 
-    init_public_ip_and_country_ = network_manager_->getPublicIPAndCountry();
+    init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
 
     connect_signals();
 
@@ -1016,7 +1016,7 @@ void ExtraChainNode::connect_dfs() {
     // init dfs for user
     // connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
     // connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
-    connect(this, &ExtraChainNode::ready, network_manager_, &NetworkManager::startNetwork);
+    connect(this, &ExtraChainNode::ready, network_manager_, &NetworkManager::start_network);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
     // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);

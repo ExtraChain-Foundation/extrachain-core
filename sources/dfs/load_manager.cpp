@@ -352,7 +352,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 file_fragment.current_size          = chunk_size;
                 file_fragment.fragment_number       = fragment_number;
                 file_fragment.full_amount_fragments = max_offsets;
-                if (!this->node->network()->isActiveConnectionExists()) {
+                if (!this->node->network()->is_active_connection_exists()) {
                     // eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file.
                     // owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id,
                     // file_link_fragment.file_link.file_id, offset);
