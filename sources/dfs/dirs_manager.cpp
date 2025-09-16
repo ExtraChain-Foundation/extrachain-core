@@ -225,9 +225,9 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        auto actors = node->actorIndex()->allActors();
+        auto actors = node->actor_index()->read_all_actors_ids();
 
-        auto network_id = node->actorIndex()->network_id();
+        auto network_id = node->actor_index()->network_id();
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
         std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
             return actor == network_id || actor == raccoon_id;

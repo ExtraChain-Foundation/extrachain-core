@@ -129,7 +129,7 @@ private slots:
         QDir::setCurrent("test-data");
         Utils::wipeDataFiles();
         node           = new ExtraChainNode;
-        bool isCreated = node->createNewNetwork("email", "password", "Token", "1000", "#ffffff");
+        bool isCreated = node->createNewNetwork("login", "password", "Token", "1000", "#ffffff");
         QVERIFY(isCreated);
     }
 

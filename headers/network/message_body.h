@@ -30,8 +30,6 @@ enum class MessageType {
     Custom     = 0,
     NewActor   = 1,
     Actor      = 2,
-    ActorCount = 3,
-    ActorAll   = 4,
     Actors     = 15,
     ActorsHash = 16,
 

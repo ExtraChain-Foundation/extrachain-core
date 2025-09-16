@@ -108,7 +108,7 @@ Dag::Dag(ExtraChainNode *node)
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
         auto network_id = section->transactions.begin()->sender();
-        node->actorIndex()->set_network_id(network_id);
+        node->actor_index()->set_network_id(network_id);
     }
 
     if (mode_ == DagMode::Light) {
@@ -319,7 +319,9 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     return {};
 }
 
-void Dag::network_transaction_result(const std::string hash, TransactionProveError result) {
+void Dag::network_transaction_result(const std::string     hash,
+                                     TransactionProveError result,
+                                     const Responder      &responder) {
     if (sended_transactions_.find(hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
@@ -358,7 +360,7 @@ void Dag::network_transaction_result(const std::string hash, TransactionProveErr
 }
 
 void Dag::check_self(const Transaction &transaction) {
-    const auto my_actors = node->accountController()->accounts_ids();
+    const auto my_actors = node->account_controller()->accounts_ids();
 
     for (const auto &my_actor : my_actors) {
         if (transaction.sender() == my_actor || transaction.receiver() == my_actor) {
@@ -681,7 +683,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
         if (mode_ == DagMode::Light && transaction.section() == BigNumber(0)) {
             auto network_id = transaction.sender();
-            node->actorIndex()->set_network_id(network_id);
+            node->actor_index()->set_network_id(network_id);
         }
 
         // Update first_saved_section_ if this is the first section or has a lower ID
@@ -806,7 +808,7 @@ std::optional<std::pair<BigNumber, BigNumber>> Dag::save_transactions(const std:
             cache_.check_and_update_cache_thread(current_section_);
             this->update_range();
             if (mode_ == DagMode::Light && section_id == BigNumber(0)) {
-                node->actorIndex()->set_network_id(first->sender());
+                node->actor_index()->set_network_id(first->sender());
                 all_saved &= write_section(section).has_value();
                 it = last;
                 continue;
@@ -898,7 +900,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Get sender and receiver IDs
     ActorId        targetSender   = tx.sender();
     ActorId        targetReceiver = tx.receiver();
-    const ActorId &mainActorId    = node->accountController()->system_actor().id();
+    const ActorId &mainActorId    = node->account_controller()->system_actor().id();
 
     // Check if transaction involves the node's own accounts
     // if (tx.type() != TransactionType::Repeatable) {
@@ -929,7 +931,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> senderActor;
-    senderActor = node->actorIndex()->getActor(targetSender);
+    senderActor = node->actor_index()->read_actor_old(targetSender);
     if (senderActor.empty()) {
         return TransactionProveError::SenderNotExists;
     }
@@ -954,7 +956,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     Actor<KeyPublic> receiverActor;
-    receiverActor = node->actorIndex()->getActor(targetReceiver);
+    receiverActor = node->actor_index()->read_actor_old(targetReceiver);
     if (receiverActor.empty()) {
         return TransactionProveError::ReceiverNotExists;
     }
@@ -1254,6 +1256,10 @@ void Dag::network_status_sync_request(const Responder &responder) {
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
+    if (responder.luminance_weight() < 2) {
+        return;
+    }
+
     if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
         eWarning("[Dag] Sync responce: not last info status");
         return;
@@ -1424,7 +1430,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 }
 
 #ifdef IS_R // only for clients for first correction and integration
-                // emit node->dagSyncFinish();
+            // emit node->dagSyncFinish();
                 this->process_cached_transactions(true);
                 cache_.reset_db();
                 auto responder_new = responder.with_new_message_id();
@@ -1576,6 +1582,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
     if (status_ != DagStatus::Ready) {
         eLog("[Dag] Hash interval check: ignore", hash_interval);
+        return;
+    }
+
+    if (responder.luminance_weight() < 2) {
         return;
     }
 
@@ -2466,6 +2476,10 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
 
 void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
                                           const Responder              &responder) {
+    if (mode_ == DagMode::Light) {
+        return;
+    }
+
     // TODO: to thread? with status generated controls
     if (!is_aligned20(control_request.from) || !is_aligned20(control_request.to)
         || control_request.to < control_request.from) {
@@ -2516,6 +2530,10 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
              control_response.from);
         search_control_ = false;
         emit node->dagSearchControlEnded();
+        return;
+    }
+
+    if (responder.luminance_weight() < 2) {
         return;
     }
 

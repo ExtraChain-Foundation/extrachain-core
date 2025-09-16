@@ -21,7 +21,7 @@
 
 #include <string>
 
-// TODO: make specific security
+// for debug mode
 
 class AutologinHash {
 public:
@@ -29,8 +29,8 @@ public:
     void               save(const std::string &key);
     const std::string &hash() const;
 
-    static bool isAvailable();
+    static bool is_available();
 
 private:
-    std::string m_hash;
+    std::string hash_;
 };

@@ -24,39 +24,43 @@
 #include "utils/exc_logs.h"
 
 bool AutologinHash::load() {
-    if (!QFile::exists(".auth_hash"))
+    if (!QFile::exists(".auth_hash")) {
         return false;
+    }
 
     QFile file(".auth_hash");
     if (!file.open(QFile::ReadOnly)) {
         eLog("[Autologin Hash] Can't read auth hash file");
         return false;
     }
-    m_hash = file.read(64);
+
+    hash_ = file.read(64);
     file.close();
-    return m_hash.size() == 64;
+    return hash_.size() == 64;
 }
 
 void AutologinHash::save(const std::string& hash) {
 #ifdef QT_DEBUG
-    auto  hashBytes = QByteArray::fromStdString(hash);
+    auto  hash_bytes = QByteArray::fromStdString(hash);
     QFile file(".auth_hash");
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hashBytes) > 0) {
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hash_bytes) > 0) {
         eFatal("[Autologin Hash] Can't write to auth hash file");
         return;
     }
-    file.write(hashBytes);
+
+    file.write(hash_bytes);
     file.close();
 
-    m_hash = hash;
+    hash_ = hash;
 #endif
 }
 
 const std::string& AutologinHash::hash() const {
-    return m_hash;
+    return hash_;
 }
 
-bool AutologinHash::isAvailable() {
+bool AutologinHash::is_available() {
     AutologinHash hash;
     return hash.load();
 }
