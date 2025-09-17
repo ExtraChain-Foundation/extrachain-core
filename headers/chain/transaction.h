@@ -345,5 +345,6 @@ public:
 struct TransactionInfo {
     TransactionAmountOperation operation = TransactionAmountOperation::Plus; ///< Balance operation type
     Transaction                transaction;                                  ///< The transaction data
+    std::string                hash;
 };
 BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (operation, transaction))

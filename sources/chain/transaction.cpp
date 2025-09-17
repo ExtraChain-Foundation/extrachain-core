@@ -99,8 +99,7 @@ std::string Transaction::calculate_hash() const {
         + receiver_.to_string() + token_.to_string() + amount_.to_string(NumeralBase::Hex)
         + std::to_string(timestamp_)
         + (meta_.has_value() ? meta_.value() : ""); // TODO: + amount.size() meta.size() + prev_hashs_.size()
-                                                    // TODO: meta max 255 in prove
-    // TODO: секция хеш должна учесть размер секции
+                                                    // TODO: meta max 255 in prove + section size?
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;

@@ -432,7 +432,7 @@ namespace detail {
 #endif
         }
 
-        // File output - всегда пишем всё с debug=true эффектом
+        // File output - always write
         if (should_log_file) {
             auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
 

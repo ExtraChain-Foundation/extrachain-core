@@ -2630,47 +2630,6 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
     }
 }
 
-/*
-void Dag::network_request_control_section(const DagControl &dag_control, const Responder &responder) {
-    if (dag_control.section_id % 20 != 0) {
-        return;
-    }
-
-    if (dag_control.section_id > current_section_) {
-        // sitation must save global sync with hashs stats
-        return;
-    }
-
-    if (dag_control.hash.empty()) {
-        // request interval control sync
-        request_sections(dag_control.section_id, dag_control.section_id + CONTROL_INTERVAL,
-                         responder); // ?
-    }
-
-    if (!dag_control.hash.empty()) {
-        auto control = this->read_control(dag_control.section_id);
-
-        if (control.value() == dag_control.hash) {
-            // 40: recheck. maybe 30?
-            if (current_section_ - 40 >= dag_control.section_id) { // 60 >= 50
-                // request sections?
-                // TODO: set last sync?
-                sync_last_index = current_section_;
-                request_sections(dag_control.section_id,
-                                 std::min(current_section_, dag_control.section_id + 100),
-                                 responder);
-            } else {
-                // okay
-            }
-        } else {
-            request_control_section(dag_control.section_id - CONTROL_INTERVAL, responder);
-        }
-    }
-
-    // що робити, якщо 1 повний і 2 ні, а не обидва? все одно?
-}
-*/
-
 std::set<std::string> Section::prev_hashs() const {
     std::set<std::string> hashs;
 
