@@ -57,7 +57,7 @@ BigNumberFloat::BigNumberFloat(BigNumberFloat &&other) noexcept {
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumber &other) {
-    this->m_data = cpp_dec_float_exc(other.m_data);
+    this->m_data = cpp_dec_float_exc(other.data());
     UPDATE_DEBUG()
 }
 
@@ -82,7 +82,7 @@ BigNumberFloat::BigNumberFloat(std::uint64_t number) {
 }
 
 BigNumberFloat BigNumberFloat::operator+(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data + bigNumberFloat.m_data);
+    return BigNumberFloat(m_data + bigNumberFloat.data());
 }
 
 BigNumberFloat BigNumberFloat::operator+(long long number) const {
@@ -90,7 +90,7 @@ BigNumberFloat BigNumberFloat::operator+(long long number) const {
 }
 
 BigNumberFloat BigNumberFloat::operator-(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data - bigNumberFloat.m_data);
+    return BigNumberFloat(m_data - bigNumberFloat.data());
 }
 
 BigNumberFloat BigNumberFloat::operator-(long long number) const {
@@ -98,7 +98,7 @@ BigNumberFloat BigNumberFloat::operator-(long long number) const {
 }
 
 BigNumberFloat BigNumberFloat::operator*(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data * bigNumberFloat.m_data);
+    return BigNumberFloat(m_data * bigNumberFloat.data());
 }
 
 BigNumberFloat BigNumberFloat::operator*(long long number) const {
@@ -110,7 +110,7 @@ BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) c
         eFatal("BigNumberFloat: Division by zero");
     }
 
-    return BigNumberFloat(m_data / bigNumberFloat.m_data);
+    return BigNumberFloat(m_data / bigNumberFloat.data());
 }
 
 BigNumberFloat BigNumberFloat::operator/(long long number) const {
@@ -118,7 +118,7 @@ BigNumberFloat BigNumberFloat::operator/(long long number) const {
 }
 
 BigNumberFloat &BigNumberFloat::operator=(const BigNumberFloat &bigNumberFloat) {
-    m_data = bigNumberFloat.m_data;
+    m_data = bigNumberFloat.data();
     UPDATE_DEBUG()
     return *this;
 }
@@ -166,7 +166,7 @@ BigNumberFloat &BigNumberFloat::operator+=(long long number) {
 }
 
 BigNumberFloat &BigNumberFloat::operator-=(const BigNumberFloat &bigNumberFloat) {
-    this->m_data -= bigNumberFloat.m_data;
+    this->m_data -= bigNumberFloat.data();
     UPDATE_DEBUG()
     return *this;
 }
