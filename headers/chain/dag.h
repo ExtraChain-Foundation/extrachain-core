@@ -147,8 +147,9 @@ struct HashInterval {
     SectionId   from;
     SectionId   to;
     std::string hash;
+    std::string cache_hash;
 };
-BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
+BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash, cache_hash))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -188,6 +189,7 @@ struct DagLastInfo {
     std::string   last_control_hash;
     std::uint64_t zero_date;
     DagStatus     status;
+    // int weight
 };
 BOOST_DESCRIBE_STRUCT(DagLastInfo,
                       (),
@@ -368,7 +370,9 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result, const Responder &responder);
+    void network_transaction_result(const std::string     hash,
+                                    TransactionProveError result,
+                                    const Responder      &responder);
 
     /**
      * @brief Process a section received from the network

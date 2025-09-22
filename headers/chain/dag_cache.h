@@ -124,7 +124,7 @@ public:
      * @param token_id The token id
      * @param balance The balance to set
      */
-    void write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
+    bool write_cached_balance(const ActorId& actor_id, const TokenId& token_id, const BigNumberFloat& balance);
 
     /**
      * @brief Calculate balances for actors using cache

@@ -179,6 +179,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
+    bool need_commit = false;
 
     // Write each balance to the database
     for (const auto& [key, balance] : balances) {
@@ -193,12 +194,20 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         DbRow data = { { "actor_id", actor_id.to_string() },
                        { "token_id", token_id.to_string() },
                        { "balance", balance.to_string() } };
-        cache_db_->replace("balance_cache", data);
+
+        bool res = cache_db_->replace("balance_cache", data);
+        if (res) {
+            need_commit = true;
+        }
         // }
     }
 
     // Commit transaction
-    cache_db_->query("COMMIT");
+    if (need_commit) {
+        cache_db_->query("COMMIT");
+    } else {
+        cache_db_->query("ROLLBACK");
+    }
 
     // Update cached section if provided
     if (section_id.has_value()) {
@@ -232,12 +241,12 @@ BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const Toke
     return BigNumberFloat(0);
 }
 
-void DagCache::write_cached_balance(const ActorId&        actor_id,
+bool DagCache::write_cached_balance(const ActorId&        actor_id,
                                     const TokenId&        token_id,
                                     const BigNumberFloat& balance) {
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balance");
-        return;
+        return false;
     }
 
     DbRow data = { { "actor_id", actor_id.to_string() },
@@ -249,7 +258,7 @@ void DagCache::write_cached_balance(const ActorId&        actor_id,
     //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
     //     db_->delete_row("balance_cache", where);
     // } else {
-    cache_db_->replace("balance_cache", data);
+    return cache_db_->replace("balance_cache", data);
     // }
 }
 
@@ -440,7 +449,12 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                     return;
                 }
 
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                auto hash_size = cache_db_->hash_size("actor_id");
+
+                auto hash_interval = HashInterval { .from       = res.from,
+                                                    .to         = res.to,
+                                                    .hash       = last_hash.value(),
+                                                    .cache_hash = hash_size.first };
                 eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
                 // eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
@@ -544,18 +558,29 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     }
 
     // Store non-zero balances in the database
+    bool need_commit = false;
+
     for (const auto& pair : actor_token_set) {
         auto it = balances.find(pair);
         if (it != balances.end() && it->second != BigNumberFloat(0)) {
-            write_cached_balance(pair.first, pair.second, it->second);
+            bool res = write_cached_balance(pair.first, pair.second, it->second);
+
+            if (res) {
+                need_commit = true;
+            }
         }
     }
 
     // Commit transaction
-    cache_db_->query("COMMIT");
+    if (need_commit) {
+        cache_db_->query("COMMIT");
+    } else {
+        cache_db_->query("ROLLBACK");
+    }
+
     // Update cached section
     // cached_section_ = genesis_section;
-    set_section(genesis_section);
+    this->set_section(genesis_section);
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
     return { true, start_section };
