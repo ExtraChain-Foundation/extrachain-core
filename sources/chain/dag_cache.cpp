@@ -382,10 +382,10 @@ CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
     };
 
     // Update cache to safe section (genesis + lag)
-    auto [result, start_section] = update_to_genesis_section(safe_genesis_section,
-                                                             current_section,
-                                                             dag->first_saved_section(),
-                                                             read_section_callback);
+    auto [result, start_section] = this->update_to_genesis_section(safe_genesis_section,
+                                                                   current_section,
+                                                                   dag->first_saved_section(),
+                                                                   read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
@@ -546,7 +546,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Store non-zero balances in the database
     for (const auto& pair : actor_token_set) {
         auto it = balances.find(pair);
-        if (it != balances.end() && it->second != BigNumberFloat(0)) {
+        if (it != balances.end() /*&& it->second != BigNumberFloat(0)*/) {
             write_cached_balance(pair.first, pair.second, it->second);
         }
     }
