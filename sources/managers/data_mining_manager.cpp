@@ -56,9 +56,9 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#if !defined(IS_RC) && !defined(RACCOON_CLIENT_CONSOLE)
-    return;
-#endif
+    // #if !defined(IS_RC) && !defined(RACCOON_CLIENT_CONSOLE)
+    //     return;
+    // #endif
 
     if (node->account_controller()->empty()) {
         return;
@@ -68,12 +68,12 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
-    if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
-        && koef_to_koef_ == BigNumberFloat(1)) {
-        return;
-    }
-#endif
+    // #if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
+    //     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
+    //         && koef_to_koef_ == BigNumberFloat(1)) {
+    //         return;
+    //     }
+    // #endif
 
     const auto actor      = node->account_controller()->system_actor();
     auto       totalBytes = node->network()->calculate_traffic()->totalBytes();
