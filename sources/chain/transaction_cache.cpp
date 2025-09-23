@@ -142,7 +142,14 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
             operation = TransactionAmountOperation::Minus;
         }
 
-        auto transaction_info = TransactionInfo { .operation = operation, .transaction = tx.value() };
+        std::string hash;
+        try {
+            hash = map.at("hash");
+        } catch (const std::out_of_range &e) {
+        }
+
+        auto transaction_info =
+            TransactionInfo { .operation = operation, .transaction = tx.value(), .hash = hash };
         transactions.push_back(transaction_info);
     }
 

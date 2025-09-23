@@ -210,7 +210,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 auto res = node->dfs()->make_vector(owner_id,
                                                     dir_row.file_id,
                                                     false,
-                                                    node->accountController()->system_actor().id());
+                                                    node->account_controller()->system_actor().id());
                 if (res.has_value()) {
                     auto& [dir_row, dfs_vector] = res.value();
                     if (row.has_value()) {
@@ -352,7 +352,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 file_fragment.current_size          = chunk_size;
                 file_fragment.fragment_number       = fragment_number;
                 file_fragment.full_amount_fragments = max_offsets;
-                if (!this->node->network()->isActiveConnectionExists()) {
+                if (!this->node->network()->is_active_connection_exists()) {
                     // eCritical("[Dfs] LoadManager::share_stored_file, no active connections. Cannot share file.
                     // owner_id: {}, file_id: {}, offset: {}", file_link_fragment.file_link.owner_id,
                     // file_link_fragment.file_link.file_id, offset);

@@ -54,7 +54,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
                                                                       const BigNumberFloat &token_count,
                                                                       const std::string    &color,
                                                                       const std::string    &predefine_token_id) {
-    if (!node->network()->isActiveConnectionExists()) {
+    if (!node->network()->is_active_connection_exists()) {
         eLog("[TokenManager] No connections");
         return std::unexpected(CreateTokenError::NoConnections);
     }
@@ -97,10 +97,10 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 
     Actor<KeyPrivate> token_actor;
     if (predefine_token_id.empty())
-        token_actor = node->accountController()->createService();
+        token_actor = node->account_controller()->create_service();
     else {
         auto temp_actor = token_actor.fromJson(QByteArray::fromStdString(predefine_token_id));
-        token_actor     = node->accountController()->createService({}, temp_actor);
+        token_actor     = node->account_controller()->create_service({}, temp_actor);
     }
 
     auto token_data = TokenData { .token_id = token_actor.id(),
@@ -112,7 +112,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 
     auto token_data_short = TokenDataShort { .name = token_name, .ticker = ticker, .color = color };
 
-    auto owner_actor = node->accountController()->currentProfile().get_actor(owner_id);
+    auto owner_actor = node->account_controller()->current_profile().get_actor(owner_id);
     if (!owner_actor.has_value()) {
         return std::unexpected(CreateTokenError::InvalidOwnerId);
     }

@@ -368,7 +368,7 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result);
+    void network_transaction_result(const std::string hash, TransactionProveError result, const Responder &responder);
 
     /**
      * @brief Process a section received from the network

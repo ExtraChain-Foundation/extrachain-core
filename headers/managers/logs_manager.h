@@ -27,6 +27,8 @@
 #include <QObject>
 #include <QString>
 
+// deprecated
+
 class EXTRACHAIN_EXPORT LogsManager : public QObject {
     Q_OBJECT
 

@@ -47,12 +47,12 @@ SeedProfile AccountController::create_profile(const std::string               &h
     main_actor.generate_from_seed(seed, 1, ActorType::User);
 
     auto profile = PrivateProfile::create(system_actor, main_actor, hash, node);
-    m_profiles.push_back(profile);
-    m_currentProfile = system_actor.id();
-    node->actorIndex()->store_new_actor(system_actor.to_public());
-    node->actorIndex()->store_new_actor(main_actor.to_public());
+    profiles_.push_back(profile);
+    current_profile_ = system_actor.id();
+    node->actor_index()->store_new_actor(system_actor.to_public());
+    node->actor_index()->store_new_actor(main_actor.to_public());
     insert_to_profile_set(system_actor.id());
-    autologinHash.save(hash); // TODO: add arg
+    autologin_hash.save(hash); // TODO: add arg
 
     SeedProfile profile_seed;
     profile_seed.set(seed);
@@ -69,7 +69,7 @@ SeedProfile AccountController::create_profile(const std::string               &h
     return profile_seed;
 }
 
-Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, const std::string &wallet_name) {
+Actor<KeyPrivate> AccountController::create_wallet(const ActorId &profileActor, const std::string &wallet_name) {
     Actor<KeyPrivate> actor;
 
     if (profile_type_ == ProfileType::Old) {
@@ -78,7 +78,7 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, c
         actor.generate_from_seed(profile_seed.seed(), profile_seed.actors().size(), ActorType::User);
     }
 
-    auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     //
     profile.add_wallet(actor, profile_type_ == ProfileType::Old);
 
@@ -86,20 +86,20 @@ Actor<KeyPrivate> AccountController::createWallet(const ActorId &profileActor, c
         profile.rename_wallet(actor.id(), wallet_name);
     }
 
-    node->actorIndex()->store_new_actor(actor.to_public());
+    node->actor_index()->store_new_actor(actor.to_public());
     return actor;
 }
 
-Actor<KeyPrivate> AccountController::createService(const ActorId                   &profileActor,
-                                                   std::optional<Actor<KeyPrivate>> predefined_actor) {
+Actor<KeyPrivate> AccountController::create_service(const ActorId                   &profileActor,
+                                                    std::optional<Actor<KeyPrivate>> predefined_actor) {
     Actor<KeyPrivate> actor;
     if (predefined_actor.has_value())
         actor = predefined_actor.value();
     else
         actor.create(ActorType::Service);
-    auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     profile.add_wallet(actor);
-    node->actorIndex()->store_new_actor(actor.to_public());
+    node->actor_index()->store_new_actor(actor.to_public());
     return actor;
 }
 
@@ -108,10 +108,10 @@ void AccountController::import_old_profile(const ImportedUser &imported_profile,
     Actor<KeyPrivate> actor   = profile.system();
 
     for (const auto &actor : profile.actors()) {
-        node->actorIndex()->save_actor(actor.to_public());
+        node->actor_index()->save_actor(actor.to_public());
     }
     for (const auto &actor : profile.imports()) {
-        node->actorIndex()->save_actor(actor.to_public());
+        node->actor_index()->save_actor(actor.to_public());
     }
 
     insert_to_profile_set(actor.id());
@@ -121,7 +121,7 @@ void AccountController::import_old_profile(const ImportedUser &imported_profile,
 bool AccountController::rename_wallet(const ActorId     &profileActor,
                                       const ActorId     &actorId,
                                       const std::string &walletName) {
-    auto &profile = getProfile(profileActor.is_zero() ? m_currentProfile : profileActor);
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     return profile.rename_wallet(actorId, walletName);
 }
 
@@ -130,7 +130,7 @@ std::expected<void, LoadError> AccountController::load(const std::string &hash) 
         return std::unexpected(LoadError::EmptyHash);
     }
 
-    auto profiles = profilesList();
+    auto profiles = profiles_list();
 
     if (profiles.empty()) {
         return std::unexpected(LoadError::NoProfiles);
@@ -191,15 +191,15 @@ bool AccountController::load_profile(const ActorId                &actor_id,
     if (profile.loaded()) {
         const auto &actors = profile.actors();
         for (auto &actor : actors) {
-            if (node->actorIndex()->getById(actor.id()).isEmpty()) {
-                node->actorIndex()->save_actor(actor.to_public());
+            if (node->actor_index()->read_by_id(actor.id()).isEmpty()) {
+                node->actor_index()->save_actor(actor.to_public());
             }
         }
 
-        m_profiles.push_back(profile);
-        m_currentProfile = profile.system().id();
-        node->start();            // TODO: remove
-        autologinHash.save(hash); // TODO: add arg
+        profiles_.push_back(profile);
+        current_profile_ = profile.system().id();
+        node->start();             // TODO: remove
+        autologin_hash.save(hash); // TODO: add arg
         return true;
     } else {
         auto try_new = SeedProfile::load(actor_id.to_string(), key_result.value());
@@ -214,10 +214,10 @@ bool AccountController::load_profile(const ActorId                &actor_id,
                 }
             }
 
-            m_profiles.push_back(profile);
-            m_currentProfile = try_new->actors()[0].id();
+            profiles_.push_back(profile);
+            current_profile_ = try_new->actors()[0].id();
             insert_to_profile_set(try_new->actors()[0].id());
-            autologinHash.save(hash); // TODO: add arg
+            autologin_hash.save(hash); // TODO: add arg
 
             this->profile_seed = try_new.value();
             profile_type_      = ProfileType::New;
@@ -230,7 +230,7 @@ bool AccountController::load_profile(const ActorId                &actor_id,
 }
 
 std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) {
-    auto              profiles = profilesList();
+    auto              profiles = profiles_list();
     std::set<ActorId> multiple_profiles;
 
     auto key_result = Cryptography::key_from_password(hash);
@@ -254,94 +254,96 @@ std::set<ActorId> AccountController::multiple_profiles(const std::string &hash) 
 }
 
 const Actor<KeyPrivate> &AccountController::system_actor() {
-    if (m_profiles.empty()) {
+    if (profiles_.empty()) {
         eFatal("[AccountController] No system actor");
     }
-    return currentProfile().system();
+
+    return current_profile().system();
 }
 
-PrivateProfile &AccountController::getProfile(const ActorId &actorId) {
-    for (auto &profile : m_profiles) {
+PrivateProfile &AccountController::profile(const ActorId &actorId) {
+    for (auto &profile : profiles_) {
         if (actorId == profile.system().id()) {
             return profile;
         }
     }
 
     eFatal("getProfile: Can't find actor");
-    return m_profiles.front();
+    return profiles_.front();
 }
 
-const PrivateProfile &AccountController::currentProfile() const {
-    if (m_currentProfile.is_zero())
+const PrivateProfile &AccountController::current_profile() const {
+    if (current_profile_.is_zero())
         eFatal("Incorrect current profile");
 
-    for (auto &profile : m_profiles) {
-        if (m_currentProfile == profile.system().id()) {
+    for (auto &profile : profiles_) {
+        if (current_profile_ == profile.system().id()) {
             return profile;
         }
     }
 
     eFatal("Can't find actor");
     QCoreApplication::exit(-123);
-    return m_profiles.front();
+
+    return profiles_.front();
 }
 
 int AccountController::count() const {
-    return m_profiles.size();
+    return profiles_.size();
 }
 
 bool AccountController::empty() const {
-    return m_profiles.empty();
+    return profiles_.empty();
 }
 
-void AccountController::changeCurrentProfile(const ActorId &actorId) {
-    if (!getProfile(actorId).actors().empty()) {
-        m_currentProfile = actorId.to_string();
+void AccountController::change_current_profile(const ActorId &actorId) {
+    if (!profile(actorId).actors().empty()) {
+        current_profile_ = actorId.to_string();
     }
 }
 
 const std::vector<Actor<KeyPrivate>> &AccountController::accounts() const {
-    return currentProfile().actors();
+    return current_profile().actors();
 }
 
 const std::vector<ActorId> AccountController::accounts_ids() const {
     std::vector<ActorId> ids;
-    for (int i = 0; i < currentProfile().actors().size(); i++) {
-        ids.push_back(currentProfile().actors()[i].id());
+    for (int i = 0; i < current_profile().actors().size(); i++) {
+        ids.push_back(current_profile().actors()[i].id());
     }
     return ids;
 }
 
-const Actor<KeyPrivate> &AccountController::currentWallet() const {
-    return currentProfile().current();
+const Actor<KeyPrivate> &AccountController::current_wallet() const {
+    return current_profile().current();
 }
 
 void AccountController::clear() {
-    m_profiles.clear();
-    m_currentProfile = ActorId();
+    profiles_.clear();
+    current_profile_ = ActorId();
     eLog("[AccountController] Cleared");
 }
 
-std::set<ActorId> AccountController::profilesList() {
+std::set<ActorId> AccountController::profiles_list() {
     QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
     if (!file.exists())
         return {};
 
     file.open(QFile::ReadOnly);
-    auto jsonBytes    = file.readAll();
-    auto profilesJson = QJsonDocument::fromJson(jsonBytes).array();
+    auto json_bytes    = file.readAll();
+    auto profiles_json = QJsonDocument::fromJson(json_bytes).array();
 
     std::set<ActorId> profiles;
 
-    for (auto actorId : profilesJson) {
-        profiles.insert(ActorId(actorId.toString().toStdString()));
+    for (auto actor_id : profiles_json) {
+        profiles.insert(ActorId(actor_id.toString().toStdString()));
     }
 
     return profiles;
 }
 
 void AccountController::insert_to_profile_set(const ActorId &actorId) {
-    auto profiles = profilesList();
+    auto profiles = profiles_list();
     profiles.insert(actorId);
     QJsonArray array;
     for (auto &actorId : profiles) {
@@ -371,7 +373,7 @@ std::string AccountController::seed_hex() {
     }
 
     std::string hex;
-    auto        hash = currentProfile().hash();
+    auto        hash = current_profile().hash();
     if (hash.empty()) {
         return "";
     }
@@ -445,7 +447,7 @@ void AccountController::dogenerate() {
     }
 
     for (const auto &actor : actors) {
-        getProfile(m_currentProfile).add_wallet(actor, false);
+        profile(current_profile_).add_wallet(actor, false);
     }
 
     emit this->dogenerated();

@@ -32,7 +32,7 @@ private:
 
 public:
     template <class Worker>
-    static QThread *addThread(Worker *worker, QThread *newThread = nullptr) {
+    static QThread *add_thread(Worker *worker, QThread *newThread = nullptr) {
         QThread *thread = newThread == nullptr ? new QThread() : newThread;
 
         QObject::connect(thread, &QThread::started, worker, &Worker::process);
@@ -54,7 +54,7 @@ public:
                 thread->deleteLater();
         });
 
-        if (isFirst) {
+        if (is_first) {
             eLog("[ThreadPool] Connected with qApp");
             QObject::connect(qApp, &QCoreApplication::aboutToQuit, []() {
                 eLog("[ThreadPool] Threads count: {}", threads.size());
@@ -67,7 +67,7 @@ public:
                 threads.clear();
             });
 
-            isFirst = false;
+            is_first = false;
         }
 
         // eLog("[ThreadPool] Move for {}", worker);
@@ -86,6 +86,6 @@ public:
     }
 
 private:
-    static bool                isFirst;
+    static bool                is_first;
     static std::set<QThread *> threads;
 };

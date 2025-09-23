@@ -55,14 +55,16 @@ class EXTRACHAIN_EXPORT ActorIndex : public QObject {
 private:
     ExtraChainNode *node;
 
-    std::uint64_t     records           = 0;
-    const std::string folderPath        = fmt::format("{}/", ChainConst::ACTORS_FOLDER);
-    int16_t           SECTION_NAME_SIZE = 2;
-    ActorId           network_id_;
+    const std::string folder_path_      = fmt::format("{}/", ChainConst::ACTORS_FOLDER);
+    const int16_t     SECTION_NAME_SIZE = 2;
 
-    ActorSynchronizer synch;
-    std::uint64_t     synch_count     = 0;
-    bool              sync_first_done = false;
+    std::uint64_t records_ = 0;
+    ActorId       network_id_;
+
+    ActorSynchronizer                       synch_;
+    std::uint64_t                           synch_count_     = 0;
+    bool                                    sync_first_done_ = false;
+    std::map<std::string, Actor<KeyPublic>> actors_todo_map_;
 
 public:
     /**
@@ -76,12 +78,13 @@ public:
 
 private:
     /**
-     * @brief buildFilePath
+     * @brief build_file_path
      * @param id
      * @return
      */
-    QString     buildFilePath(const ActorId &id) const;
-    std::string actorPath(const ActorId &id) const;
+    QString     build_file_path(const ActorId &id) const;
+    std::string build_actor_path(const ActorId &id) const;
+
     /**
      * @brief add
      * @param ActorId id actorId for add
@@ -89,10 +92,8 @@ private:
      * @return
      */
     std::expected<void, ActorSaveError> add(const ActorId &id, const QByteArray &data);
-    void                                sendGetActorMessage(const ActorId &actorId);
+    void                                send_get_actor_message(const ActorId &actorId);
     bool                                save_actor_index(const Actor<KeyPublic> &actor);
-
-    std::map<std::string, Actor<KeyPublic>> actors_todo_map_;
 
 public:
     ActorId network_id();
@@ -105,25 +106,25 @@ public:
     bool exists(const ActorId &actor_id);
 
     /**
-     * @brief Gets actor from local storage
+     * @brief Read actor from local storage
      * @param id - actor's id
      * @return Found actor, or empty actor (if not found)
      */
-    Actor<KeyPublic> getActor(const ActorId &id);
+    Actor<KeyPublic> read_actor_old(const ActorId &id);
 
-    std::expected<Actor<KeyPublic>, ActorIndexError> get_actor(const ActorId &id,
+    std::expected<Actor<KeyPublic>, ActorIndexError> read_actor(const ActorId &id,
                                                                ActorGetType   get_type = ActorGetType::Request);
 
     /**
-     * @brief getById
+     * @brief read_by_id
      * @param id
      * @return
      */
-    QByteArray getById(const ActorId &id) const;
+    QByteArray read_by_id(const ActorId &id) const;
 
-    std::size_t getRecords() const;
+    std::size_t records() const;
+    std::string folder_path() const;
     void        set_network_id(const ActorId &value);
-    std::string getFolderPath() const;
 
     /**
      * @brief Serializes an actor and make a file in fs.
@@ -131,11 +132,12 @@ public:
      * @return resultCode, 0 - actor is saved
      */
     std::expected<void, ActorSaveError> store_new_actor(const Actor<KeyPublic> &actor);
+
     std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actors();
-    std::vector<ActorId>                allActors();
-    void network_actors_all_response(const std::vector<ActorId> &actors, const Responder &responder);
+    std::vector<ActorId>                read_all_actors_ids();
+    bool                                is_prepare();
 
     void network_actors_request(const std::set<ActorId> &actors, const Responder &responder);
     void network_actors_response(const std::vector<Actor<KeyPublic>> &actors);
@@ -143,23 +145,15 @@ public:
     void send_system_actor(const Responder &responder);
 
     void network_actor_request(const ActorId &actorId, const Responder &responder);
-    void network_actors_all_request(const ActorId &ignoredActorId, const Responder &responder);
-    void getAllActors(ActorId id, bool isUser);
-    void getActorCount(const QByteArray &requestHash, const Responder &responder);
 
     void request_actors_hash(const Responder &responder);
     void network_actors_hash_request(std::uint64_t               count,
                                      const std::vector<uint8_t> &bits,
                                      const Responder            &responder);
 
-    bool is_prepare() {
-        return sync_first_done;
-    }
-
 signals:
     void newActorSaved(ActorId actor_id);
     void actorSaved(ActorId actor_id);
-
     void firstSyncStarted();
     void firstSyncEnded();
     void firstSyncProgress(int progress, int all);

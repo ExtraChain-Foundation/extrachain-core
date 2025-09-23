@@ -64,7 +64,7 @@ public:
      */
     void create(ActorType type) {
         static_assert(std::is_same<T, KeyPrivate>::value,
-                      "Сannot be created with a public key. Only private is supported");
+                      "Cannot be created with a public key. Only private is supported");
 
         this->type_ = type;
         this->key_.generate_random();
@@ -79,7 +79,7 @@ public:
 
     void generate_from_seed(const MasterSeed &seed, int index, ActorType type) {
         static_assert(std::is_same<T, KeyPrivate>::value,
-                      "Сannot be created with a public key. Only private is supported");
+                      "Cannot be created with a public key. Only private is supported");
 
         this->type_ = type;
         this->key_.generate_seed(seed, index);
