@@ -223,12 +223,30 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             return false;
         }
 
+        //
+        auto sender_id      = request_reward.transaction.sender();
+        auto last_reward_it = last_reward_.find(sender_id);
+
+        if (last_reward_it != last_reward_.end()) {
+            auto current_time = Utils::current_date_ms();
+            auto time_diff_ms = current_time - last_reward_it->second;
+
+            if (time_diff_ms < 55000) {
+#ifndef IS_R
+                eLog("[Reward] Ignore from {}, diff: {} ms", sender_id, time_diff_ms);
+#endif
+                return false;
+            }
+        }
+
         // eLog("[Reward] Add request: {}", requestReward);
         auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
 
         if (!res1.has_value()) {
             return false;
         }
+
+        last_reward_[sender_id] = request_reward.transaction.timestamp(); // tils::current_date_ms();
 
         return true;
     } else {
