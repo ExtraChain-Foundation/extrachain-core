@@ -80,4 +80,6 @@ private:
     const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015", NumeralBase::Dec);
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
     ExtraChainNode      *node;
+
+    std::map<ActorId, std::uint64_t> last_reward_;
 };
