@@ -92,7 +92,7 @@ void DataMiningManager::requestCoinReward() {
     if (amount <= 0) {
         // eLog("[Reward] Can't send amount, because amount = 0");
         // return;
-        amount = BigNumberFloat("0.014", NumeralBase::Dec);
+        amount = BigNumberFloat("0.0011", NumeralBase::Dec);
     }
 
     if (amount > max_reward_) {
