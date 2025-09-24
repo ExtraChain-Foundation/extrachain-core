@@ -22,4 +22,4 @@
 #include <string>
 
 // Release: 0.23.2
-static const std::string extrachain_version = "0.23.2";
+static const std::string extrachain_version = "0.23.3";
