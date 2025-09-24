@@ -246,7 +246,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             return false;
         }
 
-        last_reward_[sender_id] = request_reward.transaction.timestamp(); // tils::current_date_ms();
+        last_reward_[sender_id] = request_reward.transaction.timestamp(); // Utils::current_date_ms();
 
         return true;
     } else {
