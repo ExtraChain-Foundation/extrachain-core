@@ -2438,6 +2438,8 @@ void Dag::clear_controls(const SectionId &from) {
             continue;
         }
 
+        // TODO: add log
+
         if (section->control.has_value()) {
             this->remove_control(i);
         }
@@ -2501,7 +2503,7 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
                 from = s;
             }
 
-            continue;
+            break;
         }
 
         control_response.controls.emplace_back(dag_control.value());
