@@ -20,6 +20,8 @@
 #include "chain/dag.h"
 
 #include "managers/extrachain_node.h"
+#include "managers/subscription_manager.h"
+#include "managers/token_manager.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
@@ -372,11 +374,11 @@ void Dag::check_self(const Transaction &transaction) {
             emit transaction_cache_.add(transaction);
 
             if (transaction.type() == TransactionType::InitContract) {
-                node->selfTxInitContractAdded(transaction);
+                node->token_manager()->final_token_creation(transaction);
             }
 
             if (transaction.type() == TransactionType::Repeatable) {
-                node->selfTxRepeatableAdded(transaction);
+                node->subscription_manager()->self_tx_repeatable_added(transaction);
             }
 
             // if (transaction.type() == TransactionType::Reward

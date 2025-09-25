@@ -36,9 +36,9 @@
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/token_manager.h"
+#include "managers/subscription_manager.h"
 #include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
-// #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
@@ -107,6 +107,7 @@ void ExtraChainNode::process() {
     dfs_                = new DfsController(this);
     dmm_                = new DataMiningManager(this);
     token_manager_      = new TokenManager(this);
+    subscription_manager_ = new SubscriptionManager(this);
     chat_manager_       = new ChatManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
@@ -258,25 +259,6 @@ bool ExtraChainNode::create_chat_templates() {
     return true;
 }
 
-bool ExtraChainNode::create_subscription_template() {
-    auto subscription_template = Dfs::CollectionTemplate::create("Subscription")
-                                     .value()
-                                     .add_fields({ Dfs::Field::Integer("type").not_null(),
-                                                   Dfs::Field::Integer("date_start").not_null(),
-                                                   Dfs::Field::Bool("auto_renew").not_null().between(0, 1),
-                                                   Dfs::Field::String("section_id").not_null(),
-                                                   Dfs::Field::String("transaction_hash").not_null() });
-
-    auto system_actor_id = account_controller()->system_actor().id();
-    auto template_res    = dfs()->store_template(system_actor_id, subscription_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create subscription template, because {}", template_res.error());
-        return false;
-    }
-
-    return true;
-}
-
 bool ExtraChainNode::create_token_template() {
     auto network_id      = actor_index_->network_id();
     auto tokens_template = Dfs::CollectionTemplate::create("TokensCache")
@@ -332,30 +314,6 @@ bool ExtraChainNode::create_token_vector() {
 
     auto res = dfs_->add_vector_row(store_res->actor_id, store_res->file_id, tokens_row);
     if (!res) {
-        return false;
-    }
-
-    return true;
-}
-
-bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
-    auto network_id = actor_index()->network_id();
-    if (network_id.is_zero()) {
-        return false;
-    }
-
-    auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Subscription");
-    if (!search_result.has_value()) {
-        return false;
-    }
-
-    auto system_actor_id = account_controller()->system_actor().id();
-    auto sub_res =
-        dfs()->store_vector(system_actor_id, system_actor_id, file_name, network_id, search_result->file_id);
-    if (!sub_res.has_value()) {
         return false;
     }
 
@@ -646,38 +604,12 @@ TokenManager* ExtraChainNode::token_manager() const {
     return token_manager_;
 }
 
-ChatManager* ExtraChainNode::chat_manager() {
-    return chat_manager_;
+SubscriptionManager* ExtraChainNode::subscription_manager() const {
+    return subscription_manager_;
 }
 
-bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
-                                      const std::string& file_id,
-                                      int                type,
-                                      bool               auto_renew,
-                                      const TokenId&     token_id) {
-    if (subscription_row_.has_value()) {
-        return false;
-    }
-
-    ActorId system_id = account_controller_->system_actor().id();
-
-    Transaction transaction;
-    transaction.set_sender(system_id);
-    transaction.set_receiver(owner_id);
-    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
-#ifdef QT_DEBUG
-    transaction.set_amount(BigNumberFloat("0.112", NumeralBase::Dec));
-#endif
-    transaction.set_token(token_id); // TODO: get token_id from json
-    transaction.set_meta(std::to_string(type));
-    transaction.set_type(TransactionType::Repeatable);
-    this->send_transaction(transaction, account_controller_->system_actor());
-    // transaction.setHash()
-
-    auto row =
-        SubscriptionRow { .owner_id = owner_id, .file_id = file_id, .type = type, .auto_renew = auto_renew };
-    subscription_row_ = row;
-    return true;
+ChatManager* ExtraChainNode::chat_manager() {
+    return chat_manager_;
 }
 
 void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
@@ -960,8 +892,6 @@ void ExtraChainNode::timer_info_print() {
     }
 }
 
-void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
-    token_manager_->final_token_creation(transaction);
 }
 
 std::string ExtraChainNode::generate_network_identifier() {

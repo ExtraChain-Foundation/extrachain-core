@@ -96,7 +96,8 @@ namespace Dfs {
         static const std::string TEMPLATE_COLLECTION_TEMPLATE = ":CollectionTemplate";
         static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
         static const std::string TEMPLATE_VECTOR              = ":Vector";
-        static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
+        static const std::string TEMPLATE_CONTRACT            = ":Contract";
+        static const std::string TEMPLATE_SUBSCRIPTION        = ":Subscription";
         static const std::string TEMPLATE_CHAT                = ":Chat";
     } // namespace Basic
 
@@ -524,9 +525,9 @@ namespace Dfs {
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const ActorId&     owner_id,
                                                                                      const std::string& folder,
                                                                                      const std::string& name);
-
             std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_hash(const ActorId&     owner_id,
                                                                           const std::string& hash);
+            bool is_file_ready(const ActorId& owner_id, const std::string& folder, const std::string& name);
 
             std::expected<std::string, Dfs::DfsError> last_file_id(const ActorId&     owner_id,
                                                                    const std::string& file_id);

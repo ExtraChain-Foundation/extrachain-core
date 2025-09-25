@@ -139,15 +139,17 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
         return;
     }
 
-    auto token_data       = cache_creation_.at(transaction.hash());
+    auto token_data = cache_creation_.at(transaction.hash());
+    cache_creation_.erase(transaction.hash());
+
     token_data.section_id = transaction.section();
     token_data.tx_hash    = transaction.hash();
     auto json             = Json::serialize(token_data);
 
-    auto res = node->dfs()->store_data_as_file(transaction.sender(),
-                                               transaction.sender(),
+    auto res = node->dfs()->store_data_as_file(transaction.receiver(),
+                                               transaction.receiver(),
                                                ByteArray(json).toBytes(),
-                                               Dfs::Basic::TEMPLATE_CONTRACTS,
+                                               Dfs::Basic::TEMPLATE_CONTRACT,
                                                "token-description.json",
                                                Dfs::DataSecurity::Public);
 
@@ -156,7 +158,29 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
         return;
     }
 
-    // TODO!: write to vector
+    add_to_token_cache(token_data);
+}
+
+bool TokenManager::is_token_cache_exists() {
+    return Dfs::Tables::ActorDirFile::is_file_ready(node->network_id(),
+                                                    Dfs::Basic::TEMPLATE_VECTOR,
+                                                    "TokensCache");
+}
+
+bool TokenManager::add_to_token_cache(const TokenData &token_data) {
+    auto dir_row = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(node->network_id(),
+                                                                             Dfs::Basic::TEMPLATE_VECTOR,
+                                                                             "TokensCache");
+
+    auto network_id = node->actorIndex()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto tokens_row = Utils::to_dbrow(token_data);
+
+    bool res = node->dfs()->add_vector_row(network_id, dir_row->file_id, tokens_row);
+    return res;
 }
 
 bool TokenManager::is_valid_token_name(const std::string &name) {

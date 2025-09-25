@@ -289,6 +289,17 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file
     return dirRow.value();
 }
 
+bool Dfs::Tables::ActorDirFile::is_file_ready(const ActorId     &owner_id,
+                                              const std::string &folder,
+                                              const std::string &name) {
+    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, folder, name);
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    return search_result->state != Dfs::FileState::Ready;
+}
+
 bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
                                             DirRow                  &dir_row,
                                             const Actor<KeyPrivate> &signer) {
