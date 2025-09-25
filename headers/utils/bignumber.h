@@ -57,9 +57,14 @@ public:
     explicit BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
     BigNumber(const BigNumber &other);
     BigNumber(BigNumber &&other) noexcept;
-    explicit BigNumber(int number);
-    explicit BigNumber(long long number);
     explicit BigNumber(const boost::multiprecision::cpp_int &number);
+
+    template <typename T>
+    explicit BigNumber(T number, typename std::enable_if<std::is_integral<T>::value>::type * = nullptr) {
+        this->m_data = boost::multiprecision::cpp_int(number);
+        UPDATE_DEBUG()
+    }
+
     ~BigNumber() = default;
 
 private:

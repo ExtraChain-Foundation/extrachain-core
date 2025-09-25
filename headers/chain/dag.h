@@ -368,7 +368,9 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result, const Responder &responder);
+    void network_transaction_result(const std::string     hash,
+                                    TransactionProveError result,
+                                    const Responder      &responder);
 
     /**
      * @brief Process a section received from the network
@@ -745,6 +747,8 @@ public:
     void start_control(Force force = Force::None, Force qt_signals = Force::Active);
 
     void clear_controls(const SectionId &from = SectionId(0));
+
+    void clear_controls_async(const SectionId &from = SectionId(0));
 
     /**
      * @brief request_control_section

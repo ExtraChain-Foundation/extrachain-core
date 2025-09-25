@@ -2431,7 +2431,7 @@ void Dag::start_control(Force force, Force qt_signals) {
 }
 
 void Dag::clear_controls(const SectionId &from) {
-    eLog("[Dag] Clear controls from {}...", from); // TODO: % 20?
+    eLog("[Dag] Clear controls from {}...", from);
     for (SectionId i = from; i <= current_section_; i++) {
         auto section = read_section(i);
         if (!section.has_value()) {
@@ -2441,6 +2441,34 @@ void Dag::clear_controls(const SectionId &from) {
         if (section->control.has_value()) {
             this->remove_control(i);
         }
+    }
+}
+
+void Dag::clear_controls_async(const SectionId &from) {
+    eLog("[Dag] Clear controls from {}...", from);
+
+    const size_t    num_threads = std::thread::hardware_concurrency();
+    const SectionId total       = current_section_ - from + 1;
+    const SectionId chunk       = total / num_threads;
+
+    std::vector<std::future<void>> futures;
+
+    for (size_t t = 0; t < num_threads; ++t) {
+        SectionId start = from + BigNumber(t) * chunk;
+        SectionId end   = (t == num_threads - 1) ? current_section_ : start + chunk - 1;
+
+        futures.emplace_back(std::async(std::launch::async, [this, start, end]() {
+            for (SectionId i = start; i <= end; i++) {
+                auto section = read_section(i);
+                if (section.has_value() && section->control.has_value()) {
+                    remove_control(i);
+                }
+            }
+        }));
+    }
+
+    for (auto &f : futures) {
+        f.wait();
     }
 }
 

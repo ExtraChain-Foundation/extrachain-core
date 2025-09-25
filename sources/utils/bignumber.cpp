@@ -70,16 +70,6 @@ BigNumber::BigNumber(const cpp_int &number) {
     UPDATE_DEBUG()
 }
 
-BigNumber::BigNumber(int number) {
-    this->m_data = cpp_int(number);
-    UPDATE_DEBUG()
-}
-
-BigNumber::BigNumber(long long number) {
-    this->m_data = cpp_int(number);
-    UPDATE_DEBUG()
-}
-
 BigNumber BigNumber::operator&(const BigNumber &value) {
     BigNumber da(m_data & value.data());
     return da;
