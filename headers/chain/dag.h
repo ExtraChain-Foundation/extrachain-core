@@ -359,7 +359,8 @@ public:
      * @param responder The responder to send the result to
      * @return std::expected<void, bool> Success or failure
      */
-    std::expected<void, bool> network_transaction(const Transaction &transaction, const Responder &responder);
+    std::expected<void, TransactionProveError> network_transaction(const Transaction &transaction,
+                                                                   const Responder   &responder);
 
     /**
      * @brief Process a transaction validation result from the network

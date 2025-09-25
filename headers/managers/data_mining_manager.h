@@ -81,5 +81,5 @@ private:
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
     ExtraChainNode      *node;
 
-    std::map<ActorId, std::uint64_t> last_reward_;
+    std::map<std::pair<ActorId, std::string>, std::uint64_t> last_reward_;
 };

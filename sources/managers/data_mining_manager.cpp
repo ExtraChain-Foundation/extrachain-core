@@ -119,7 +119,8 @@ void DataMiningManager::requestCoinReward() {
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored       = node->dag()->current_section(),
-                                                      .transaction        = tx_result.value() };
+                                                      .transaction        = tx_result.value(),
+                                                      .network_identifier = node->network_identifier() };
 
     node->dag()->add_transaction_sended(tx_result.value());
     // node->dag()->add_transaction_sended(tx_result2.value());
@@ -224,8 +225,8 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         //
-        auto sender_id      = request_reward.transaction.sender();
-        auto last_reward_it = last_reward_.find(sender_id);
+        auto sender = std::make_pair(request_reward.transaction.sender(), request_reward.network_identifier);
+        auto last_reward_it = last_reward_.find(sender);
 
         if (last_reward_it != last_reward_.end()) {
             auto current_time = Utils::current_date_ms();
@@ -243,10 +244,12 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
 
         if (!res1.has_value()) {
-            return false;
+            if (res1.error() != TransactionProveError::TooSectionDiff) {
+                return false;
+            }
         }
 
-        last_reward_[sender_id] = request_reward.transaction.timestamp(); // Utils::current_date_ms();
+        last_reward_[sender] = request_reward.transaction.timestamp();
 
         return true;
     } else {

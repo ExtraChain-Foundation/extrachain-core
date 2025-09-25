@@ -470,6 +470,7 @@ namespace Dfs {
             std::uint64_t   BytesReceived;
             BigNumber       BlocksStored;
             Transaction     transaction;
+            std::string     network_identifier;
         };
 
         BOOST_DESCRIBE_STRUCT(

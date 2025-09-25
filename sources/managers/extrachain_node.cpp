@@ -980,7 +980,7 @@ std::string ExtraChainNode::network_identifier() {
     auto settings = Utils::read_settings();
 
     if (!settings.network_identifier.has_value()) {
-        auto new_network_identifier = generate_network_identifier();
+        auto new_network_identifier = this->generate_network_identifier();
         return new_network_identifier;
     }
 
@@ -1114,7 +1114,7 @@ void ExtraChainNode::prepare_folders() {
     QDir().mkpath(QString::fromStdString(ChainConst::DAG_FOLDER));
     QDir().mkpath(QString::fromStdString(ChainConst::ACTORS_FOLDER));
 
-    generate_network_identifier();
+    this->generate_network_identifier();
 }
 
 void ExtraChainNode::calculateBlockCount() {

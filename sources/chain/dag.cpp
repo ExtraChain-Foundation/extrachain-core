@@ -235,31 +235,38 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     return tx;
 }
 
-std::expected<void, bool> Dag::network_transaction(const Transaction &transaction, const Responder &responder) {
+std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
+                                                                    const Responder   &responder) {
     if (status_ != DagStatus::Final) {
+        /*
         bool sync_timeout = false;
         if (timestamp_bigger_sync_start_ != 0) {
             sync_timeout = (Utils::current_date_ms() - timestamp_bigger_sync_start_) > 10000;
         }
+        */
 
-        if (!sync_timeout && status_ != DagStatus::Ready) {
+        if (/* !sync_timeout && */ status_ != DagStatus::Ready) {
             if (mode_ == DagMode::Light || light_requested_) {
-                add_to_cached_tx(transaction);
+                this->add_to_cached_tx(transaction);
             }
-
-            return {};
         }
 
+        return {};
+
+        /*
         if (sync_timeout && transaction.section() > current_section_ + 5) {
             if (!sync_timeout)
-                add_to_cached_tx(transaction);
-            set_status(DagStatus::Sync);
+                this->add_to_cached_tx(transaction);
+            this->set_status(DagStatus::Sync);
             sync_last_index_             = transaction.section();
             timestamp_bigger_sync_start_ = Utils::current_date_ms();
             eLog("[Dag] Section bigger: {}", sync_last_index_);
-            request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
+            this->request_sections(current_section_,
+                                   std::min(sync_last_index_, current_section_ + 100),
+                                   responder);
             return {};
         }
+        */
     }
 
     auto tx   = transaction;
@@ -294,15 +301,15 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     }
 
     if (res == TransactionProveError::NoError) {
-        auto save_result = save_transaction(transaction);
+        auto save_result = this->save_transaction(transaction);
         if (!save_result) {
             transaction_result.result = TransactionProveError::NoSectionAdded;
             // send response
-            return std::unexpected(false);
+            return std::unexpected(transaction_result.result);
         }
 
-        set_current_section(transaction.section());
-        update_range();
+        this->set_current_section(transaction.section());
+        this->update_range();
     }
 
     if (!responder.identifiers().empty()) {
@@ -313,10 +320,10 @@ std::expected<void, bool> Dag::network_transaction(const Transaction &transactio
     }
 
     if (res != TransactionProveError::NoError) {
-        return std::unexpected(false);
+        return std::unexpected(res);
     }
 
-    check_self(transaction);
+    this->check_self(transaction);
     // });
 
     return {};
