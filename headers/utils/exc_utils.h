@@ -224,11 +224,11 @@ namespace Network {
 
     static bool    isStartedServer = true;
     static quint16 maxConnections =
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-        3
-    #else
         4
+    #else
+        5
     #endif
 #else
         1000

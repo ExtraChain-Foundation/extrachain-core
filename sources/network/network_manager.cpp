@@ -1602,7 +1602,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagTransactionResult: {
-#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
+#ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
         if (!is_luminance_weight) {
             return;
         }
@@ -1648,7 +1648,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
+#ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
             if (!is_luminance_weight) {
                 return;
             }
@@ -2131,8 +2131,8 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-#ifdef IS_RC
-        request.setTransferTimeout(5000);
+#ifdef IS_APP_UI_CLIENT
+        request.setTransferTimeout(4000);
 #else
         request.setTransferTimeout(5000);
 #endif

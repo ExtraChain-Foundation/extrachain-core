@@ -140,6 +140,7 @@ struct SectionSync {
     SectionId               to;
     std::set<Transaction>   txs;
     std::vector<DagControl> controls; // need map?
+    SectionId               last_section;
 };
 BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
 
@@ -547,6 +548,7 @@ private:
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
+    bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 

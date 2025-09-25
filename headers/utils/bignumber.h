@@ -109,10 +109,13 @@ public:
 
 public:
     const boost::multiprecision::cpp_int &data() const;
-    bool                                  is_empty() const;
-    std::string                           to_string(NumeralBase numSystem = NumeralBase::Hex) const;
-    std::optional<int>                    to_int() const;
-    BigNumber                             pow(unsigned long number);
+
+    bool               is_empty() const;
+    std::string        to_string(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string        to_printable_string() const;
+    std::optional<int> to_int() const;
+
+    BigNumber pow(unsigned long number);
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
 

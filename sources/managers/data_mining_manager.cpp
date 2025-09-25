@@ -56,7 +56,7 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#if !defined(IS_RC) && !defined(RACCOON_CLIENT_CONSOLE)
+#if !defined(IS_APP_UI_CLIENT) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
 
@@ -232,7 +232,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             auto time_diff_ms = current_time - last_reward_it->second;
 
             if (time_diff_ms < 55000) {
-#ifndef IS_R
+#ifndef IS_APP_CLIENT
                 eLog("[Reward] Ignore from {}, diff: {} ms", sender_id, time_diff_ms);
 #endif
                 return false;

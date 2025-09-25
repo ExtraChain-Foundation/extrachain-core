@@ -247,6 +247,21 @@ std::string BigNumber::to_string(NumeralBase numSystem) const {
     }
 }
 
+std::string BigNumber::to_printable_string() const {
+    auto res = this->to_string(NumeralBase::Dec);
+    if (res.length() < 6)
+        return res;
+
+    std::string result;
+    int         counter = 0;
+    for (int i = res.length() - 1; i >= 0; i--) {
+        result = res[i] + result;
+        if (++counter % 3 == 0 && i != 0)
+            result = " " + result;
+    }
+    return result;
+}
+
 std::optional<int> BigNumber::to_int() const {
     if (m_data <= std::numeric_limits<int>::max() && m_data >= std::numeric_limits<int>::min()) {
         return static_cast<int>(m_data);

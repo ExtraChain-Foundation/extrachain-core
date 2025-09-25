@@ -507,7 +507,7 @@ void ExtraChainNode::start() {
     }
 
     // Version compatibility: 0.17.0 (temp)
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     QThreadPool::globalInstance()->start([this]() {
         auto system_id     = account_controller_->system_actor().id();
         auto main_id       = account_controller_->current_profile().main_id();
@@ -544,7 +544,7 @@ void ExtraChainNode::start() {
 #endif
 
     // Version compatibility: 0.19.2 (temp)
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     QThreadPool::globalInstance()->start([this]() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -1060,7 +1060,7 @@ void ExtraChainNode::connect_signals() {
                     return;
                 }
 
-#ifdef IS_R
+#ifdef IS_APP_CLIENT
                 if (ip == network_manager_->first_node()) {
                     dag_->start_check();
                 }
