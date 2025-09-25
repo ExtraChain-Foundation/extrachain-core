@@ -65,6 +65,13 @@ enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 
+enum class ImportProfileError {
+    DataEmpty,
+    LoginPasswordEmpty,
+    DecryptError,
+    IncorrectJson
+};
+
 enum class ImportProfileFileError {
     LoginPasswordEmpty,
     FileNotFound,
@@ -100,25 +107,23 @@ public:
 
 private:
     // common object for
-    DfsController*     dfs_                = nullptr;
-    ActorIndex*        actor_index_        = nullptr;
-    Dag*               dag_                = nullptr;
-    NetworkManager*    network_manager_    = nullptr;
-    AccountController* account_controller_ = nullptr;
-    DataMiningManager* dmm_                = nullptr;
-    TokenManager*      token_manager_      = nullptr;
+    DfsController*       dfs_                  = nullptr;
+    ActorIndex*          actor_index_          = nullptr;
+    Dag*                 dag_                  = nullptr;
+    NetworkManager*      network_manager_      = nullptr;
+    AccountController*   account_controller_   = nullptr;
+    DataMiningManager*   dmm_                  = nullptr;
+    TokenManager*        token_manager_        = nullptr;
     SubscriptionManager* subscription_manager_ = nullptr;
-    ChatManager*       chat_manager_       = nullptr;
-    QTimer*            timer_reward_       = nullptr;
-    QTimer*            timer_info_         = nullptr;
+    ChatManager*         chat_manager_         = nullptr;
+    QTimer*              timer_reward_         = nullptr;
+    QTimer*              timer_info_           = nullptr;
 
     bool                        started_               = false;
     bool                        is_client_application_ = false;
     std::vector<BigNumber>      resive_counts_;
     VpnFunctionClearType        vpn_clear_func_ = nullptr;
     std::pair<QString, QString> init_public_ip_and_country_;
-
-    std::optional<SubscriptionRow> subscription_row_;
 
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
@@ -142,7 +147,6 @@ public:
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
-
 
     void start();
     bool is_client_application();
@@ -200,10 +204,10 @@ public:
     std::string generate_network_identifier();
     std::string network_identifier();
 
-    void          init_vpn(VpnFunctionClearType vpnClearFun);
-    TokenManager* token_manager() const;
+    void                 init_vpn(VpnFunctionClearType vpnClearFun);
+    TokenManager*        token_manager() const;
     SubscriptionManager* subscription_manager() const;
-    bool          is_custom_app_;
+    bool                 is_custom_app_;
 
     ChatManager* chat_manager();
 
@@ -265,6 +269,10 @@ signals:
 private slots:
     void timer_reward_request();
     void timer_info_print();
+
+public:
+    void selfTxInitContractAdded(const Transaction& transaction);
+    void selfTxRepeatableAdded(const Transaction& transaction);
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);
