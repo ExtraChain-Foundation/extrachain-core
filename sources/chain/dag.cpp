@@ -1975,7 +1975,7 @@ void Dag::remove_sections(const SectionId &from) {
     }
 }
 
-void Dag::tx_list_log(const ActorId &actor_id) {
+void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {
     eLog("Start tx_list_log");
     Balances                 balances;
     std::vector<std::string> logs;
@@ -1995,6 +1995,10 @@ void Dag::tx_list_log(const ActorId &actor_id) {
 
         // Process each transaction
         for (const auto &tx : section->transactions) {
+            if (ignore_reward && tx.type() == TransactionType::Reward) {
+                continue;
+            }
+
             cache_.process_transaction(tx, balances);
 
             if (tx.sender() == ActorId(actor_id) || tx.receiver() == ActorId(actor_id)) {

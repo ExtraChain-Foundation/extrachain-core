@@ -234,7 +234,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 
             if (time_diff_ms < 55000) {
 #ifndef IS_APP_CLIENT
-                eLog("[Reward] Ignore from {}, diff: {} ms", sender_id, time_diff_ms);
+                eLog("[Reward] Ignore from {}, diff: {} ms", sender, time_diff_ms);
 #endif
                 return false;
             }

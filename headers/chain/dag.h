@@ -661,7 +661,7 @@ public:
      * @brief tx_list_log
      * @param actor_id
      */
-    void tx_list_log(const ActorId &actor_id);
+    void tx_list_log(const ActorId &actor_id, bool ignore_reward = false);
 
     /**
      * @brief cache_log
