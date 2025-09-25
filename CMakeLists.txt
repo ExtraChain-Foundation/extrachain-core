@@ -101,6 +101,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_magic.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_filter.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_commands.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_logs_extra.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/exc_msgpack_describe.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
@@ -200,10 +201,20 @@ target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/p
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 # target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
+set(bip3x_BUILD_SHARED_LIBS OFF CACHE BOOL "")
+set(bip3x_BUILD_JNI_BINDINGS OFF CACHE BOOL "")
+set(bip3x_BUILD_C_BINDINGS OFF CACHE BOOL "")
+set(bip3x_BUILD_TESTS OFF CACHE BOOL "")
+set(bip3x_USE_OPENSSL_RANDOM OFF CACHE BOOL "")
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
+
+target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x/include)
+
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json)
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x)
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)

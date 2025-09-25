@@ -94,7 +94,7 @@ void TransactionCache::adding(const Transaction &transaction) {
     db.close();
 
     if (res) {
-        emit node->selfTxAdded(transaction);
+        emit node->selfTxAdded(transaction, StatusTrx::StatusTrxType::Approved);
     }
 }
 
@@ -104,6 +104,8 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
     std::string adding_query;
     if (reward_hidden) {
         adding_query = fmt::format("AND type != '{}'", int(TransactionType::Conversion));
+        adding_query += " ";
+        adding_query += fmt::format("AND type != '{}'", int(TransactionType::Reward));
     }
 
     if (from_time == 0) {
@@ -140,7 +142,14 @@ void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidd
             operation = TransactionAmountOperation::Minus;
         }
 
-        auto transaction_info = TransactionInfo { .operation = operation, .transaction = tx.value() };
+        std::string hash;
+        try {
+            hash = map.at("hash");
+        } catch (const std::out_of_range &e) {
+        }
+
+        auto transaction_info =
+            TransactionInfo { .operation = operation, .transaction = tx.value(), .hash = hash };
         transactions.push_back(transaction_info);
     }
 

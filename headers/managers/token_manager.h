@@ -36,7 +36,7 @@ struct TokenData {
     BigNumberFloat             count;
     std::string                color;
     std::string                smart;
-    std::optional<BigNumber>   section_id;
+    std::optional<SectionId>   section_id;
     std::optional<std::string> tx_hash;
 
     bool operator==(const TokenData &other) const {

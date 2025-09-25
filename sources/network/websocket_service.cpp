@@ -19,9 +19,17 @@
 
 #include "network/websocket_service.h"
 
-WebSocketService::WebSocketService(QWebSocket *ws, ExtraChainNode *node, QObject *parent, const bool is_constant)
+WebSocketService::WebSocketService(QWebSocket     *ws,
+                                   ExtraChainNode *node,
+                                   QObject        *parent,
+                                   const bool      is_constant,
+                                   const bool      is_light)
     : SocketService(node, parent) {
     is_constant_ = is_constant;
+
+    if (is_light) {
+        mode_ = SocketMode::Light;
+    }
 
     if (ws == nullptr) {
         m_ws = new QWebSocket("ExtraChain");
@@ -290,7 +298,7 @@ void WebSocketService::processMessage(const QByteArray &message) {
     }
 
     if (!mess.isEmpty()) {
-        node->network()->messageReceived(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
+        node->network()->message_received(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
         eCritical("[WS] Message is empty after prepare");
         emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString());

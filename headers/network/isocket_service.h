@@ -29,6 +29,11 @@
 
 class ExtraChainNode;
 
+enum class SocketMode {
+    Full,
+    Light
+};
+
 class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
@@ -55,6 +60,7 @@ public:
         std::set<SocketPair> connections;
         bool                 is_available = false;
         bool                 is_constant  = false;
+        SocketMode           socket_mode;
         DfsMode              dfs_mode;
     };
 
@@ -80,6 +86,9 @@ public:
     void                      set_constant(bool isConstant);
     bool                      is_vpn() const;
     void                      set_vpn(bool isVPN);
+    SocketMode                mode() {
+        return mode_;
+    }
 
     std::uint64_t timestamp() const;
 
@@ -119,6 +128,7 @@ protected:
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
+    SocketMode       mode_             = SocketMode::Full;
     DfsMode          dfs_mode_socket_;
 
     QMutex                 queue_mutex_;
@@ -135,9 +145,10 @@ protected:
     bool       closed_ = false;
 };
 
-BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
-                      (),
-                      (network_id, version, identifier, socket_type, your_ip, connections, is_available))
+BOOST_DESCRIBE_STRUCT(
+    SocketService::HandshakeMessage,
+    (),
+    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 

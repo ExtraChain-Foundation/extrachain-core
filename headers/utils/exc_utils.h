@@ -73,16 +73,18 @@ enum class DfsMode {
     Light
 };
 
+enum class Force {
+    None,
+    Active
+};
+
 struct ExtraChainSettings {
     std::optional<std::string> first_node;
-    std::optional<DagMode>     blockchain_mode;
-    std::optional<bool>        blockchain_need_reset;
+    std::optional<DagMode>     dag_mode;
     std::optional<DfsMode>     dfs_mode;
     std::optional<std::string> network_identifier;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings,
-                      (),
-                      (first_node, blockchain_mode, blockchain_need_reset, dfs_mode, network_identifier))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, network_identifier))
 
 class ByteArray {
 public:
@@ -229,7 +231,7 @@ namespace Network {
         4
     #endif
 #else
-        100
+        1000
 #endif
 
         ;
@@ -361,6 +363,25 @@ CREATE TABLE IF NOT EXISTS balance_cache (
                                                       "hash         TEXT  NOT NULL UNIQUE, "
                                                       "signature    TEXT  NOT NULL "
                                                       ");";
+
+        static const std::string notificationTable = "Notifications";
+        static const std::string notificationTableCreate = "CREATE TABLE IF NOT EXISTS " + notificationTable
+                                                     + " ("
+                                                     "type            INT    NOT NULL, "
+                                                     "amount          TEXT   NOT NULL, "
+                                                     "sender          TEXT   NOT NULL, "
+                                                     "receiver        TEXT   NOT NULL, "
+                                                     "hash            TEXT   NOT NULL, "
+                                                     "timestamp       INT    NOT NULL, "
+                                                     "message         TEXT"
+                                                     ");";
+
+        static const std::string cacheStatusTransactionTable = "CacheStatusTransactions";
+        static const std::string cacheStatusTransactionTableCreate = "CREATE TABLE IF NOT EXISTS " + cacheStatusTransactionTable
+                                                           + " ("
+                                                           "hash              TEXT   NOT NULL, "
+                                                           "status            INT    NOT NULL"
+                                                           ");";
 
         // How many files one section folder will store
         static const BigNumber SECTION_SIZE = BigNumber(10000);
@@ -495,8 +516,13 @@ namespace Json {
 } // namespace Json
 
 namespace Utils {
+    EXTRACHAIN_EXPORT void prepare_extrachain();
+
     EXTRACHAIN_EXPORT std::string platformDelimeter();
     const static int              RECONNECT_INTERVAL = 5000;
+    // Notifications
+    static const std::string NOTIFIACATION_CACHE      = "tmp/NotificationCache.db";
+    static const std::string TRANSACTION_STATUS_CACHE = "tmp/TrxCache.db";
 
     // static std::uint64_t current_date_secs() {
     //     using namespace std::chrono;
@@ -595,6 +621,7 @@ namespace Utils {
     }
 
     EXTRACHAIN_EXPORT QString dataDir(const QString &newDir = "");
+    EXTRACHAIN_EXPORT qint64  diskAvailableMemory();
     EXTRACHAIN_EXPORT qint64  diskFreeMemory();
     EXTRACHAIN_EXPORT qint64  diskTotalMemory();
 
@@ -743,7 +770,15 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::expected<void, Utils::ContentError> write_file_content(const FsPath &path,
                                                                                   const char (&content)[N]);
 
-    std::string to_hex(std::vector<unsigned char> &data);
+    std::string to_hex_impl(const unsigned char *data, size_t size);
+
+    template <typename T>
+    std::string to_hex(const std::vector<T> &data) {
+        static_assert(std::is_same_v<T, unsigned char> || std::is_same_v<T, uint8_t>,
+                      "T must be unsigned char or uint8_t");
+        return to_hex_impl(reinterpret_cast<const unsigned char *>(data.data()), data.size());
+    }
+
     std::string to_hex(const std::string &data);
     std::string from_hex(const std::string &data);
 
@@ -830,6 +865,8 @@ namespace Utils {
 
     EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
     EXTRACHAIN_EXPORT bool is_valid_ip(const std::string_view ip);
+    EXTRACHAIN_EXPORT bool is_external_ip(const QString &ip);
+    EXTRACHAIN_EXPORT bool is_external_ip(const std::string &ip);
 
     EXTRACHAIN_EXPORT void benchmark(std::function<void(void)> func, int count = 1000);
 
@@ -898,6 +935,16 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT bool is_newer_version(const std::string &current, const std::string &latest);
 
+    enum class TimeParseError {
+        InvalidFormat,
+        EmptyString,
+        InvalidUnit,
+        InvalidNumber,
+        Overflow
+    };
+
+    // format: "2d5h3m30s"
+    EXTRACHAIN_EXPORT std::expected<std::uint64_t, TimeParseError> parse_time_string(const std::string &time_str);
 } // namespace Utils
 
 namespace ChainConst {
@@ -961,17 +1008,105 @@ namespace SearchEnum {
 
 struct EXTRACHAIN_EXPORT Notification {
     enum NotifyType {
-        TxToUser,
-        TxToMe,
-        ChatMsg,
-        ChatInvite,
-        NewPost,
-        NewEvent,
-        NewFollower
+        Deposit,
+        Withdrawal,
+        Reward,
+        Message,
+        // TxToUser,
+        // TxToMe,
+        // ChatMsg,
+        // ChatInvite,
+        // NewPost,
+        // NewEvent,
+        // NewFollower
+        Unknown = 50
     };
+
+    static NotifyType fromInt(int value) {
+        switch (value) {
+        case 0:
+            return Deposit;
+        case 1:
+            return Withdrawal;
+        case 2:
+            return Reward;
+        case 3:
+            return Message;
+        case 50:
+            break;
+        }
+        return Unknown;
+    }
+
+    static int toInt(NotifyType value) {
+        switch (value) {
+        case NotifyType::Deposit:
+            return 0;
+        case NotifyType::Withdrawal:
+            return 1;
+        case NotifyType::Reward:
+            return 2;
+        case Message:
+            return 3;
+            break;
+        case Unknown:
+            break;
+        }
+        return 50;
+    }
+
     std::uint64_t time;
     NotifyType    type;
     QByteArray    data = "";
+};
+
+struct EXTRACHAIN_EXPORT StatusTrx {
+    enum StatusTrxType {
+        None = -1,
+        Approved,
+        Processing,
+        Failed
+    };
+
+    static StatusTrxType fromInt(int value) {
+        switch (value) {
+        case 0:
+            return Approved;
+        case 1:
+            return Processing;
+        case 2:
+            return Failed;
+        }
+        return None;
+    }
+
+    static int toInt(StatusTrxType value) {
+        switch (value) {
+        case Approved:
+            return 0;
+        case Processing:
+            return 1;
+        case Failed:
+            return 2;
+        case None:
+            return -1;
+        }
+        return -1;
+    }
+
+    static std::string toString(int value) {
+        switch (value) {
+        case 0:
+            return "Approved";
+        case 1:
+            return "Processing";
+        case 2:
+            return "Failed";
+        case None:
+            return "-1";
+        }
+        return "";
+    }
 };
 
 #define TIMER_START(name)                                                                                         \

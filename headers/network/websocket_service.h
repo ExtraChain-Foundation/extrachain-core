@@ -34,7 +34,8 @@ public:
     explicit WebSocketService(QWebSocket     *ws,
                               ExtraChainNode *node,
                               QObject        *parent      = nullptr,
-                              const bool      is_constant = false);
+                              const bool      is_constant = false,
+                              const bool      is_light    = false);
     // WebSocketService(const WebSocketService &);
     ~WebSocketService();
 

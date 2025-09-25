@@ -91,7 +91,8 @@ enum class TransactionProveError {
     GenesisOnlyZeroSection,       ///< Genesis transaction must use section zero
     SectionTooBig,                ///< Section number exceeds limits
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
-    TooSectionDiff                ///< Section difference too large
+    TooSectionDiff,               ///< Section difference too large
+    BigReward
 };
 
 /**
@@ -107,7 +108,7 @@ private:
     BigNumberFloat             amount_;     ///< Transaction amount
     std::optional<std::string> meta_;       ///< Optional metadata payload
     ActorId                    token_;      ///< Token contract address
-    BigNumber                  section_;    ///< Chain section ID
+    SectionId                  section_;    ///< Chain section ID
     std::string                hash_;       ///< Transaction hash (Blake3)
     Signature                  signature_;  ///< Digital signature
     TransactionType            type_;       ///< Transaction type
@@ -168,7 +169,7 @@ public:
      * @brief Get chain section
      * @return Section number as BigNumber
      */
-    BigNumber section() const;
+    SectionId section() const;
 
     /**
      * @brief Get optional metadata
@@ -186,7 +187,7 @@ public:
      * @brief Get token contract address
      * @return Token actor ID
      */
-    ActorId token() const;
+    TokenId token() const;
 
     /**
      * @brief Get transaction type
@@ -344,5 +345,6 @@ public:
 struct TransactionInfo {
     TransactionAmountOperation operation = TransactionAmountOperation::Plus; ///< Balance operation type
     Transaction                transaction;                                  ///< The transaction data
+    std::string                hash;
 };
 BOOST_DESCRIBE_STRUCT(TransactionInfo, (), (operation, transaction))

@@ -22,6 +22,7 @@
 #include <memory>
 #include <functional>
 #include <expected>
+#include <atomic>
 
 #include <QCoreApplication>
 #include <QMap>
@@ -31,16 +32,13 @@
 #include "chain/actor_index.h"
 #include "chat/chat.h"
 #include "chat/message.h"
+#include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
 #include "chain/transaction.h"
 #include "chain/private_profile.h"
 #include "extrachain_global.h"
 #include "utils/vpn_types.h"
 #include "chain/dag.h"
-
-#include <atomic>
-
-static std::atomic<bool> node_enabled { true };
 
 class DfsController;
 class ActorIndex;
@@ -67,18 +65,23 @@ enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 
-enum class ImportProfileError {
-    DataEmpty,
+enum class ImportProfileFileError {
     LoginPasswordEmpty,
-    DecryptError,
-    IncorrectJson
+    FileNotFound,
+    FileReadError,
+    FileEmpty,
+    Base64DecodeError,
+    ImportError
 };
+
+extern std::atomic<bool> node_enabled;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent, bool isRaccoon = false);
+    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false);
+
     ~ExtraChainNodeWrapper();
 
     void            Init(bool makeAsync = false);
@@ -97,25 +100,32 @@ public:
 
 private:
     // common object for
-    DfsController*       dfs_                  = nullptr;
-    ActorIndex*          actor_index_          = nullptr;
-    Dag*                 dag_                  = nullptr;
-    NetworkManager*      network_manager_      = nullptr;
-    AccountController*   account_controller_   = nullptr;
-    DataMiningManager*   mining_manager_       = nullptr;
-    TokenManager*        token_manager_        = nullptr;
+    DfsController*     dfs_                = nullptr;
+    ActorIndex*        actor_index_        = nullptr;
+    Dag*               dag_                = nullptr;
+    NetworkManager*    network_manager_    = nullptr;
+    AccountController* account_controller_ = nullptr;
+    DataMiningManager* dmm_                = nullptr;
+    TokenManager*      token_manager_      = nullptr;
     SubscriptionManager* subscription_manager_ = nullptr;
-    ChatManager*         chat_manager_         = nullptr;
-    QTimer*              timer_all_actors_     = nullptr;
-    QTimer*              timer_reward_         = nullptr;
-    QTimer*              timer_info_           = nullptr;
+    ChatManager*       chat_manager_       = nullptr;
+    QTimer*            timer_reward_       = nullptr;
+    QTimer*            timer_info_         = nullptr;
 
-    bool                        started_       = false;
-    VpnFunctionClearType        m_vpnClearFunc = nullptr;
-    std::pair<QString, QString> m_initPublicIPAndCountry;
+    bool                        started_               = false;
+    bool                        is_client_application_ = false;
+    std::vector<BigNumber>      resive_counts_;
+    VpnFunctionClearType        vpn_clear_func_ = nullptr;
+    std::pair<QString, QString> init_public_ip_and_country_;
 
-public:
-    std::vector<Actor<KeyPublic>> actors_broadcast_;
+    std::optional<SubscriptionRow> subscription_row_;
+
+    std::string                              renames_file_id_waiting_;
+    std::unordered_map<ActorId, std::string> renames_todo_;
+
+public: // TODO
+    std::vector<Actor<KeyPublic>>                 actors_broadcast_;
+    std::set<std::pair<std::string, std::string>> identifiers_after_actors_sync_;
 
 public:
     ~ExtraChainNode();
@@ -126,17 +136,25 @@ public:
     bool create_chat_templates();
     bool create_token_template();
     bool create_token_vector();
+    bool create_renames_template();
+    //
+    DfsFileStatus create_renames_vector();
+
+    bool write_actor_rename(const ActorId& actor_id, const std::string& name);
+    std::vector<std::pair<ActorId, std::string>> read_actor_renames();
+
 
     void start();
+    bool is_client_application();
 
-    std::pair<QString, QString> getInitPublicIPAndCountry() const;
+    std::pair<QString, QString> init_public_ip_and_country() const;
 
     Dag*               dag();
     NetworkManager*    network();
-    AccountController* accountController() const;
-    ActorIndex*        actorIndex() const;
+    AccountController* account_controller() const;
+    ActorIndex*        actor_index() const;
     DfsController*     dfs() const;
-    DataMiningManager* mining_manager() const;
+    DataMiningManager* data_mining_manager() const;
 
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
@@ -146,31 +164,35 @@ public:
      * @brief Create new transaction from current user
      * @param tx
      */
-    std::expected<Transaction, TransactionError> createTransaction(Transaction tx);
+    std::expected<Transaction, TransactionError> create_transaction(Transaction tx);
 
     /**
-     * @brief Shortcut for another createTransaction method
+     * @brief Shortcut for another create_transaction method
      * @param receiver - receiver address
      * @param amount - coin count
      */
-    std::expected<Transaction, TransactionError> createTransaction(ActorId        receiver,
-                                                                   BigNumberFloat amount,
-                                                                   ActorId        token);
+    std::expected<Transaction, TransactionError> create_transaction(ActorId        receiver,
+                                                                    BigNumberFloat amount,
+                                                                    ActorId        token);
 
-    std::expected<Transaction, TransactionError> createTransactionFrom(ActorId        sender,
-                                                                       ActorId        receiver,
-                                                                       BigNumberFloat amount,
-                                                                       ActorId        token);
+    std::expected<Transaction, TransactionError> create_transaction_from(ActorId        sender,
+                                                                         ActorId        receiver,
+                                                                         BigNumberFloat amount,
+                                                                         ActorId        token);
 
     std::expected<Transaction, TransactionError> send_transaction(const Transaction&       transaction,
                                                                   const Actor<KeyPrivate>& signer);
 
-    std::string transactionErrorDescription(const TransactionError& error);
+    std::string transaction_error_description(const TransactionError& error);
 
     std::expected<std::string, ImportError>        export_profile();
     std::expected<std::string, ImportProfileError> import_profile(const std::string& data,
                                                                   const std::string& login,
                                                                   const std::string& password);
+
+    std::expected<std::string, ImportProfileFileError> import_profile_file(const std::string& file_path,
+                                                                           const std::string& login,
+                                                                           const std::string& password);
 
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
@@ -178,59 +200,69 @@ public:
     std::string generate_network_identifier();
     std::string network_identifier();
 
-    void                 InitVPN(VpnFunctionClearType vpnClearFun);
-    TokenManager*        token_manager() const;
+    void          init_vpn(VpnFunctionClearType vpnClearFun);
+    TokenManager* token_manager() const;
     SubscriptionManager* subscription_manager() const;
-    bool                 isRaccoon;
+    bool          is_custom_app_;
 
     ChatManager* chat_manager();
 
     VPNConfigStorage vpnConfigStorage;
 
 private:
-    ExtraChainNode(bool isRaccoon = false);
-
-    friend class ExtraChainNodeWrapper;
-    friend class NetworkManager;
+    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false);
 
     /**
      * @brief Connect signals between NetworkManager and
      */
     //    void connectAccountController();
-    void connectActorIndex();
-    void dfsConnection();
-    void connectSignals();
+    void connect_actor_index();
+    void connect_dfs();
+    void connect_signals();
     //    void dfsConnection();
     /**
      * @brief Creates folders for work, if they not exist
      */
-    void prepareFolders();
+    void prepare_folders();
 
 signals:
-    void InitNode();
+    void initNode();
     void finished();
-    void NodeInitialised();
+    void nodeInitialised();
     void ready();
     void pushNotification(QString actorId, Notification notification);
-    void readyInitLocalizationFiles();
     void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
     void vpnDisconnect();
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
-    void selfTxAdded(const Transaction& tx);
+    void selfTxAdded(const Transaction& tx, StatusTrx::StatusTrxType);
     // void subscriptionRemoved(ActorId owner_id, std::string file_id);
 
     void dagStatus(DagStatus);
-    void dagSyncStart(BigNumber, BigNumber);
-    void dagSyncProgress(BigNumber);
+    void dagSyncStart(SectionId, SectionId);
+    void dagSyncProgress(SectionId);
+    void dagSyncFinish();
+    void dagTimerStart(int ms = 15000);
+    void dagTimerStop();
+    void dagTxSended(SectionId section_id, std::string hash);
+    void dagTxApproved(SectionId section_id, std::string hash);
+    void dagTxNotApproved(SectionId section_id, std::string hash);
+
+    void dagControlStarted();
+    void dagControlEnded();
+    void dagControlProgress(SectionId);
+    void dagSearchControlStarted();
+    void dagSearchControlEnded();
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);
     void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
     void messageRemoved(ActorId owner_id, std::string file_id, std::string id);
 
+    void actorRenamedLoaded();
+    void actorRenamed(ActorId actor_id, std::string name);
+
 private slots:
-    void getAllActorsTimerCall();
     void timer_reward_request();
     void timer_info_print();
 
@@ -240,4 +272,11 @@ public slots:
     void calculateBlockCount();
     void cleanUp();
     void process();
+
+    void dagTimerStarting(int ms);
+    void dagTimerStoping();
+    void dagTimerTick();
+
+    friend class ExtraChainNodeWrapper;
+    friend class NetworkManager;
 };

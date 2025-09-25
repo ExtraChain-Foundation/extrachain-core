@@ -41,7 +41,6 @@ enum class PrivateProfileReadError {
 };
 
 struct ImportedUser {
-    ActorId                                  network;
     std::string                              version;
     uint64_t                                 date = 0;
     ActorId                                  system;
@@ -54,7 +53,7 @@ struct ImportedUser {
 };
 BOOST_DESCRIBE_STRUCT(ImportedUser,
                       (),
-                      (network, date, system, main, actors, imports, wallet_names, creation_date, modified_date))
+                      (date, system, main, actors, imports, wallet_names, creation_date, modified_date))
 
 class ExtraChainNode;
 
@@ -64,7 +63,8 @@ public:
     static PrivateProfile                                         create(const Actor<KeyPrivate> &system_actor,
                                                                          const Actor<KeyPrivate> &main_actor,
                                                                          const std::string       &hash,
-                                                                         ExtraChainNode          *node);
+                                                                         ExtraChainNode          *node,
+                                                                         bool                     is_save = true);
     static std::expected<PrivateProfile, PrivateProfileReadError> read(
         const ActorId                &actor_id,
         const std::string            &hash,
@@ -92,7 +92,7 @@ public:
     }
 
     bool change_current(const ActorId &actorId);
-    void add_wallet(const Actor<KeyPrivate> &actor);
+    void add_wallet(const Actor<KeyPrivate> &actor, bool is_save = true);
     bool rename_wallet(const ActorId &actor_id, const std::string &wallet_name);
 
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> get_actor(
@@ -135,4 +135,38 @@ private:
                          (),
                          (),
                          (system_, main_, actors_, imports_, wallet_names_, creation_date_, modified_date_))
+};
+
+class SeedProfile {
+public:
+    std::expected<void, bool>                                  save(const std::string &hash);
+    static std::expected<SeedProfile, PrivateProfileReadError> load(
+        const std::string                        &file_name,
+        const std::variant<std::string, KeyPass> &key_or_password);
+
+    void                           generate();
+    std::vector<Actor<KeyPrivate>> generate_other(ExtraChainNode *node);
+
+    MasterSeed seed() {
+        return seed_;
+    }
+
+    void set(MasterSeed seed) {
+        seed_ = seed;
+    }
+
+    const std::vector<Actor<KeyPrivate>> &actors() const {
+        return actors_;
+    }
+
+    const std::string &filename() const {
+        return filename_;
+    }
+
+    SeedProfile &operator=(const SeedProfile &) = default;
+
+private:
+    MasterSeed                     seed_ = MasterSeed();
+    std::string                    filename_;
+    std::vector<Actor<KeyPrivate>> actors_;
 };

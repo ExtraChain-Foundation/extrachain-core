@@ -43,16 +43,11 @@
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
-#ifdef Q_OS_LINUX
-    #include <signal.h>
-#endif
+std::atomic<bool> node_enabled { true };
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool isRaccoonCheck)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app)
     : QObject(parent)
-    , node(new ExtraChainNode(isRaccoonCheck)) {
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
-#endif
+    , node(new ExtraChainNode(is_client_application, is_custom_app)) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -61,6 +56,7 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     eLog("Set node_enabled to {}", node_enabled);
 
     if (m_thread) {
+        ThreadPoolBoost::terminate();
         m_thread->quit();
         m_thread->wait();
         node->deleteLater();
@@ -81,12 +77,10 @@ void ExtraChainNodeWrapper::Init(bool makeAsync) {
         node->process();
 }
 
-ExtraChainNode::ExtraChainNode(bool isRaccoonCheck)
-    : isRaccoon(isRaccoonCheck) {
+ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app)
+    : is_client_application_(is_client_application)
+    , is_custom_app_(is_custom_app) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
-#ifndef RACCOON_CLIENT_CONSOLE
-    Logger::instance().set_debug(true);
-#endif
 }
 
 void ExtraChainNode::process() {
@@ -102,23 +96,19 @@ void ExtraChainNode::process() {
         QCoreApplication::exit(-1000);
     }
 
-#ifdef Q_OS_LINUX
-    signal(SIGPIPE, SIG_IGN);
-#endif
-
     ThreadPoolBoost::instance_dfs(4);
     ThreadPoolBoost::instance(4);
 
-    prepareFolders();
-    actor_index_          = new ActorIndex(this);
-    account_controller_   = new AccountController(this);
-    network_manager_      = new NetworkManager(this);
-    dag_                  = new Dag(this);
-    dfs_                  = new DfsController(this);
-    mining_manager_       = new DataMiningManager(this);
-    token_manager_        = new TokenManager(this);
+    prepare_folders();
+    actor_index_        = new ActorIndex(this);
+    account_controller_ = new AccountController(this);
+    network_manager_    = new NetworkManager(this);
+    dag_                = new Dag(this);
+    dfs_                = new DfsController(this);
+    dmm_                = new DataMiningManager(this);
+    token_manager_      = new TokenManager(this);
     subscription_manager_ = new SubscriptionManager(this);
-    chat_manager_         = new ChatManager(this);
+    chat_manager_       = new ChatManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
@@ -126,10 +116,6 @@ void ExtraChainNode::process() {
 
     // auto thread = ThreadPool::addThread(m_blockchain);
     // ThreadPool::addThread(m_transactionManager, thread);
-
-    timer_all_actors_ = new QTimer(this);
-    connect(timer_all_actors_, &QTimer::timeout, this, &ExtraChainNode::getAllActorsTimerCall);
-    // timer_all_actors_->start(30000);
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
@@ -139,22 +125,22 @@ void ExtraChainNode::process() {
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
     timer_info_->start(10000);
 
-    m_initPublicIPAndCountry = network_manager_->getPublicIPAndCountry();
+    init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
 
-    connectSignals();
+    connect_signals();
 
     node_enabled = true;
-    emit NodeInitialised();
+    emit nodeInitialised();
 }
 
 ExtraChainNode::~ExtraChainNode() {
     node_enabled.store(false);
     eLog("ExtraChainNode::~ExtraChainNode");
-    if (m_vpnClearFunc) {
-        m_vpnClearFunc();
+    if (vpn_clear_func_) {
+        vpn_clear_func_();
     }
 
-    ThreadPoolBoost::terminate();
+    // ThreadPoolBoost::terminate();
 }
 
 void ExtraChainNode::cleanUp() {
@@ -167,18 +153,18 @@ void ExtraChainNode::cleanUp() {
 }
 
 bool ExtraChainNode::create_new_network(const std::string& login, const std::string& password) {
-    if (!AccountController::profilesList().empty()) {
+    if (!AccountController::profiles_list().empty()) {
         eLog("Cannot create a new network: existing profile data found");
         return false;
     }
 
     eLog("[Node] Create network with login {}", login);
     auto consoleHash = Utils::calculate_hash(login + password);
-    auto first       = account_controller_->createProfile(consoleHash, ActorType::DAppMaster);
-    actor_index_->set_network_id(first.id());
-    account_controller_->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
+    auto first       = account_controller_->create_profile(consoleHash, ActorType::DAppMaster);
+    actor_index_->set_network_id(first.actors().front().id());
+    // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
-    create_new_dag();
+    this->create_new_dag();
 
     eSuccess("[Node] New network created");
     return true;
@@ -196,7 +182,7 @@ bool ExtraChainNode::create_new_dag() {
     tx.set_receiver(actor.id());
     tx.set_type(TransactionType::Genesis);
 
-    auto prepared_tx = dag_->prepare_transaction(tx, actor);
+    auto prepared_tx = dag_->prepare_transaction(tx, actor, true);
     if (!prepared_tx.has_value()) {
         eCritical("[Node] Can't prepare transaction for new network");
         std::exit(-10);
@@ -209,6 +195,7 @@ bool ExtraChainNode::create_new_dag() {
         std::exit(-11);
     }
 
+    dag_->generate_hash();
     dag_->set_status(DagStatus::Ready);
 
     actor_index_->set_network_id(actor.id());
@@ -220,14 +207,14 @@ bool ExtraChainNode::create_usernames_vector() {
     auto vector_template =
         Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });
 
-    auto system_actor_id = accountController()->system_actor().id();
+    auto system_actor_id = account_controller()->system_actor().id();
     auto template_res    = dfs()->store_template(system_actor_id, vector_template);
     if (!template_res.has_value()) {
         eCritical("Can't create usernames, because {}", template_res.error());
         return false;
     }
 
-    auto first_id = actorIndex()->network_id();
+    auto first_id = actor_index()->network_id();
     auto vec_res  = dfs()->store_vector(system_actor_id,
                                        system_actor_id,
                                        "Usernames",
@@ -241,7 +228,7 @@ bool ExtraChainNode::create_usernames_vector() {
 }
 
 bool ExtraChainNode::create_chat_templates() {
-    auto system_actor_id   = accountController()->system_actor().id();
+    auto system_actor_id   = account_controller()->system_actor().id();
     auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
                                  .value()
                                  .use_id()
@@ -296,7 +283,7 @@ bool ExtraChainNode::create_token_template() {
 }
 
 bool ExtraChainNode::create_token_vector() {
-    auto network_id = actorIndex()->network_id();
+    auto network_id = actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
     }
@@ -333,6 +320,141 @@ bool ExtraChainNode::create_token_vector() {
     return true;
 }
 
+bool ExtraChainNode::create_renames_template() {
+    auto system_actor_id = account_controller()->system_actor().id();
+
+    auto chat_template = Dfs::CollectionTemplate::create("Renames").value().use_id().add_fields(
+        { Dfs::Field::Json("name").not_null() });
+
+    auto chat_result = dfs()->store_template(system_actor_id, chat_template);
+    if (!chat_result.has_value()) {
+        eCritical("Can't create renames template, because {}", chat_result.error());
+        return false;
+    }
+
+    eSuccess("Renames template created");
+    return true;
+}
+
+DfsFileStatus ExtraChainNode::create_renames_vector() {
+    auto row = this->dfs()->read_file_status("Renames");
+    if (row.has_value()) {
+        return DfsFileStatus::Existed;
+    }
+
+    const auto main_actor_id = this->account_controller()->current_profile().main_id();
+    auto       network_id    = this->network_id();
+    if (network_id.is_zero()) {
+        return DfsFileStatus::CantCreate;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "Renames");
+    if (!search_result.has_value()) {
+        return DfsFileStatus::CantCreate;
+    }
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_actor_id };
+    auto store_chat_res = this->dfs()->store_vector(main_actor_id,
+                                                    main_actor_id,
+                                                    "Renames",
+                                                    network_id,
+                                                    search_result->file_id,
+                                                    Dfs::DataSecurity::Self,
+                                                    security_actor);
+
+    if (!store_chat_res.has_value()) {
+        return DfsFileStatus::CantCreate;
+    }
+
+    return DfsFileStatus::Created;
+}
+
+bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {
+    if (this->account_controller()->profile_type() != ProfileType::New) {
+        bool res = this->account_controller()->rename_wallet(this->account_controller()->system_actor().id(),
+                                                             actor_id,
+                                                             name);
+        return res;
+    }
+
+    auto row = this->dfs()->read_file_status("Renames");
+    if (!row.has_value()) {
+        auto res = this->create_renames_vector();
+
+        if (res != DfsFileStatus::Created) {
+            return false;
+        } else {
+            return write_actor_rename(actor_id, name);
+        }
+    }
+
+    if (row->state != Dfs::FileState::Ready) {
+        this->dfs()->add_to_waiting_file(actor_id, row->file_id);
+        renames_file_id_waiting_ = row->file_id;
+    }
+
+    auto main_id = account_controller_->current_profile().main_id();
+
+    if (name.empty()) {
+        // TODO: add remove. Need to search for actor, scan and remove
+        // this->dfs()->remove_vector_row(main_id, row->file_id);
+        emit this->actorRenamed(actor_id, name);
+    } else {
+        auto  security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
+        DbRow db_row         = { { "id", actor_id.value() }, { "name", name } };
+
+        bool res = this->dfs()->add_vector_row(main_id, row->file_id, db_row, main_id, security_actor);
+        if (!res) {
+            return false;
+        }
+
+        emit this->actorRenamed(actor_id, name);
+    }
+
+    return true;
+}
+
+std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames() {
+    auto row     = this->dfs()->read_file_status("Renames");
+    auto main_id = account_controller_->current_profile().main_id();
+
+    if (!row.has_value()) {
+        return {};
+    }
+
+    if (row->state != Dfs::FileState::Ready) {
+        this->dfs()->add_to_waiting_file(main_id, row->file_id);
+        renames_file_id_waiting_ = row->file_id;
+        return {};
+    }
+
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
+    auto actors         = this->dfs()->get_vector_rows(main_id, row->file_id, "", security_actor);
+
+    if (!actors.has_value()) {
+        return {};
+    }
+
+    std::vector<std::pair<ActorId, std::string>> renames;
+    for (const auto& row : actors.value()) {
+        if (row.find("id") == row.end() || row.find("name") == row.end()) {
+            continue;
+        }
+
+        auto actor = ActorId::create(row.at("id"));
+        if (!actor.has_value()) {
+            continue;
+        }
+
+        renames.push_back(std::make_pair(actor.value(), row.at("name")));
+    }
+
+    return renames;
+}
+
 void ExtraChainNode::start() {
     if (!started_) {
         QTimer::singleShot(10, this, &ExtraChainNode::ready);
@@ -346,7 +468,7 @@ void ExtraChainNode::start() {
 #ifdef IS_RC
     QThreadPool::globalInstance()->start([this]() {
         auto system_id     = account_controller_->system_actor().id();
-        auto main_id       = account_controller_->currentProfile().main_id();
+        auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
@@ -382,7 +504,7 @@ void ExtraChainNode::start() {
     // Version compatibility: 0.19.2 (temp)
 #ifdef IS_RC
     QThreadPool::globalInstance()->start([this]() {
-        auto main_id       = account_controller_->currentProfile().main_id();
+        auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
         auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id);
@@ -425,6 +547,10 @@ void ExtraChainNode::start() {
     });
 }
 
+bool ExtraChainNode::is_client_application() {
+    return is_client_application_;
+}
+
 Dag* ExtraChainNode::dag() {
     return dag_;
 }
@@ -433,7 +559,7 @@ NetworkManager* ExtraChainNode::network() {
     return network_manager_;
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(Transaction tx) {
+std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
     if (tx.amount() <= 0) {
         eWarning("Can not create tx without amount {}", tx);
         return std::unexpected(TransactionError::ZeroAmount);
@@ -444,7 +570,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(T
         return std::unexpected(TransactionError::EmptyTransaction);
     }
 
-    auto actor = account_controller_->currentWallet();
+    auto actor = account_controller_->current_wallet();
     if (actor.empty()) {
         eWarning("Can not create: {}. There no current user", tx);
         return std::unexpected(TransactionError::NoCurrentUser);
@@ -486,10 +612,40 @@ ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(ActorId        receiver,
-                                                                               BigNumberFloat amount,
-                                                                               ActorId        token) {
-    auto actor = account_controller_->currentWallet();
+void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
+    if (!subscription_row_.has_value()) {
+        return;
+    }
+
+    ActorId system_id = account_controller_->system_actor().id();
+    if (transaction.sender() != system_id) {
+        return;
+    }
+
+    auto row = subscription_row_.value();
+
+    row.section_id       = transaction.section();
+    row.date_start       = transaction.timestamp();
+    row.transaction_hash = transaction.hash();
+
+    auto row_map = Utils::to_dbrow(row);
+
+    // temp for old vector
+    auto section = row_map["section_id"];
+    row_map.erase("section_id");
+    row_map.insert({ "block_id", section });
+
+    auto res = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
+
+    if (res) {
+        emit subscriptionAdded(row.owner_id, row.file_id);
+    }
+}
+
+std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(ActorId        receiver,
+                                                                                BigNumberFloat amount,
+                                                                                ActorId        token) {
+    auto actor = account_controller_->current_wallet();
 
     Transaction tx;
     tx.set_sender(actor.id());
@@ -502,18 +658,19 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransaction(A
         return std::unexpected(TransactionError::NoCurrentUser);
     }
 
-    return this->createTransaction(tx);
+    return this->create_transaction(tx);
 }
 
 std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
-    const auto& current_profile = account_controller_->currentProfile();
-    auto        network_id      = actor_index_->network_id();
-    if (network_id.is_zero()) {
-        return std::unexpected(ImportError::NoNetworkId);
+    if (account_controller_->profile_type() == ProfileType::New) {
+        QFile file(account_controller_->profile_seed.filename().c_str());
+        file.open(QFile::ReadOnly);
+        return file.readAll().toStdString();
     }
 
-    auto imported_user = ImportedUser { .network       = network_id,
-                                        .version       = extrachain_version,
+    const auto& current_profile = account_controller_->current_profile();
+
+    auto imported_user = ImportedUser { .version       = extrachain_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
                                         .main          = current_profile.main()->get().id(),
@@ -547,7 +704,18 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
     }
 
     auto hash = Utils::calculate_hash(login_password);
-    auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash);
+
+    if (data.size() < 100) {
+        auto decrypted = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, true);
+        if (!decrypted.has_value()) {
+            return std::unexpected(ImportProfileError::DecryptError);
+        }
+
+        account_controller_->import_seed(login, password, ByteArray(decrypted.value()).toArray<32>());
+        return hash;
+    }
+
+    auto json = Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash, false);
     if (!json.has_value()) {
         return std::unexpected(ImportProfileError::DecryptError);
     }
@@ -557,26 +725,81 @@ std::expected<std::string, ImportProfileError> ExtraChainNode::import_profile(co
         return std::unexpected(ImportProfileError::IncorrectJson);
     }
 
-    // TODO: network id check
+    eLog("imported_user", imported_user.value());
 
-    account_controller_->import_profile(imported_user.value(), hash);
-
+    account_controller_->import_old_profile(imported_user.value(), hash);
     return hash;
+}
+
+std::string get_import_error_message(ImportProfileError error) {
+    switch (error) {
+    case ImportProfileError::DecryptError:
+        return "The username or password entered is incorrect. Please try again";
+    case ImportProfileError::DataEmpty:
+        return "Import data is empty";
+    case ImportProfileError::LoginPasswordEmpty:
+        return "Login and password is empty";
+    case ImportProfileError::IncorrectJson:
+        return "Json data is empty";
+    default:
+        return "Unknown import error";
+    }
+}
+
+std::expected<std::string, ImportProfileFileError> ExtraChainNode::import_profile_file(
+    const std::string& file_path,
+    const std::string& login,
+    const std::string& password) {
+    eLog("Importing profile from file: {}", file_path);
+
+    if (login.empty() || password.empty()) {
+        return std::unexpected(ImportProfileFileError::LoginPasswordEmpty);
+    }
+
+    QFile file(QString::fromStdString(file_path));
+    if (!file.open(QIODevice::ReadOnly)) {
+        eInfo("Import operation failed: unable to open file {}", file_path);
+        return std::unexpected(ImportProfileFileError::FileNotFound);
+    }
+
+    QByteArray file_content = file.readAll();
+    file.close();
+
+    if (file_content.isEmpty()) {
+        eInfo("Import operation failed: file is empty");
+        return std::unexpected(ImportProfileFileError::FileEmpty);
+    }
+
+    std::string file_content_str = file_content.toStdString();
+    auto        from_base64      = Utils::from_base64(file_content_str);
+    if (!from_base64.has_value()) {
+        eInfo("Import operation failed: base64 decode error");
+        return std::unexpected(ImportProfileFileError::Base64DecodeError);
+    }
+
+    auto hash_result = import_profile(from_base64.value(), login, password);
+    if (!hash_result.has_value()) {
+        eInfo("Import operation failed: {}", get_import_error_message(hash_result.error()));
+        return std::unexpected(ImportProfileFileError::ImportError);
+    }
+
+    eInfo("Profile successfully imported!");
+    return hash_result.value();
 }
 
 ActorId ExtraChainNode::network_id() {
     return actor_index_->network_id();
 }
 
-std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFrom(ActorId        sender,
-                                                                                   ActorId        receiver,
-                                                                                   BigNumberFloat amount,
-                                                                                   ActorId        token) {
+std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_from(ActorId        sender,
+                                                                                     ActorId        receiver,
+                                                                                     BigNumberFloat amount,
+                                                                                     ActorId        token) {
     if (sender == ActorId()) { // TODO: remove hack
-        sender = account_controller_->currentWallet().id();
+        sender = account_controller_->current_wallet().id();
     }
 
-    auto actor = account_controller_->currentProfile().get_actor(sender);
+    auto actor = account_controller_->current_profile().get_actor(sender);
     if (!actor.has_value()) {
         return std::unexpected(TransactionError::NoSender);
     }
@@ -597,7 +820,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
 
             tx.sign(actor.value());
             eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
-            auto createdTx = this->createTransaction(tx);
+            auto createdTx = this->create_transaction(tx);
             return createdTx;
         }
 
@@ -615,7 +838,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::createTransactionFr
         //        if (actorIndex->network_id() != nullptr)
         //            if (actor.getId() == BigNumber(*actorIndex->network_id()))
         //                tx.setSenderBalance(BigNumber(0));
-        return this->createTransaction(tx);
+        return this->create_transaction(tx);
     } else {
         eWarning("Can not create tx to '{}'. There no current user", receiver.toQByteArray());
         return std::unexpected(TransactionError::NoCurrentUser);
@@ -630,7 +853,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::send_transaction(co
     return transaction_result;
 }
 
-std::string ExtraChainNode::transactionErrorDescription(const TransactionError& error) {
+std::string ExtraChainNode::transaction_error_description(const TransactionError& error) {
     switch (error) {
     case TransactionError::Unknown:
         return "Unknown error";
@@ -649,24 +872,12 @@ std::string ExtraChainNode::transactionErrorDescription(const TransactionError& 
     }
 }
 
-void ExtraChainNode::getAllActorsTimerCall() {
-    return;
-    if (account_controller_->count() > 0 && network_manager_->connections()->size() > 0) {
-        ActorId actorId = account_controller_->system_actor().id();
-
-        if (!actorId.is_zero())
-            actor_index_->getAllActors(actorId, true);
-
-        // m_dfs->download_manager().check_all_files("");
-    }
-}
-
 void ExtraChainNode::timer_reward_request() {
-    mining_manager()->requestCoinReward();
+    data_mining_manager()->requestCoinReward();
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Dag] {} (0x{}) sections, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
+    eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
          dag_->status(),
@@ -674,6 +885,13 @@ void ExtraChainNode::timer_info_print() {
          dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
+
+    if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
+        && !dag_->read_section(dag_->current_section()).has_value()) {
+        eCritical("[Dag] No physical section");
+    }
+}
+
 }
 
 std::string ExtraChainNode::generate_network_identifier() {
@@ -705,7 +923,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     auto network_id = actor_index_->network_id();
     if (network_id.is_zero())
         return;
-    auto first = actor_index_->getActor(network_id);
+    auto first = actor_index_->read_actor_old(network_id);
     if (first.empty())
         return;
     auto& mainKey   = account_controller_->system_actor().key();
@@ -720,15 +938,15 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     // TODONEW emit sendMsg(Serialization::serializeMap(map), Messages::GeneralRequest::Notification);
 }
 
-void ExtraChainNode::connectActorIndex() {
+void ExtraChainNode::connect_actor_index() {
     // connect(m_actorIndex, &ActorIndex::sendMessage, m_resolveManager, &ResolveManager::registrateMsg);
 }
 
-void ExtraChainNode::dfsConnection() {
+void ExtraChainNode::connect_dfs() {
     // init dfs for user
     // connect(m_networkManager, &NetworkManager::addFragSignal, m_dfs, &DfsController::threadAddFragment);
     // connect(m_networkManager, &NetworkManager::fetchFragment, m_dfs, &DfsController::fetchFragment);
-    connect(this, &ExtraChainNode::ready, network_manager_, &NetworkManager::startNetwork);
+    connect(this, &ExtraChainNode::ready, network_manager_, &NetworkManager::start_network);
     // connect(this, &ExtraChainNode::ready, m_dfs, &Dfs::startDFS);
     // connect(m_accountController, &AccountController::initDfs, m_dfs, &Dfs::initMyLocalStorage);
     // connect(m_actorIndex, &ActorIndex::initDfs, m_dfs, &Dfs::initUser);
@@ -737,23 +955,15 @@ void ExtraChainNode::dfsConnection() {
     //    &DfsNetworkManager::appendSocket);
 }
 
-void ExtraChainNode::connectSignals() {
-    connect(this, &ExtraChainNode::ready, []() {
-        eInfo("Node successfully started");
+void ExtraChainNode::connect_signals() {
+    connect(this, &ExtraChainNode::ready, [this]() {
+        // dag_->start_control(Force::None);
+        eInfo("Your node successfully started");
     });
 
     //    connectAccountController();
-    connectActorIndex();
-    dfsConnection();
-
-    connect(network_manager_, &NetworkManager::newSocketActivated, this, &ExtraChainNode::getAllActorsTimerCall);
-
-    // temp for tests, maybe only for console
-    connect(network_manager_, &NetworkManager::newSocketActivated, [this]() {
-        emit readyInitLocalizationFiles();
-        // m_dfs->requestDirFileAllActors();
-        // m_dfs->requestSync();
-    });
+    connect_actor_index();
+    connect_dfs();
 
     connect(network_manager_,
             &NetworkManager::newSocketActivatedWithParams,
@@ -773,9 +983,21 @@ void ExtraChainNode::connectSignals() {
                 responder.add_identifier(identifier);
                 actor_index_->send_system_actor(responder);
 
-                network_manager_->sendFromCache();
-                dag_->start_check();
                 actor_index_->request_actors_hash(responder);
+
+                if (!actor_index_->is_prepare()) {
+                    identifiers_after_actors_sync_.insert({ ip, identifier });
+                    return;
+                }
+
+#ifdef IS_R
+                if (ip == network_manager_->first_node()) {
+                    dag_->start_check();
+                }
+#else
+                dag_->start_check();
+#endif
+
                 dfs_->sync(identifier);
             });
 
@@ -783,10 +1005,32 @@ void ExtraChainNode::connectSignals() {
         dfs_->sendSizeRequestMsg(account_controller_->system_actor().id());
     });
 
+    connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
+        dag_->start_check();
+
+        for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {
+            dfs_->sync(identifier);
+        }
+    });
+
     // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
+
+    connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
+    connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);
+    connect(dag_->timer_sync_, &QTimer::timeout, this, &ExtraChainNode::dagTimerTick, Qt::QueuedConnection);
+
+    connect(dfs_, &DfsController::waitDownloaded, [this](ActorId actor_id, Dfs::DirRow dir_row) {
+        if (dir_row.file_id == renames_file_id_waiting_) {
+            emit actorRenamedLoaded();
+
+            for (const auto& [actor_id, name] : renames_todo_) {
+                this->write_actor_rename(actor_id, name);
+            }
+        }
+    });
 }
 
-void ExtraChainNode::prepareFolders() {
+void ExtraChainNode::prepare_folders() {
     eLog("Preparing folders");
     eLog("Working directory: {}", QDir::currentPath());
 
@@ -813,11 +1057,11 @@ void ExtraChainNode::calculateBlockCount() {
     //                                MessageStatus::Request);
 }
 
-AccountController* ExtraChainNode::accountController() const {
+AccountController* ExtraChainNode::account_controller() const {
     return account_controller_;
 }
 
-ActorIndex* ExtraChainNode::actorIndex() const {
+ActorIndex* ExtraChainNode::actor_index() const {
     return actor_index_;
 }
 
@@ -825,8 +1069,8 @@ DfsController* ExtraChainNode::dfs() const {
     return dfs_;
 }
 
-DataMiningManager* ExtraChainNode::mining_manager() const {
-    return mining_manager_;
+DataMiningManager* ExtraChainNode::data_mining_manager() const {
+    return dmm_;
 }
 
 std::expected<void, LoadError> ExtraChainNode::login(const std::string& login, const std::string& password) {
@@ -843,10 +1087,25 @@ void ExtraChainNode::logout() {
     QCoreApplication::exit(0);
 }
 
-void ExtraChainNode::InitVPN(VpnFunctionClearType vpnClearFunc) {
-    m_vpnClearFunc = vpnClearFunc;
+void ExtraChainNode::init_vpn(VpnFunctionClearType vpnClearFunc) {
+    vpn_clear_func_ = vpnClearFunc;
 }
 
-std::pair<QString, QString> ExtraChainNode::getInitPublicIPAndCountry() const {
-    return m_initPublicIPAndCountry;
+std::pair<QString, QString> ExtraChainNode::init_public_ip_and_country() const {
+    return init_public_ip_and_country_;
+}
+
+void ExtraChainNode::dagTimerStarting(int ms) {
+    // eLog("[Dag] Timer start, {} ms", ms);
+    dag_->timer_sync_->stop();
+    dag_->timer_sync_->start(ms);
+}
+
+void ExtraChainNode::dagTimerStoping() {
+    // eLog("[Dag] Timer stop");
+    dag_->timer_sync_->stop();
+}
+
+void ExtraChainNode::dagTimerTick() {
+    dag_->timer_tick();
 }

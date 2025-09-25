@@ -50,6 +50,10 @@
 // #include "managers/data_mining_manager.h"
 #include "dfs/dfs_utils.h"
 
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    #include <signal.h>
+#endif
+
 #ifndef EXTRACHAIN_CMAKE
     #include "preconfig.h"
 #endif
@@ -365,6 +369,11 @@ void Utils::wipeDataFiles() {
 #endif
 }
 
+qint64 Utils::diskAvailableMemory() {
+    QStorageInfo x(qApp->applicationDirPath());
+    return x.bytesAvailable();
+}
+
 qint64 Utils::diskFreeMemory() {
     QStorageInfo x(qApp->applicationDirPath());
     return x.bytesFree();
@@ -384,18 +393,16 @@ QString Utils::dataDir(const QString &newDir) {
     return current;
 }
 
-std::string Utils::to_hex(std::vector<unsigned char> &data) {
-    size_t            psize = data.size() * 2 + 1;
-    std::vector<char> p(psize);
-    sodium_bin2hex(p.data(), psize, data.data(), data.size());
-    std::string s(p.begin(), p.end());
-    // s.erase(--s.end());
-    return s;
-}
-
 std::string Utils::to_hex(const std::string &data) {
     std::vector<unsigned char> v(data.begin(), data.end());
     return to_hex(v);
+}
+
+std::string Utils::to_hex_impl(const unsigned char *data, size_t size) {
+    size_t            psize = size * 2 + 1;
+    std::vector<char> p(psize);
+    sodium_bin2hex(p.data(), psize, data, size);
+    return std::string(p.data(), size * 2);
 }
 
 std::string Utils::from_hex(const std::string &data) {
@@ -985,6 +992,83 @@ bool Utils::is_valid_ip(const std::string_view ip) {
     return std::regex_match(ip.begin(), ip.end(), ip_regex);
 }
 
+bool Utils::is_external_ip(const QString &ip) {
+    QHostAddress addr(ip);
+
+    if (addr.isNull()) {
+        return false; // Invalid IP
+    }
+
+    if (addr.protocol() == QAbstractSocket::IPv4Protocol) {
+        quint32 ip = addr.toIPv4Address();
+
+        // Local IPv4 ranges:
+        // 127.0.0.0/8 (127.0.0.0 - 127.255.255.255) - Loopback
+        if ((ip & 0xFF000000) == 0x7F000000)
+            return false;
+
+        // 10.0.0.0/8 (10.0.0.0 - 10.255.255.255) - Private Class A
+        if ((ip & 0xFF000000) == 0x0A000000)
+            return false;
+
+        // 172.16.0.0/12 (172.16.0.0 - 172.31.255.255) - Private Class B
+        if ((ip & 0xFFF00000) == 0xAC100000)
+            return false;
+
+        // 192.168.0.0/16 (192.168.0.0 - 192.168.255.255) - Private Class C
+        if ((ip & 0xFFFF0000) == 0xC0A80000)
+            return false;
+
+        // 169.254.0.0/16 (169.254.0.0 - 169.254.255.255) - Link-local
+        if ((ip & 0xFFFF0000) == 0xA9FE0000)
+            return false;
+
+        // 0.0.0.0/8 (0.0.0.0 - 0.255.255.255) - Current network
+        if ((ip & 0xFF000000) == 0x00000000)
+            return false;
+
+        // 100.64.0.0/10 (100.64.0.0 - 100.127.255.255) - Carrier-grade NAT
+        if ((ip & 0xFFC00000) == 0x64400000)
+            return false;
+
+        // 224.0.0.0/4 (224.0.0.0 - 239.255.255.255) - Multicast
+        if ((ip & 0xF0000000) == 0xE0000000)
+            return false;
+
+        // 240.0.0.0/4 (240.0.0.0 - 255.255.255.255) - Reserved
+        if ((ip & 0xF0000000) == 0xF0000000)
+            return false;
+
+        return true; // External IPv4
+    }
+
+    if (addr.protocol() == QAbstractSocket::IPv6Protocol) {
+        // Loopback ::1
+        if (addr == QHostAddress::LocalHostIPv6)
+            return false;
+
+        // Link-local fe80::/10
+        if (addr.isInSubnet(QHostAddress::parseSubnet("fe80::/10")))
+            return false;
+
+        // Unique local fc00::/7 (fc00::/7 and fd00::/8)
+        if (addr.isInSubnet(QHostAddress::parseSubnet("fc00::/7")))
+            return false;
+
+        // Multicast ff00::/8
+        if (addr.isInSubnet(QHostAddress::parseSubnet("ff00::/8")))
+            return false;
+
+        return true; // External IPv6
+    }
+
+    return false; // Unknown protocol
+}
+
+bool Utils::is_external_ip(const std::string &ip) {
+    return is_external_ip(QString::fromStdString(ip));
+}
+
 ExtraChainSettings Utils::read_settings() {
     auto path = FsPath::create(std::string(".settings"));
     if (!path.has_value()) {
@@ -1071,4 +1155,93 @@ Utils::VersionCompareResult Utils::compare_versions(const std::string &current, 
 
 bool Utils::is_newer_version(const std::string &current, const std::string &latest) {
     return compare_versions(current, latest) == VersionCompareResult::Newer;
+}
+
+void Utils::prepare_extrachain() {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &set, nullptr);
+#endif
+}
+
+std::expected<std::uint64_t, Utils::TimeParseError> Utils::parse_time_string(const std::string &time_str) {
+    if (time_str.empty()) {
+        return std::unexpected(TimeParseError::EmptyString);
+    }
+
+    std::regex  time_regex(R"((?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?)");
+    std::smatch matches;
+
+    if (!std::regex_match(time_str, matches, time_regex)) {
+        return std::unexpected(TimeParseError::InvalidFormat);
+    }
+
+    bool has_any_unit = false;
+    for (size_t i = 1; i < matches.size(); ++i) {
+        if (matches[i].matched) {
+            has_any_unit = true;
+            break;
+        }
+    }
+
+    if (!has_any_unit) {
+        return std::unexpected(TimeParseError::InvalidFormat);
+    }
+
+    std::uint64_t total_milliseconds = 0;
+
+    try {
+        if (matches[1].matched) {
+            std::uint64_t           days       = std::stoull(matches[1].str());
+            constexpr std::uint64_t ms_per_day = 24ULL * 60 * 60 * 1000;
+
+            if (days > UINT64_MAX / ms_per_day) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += days * ms_per_day;
+        }
+
+        if (matches[2].matched) {
+            std::uint64_t           hours       = std::stoull(matches[2].str());
+            constexpr std::uint64_t ms_per_hour = 60ULL * 60 * 1000;
+
+            if (hours > (UINT64_MAX - total_milliseconds) / ms_per_hour) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += hours * ms_per_hour;
+        }
+
+        if (matches[3].matched) {
+            std::uint64_t           minutes       = std::stoull(matches[3].str());
+            constexpr std::uint64_t ms_per_minute = 60ULL * 1000;
+
+            if (minutes > (UINT64_MAX - total_milliseconds) / ms_per_minute) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += minutes * ms_per_minute;
+        }
+
+        if (matches[4].matched) {
+            std::uint64_t           seconds       = std::stoull(matches[4].str());
+            constexpr std::uint64_t ms_per_second = 1000ULL;
+
+            if (seconds > (UINT64_MAX - total_milliseconds) / ms_per_second) {
+                return std::unexpected(TimeParseError::Overflow);
+            }
+
+            total_milliseconds += seconds * ms_per_second;
+        }
+
+    } catch (const std::invalid_argument &) {
+        return std::unexpected(TimeParseError::InvalidNumber);
+    } catch (const std::out_of_range &) {
+        return std::unexpected(TimeParseError::Overflow);
+    }
+
+    return total_milliseconds;
 }

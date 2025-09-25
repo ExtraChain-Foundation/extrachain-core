@@ -56,14 +56,11 @@ BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored
 }
 
 void DataMiningManager::requestCoinReward() {
-#ifndef IS_RC
-    return;
-#endif
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID) && !defined(RACCOON_CLIENT_CONSOLE)
+#if !defined(IS_RC) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
 
-    if (node->accountController()->empty()) {
+    if (node->account_controller()->empty()) {
         return;
     }
 
@@ -71,9 +68,16 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-    const auto actor      = node->accountController()->system_actor();
-    auto       totalBytes = node->network()->getCalculateTraffic()->totalBytes();
-    auto       amount     = calculateRewardAmount();
+#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
+    if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
+        && koef_to_koef_ == BigNumberFloat(1)) {
+        return;
+    }
+#endif
+
+    const auto actor      = node->account_controller()->system_actor();
+    auto       totalBytes = node->network()->calculate_traffic()->totalBytes();
+    auto       amount     = calculate_reward_amount();
 
     // eLog("[Reward] Request: Actor: {}, Dfs size: {}, Reward: {}, Traffic sent/received: {}/{}, Blocks: {}",
     //      actor.id(),
@@ -83,14 +87,16 @@ void DataMiningManager::requestCoinReward() {
     //      totalBytes.second,
     //      node->dag count stored);
 
+    amount.truncate();
+
     if (amount <= 0) {
-        eLog("[Reward] Can't send amount, because amount = 0");
-        return;
+        // eLog("[Reward] Can't send amount, because amount = 0");
+        // return;
+        amount = BigNumberFloat("0.0011", NumeralBase::Dec);
     }
 
-    amount.truncate();
-    if (amount > 3) {
-        amount = 3;
+    if (amount > max_reward_) {
+        amount = max_reward_;
     }
 
     Transaction transaction;
@@ -98,6 +104,7 @@ void DataMiningManager::requestCoinReward() {
     transaction.set_receiver(actor.id());
     transaction.set_amount(amount);
     transaction.set_type(TransactionType::Reward);
+    transaction.set_token(TokenId("468faf2f1be6504a9a26f7f027f7e43380b0d77d"));
     // transaction.set_section(node->dag()->current_section() + 1);
     // transaction.sign(actor);
 
@@ -107,32 +114,15 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-    Transaction tx_conv;
-    tx_conv.set_sender(actor.id());
-    tx_conv.set_receiver(actor.id());
-    tx_conv.set_type(TransactionType::Conversion);
-    tx_conv.set_meta(ActorId().to_string());
-    tx_conv.set_amount(transaction.amount());
-    tx_conv.set_token(
-        ActorId("468faf2f1be6504a9a26f7f027"
-                "f7e43380b0d77d"));
-
-    auto tx_result2 = node->dag()->prepare_transaction(tx_conv, actor);
-    if (!tx_result2.has_value()) {
-        eLog("[Reward] Can't send amount, because can't prepare transaction: {}", tx_result.error());
-        return;
-    }
-
     auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
                                                       .TypeFunctioningObj = Dfs::Reward::Base,
                                                       .BytesSent          = totalBytes.first,
                                                       .BytesReceived      = totalBytes.second,
                                                       .BlocksStored       = node->dag()->current_section(),
-                                                      .transaction        = tx_result.value(),
-                                                      .convert            = tx_result2.value() };
+                                                      .transaction        = tx_result.value() };
 
     node->dag()->add_transaction_sended(tx_result.value());
-    node->dag()->add_transaction_sended(tx_result2.value());
+    // node->dag()->add_transaction_sended(tx_result2.value());
 
     node->network()->send_message(requestReward,
                                   MessageType::CoinReward,
@@ -149,10 +139,10 @@ void DataMiningManager::requestCoinReward() {
     // }
 }
 
-BigNumberFloat DataMiningManager::calculateRewardAmount() const {
+BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
-    node->dfs()->refresh_calculate();
-    const auto &totalBytes = node->network()->getCalculateTraffic()->totalBytes();
+    // node->dfs()->refresh_calculate();
+    const auto &totalBytes = node->network()->calculate_traffic()->totalBytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
@@ -171,9 +161,18 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto sectionsStored     =
-    auto res = sizeTaken / totalDfsSize + totalBytesSecond / totalBytesFirst
+    auto res = sizeTaken / totalDfsSize + 1 / 1 // totalBytesSecond / totalBytesFirst
                + BigNumberFloat(node->dag()->current_section()) / current_section * 100;
-    res *= KoefReward;
+
+    if (node->dfs()->mode() == DfsMode::Full) {
+        res *= koef_reward_dag_dfs_ * koef_to_koef_;
+    } else if (node->dag()->mode() == DagMode::Full) {
+        res *= koef_reward_dag_ * koef_to_koef_;
+    } else {
+        res *= koef_reward_ * koef_to_koef_;
+    }
+
+    // res *= node->dag()->mode() != DagMode::Light ? KoefRewardDag * koef_to_koef : KoefReward * koef_to_koef;
 
     // eLog(
     //     "[Reward] Request calculation: Dfs ratio: {}/{}, Traffic ratio: {}/{}, Sections ratio: {}/{},
@@ -183,8 +182,8 @@ BigNumberFloat DataMiningManager::calculateRewardAmount() const {
     return res;
 }
 
-BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const {
-    if (requestReward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+BigNumberFloat DataMiningManager::calculate_reward_amount(const Dfs::Reward::RequestReward &request_reward) const {
+    if (request_reward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("{} {} {}", "[Reward] Cannot calculate reward due to division by zero. BytesSent, total
         // dfs:"
         //, requestReward.BytesSent, node->dfs()->totalDfsSize());
@@ -207,34 +206,55 @@ BigNumberFloat DataMiningManager::calculateRewardAmount(const Dfs::Reward::Reque
         current_section = BigNumberFloat(1);
     }
 
-    auto res = (BigNumberFloat { requestReward.DataStoredSize } / node->dfs()->totalDfsSize()
-                + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + BigNumberFloat { requestReward.BlocksStored } / current_section * 100);
-    res *= KoefReward;
+    auto res = (BigNumberFloat { request_reward.DataStoredSize } / node->dfs()->totalDfsSize()
+                + 1 / 1 // + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
+                + BigNumberFloat { request_reward.BlocksStored } / current_section * 100);
+    res *= koef_reward_;
     return res;
 }
 
-bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward,
+bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward,
                                                     const Responder                  &responder) {
-    auto calc   = calculateRewardAmount(requestReward);
-    auto amount = requestReward.transaction.amount();
+    auto calc   = calculate_reward_amount(request_reward);
+    auto amount = request_reward.transaction.amount();
 
-    if (amount <= 3 || calc - amount <= Dfs::Reward::TOLERANCE) {
-        if (requestReward.transaction.sender() != requestReward.transaction.receiver()) {
+    if (amount <= max_reward_ || calc - amount <= Dfs::Reward::TOLERANCE) {
+        if (request_reward.transaction.sender() != request_reward.transaction.receiver()) {
             return false;
+        }
+
+        //
+        auto sender_id      = request_reward.transaction.sender();
+        auto last_reward_it = last_reward_.find(sender_id);
+
+        if (last_reward_it != last_reward_.end()) {
+            auto current_time = Utils::current_date_ms();
+            auto time_diff_ms = current_time - last_reward_it->second;
+
+            if (time_diff_ms < 55000) {
+#ifndef IS_R
+                eLog("[Reward] Ignore from {}, diff: {} ms", sender_id, time_diff_ms);
+#endif
+                return false;
+            }
         }
 
         // eLog("[Reward] Add request: {}", requestReward);
-        auto res1 = node->dag()->network_transaction(requestReward.transaction, responder);
-        auto res2 = node->dag()->network_transaction(requestReward.convert, responder);
+        auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
 
-        if (!res1.has_value() || !res2.has_value()) {
+        if (!res1.has_value()) {
             return false;
         }
+
+        last_reward_[sender_id] = request_reward.transaction.timestamp(); // Utils::current_date_ms();
 
         return true;
     } else {
         return false;
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
+}
+
+void DataMiningManager::set_koef_to_koef(const BigNumberFloat &koef_to_koef) {
+    this->koef_to_koef_ = koef_to_koef;
 }

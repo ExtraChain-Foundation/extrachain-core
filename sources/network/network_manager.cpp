@@ -39,15 +39,15 @@
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
 SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
-    return m_connections;
+    return connections_;
 }
 
-bool NetworkManager::serverStatus(Network::Protocol protocol) const {
+bool NetworkManager::server_status(Network::Protocol protocol) const {
     switch (protocol) {
     case Network::Protocol::Udp:
         break;
     case Network::Protocol::WebSocket:
-        return wsServer == nullptr ? false : wsServer->isListening();
+        return ws_server_ == nullptr ? false : ws_server_->isListening();
     case Network::Protocol::Undefined:
         return false;
     }
@@ -55,10 +55,10 @@ bool NetworkManager::serverStatus(Network::Protocol protocol) const {
 }
 
 SafePtr<std::map<NetworkReconnect, QString>> NetworkManager::reconnections() {
-    return m_reconnectionsToIdentifier;
+    return reconnections_to_identifier_;
 }
-CalculateTraffic *NetworkManager::getCalculateTraffic() const {
-    return calculateTraffic;
+CalculateTraffic *NetworkManager::calculate_traffic() const {
+    return calculate_traffic_;
 }
 
 std::string NetworkManager::public_ip() const {
@@ -81,29 +81,29 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     return;
 #endif
 
-    if (node->getInitPublicIPAndCountry().first.isEmpty()) {
-        node->m_initPublicIPAndCountry = { QString::fromStdString(public_ip_), "Security" };
+    if (node->init_public_ip_and_country().first.isEmpty()) {
+        node->init_public_ip_and_country_ = { QString::fromStdString(public_ip_), "Security" };
     }
 }
 
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
-    localInizialization();
+    local_inizialization();
     initialize_first_node();
 
-    m_reconnectTimer             = new QTimer(this);
-    m_clear_network_caches_timer = new QTimer(this);
-    calculateTraffic             = CalculateTraffic::GetInstance();
+    reconnect_timer_             = new QTimer(this);
+    clear_network_caches_timer_ = new QTimer(this);
+    calculate_traffic_             = CalculateTraffic::GetInstance();
 
-    connect(m_clear_network_caches_timer, &QTimer::timeout, this, &NetworkManager::clearNetworkCaches);
-    m_clear_network_caches_timer->start(20000);
+    connect(clear_network_caches_timer_, &QTimer::timeout, this, &NetworkManager::clear_network_caches);
+    clear_network_caches_timer_->start(20000);
 
     process();
 
-    connect(this, &NetworkManager::connectToNode, this, &NetworkManager::checkPort);
+    connect(this, &NetworkManager::connect_to_node, this, &NetworkManager::check_port);
 
-    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::messageReceived);
+    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::message_received);
 
     /*
     QTimer::singleShot(20000, [this]() {
@@ -119,7 +119,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     */
 }
 
-void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
+void NetworkManager::add_all_services_identifiers_to_message(MessageBody &msg) {
     for (const auto &it : msg.nodes_identifiers_to_ignore_later) {
         msg.nodes_identifiers_to_ignore.emplace(it);
     }
@@ -127,7 +127,7 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
 
     msg.nodes_identifiers_to_ignore_later.emplace(node->network_identifier());
 
-    auto connectionsLocked = *m_connections;
+    auto connectionsLocked = *connections_;
     for (const auto &service : *connectionsLocked) {
         std::string ident = service->identifier().toStdString();
 
@@ -136,17 +136,35 @@ void NetworkManager::addAllServicesIdentifiersToMessage(MessageBody &msg) {
     }
 }
 
+bool NetworkManager::is_first_node(const std::string &identifier) {
+    auto connectionsLocked = *connections_;
+    if (connectionsLocked->empty()) {
+        return false;
+    }
+
+    for (const auto &el : *connectionsLocked) {
+        if (el->identifier() == identifier && el->ip() == first_node_) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void NetworkManager::process() {
-    connect(m_reconnectTimer, &QTimer::timeout, this, &NetworkManager::reconnection);
-    m_reconnectTimer->start(Utils::RECONNECT_INTERVAL);
+    if (!node->is_client_application())
+        return;
+
+    connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
+    reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
 
 void NetworkManager::reconnection() {
-    if (node->accountController()->empty()) {
+    if (node->account_controller()->empty()) {
         return;
     }
 
-    if (failed_ips.contains(first_node_)) {
+    if (failed_ips_.contains(first_node_)) {
         return;
     }
 
@@ -160,7 +178,7 @@ void NetworkManager::reconnection() {
     std::set<SocketService *> to_close;
 
     {
-        auto connectionsLocked = *m_connections;
+        auto connectionsLocked = *connections_;
         for (const auto &el : *connectionsLocked) {
             // eLog("_____________");
             if (el->is_closed()) {
@@ -187,7 +205,7 @@ void NetworkManager::reconnection() {
             }
 
             if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
-                eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
+                // eLog("PHYYYY {}", Utils::current_date_ms() - el->timestamp());
                 // to_close.insert(el);
             }
         }
@@ -198,19 +216,19 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        eLog("[Network] Reconnect to first node");
-        emit connectToNode(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        eLog("[Network] Reconnect to first node {}", first_node_);
+        emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
         return;
     }
 
     for (const auto &[ip, count] : need_reconnect) {
         eLog("[Network] Reconnect to node: {}", ip);
 
-        if (failed_ips.contains(ip)) {
+        if (failed_ips_.contains(ip)) {
             continue;
         }
 
-        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
         // reconn_[ip] += 1; // count
 
         // if (reconn_[ip] > 1000) {
@@ -219,7 +237,7 @@ void NetworkManager::reconnection() {
     }
 }
 
-void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
+void NetworkManager::setup_proxy(QNetworkProxy::ProxyType type,
                                 const QString           &hostName,
                                 quint16                  port,
                                 const QString           &user,
@@ -234,9 +252,9 @@ void NetworkManager::setupProxy(QNetworkProxy::ProxyType type,
 }
 
 void NetworkManager::connectWsService(WebSocketService *service, bool requestListNodes) {
-    connect(service, &WebSocketService::error, this, &NetworkManager::socketError);
-    connect(service, &WebSocketService::disconnected, this, &NetworkManager::removeWsConnection);
-    connect(service, &WebSocketService::activated, this, &NetworkManager::checkConnectionsStatus);
+    connect(service, &WebSocketService::error, this, &NetworkManager::socket_error);
+    connect(service, &WebSocketService::disconnected, this, &NetworkManager::remove_socket_connection);
+    connect(service, &WebSocketService::activated, this, &NetworkManager::check_connections_status);
     connect(service, &WebSocketService::activated, this, [&] {
         auto senderObj = QObject::sender();
         if (senderObj == nullptr)
@@ -247,13 +265,13 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->ip() != first_node()) {
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
             reconn_.insert({ service->ip().toStdString(), 1 });
         }
     });
 
     {
-        auto connectionsLocked = *m_connections;
+        auto connectionsLocked = *connections_;
         if (!connectionsLocked->contains(service))
             connectionsLocked->insert(service);
     }
@@ -263,7 +281,16 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
             [&](const std::set<SocketService::SocketPair> &connections) {
                 // eLog("shareConnections: {}", connections);
 
-                auto init_ip = node->getInitPublicIPAndCountry().first;
+                auto init_ip = node->init_public_ip_and_country().first;
+
+                /*
+                // for tests
+                std::set<std::string> ips;
+                for (const auto &pair : connections) {
+                    ips.insert(pair.ip);
+                }
+                eLog("{}", ips);
+                */
 
                 if (active_connections_count() >= Network::maxConnections) {
                     eLog("shareConnections ignored by max connections limit");
@@ -277,7 +304,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     bool can_connect = true;
 
                     {
-                        auto connections_locked = *m_connections;
+                        auto connections_locked = *connections_;
                         for (const auto &conn_item : *connections_locked) {
                             if (ip == init_ip) {
                                 can_connect = false;
@@ -302,23 +329,23 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
 
                     if (can_connect) {
-                        emit connectToNode(QString::fromStdString(ip), Network::Protocol::WebSocket);
+                        emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
             });
 }
 
-void NetworkManager::removeConnection(const QString &identifier) {
+void NetworkManager::remove_connection(const QString &identifier) {
     if (identifier.isEmpty())
         eFatal("Try remove with empty identifier");
-    auto connectionsLocked = *m_connections;
+    auto connectionsLocked = *connections_;
     for (const auto &connection : *connectionsLocked) {
         if (connection->identifier() == identifier)
             emit connection->close();
     }
 }
 
-void NetworkManager::checkPort(const QString     ip,
+void NetworkManager::check_port(const QString     ip,
                                Network::Protocol protocol,
                                const bool        request,
                                const bool        isConstant) {
@@ -333,7 +360,7 @@ void NetworkManager::checkPort(const QString     ip,
         socket->disconnectFromHost();
         socket->deleteLater();
         // emit portCheckResult(ip, port, true);
-        connectToNodeSlot(ip, protocol, request, isConstant);
+        connect_to_node_slot(ip, protocol, request, isConstant);
     });
 
     connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
@@ -356,12 +383,12 @@ void NetworkManager::checkPort(const QString     ip,
 }
 
 NetworkManager::~NetworkManager() {
-    eLog("[NetworkManager] Finish him with {} connections", m_connections->size());
+    eLog("[NetworkManager] Finish him with {} connections", connections_->size());
 
     std::set<SocketService *> copied;
     {
-        auto connectionsLocked = *m_connections;
-        copied                 = **m_connections;
+        auto connectionsLocked = *connections_;
+        copied                 = **connections_;
     }
 
     for (const auto &connection : copied) {
@@ -370,13 +397,13 @@ NetworkManager::~NetworkManager() {
     }
 }
 
-void NetworkManager::checkConnectionsStatus() {
+void NetworkManager::check_connections_status() {
     std::unordered_set<std::string> ind_temp;
     // m_reconnectTimer->stop();
     bool flag  = false;
     int  count = 0;
     {
-        auto connectionsLocked = *m_connections;
+        auto connectionsLocked = *connections_;
         std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](SocketService *el) {
             flag = flag || el->is_active();
             if (el->is_active()) {
@@ -389,40 +416,39 @@ void NetworkManager::checkConnectionsStatus() {
     emit connectionsCountChanged(count); // TODO: check prev count value
 }
 
-void NetworkManager::startNetwork() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 2222 ? "Network" : "DFS"));
+void NetworkManager::start_network() {
+    eLog("[NetworkManager] Start servers... {}", (wsPort == 17593 ? "Network" : "Else"));
 
-    if (!local) {
+    if (!local_) {
         eLog("[NetworkManager] Can't detect local ip");
         return;
     }
 
     if (!Network::isStartedServer)
         return;
-    wsServer = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
-    if (!wsServer->listen(QHostAddress::Any, wsPort)) {
-        eLog("[NetworkManager] Can't listen port");
+    ws_server_ = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
+
+    if (!ws_server_->listen(QHostAddress::Any, wsPort)) {
+        eLog("[NetworkManager] Can't listen port {}", wsPort);
         return;
     }
 
-    connect(wsServer, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
-    connect(wsServer, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
+    connect(ws_server_, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
+    connect(ws_server_, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
         eLog("[WS] Server error code: {}", int(closeCode));
     });
-    connect(wsServer, &QWebSocketServer::closed, [] {
+    connect(ws_server_, &QWebSocketServer::closed, [] {
         eLog("[WS] Server: closed");
     });
-    connect(wsServer, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socketError) {
-        eLog("[WS] Server socker error: {}", int(socketError));
+    connect(ws_server_, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socket_error) {
+        eLog("[WS] Server socker error: {}", int(socket_error));
     });
 
-    eLog("[WS] Start listening: {}:{}",
-         wsServer->serverAddress(),
-         wsServer->serverPort()); // << wsServer->serverName();
+    eLog("[WS] Start listening: {}:{}", ws_server_->serverAddress(), ws_server_->serverPort());
 }
 
-[[maybe_unused]] void NetworkManager::startDiscovery() {
+[[maybe_unused]] void NetworkManager::start_discovery() {
     eLog("NetworkManager::startDiscovery()");
     // discoveryService = new DiscoveryService(extPort, tcpPort, local);
     // ThreadPool::addThread(discoveryService);
@@ -430,10 +456,11 @@ void NetworkManager::startNetwork() {
     // &NetworkManager::addConnectionFromPair);
 }
 
-void NetworkManager::connectToNodeSlot(const QString    &ip,
+void NetworkManager::connect_to_node_slot(const QString    &ip,
                                        Network::Protocol protocol,
                                        const bool        request,
-                                       bool              isConstant) {
+                                       bool              isConstant,
+                                       const bool        is_light) {
     if (ip.toStdString() == first_node_) {
         isConstant = true;
     }
@@ -445,8 +472,10 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
         }
     }
 
-    if (ip.isEmpty())
+    if (ip.isEmpty()) {
+        // eLog("Ip is empty");
         return;
+    }
 
     const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
     eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
@@ -457,31 +486,32 @@ void NetworkManager::connectToNodeSlot(const QString    &ip,
     case Protocol::Udp:
         break;
     case Protocol::WebSocket:
-        connectToWebSocket(ip.simplified(), port, request, isConstant);
+        connect_to_websocket(ip.simplified(), port, request, isConstant, is_light);
         break;
     case Protocol::Undefined:
         eFatal("Undefined connectToNode");
     }
 }
 
-void NetworkManager::connectToWebSocket(const QString &ip,
+void NetworkManager::connect_to_websocket(const QString &ip,
                                         quint16        port,
                                         bool           requestListNodes,
-                                        const bool     isConstant) {
+                                        const bool     isConstant,
+                                        const bool     is_light) {
     if (ip.isEmpty()) {
         return;
     }
 
-    auto service = new WebSocketService(nullptr, node, this, isConstant);
+    auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
     connectWsService(service, requestListNodes);
     service->open(ip, port);
-    m_reconnectionsToIdentifier
+    reconnections_to_identifier_
         ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
 }
 
-void NetworkManager::clearNetworkCaches() {
+void NetworkManager::clear_network_caches() {
     {
-        auto network_forwarded_messages_locked = *m_network_forwarded_messages;
+        auto network_forwarded_messages_locked = *forwarded_messages_;
         for (auto it = network_forwarded_messages_locked->begin();
              it != network_forwarded_messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
@@ -493,7 +523,7 @@ void NetworkManager::clearNetworkCaches() {
     }
 
     {
-        auto messages_locked = *m_messages;
+        auto messages_locked = *messages_;
         for (auto it = messages_locked->begin(); it != messages_locked->end();) {
             QDateTime currentTime = QDateTime::currentDateTime();
             if (it->second.second.secsTo(currentTime) >= 120) {
@@ -517,11 +547,11 @@ bool NetworkManager::send_message_checker(MessageType      type,
         eCritical("[Network] Send message error: accountController is bye 1!");
         return false;
     }
-    if (!node->accountController()) {
+    if (!node->account_controller()) {
         eCritical("[Network] Send message error: accountController is bye 2!");
         return false;
     }
-    if (node->accountController()->empty()) {
+    if (node->account_controller()->empty()) {
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
@@ -542,12 +572,12 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->accountController()->system_actor();
+    auto       &mainActor = node->account_controller()->system_actor();
     MessageBody message =
         make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
 
     if (send_mode == SendMode::Broadcast) {
-        addAllServicesIdentifiersToMessage(message);
+        add_all_services_identifiers_to_message(message);
     }
 
     auto serialized      = message.serialize();
@@ -562,7 +592,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
     std::string to_message_id = responder.message_id();
     std::string receiver_identifier;
     if (!to_message_id.empty()) {
-        auto messages_locked = *m_messages;
+        auto messages_locked = *messages_;
         if (messages_locked->count(to_message_id)) {
             receiver_identifier = messages_locked->at(to_message_id).first;
         } else {
@@ -609,9 +639,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
-    if (!isActiveConnectionExists()) {
+    if (!is_active_connection_exists()) {
         // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
-        saveToCache(serialized_message, send_mode, receiver_identifier);
+        save_to_cache(serialized_message, send_mode, receiver_identifier);
         return;
     }
 
@@ -641,7 +671,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
     SocketService::Priority priority = SocketService::Priority::Normal;
 
-    if (message_type == MessageType::DfsStoreFragment || message_type == MessageType::DfsFileFragment
+    if (message_type == MessageType::DfsFileExistNotification || message_type == MessageType::DfsFileFragment
         || message_type == MessageType::Actors || message_type == MessageType::DfsSyncDirRows) {
         priority = SocketService::Priority::Low;
     }
@@ -652,7 +682,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         priority = SocketService::Priority::High;
     }
 
-    auto connections_locked = *m_connections;
+    auto connections_locked = *connections_;
 
     if (send_mode == SendMode::NeighboursRandom || send_mode == SendMode::OneNeighbourRandom) {
         std::vector<SocketService *> active_identifiers;
@@ -680,9 +710,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 
     if (serialized_message.size() > 10000
-        && (non_serialized_message.message_type != MessageType::DfsStoreFragment
+        && (non_serialized_message.message_type != MessageType::DfsFileExistNotification
             && non_serialized_message.message_type != MessageType::DfsFileFragment)) {
-        eLog("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
+        eTemp("Message: BIG {} {}", serialized_message.size(), non_serialized_message.message_type);
     }
 
     TIMER_START(kkk)
@@ -692,13 +722,17 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             continue;
         }
 
+        if (service->mode() == SocketMode::Light && send_mode != SendMode::Focused) {
+            continue;
+        }
+
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
                                           service->identifier().toStdString(),
                                           non_serialized_message);
 
         if (send_checked) {
-            calculateTraffic->addBytesSent(service->ip().toStdString(), serialized_message.size());
+            calculate_traffic_->addBytesSent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
             if (send_mode == SendMode::Focused) {
                 break;
@@ -712,25 +746,25 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 }
 
-void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &package_data) {
+void NetworkManager::send_brodcast_message_further(const NetworkPackageStorage &package_data) {
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
     }
 
-    auto network_forwarded_messages_locked = *m_network_forwarded_messages;
+    auto network_forwarded_messages_locked = *forwarded_messages_;
     if (network_forwarded_messages_locked->contains(package_data.msg_body.message_id)) {
         eWarning("Send Broadcast Message error - message with the same message ID has already been sent: {}",
                  package_data.msg_body.message_id);
         return;
     }
 
-    auto &mainActor = node->accountController()->system_actor();
+    auto &mainActor = node->account_controller()->system_actor();
 
     MessageBody message_edited = package_data.msg_body;
-    message_edited.sender_id   = node->accountController()->system_actor().id();
+    message_edited.sender_id   = node->account_controller()->system_actor().id();
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
-    addAllServicesIdentifiersToMessage(message_edited);
+    add_all_services_identifiers_to_message(message_edited);
 
     auto serialized = message_edited.serialize();
     send_message_connections(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
@@ -742,7 +776,7 @@ void NetworkManager::sendBrodcastMessageFurther(const NetworkPackageStorage &pac
                                                               QDateTime::currentDateTime()));
 }
 
-void NetworkManager::saveToCache(const std::string &serialized_message,
+void NetworkManager::save_to_cache(const std::string &serialized_message,
                                  SendMode           send_mode,
                                  const std::string &receiver_identifier) {
     return;
@@ -787,7 +821,7 @@ void NetworkManager::saveToCache(const std::string &serialized_message,
     }
 }
 
-void NetworkManager::sendFromCache() {
+void NetworkManager::send_from_cache() {
     QFile filet(QString::fromStdString(NetworkCacheFile));
     if (filet.exists()) {
         filet.remove();
@@ -833,12 +867,12 @@ void NetworkManager::sendFromCache() {
 }
 
 bool NetworkManager::is_connection_exists(const std::string &identifier) {
-    auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
-        return false;
-
-    for (const auto &el : *connectionsLocked) {
-        if (el->identifier() == identifier) {
+    auto connections_locked = *connections_;
+    for (const auto &service : *connections_locked) {
+        if (!service->is_active()) {
+            continue;
+        }
+        if (service->identifier().toStdString() == identifier) {
             return true;
         }
     }
@@ -846,10 +880,11 @@ bool NetworkManager::is_connection_exists(const std::string &identifier) {
     return false;
 }
 
-bool NetworkManager::isActiveConnectionExists() {
-    auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+bool NetworkManager::is_active_connection_exists() {
+    auto connectionsLocked = *connections_;
+    if (connectionsLocked->empty()) {
         return false;
+    }
 
     for (const auto &el : *connectionsLocked) {
         if (el->is_active()) {
@@ -861,9 +896,10 @@ bool NetworkManager::isActiveConnectionExists() {
 }
 
 int NetworkManager::active_connections_count() {
-    auto connectionsLocked = *m_connections;
-    if (connectionsLocked->empty())
+    auto connectionsLocked = *connections_;
+    if (connectionsLocked->empty()) {
         return 0;
+    }
 
     int count = 0;
     for (const auto &el : *connectionsLocked) {
@@ -875,20 +911,20 @@ int NetworkManager::active_connections_count() {
     return count;
 }
 
-bool NetworkManager::checkMsgCount(const std::string &msg) {
+bool NetworkManager::check_message_count(const std::string &msg) {
     bool                             flag_result = true;
     bool                             value       = 0;
     std::string                      hashMsg     = Utils::calculate_hash(msg);
-    QMap<std::string, int>::iterator it          = msgHashList.find(hashMsg);
+    QMap<std::string, int>::iterator it          = msg_hash_list_.find(hashMsg);
 
-    if (it == msgHashList.end())
-        msgHashList.insert(hashMsg, value);
+    if (it == msg_hash_list_.end())
+        msg_hash_list_.insert(hashMsg, value);
     else {
-        if (msgHashList.find(hashMsg).value() == m_connections->size() - 1) {
-            msgHashList.remove(hashMsg);
+        if (msg_hash_list_.find(hashMsg).value() == connections_->size() - 1) {
+            msg_hash_list_.remove(hashMsg);
             flag_result = false;
         } else {
-            msgHashList.find(hashMsg).value()++;
+            msg_hash_list_.find(hashMsg).value()++;
             flag_result = true;
         }
     }
@@ -896,15 +932,15 @@ bool NetworkManager::checkMsgCount(const std::string &msg) {
     return flag_result;
 }
 
-void NetworkManager::messageReceived(const std::string &message,
-                                     const std::string &ip,
-                                     const std::string &identifier) {
+void NetworkManager::message_received(const std::string &message,
+                                      const std::string &ip,
+                                      const std::string &identifier) {
     // eLog("node_enabled {}", node_enabled.load());
     if (!node_enabled.load()) {
         return;
     }
 
-    if (!checkMsgCount(message)) {
+    if (!check_message_count(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
         return;
     }
@@ -954,20 +990,17 @@ void NetworkManager::messageReceived(const std::string &message,
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
     std::string   serialized = message_body.data;
-    std::string   messId     = message_body.message_id;
-    std::string   messageId(messId.begin(), messId.end());
-
-    if (ip == first_node_) {
-        // eLog("---> {} {}", type, serialized.size());
-    }
+    std::string   mess_id    = message_body.message_id;
+    std::string   message_id(mess_id.begin(), mess_id.end());
+    bool          is_luminance_weight = ip == first_node_;
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
                               || type == MessageType::CoinReward);
 
         if (!should_ignore
-            && (m_messages->contains(messageId)
-                || message_body.init_sender_id == node->accountController()->system_actor().id())) {
+            && (messages_->contains(message_id)
+                || message_body.init_sender_id == node->account_controller()->system_actor().id())) {
             // eWarning(
             //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
             //     messageId,
@@ -975,7 +1008,7 @@ void NetworkManager::messageReceived(const std::string &message,
             //     type);
             return;
         }
-        auto res = m_messages->emplace(messageId, std::make_pair(identifier, QDateTime::currentDateTime()));
+        auto res = messages_->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
             //     "Network Message ignored 2: already achieved such Request with messageId: {} from: {}, type:
@@ -985,11 +1018,11 @@ void NetworkManager::messageReceived(const std::string &message,
             // eInfo("MessageID emplaced: {}", messageId);
         }
     } else if (status == MessageStatus::Response) {
-        auto network_forwarded_messages_locked = *m_network_forwarded_messages;
-        auto searchRes                         = network_forwarded_messages_locked->find(messageId);
+        auto network_forwarded_messages_locked = *forwarded_messages_;
+        auto searchRes                         = network_forwarded_messages_locked->find(message_id);
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
-            message_edited.sender_id   = node->accountController()->system_actor().id();
+            message_edited.sender_id   = node->account_controller()->system_actor().id();
             message_edited.nodes_identifiers_to_ignore.emplace(node->network_identifier());
 
             auto serialized = message_edited.serialize();
@@ -1008,9 +1041,13 @@ void NetworkManager::messageReceived(const std::string &message,
     const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
 
     Responder responder(this);
-    responder.set_message_id(messageId);
+    responder.set_message_id(message_id);
     responder.add_identifier(identifier);
     responder.set_message_type(type);
+
+    if (is_luminance_weight) {
+        responder.set_luminance_weight(3.5);
+    }
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
@@ -1019,16 +1056,19 @@ void NetworkManager::messageReceived(const std::string &message,
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
              status,
-             messId,
+             mess_id,
              (std::stringstream() << deserialized).str());
     }
 #endif
 
-    calculateTraffic->addBytesReceived(ip, message.size());
+    calculate_traffic_->addBytesReceived(ip, message.size());
 
     if (type == MessageType::DagLightData) {
         eLog("DagLight {}", status);
     }
+
+    // QElapsedTimer timer;
+    // timer.start();
 
     // try {
     switch (type) {
@@ -1046,10 +1086,10 @@ void NetworkManager::messageReceived(const std::string &message,
             return;
         }
 
-        if (node->isRaccoon) {
+        if (node->is_custom_app_) {
             emit customMessageReceived(package_data, custom_deserialize_result.value());
         } else {
-            sendBrodcastMessageFurther(package_data);
+            send_brodcast_message_further(package_data);
         }
 
         break;
@@ -1057,11 +1097,11 @@ void NetworkManager::messageReceived(const std::string &message,
 
     case MessageType::ShareConnections: {
         if (status == MessageStatus::Request) {
-            eLog("Achieved ShareConnections(Request) {}", messageId);
+            eLog("Achieved ShareConnections(Request) {}", message_id);
             std::vector<std::string> available_ips;
 
             {
-                auto locked_connections = *m_connections;
+                auto locked_connections = *connections_;
                 for (const auto &connection : *locked_connections) {
                     if (identifier != connection->identifier().toStdString()) {
                         if (connection->ip().isEmpty())
@@ -1079,12 +1119,13 @@ void NetworkManager::messageReceived(const std::string &message,
                                               responder);
             }
         } else if (status == MessageStatus::Response) {
-            eLog("Achieved ShareConnections(Response) {}", messageId);
+            eLog("Achieved ShareConnections(Response) {}", message_id);
             auto serialized_ips_result = MessagePack::deserialize<std::vector<std::string>>(serialized);
             if (!serialized_ips_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for ips vector in {} state", type, status);
                 return;
             }
+
             auto deserialized_ips_result =
                 MessagePack::deserialize_container<std::string>(serialized_ips_result.value());
             if (!deserialized_ips_result.has_value()) {
@@ -1093,9 +1134,10 @@ void NetworkManager::messageReceived(const std::string &message,
                          status);
                 return;
             }
+
             for (const auto &ip_address : deserialized_ips_result.value()) {
                 bool can_connect        = true;
-                auto locked_connections = *m_connections;
+                auto locked_connections = *connections_;
                 for (const auto &existing_connection : *locked_connections) {
                     if (ip_address == existing_connection->ip().toStdString()) {
                         can_connect = false;
@@ -1104,7 +1146,7 @@ void NetworkManager::messageReceived(const std::string &message,
                 }
 
                 if (can_connect)
-                    connectToNode(QString::fromStdString(ip_address), Network::Protocol::WebSocket);
+                    connect_to_node(QString::fromStdString(ip_address), Network::Protocol::WebSocket);
             }
         }
         break;
@@ -1116,9 +1158,11 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for response dfs size", type);
             return;
         }
+
         if (Utils::globalVariableOfDfsSize < dfs_size_result.value().size) {
             Utils::globalVariableOfDfsSize = dfs_size_result.value().size;
         }
+
         break;
     }
 
@@ -1128,6 +1172,7 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for request dfs size", type);
             return;
         }
+
         node->dfs()->sendSizeReponseMsg(dfs_request_result.value(), responder);
         break;
     }
@@ -1138,9 +1183,10 @@ void NetworkManager::messageReceived(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for new actor", type);
             return;
         }
-        auto actor_handling_result = node->actorIndex()->network_store_new_actor(new_actor_result.value());
+
+        auto actor_handling_result = node->actor_index()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
-            sendBrodcastMessageFurther(package_data);
+            send_brodcast_message_further(package_data);
         }
         break;
     }
@@ -1153,39 +1199,18 @@ void NetworkManager::messageReceived(const std::string &message,
                 eWarning("[NetworkManager] {} deserialization failed for ActorId in {} state", type, status);
                 break;
             }
-            node->actorIndex()->network_actor_request(actor_id_result.value(), responder);
+
+            node->actor_index()->network_actor_request(actor_id_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto actor_result = MessagePack::deserialize<Actor<KeyPublic>>(serialized);
             if (!actor_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for Actor in {} state", type, status);
                 break;
             }
-            node->actorIndex()->save_actor(actor_result.value());
+
+            node->actor_index()->save_actor(actor_result.value());
         }
-        break;
-    }
 
-    case MessageType::ActorAll: {
-        break;
-        if (status == MessageStatus::Request) {
-            auto ignored_actor_id_result = MessagePack::deserialize<ActorId>(serialized);
-            if (!ignored_actor_id_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for ignored ActorId in {} state",
-                         type,
-                         status);
-                break;
-            }
-
-            node->actorIndex()->network_actors_all_request(ignored_actor_id_result.value(), responder);
-        } else if (status == MessageStatus::Response) {
-            auto actors_list_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
-            if (!actors_list_result.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for actors vector in {} state", type, status);
-                break;
-            }
-
-            node->actorIndex()->network_actors_all_response(actors_list_result.value(), responder);
-        }
         break;
     }
 
@@ -1207,20 +1232,20 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_response(actors_list_result.value());
+            node->actor_index()->network_actors_response(actors_list_result.value());
         }
         break;
     }
 
     case MessageType::ActorsHash: {
         if (status == MessageStatus::Request) {
-            auto bits = MessagePack::deserialize<std::vector<uint8_t>>(serialized);
-            if (!bits.has_value()) {
+            auto actors = MessagePack::deserialize<std::pair<std::uint64_t, std::vector<uint8_t>>>(serialized);
+            if (!actors.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed in {} state", type, status);
                 break;
             }
 
-            node->actorIndex()->network_actors_hash_request(bits.value(), responder);
+            node->actor_index()->network_actors_hash_request(actors->first, actors->second, responder);
         } else if (status == MessageStatus::Response) {
             auto actors_list_result = MessagePack::deserialize<std::vector<Actor<KeyPublic>>>(serialized);
             if (!actors_list_result.has_value()) {
@@ -1228,13 +1253,10 @@ void NetworkManager::messageReceived(const std::string &message,
                 break;
             }
 
-            node->actorIndex()->network_actors_response(actors_list_result.value());
+            node->actor_index()->network_actors_response(actors_list_result.value());
         }
         break;
     }
-
-    case MessageType::ActorCount:
-        break;
 
         // case MessageType::DfsDirData: {
         //     if (status == MessageStatus::Request) {
@@ -1299,14 +1321,13 @@ void NetworkManager::messageReceived(const std::string &message,
             node->dfs()->dirs_manager().network_request_dir_rows(dirs_row_result.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto dirs_row_result =
-                MessagePack::deserialize<std::pair<ActorId, std::vector<Dfs::DirRow>>>(serialized);
+                MessagePack::deserialize<std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>>>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dir rows", type);
                 return;
             }
-            auto &[owner_id, dir_rows] = dirs_row_result.value();
 
-            node->dfs()->dirs_manager().network_response_dir_rows(owner_id, dir_rows, responder);
+            node->dfs()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
         }
         break;
     }
@@ -1332,12 +1353,21 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_store_file(file_link_result->owner_id,
                                         file_link_result->dir_row,
                                         Dfs::NetworkStoreFile::Broadcast);
-        sendBrodcastMessageFurther(package_data);
+        send_brodcast_message_further(package_data);
 
         break;
     }
 
-    case MessageType::DfsStoreFragment:
+    case MessageType::DfsFileExistNotification: {
+        auto file_state_result = MessagePack::deserialize<Dfs::Packets::FileState>(serialized);
+        if (!file_state_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for file state", type);
+            break;
+        }
+
+        node->dfs()->network_response_file_state(file_state_result.value(), responder);
+        break;
+    }
     case MessageType::DfsFileFragment: {
         auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
         if (!fragment_data_result.has_value()) {
@@ -1346,20 +1376,8 @@ void NetworkManager::messageReceived(const std::string &message,
         }
 
         // TIMER_START(FRAG)
-        node->dfs()->download_manager().network_fragment(fragment_data_result.value());
+        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
         // TIMER_END(FRAG)
-
-        if (type == MessageType::DfsStoreFragment) {
-            // #ifdef IS_R
-            sendBrodcastMessageFurther(package_data);
-            // #else
-            //             auto p = package_data;
-            //             ThreadPoolBoost::instance()->post([this, package_data = p] {
-            //                 QThread::msleep(15);
-            //                 sendBrodcastMessageFurther(package_data);
-            //             });
-            // #endif
-        }
 
         break;
     }
@@ -1380,25 +1398,34 @@ void NetworkManager::messageReceived(const std::string &message,
                 return;
             }
 
-            node->dfs()->network_response_file_state(file_state_result->owner_id,
-                                                     file_state_result->file_id,
-                                                     file_state_result->state,
-                                                     file_state_result->hash,
-                                                     responder);
+            node->dfs()->network_response_file_state(file_state_result.value(), responder);
         }
         break;
     }
 
     case MessageType::DfsFileRequest: {
-        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        auto link_result = MessagePack::deserialize<Dfs::FileLinkFragment>(serialized);
         if (!link_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for file request", type);
             return;
         }
 
-        node->dfs()->download_manager().broadcast_stored_file(link_result->owner_id,
-                                                              link_result->file_id,
-                                                              responder);
+        node->dfs()->download_manager().share_stored_file(link_result.value(), responder);
+
+        break;
+    }
+
+    case MessageType::DfsFileRequestContinueUpload: {
+        auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);
+        if (!link_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for request file state", type);
+            return;
+        }
+
+        if (status == MessageStatus::Request)
+            node->dfs()->network_request_file_existance(link_result.value(), responder);
+        else if (status == MessageStatus::Response)
+            node->dfs()->download_manager().add_network_identifier(link_result.value(), identifier);
 
         break;
     }
@@ -1415,7 +1442,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                                 file_remove->sign,
                                                 file_remove->last_modified);
         // if sign not verify only -> not broadrcast
-        sendBrodcastMessageFurther(package_data);
+        send_brodcast_message_further(package_data);
         break;
     }
 
@@ -1479,7 +1506,7 @@ void NetworkManager::messageReceived(const std::string &message,
         node->dfs()->network_response_content_vector(db_content_result.value());
 
         if (type == MessageType::DfsVectorCreation) {
-            sendBrodcastMessageFurther(package_data);
+            send_brodcast_message_further(package_data);
         }
         break;
     }
@@ -1495,7 +1522,7 @@ void NetworkManager::messageReceived(const std::string &message,
                                         db_content_result->file_id,
                                         db_content_result->row);
 
-        sendBrodcastMessageFurther(package_data);
+        send_brodcast_message_further(package_data);
         break;
     }
 
@@ -1568,20 +1595,26 @@ void NetworkManager::messageReceived(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        if (res.has_value()) {
-            sendBrodcastMessageFurther(package_data);
-        }
+        // if (res.has_value()) {
+        send_brodcast_message_further(package_data);
+        // }
         break;
     }
 
     case MessageType::DagTransactionResult: {
+#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
+        if (!is_luminance_weight) {
+            return;
+        }
+#endif
+
         auto transaction_result = MessagePack::deserialize<TransactionResult>(serialized);
         if (!transaction_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for transaction result", type);
             break;
         }
 
-        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result);
+        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result, responder);
         break;
     }
 
@@ -1609,11 +1642,18 @@ void NetworkManager::messageReceived(const std::string &message,
 
             node->dag()->network_request_sections_response(txs.value(), responder);
         }
+
         break;
     }
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
+#ifdef IS_RC // only for ui clients, not for consoles, luminance priority
+            if (!is_luminance_weight) {
+                return;
+            }
+#endif
+
             auto range = MessagePack::deserialize<bool>(serialized);
             if (!range.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
@@ -1642,10 +1682,10 @@ void NetworkManager::messageReceived(const std::string &message,
         const auto &reward_request = reward_request_result.value();
         switch (status) {
         case MessageStatus::Request: {
-            auto res = node->mining_manager()->network_request_coin_reward(reward_request, responder);
+            auto res = node->data_mining_manager()->network_request_coin_reward(reward_request, responder);
 
             if (res) {
-                sendBrodcastMessageFurther(package_data);
+                send_brodcast_message_further(package_data);
             }
             break;
         }
@@ -1676,6 +1716,39 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
 
+    case MessageType::DagIntervalHash: {
+        auto hash_interval = MessagePack::deserialize<HashInterval>(serialized);
+        if (!hash_interval.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for hash interval", type);
+            break;
+        }
+
+        node->dag()->network_hash_interval(hash_interval.value(), responder);
+        break;
+    }
+
+    case MessageType::DagControlRangeRequest: {
+        auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
+        if (!dag_control.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dag control", type);
+            break;
+        }
+
+        node->dag()->network_request_control_section(dag_control.value(), responder);
+        break;
+    }
+
+    case MessageType::DagControlRangeResponse: {
+        auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
+        if (!dag_control.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for dag control", type);
+            break;
+        }
+
+        node->dag()->network_control_range_response(dag_control.value(), responder);
+        break;
+    }
+
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,
@@ -1683,9 +1756,11 @@ void NetworkManager::messageReceived(const std::string &message,
         break;
     }
     }
+
+    // eLog("Timer: {} ms for {}", timer.elapsed(), type);
 }
 
-void NetworkManager::removeWsConnection() {
+void NetworkManager::remove_socket_connection() {
     if (QObject::sender() == nullptr)
         return;
 
@@ -1702,10 +1777,10 @@ void NetworkManager::removeWsConnection() {
     if (connection != nullptr) {
         connection->deleteLater();
     }
-    checkConnectionsStatus();
+    check_connections_status();
 }
 
-void NetworkManager::socketError(Network::SocketServiceError error,
+void NetworkManager::socket_error(Network::SocketServiceError error,
                                  QString                     errorData,
                                  std::string                 ip,
                                  std::string                 identifier) {
@@ -1720,7 +1795,7 @@ void NetworkManager::socketError(Network::SocketServiceError error,
         || error == Network::SocketServiceError::VersionTooOld
         || error == Network::SocketServiceError::VersionTooNew) {
         reconn_.erase(ip);
-        failed_ips.insert(ip);
+        failed_ips_.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;
     }
@@ -1744,21 +1819,44 @@ void NetworkManager::socketError(Network::SocketServiceError error,
     */
 }
 
-void NetworkManager::localInizialization() {
+void NetworkManager::local_inizialization() {
     eLog("Doesn't find service. Start find local service");
-    connect(&m_networkStatus, &NetworkStatus::statusChanged, [](NetworkStatus::Status status) {
-        eLog("[NetworkStatus] {}", status);
+    connect(&network_status_, &NetworkStatus::statusChanged, [this](NetworkStatus::Status status) {
+        switch (status) {
+        case NetworkStatus::Status::Online:
+            eInfo("World network is online");
+            break;
+        case NetworkStatus::Status::Offline: {
+            eInfo("Warning: World network is offline");
+            std::set<SocketService *> copied;
+            {
+                auto connectionsLocked = *connections_;
+                copied                 = **connections_;
+            }
+
+            for (const auto &connection : copied) {
+                connection->flush();
+                emit connection->close();
+            }
+            break;
+        }
+        case NetworkStatus::Status::Local:
+            eInfo("Warning: Local network only");
+            break;
+        default:
+            break;
+        }
     });
 
-    local = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
-    eLog("[NetworkManager] Found local IP: {}", local->ip().toString());
+    local_ = std::make_shared<QNetworkAddressEntry>(Utils::findLocalIp(Utils::PrintDebug::Off));
+    eLog("[NetworkManager] Found local IP: {}", local_->ip().toString());
 
-    if (!local) {
+    if (!local_) {
         eLog("[NetworkManager] Local not found");
         return;
     }
 
-    bool sub = local->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
+    bool sub = local_->ip().isInSubnet(QHostAddress::parseSubnet("192.168.0.0/16"));
     eLog("Sub: {}", sub);
 
     if (!sub) {
@@ -1766,14 +1864,14 @@ void NetworkManager::localInizialization() {
         return;
     }
 
-    upnpDis = std::make_unique<UPNPConnection>(local);
-    upnpNet = std::make_unique<UPNPConnection>(local);
+    upnp_dis_ = std::make_unique<UPNPConnection>(local_);
+    upnp_net_ = std::make_unique<UPNPConnection>(local_);
     // connect(upnpNet, &UPNPConnection::success, this, &NetworkManager::);
     // connect(upnpDis, &UPNPConnection::success, this, &NetworkManager::startDiscovery);
-    connect(upnpNet.get(), &UPNPConnection::upnpError, [](QString msg) {
+    connect(upnp_net_.get(), &UPNPConnection::upnpError, [](QString msg) {
         eLog("[NetworkManager] UPnP error: {}", msg);
     });
-    connect(upnpDis.get(), &UPNPConnection::upnpError, [](QString msg) {
+    connect(upnp_dis_.get(), &UPNPConnection::upnpError, [](QString msg) {
         eLog("[NetworkManager] UPnP Discovery error: {}", msg);
     });
     // eLog("Tunnel creation started!");
@@ -1781,38 +1879,38 @@ void NetworkManager::localInizialization() {
     // upnpNet->makeTunnel(tcpPort, tcpPort, "TCP", "Network tunnel of ExtraChain ");
 
     // UPnP v2
-    upnpConnector = std::make_unique<UPnPConnector>(local);
-    QObject::connect(upnpConnector.get(),
+    upnp_connector_ = std::make_unique<UPnPConnector>(local_);
+    QObject::connect(upnp_connector_.get(),
                      &UPnPConnector::deviceDiscovered,
                      [&](const QHostAddress &address, const QString &location) {
                          std::cout << "Discovered device at " << address.toString().toStdString()
                                    << " with location: " << location.toStdString() << std::endl;
                          // Now retrieve and parse the device description.
-                         upnpConnector->retrieveDeviceDescription(QUrl(location));
+                         upnp_connector_->retrieveDeviceDescription(QUrl(location));
                      });
 
-    QObject::connect(upnpConnector.get(), &UPnPConnector::errorOccurred, [](const QString &errorMessage) {
+    QObject::connect(upnp_connector_.get(), &UPnPConnector::errorOccurred, [](const QString &errorMessage) {
         std::cout << "Error: " << errorMessage.toStdString() << std::endl;
     });
 
-    QObject::connect(upnpConnector.get(), &UPnPConnector::soapResponseReceived, [this](const QString &response) {
+    QObject::connect(upnp_connector_.get(), &UPnPConnector::soapResponseReceived, [this](const QString &response) {
         std::cout << "SOAP response: " << response.toStdString() << std::endl;
     });
 
-    QObject::connect(upnpConnector.get(), &UPnPConnector::controlURLFound, [this](const QString &response) {
+    QObject::connect(upnp_connector_.get(), &UPnPConnector::controlURLFound, [this](const QString &response) {
         // Example parameters:
         QUrl    controlUrl(response);
         int     internalPort   = 8080;  // The port on your internal application
         int     externalPort   = 8080;  // The external port on your router
         QString protocol       = "TCP"; // Typically TCP
         QString description    = "MyApp Tunnel";
-        QString internalClient = local->ip().toString(); // Your internal IP address
+        QString internalClient = local_->ip().toString(); // Your internal IP address
 
         // Call addPortMapping to establish the tunnel.
-        upnpConnector
+        upnp_connector_
             ->addPortMapping(controlUrl, internalPort, externalPort, protocol, description, internalClient);
         // Call getSpecificPortMappingEntry to check if port has been mapped.
-        upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
+        upnp_connector_->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
 
         // upnpConnector->removePortMapping(controlUrl, externalPort, protocol);
         // upnpConnector->getSpecificPortMappingEntry(controlUrl, externalPort, protocol);
@@ -1823,7 +1921,7 @@ void NetworkManager::localInizialization() {
 }
 
 std::string NetworkManager::getNetworkVPNHash() noexcept {
-    return m_networkHashForVPN;
+    return network_hash_for_vpn_;
 }
 
 void NetworkManager::setNetworkVPNHash() noexcept {
@@ -1832,16 +1930,16 @@ void NetworkManager::setNetworkVPNHash() noexcept {
     std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
 
     KeyPrivate key;
-    key.generate();
-    m_networkHashForVPN =
+    key.generate_random();
+    network_hash_for_vpn_ =
         Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->accountController()->system_actor().id().to_string() + salt,
+                                  + node->account_controller()->system_actor().id().to_string() + salt,
                               Utils::HashAlgorithm::Blake3)
             .substr(0, 64);
 }
 
-QString NetworkManager::localIp() {
-    return local->ip().toString();
+QString NetworkManager::local_ip() {
+    return local_->ip().toString();
 }
 
 void NetworkManager::initialize_first_node() {
@@ -1906,7 +2004,7 @@ bool NetworkManager::save_first_node(const std::string_view first_node) {
 
 void NetworkManager::onNewWsConnection() {
     eLog("NetworkManager::onNewWsConnection()");
-    auto ws = wsServer->nextPendingConnection();
+    auto ws = ws_server_->nextPendingConnection();
     if (ws == nullptr)
         eFatal("[WS] Error: ws == nulltpr");
 
@@ -1923,14 +2021,14 @@ void NetworkManager::onNewWsConnection() {
     auto service = new WebSocketService(ws, node, this, false);
     connectWsService(service);
     if (!needToDelete)
-        m_reconnectionsToIdentifier->emplace(NetworkReconnect { .ip       = service->ip(),
+        reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),
                                                                 .port     = service->port(),
                                                                 .protocol = Network::Protocol::WebSocket },
                                              "");
 }
 
 bool NetworkManager::removeOneConnection() {
-    auto connectionsLocked = *m_connections;
+    auto connectionsLocked = *connections_;
     bool isChanged         = false;
 
     SocketService *doomed;
@@ -2005,9 +2103,9 @@ std::pair<std::uint64_t, std::uint64_t> CalculateTraffic::totalBytes() {
                            });
 }
 
-QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
+QString NetworkManager::found_current_identifier(QString ip, quint16 port) {
     QString res;
-    auto    m_reconnectionsToIdentifierLocked = *m_reconnectionsToIdentifier;
+    auto    m_reconnectionsToIdentifierLocked = *reconnections_to_identifier_;
     for (auto it = m_reconnectionsToIdentifierLocked->begin(); it != m_reconnectionsToIdentifierLocked->end();
          ++it) {
         if (it->first.ip == ip && it->first.port == port) {
@@ -2018,7 +2116,7 @@ QString NetworkManager::foundCurrentIdentifier(QString ip, quint16 port) {
     return res;
 }
 
-std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString &ip, bool alt) {
+std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const QString &ip, bool alt) {
     static QMap<QString, QString> cache;
     if (!ip.isEmpty() && cache.contains(ip)) {
         return { ip, cache[ip] };
@@ -2033,7 +2131,11 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         QUrl                  url(query);
         QNetworkAccessManager manager;
         QNetworkRequest       request(url);
-        request.setTransferTimeout(1500);
+#ifdef IS_RC
+        request.setTransferTimeout(5000);
+#else
+        request.setTransferTimeout(5000);
+#endif
         QNetworkReply *reply = manager.get(request);
 
         QString    ip, country, output;
@@ -2082,7 +2184,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         eCritical("Get public ip error: {}", error.what());
 
         if (!alt) {
-            return getPublicIPAndCountry(ip, true);
+            return search_public_ip_and_country_(ip, true);
         }
 
 #ifdef Q_OS_LINUX
@@ -2094,7 +2196,7 @@ std::pair<QString, QString> NetworkManager::getPublicIPAndCountry(const QString 
         eCritical("Get public ip error unknown");
 
         if (!alt) {
-            return getPublicIPAndCountry(ip, true);
+            return search_public_ip_and_country_(ip, true);
         }
 
 #ifdef Q_OS_LINUX

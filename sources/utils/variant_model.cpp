@@ -162,7 +162,7 @@ void VariantModel::remove(int index, int count) {
 }
 
 QVariantMap VariantModel::get(int index) {
-    if (index > m_count - 1 || index < 0 || m_datas.size() <= index)
+    if (index < 0 || index >= m_datas.size())
         return {};
     return m_datas[index];
 }

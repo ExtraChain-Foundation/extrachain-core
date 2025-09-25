@@ -64,10 +64,25 @@ public:
      */
     void create(ActorType type) {
         static_assert(std::is_same<T, KeyPrivate>::value,
-                      "Сannot be created with a public key. Only private is supported");
+                      "Cannot be created with a public key. Only private is supported");
 
         this->type_ = type;
-        this->key_.generate();
+        this->key_.generate_random();
+        auto public_key = this->key_.public_key();
+        auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
+
+        if (hash.size() >= ChainConst::ACTOR_SIZE)
+            id_ = hash.substr(0, ChainConst::ACTOR_SIZE);
+        else
+            eFatal("[Actor] Create: error size of hash");
+    }
+
+    void generate_from_seed(const MasterSeed &seed, int index, ActorType type) {
+        static_assert(std::is_same<T, KeyPrivate>::value,
+                      "Cannot be created with a public key. Only private is supported");
+
+        this->type_ = type;
+        this->key_.generate_seed(seed, index);
         auto public_key = this->key_.public_key();
         auto hash       = Utils::calculate_hash(ByteArray(public_key).toString(), Utils::HashAlgorithm::Blake3);
 

@@ -161,6 +161,10 @@ public:
         return identifiers_;
     }
 
+    double luminance_weight() const {
+        return luminance_weight_;
+    }
+
     bool add_identifier(const std::string& identifier) {
         if (identifier.empty()) {
             return false;
@@ -182,13 +186,21 @@ public:
     }
 
     void set_message_type(MessageType type) {
-        message_type = type;
+        message_type_ = type;
+    }
+
+    void set_luminance_weight(double new_weight) {
+        luminance_weight_ = new_weight;
     }
 
     Responder with_new_message_id() const {
         Responder responder   = *this;
         responder.message_id_ = generate_message_id();
         return responder;
+    }
+
+    bool empty() const {
+        return identifiers_.empty() && message_id_.empty();
     }
 
     Responder& operator=(const Responder&) = default;
@@ -199,11 +211,12 @@ private:
                                    SendMode           send_mode,
                                    MessageStatus      status) const;
 
-    MessageType message_type;
-    // MessageStatus                   message_status;
+    MessageType message_type_;
+    // MessageStatus                   message_status_;
     std::unordered_set<std::string> identifiers_;
     std::string                     message_id_;
-    NetworkManager*                 network_manager = nullptr;
+    double                          luminance_weight_ = 1;
+    NetworkManager*                 network_manager   = nullptr;
 };
 
 /**
@@ -214,33 +227,32 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
-    bool                            reservedActorListUse = false;
-    bool                            active               = false;
-    bool                            shouldRequest        = false;
-    std::set<std::string>           failed_ips;
-    std::unique_ptr<UPNPConnection> upnpDis;
-    std::unique_ptr<UPNPConnection> upnpNet;
-    std::unique_ptr<UPnPConnector>  upnpConnector;
-    QMap<std::string, int>          msgHashList = {};
+    bool                            active_ = false;
+    std::set<std::string>           failed_ips_;
+    std::unique_ptr<UPNPConnection> upnp_dis_;
+    std::unique_ptr<UPNPConnection> upnp_net_;
+    std::unique_ptr<UPnPConnector>  upnp_connector_;
+    QMap<std::string, int>          msg_hash_list_ = {};
 
-    ExtraChainNode*                              node;
-    std::shared_ptr<QNetworkAddressEntry>        local;
-    QWebSocketServer*                            wsServer = nullptr;
-    SafePtr<std::set<SocketService*>>            m_connections;
-    SafePtr<std::map<NetworkReconnect, QString>> m_reconnectionsToIdentifier;
-    NetworkStatus                                m_networkStatus;
+    ExtraChainNode*                       node;
+    std::shared_ptr<QNetworkAddressEntry> local_;
+    QWebSocketServer*                     ws_server_ = nullptr;
+
+    SafePtr<std::set<SocketService*>>            connections_;
+    SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
+    NetworkStatus                                network_status_;
 
     std::map<std::string, int> reconn_;
 
-    SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           m_messages;
-    std::map<std::string, MessageIdDataWaiting>                                 m_messages_waiting;
-    std::map<std::string, MessageIdDataReceived>                                m_messages_received;
-    QTimer*                                                                     m_reconnectTimer;
-    QTimer*                                                                     m_clear_network_caches_timer;
-    CalculateTraffic*                                                           calculateTraffic;
-    SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> m_network_forwarded_messages;
+    SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
+    std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
+    std::map<std::string, MessageIdDataReceived>                                messages_received_;
+    QTimer*                                                                     reconnect_timer_;
+    QTimer*                                                                     clear_network_caches_timer_;
+    CalculateTraffic*                                                           calculate_traffic_;
+    SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
 
-    std::string m_networkHashForVPN;
+    std::string network_hash_for_vpn_;
 
     std::string public_ip_;
     std::string first_node_ =
@@ -253,8 +265,8 @@ private:
 public:
     explicit NetworkManager(ExtraChainNode* node);
     ~NetworkManager();
-    void                        localInizialization();
-    std::pair<QString, QString> getPublicIPAndCountry(const QString& ip = "", bool alt = false);
+    void                        local_inizialization();
+    std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
 
     bool removeOneConnection();
 
@@ -262,8 +274,8 @@ public:
     void        setNetworkVPNHash() noexcept;
 
     // protected:
-    // quint16 tcpPort = 2222;
-    const quint16 wsPort = 2222;
+    // quint16 tcpPort = 17593;
+    const quint16 wsPort = 17593;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
@@ -275,84 +287,90 @@ private:
                                   MessageType        message_type = MessageType::Unknown,
                                   MessageStatus      status_info  = MessageStatus::NoStatus);
 
-    void clearNetworkCaches();
+    void clear_network_caches();
 
-    void addAllServicesIdentifiersToMessage(MessageBody& msg);
+    void add_all_services_identifiers_to_message(MessageBody& msg);
+    bool is_first_node(const std::string& identifier); // detect for safety
 
 public:
     SafePtr<std::set<SocketService*>> connections() const;
-    bool serverStatus(Network::Protocol protocol = Network::Protocol::WebSocket) const;
+    bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
+    void connect_network() {
+        connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+    }
 
 public slots:
-    void removeConnection(const QString& identifier);
-
-    void checkPort(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
+    void remove_connection(const QString& identifier);
+    void check_port(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
 
 signals:
     void finished(); // ThreadPool
-    void connectToNode(const QString&    ip,
+    void connect_to_node(const QString&    ip,
                        Network::Protocol protocol,
                        const bool        request    = false,
-                       const bool        isConstant = false);
+                       const bool        isConstant = false,
+                       const bool        is_light   = false);
 
 protected:
-    void connectToWebSocket(const QString& ip,
+    void connect_to_websocket(const QString& ip,
                             quint16        port,
                             bool           requestListNodes = false,
-                            const bool     isConstant       = false);
+                            const bool     isConstant       = false,
+                            const bool     is_light         = false);
 
     /**
-     * @brief NetworkManager::checkMsgCount
+     * @brief NetworkManager::check_message_count
      * @param msg
      * @return
      */
-    bool checkMsgCount(const std::string& msg);
+    bool check_message_count(const std::string& msg);
 
 private slots:
     void onNewWsConnection();
 
 protected slots:
-    virtual void checkConnectionsStatus();
-    void         startDiscovery();
+    virtual void check_connections_status();
+    void         start_discovery();
 
 public slots:
-    void startNetwork();
-    void connectToNodeSlot(const QString&    ip,
+    void start_network();
+    void connect_to_node_slot(const QString&    ip,
                            Network::Protocol protocol,
                            const bool        request    = false,
-                           bool              isConstant = false);
+                           bool              isConstant = false,
+                           const bool        is_light   = false);
     void process();
     void reconnection();
-    void setupProxy(QNetworkProxy::ProxyType type,
+    void setup_proxy(QNetworkProxy::ProxyType type,
                     const QString&           hostName,
                     quint16                  port,
                     const QString&           user,
                     const QString&           password);
 
 private slots:
-    void removeWsConnection();
-    void socketError(Network::SocketServiceError error, QString errorData, std::string ip, std::string identifier);
+    void remove_socket_connection();
+    void socket_error(Network::SocketServiceError error, QString errorData, std::string ip, std::string identifier);
 
 public:
-    QString localIp(); // TODO: remove
+    QString local_ip(); // TODO: remove
 
     void        initialize_first_node();
     std::string first_node();
     bool        save_first_node(const std::string_view first_node);
 
-    void sendBrodcastMessageFurther(const NetworkPackageStorage& package_data);
+    void send_brodcast_message_further(const NetworkPackageStorage& package_data);
 
-    void saveToCache(const std::string& serialized_message,
+    void save_to_cache(const std::string& serialized_message,
                      SendMode           send_mode,
                      const std::string& receiver_identifier);
-    void sendFromCache();
+    void send_from_cache();
     bool is_connection_exists(const std::string& identifier);
-    bool isActiveConnectionExists();
+    bool is_active_connection_exists();
     int  active_connections_count();
 
-    void messageReceived(const std::string& message, const std::string& ip, const std::string& identifier);
+    void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 
-    QString foundCurrentIdentifier(QString ip, quint16 port);
+    QString found_current_identifier(QString ip, quint16 port);
 
     bool        send_message_checker(MessageType      type,
                                      SendMode         send_mode,
@@ -388,7 +406,7 @@ public:
 
     SafePtr<std::map<NetworkReconnect, QString>> reconnections();
 
-    CalculateTraffic* getCalculateTraffic() const;
+    CalculateTraffic* calculate_traffic() const;
 
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);
@@ -399,7 +417,7 @@ signals:
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);
-    void messageCountReceived(BigNumber count);
+    void messageCountReceived(SectionId count);
     void customMessageReceived(const NetworkPackageStorage packageData, const CustomMessage customPackage);
     void messageReceivedSignal(const std::string& message, const std::string& ip, const std::string& identifier);
 };

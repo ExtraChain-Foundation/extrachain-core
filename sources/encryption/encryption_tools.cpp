@@ -19,6 +19,8 @@
 
 #include "encryption/encryption_tools.h"
 
+#include <bip3x/bip3x_mnemonic.h>
+
 using Cryptography::CryptoError;
 
 namespace {
@@ -98,31 +100,43 @@ std::expected<bool, Cryptography::CryptoError> Cryptography::verify(const Bytes&
     return res == 0;
 }
 
-Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes& data, const KeyPass& secret_key) {
+Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes&   data,
+                                                           const KeyPass& secret_key,
+                                                           bool           nonce_from_key) {
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
-
     if (Utils::is_container_empty(secret_key)) {
         return std::unexpected(CryptoError::EmptyKey);
     }
 
     Bytes encrypted(crypto_secretbox_MACBYTES + data.size());
     Nonce nonce;
-    randombytes_buf(nonce.data(), nonce.size());
+
+    if (nonce_from_key) {
+        std::copy(secret_key.begin(), secret_key.begin() + nonce.size(), nonce.begin());
+    } else {
+        randombytes_buf(nonce.data(), nonce.size());
+    }
 
     if (crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data()) != 0) {
         return std::unexpected(CryptoError::EncryptionFailed);
     }
 
+    if (nonce_from_key) {
+        return encrypted;
+    }
+
     Bytes result(nonce.size() + encrypted.size());
     std::copy(nonce.begin(), nonce.end(), result.begin());
     std::copy(encrypted.begin(), encrypted.end(), result.begin() + nonce.size());
+
     return result;
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encrypted_data,
-                                                           const KeyPass& secret_key) {
+                                                           const KeyPass& secret_key,
+                                                           bool           nonce_from_key) {
     if (encrypted_data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
@@ -131,14 +145,19 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
         return std::unexpected(CryptoError::EmptyKey);
     }
 
-    if (encrypted_data.size() < MIN_ENCRYPTED_SIZE_SYMMETRIC) {
+    if (encrypted_data.size() < (nonce_from_key ? crypto_secretbox_MACBYTES : MIN_ENCRYPTED_SIZE_SYMMETRIC)) {
         return std::unexpected(CryptoError::DataTooShort);
     }
 
     Nonce nonce;
-    std::copy_n(encrypted_data.begin(), crypto_secretbox_NONCEBYTES, nonce.begin());
+    if (nonce_from_key) {
+        std::copy(secret_key.begin(), secret_key.begin() + nonce.size(), nonce.begin());
+    } else {
+        std::copy_n(encrypted_data.begin(), crypto_secretbox_NONCEBYTES, nonce.begin());
+    }
 
-    Bytes encrypted_message(encrypted_data.begin() + crypto_secretbox_NONCEBYTES, encrypted_data.end());
+    Bytes encrypted_message(encrypted_data.begin() + (!nonce_from_key ? crypto_secretbox_NONCEBYTES : 0),
+                            encrypted_data.end());
     Bytes decrypted_message(encrypted_message.size() - crypto_secretbox_MACBYTES);
 
     if (crypto_secretbox_open_easy(decrypted_message.data(),
@@ -154,7 +173,8 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_encrypt_password(const Bytes&       data,
-                                                                    const std::string& password) {
+                                                                    const std::string& password,
+                                                                    bool               nonce_from_key) {
     if (data.empty()) {
         return std::unexpected(CryptoError::EmptyData);
     }
@@ -168,11 +188,12 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt_password(const Bytes&
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
-    return symmetric_encrypt(data, key_result.value());
+    return symmetric_encrypt(data, key_result.value(), nonce_from_key);
 }
 
 Cryptography::CryptoResult Cryptography::symmetric_decrypt_password(const Bytes&       data,
-                                                                    const std::string& password) {
+                                                                    const std::string& password,
+                                                                    bool               nonce_from_key) {
     if (data.empty())
         return std::unexpected(CryptoError::EmptyData);
 
@@ -185,7 +206,7 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt_password(const Bytes&
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
-    return symmetric_decrypt(data, key_result.value());
+    return symmetric_decrypt(data, key_result.value(), nonce_from_key);
 }
 
 std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_create_pair() {
@@ -193,6 +214,81 @@ std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_create_pair() {
     PublicKey  pk;
     crypto_sign_keypair(pk.data(), sk.data());
     return { sk, pk };
+}
+
+MasterSeed Cryptography::generate_seed() {
+    MasterSeed master_seed;
+    randombytes_buf(master_seed.data(), master_seed.size());
+    return master_seed;
+}
+
+std::pair<PrivateKey, PublicKey> Cryptography::asymmetric_from_seed(const MasterSeed& master_seed,
+                                                                    std::uint32_t     index) {
+    std::array<std::uint8_t, 32> derived_seed;
+
+    // Prepare derivation data: master_seed || index (4 bytes, big-endian)
+    std::array<std::uint8_t, 36> derivation_data;
+
+    // Copy master seed
+    std::memcpy(derivation_data.data(), master_seed.data(), 32);
+
+    // Append index as 4 bytes (big-endian)
+    derivation_data[32] = (index >> 24) & 0xFF;
+    derivation_data[33] = (index >> 16) & 0xFF;
+    derivation_data[34] = (index >> 8) & 0xFF;
+    derivation_data[35] = index & 0xFF;
+
+    // Derive seed using BLAKE2b
+    crypto_generichash(derived_seed.data(),
+                       derived_seed.size(),
+                       derivation_data.data(),
+                       derivation_data.size(),
+                       nullptr,
+                       0);
+
+    // Generate Ed25519 keypair
+    PrivateKey private_key;
+    PublicKey  public_key;
+    crypto_sign_seed_keypair(public_key.data(), private_key.data(), derived_seed.data());
+
+    return { private_key, public_key };
+}
+
+PublicKey Cryptography::get_public_from_private(const PrivateKey& private_key) {
+    PublicKey public_key;
+    std::copy(private_key.begin() + 32, private_key.end(), public_key.begin());
+    return public_key;
+}
+
+std::vector<std::string> Cryptography::create_mnemonic(const MasterSeed& master_seed) {
+    auto result = bip3x::bip3x_mnemonic::encode_bytes(master_seed.data(), "en", BIP3X_ENTROPY_LEN_256);
+    return result.words;
+}
+
+std::expected<MasterSeed, Cryptography::MnemonicError> Cryptography::restore_seed_from_mnemonic(
+    const std::string& mnemonic) {
+    if (mnemonic.empty()) {
+        return std::unexpected(Cryptography::MnemonicError::Empty);
+    }
+
+    if (!validate_mnemonic(mnemonic)) {
+        return std::unexpected(Cryptography::MnemonicError::Validate);
+    }
+
+    auto decoded = bip3x::bip3x_mnemonic::decode_mnemonic(mnemonic.c_str(), "en", BIP3X_ENTROPY_LEN_256);
+
+    MasterSeed master_seed;
+    std::copy(decoded.begin(), decoded.end(), master_seed.begin());
+
+    return master_seed;
+}
+
+bool Cryptography::validate_mnemonic(const std::string& mnemonic) {
+    if (mnemonic.empty()) {
+        return false;
+    }
+
+    return bip3x::bip3x_mnemonic::validate_words("en", mnemonic.c_str());
 }
 
 Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      data,

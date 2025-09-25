@@ -20,7 +20,10 @@
 #include "chain/dag_cache.h"
 #include "chain/dag.h"
 #include "managers/extrachain_node.h"
+#include "network/network_manager.h"
 #include "utils/db_connector.h"
+
+#include "utils/thread_pool_boost.h"
 
 DagCache::DagCache(ExtraChainNode* node, Dag* dag)
     : node(node)
@@ -29,8 +32,8 @@ DagCache::DagCache(ExtraChainNode* node, Dag* dag)
 
 DagCache::~DagCache() {
     // Ensure DB is closed
-    if (db_ && db_->is_open()) {
-        db_->close();
+    if (cache_db_ && cache_db_->is_open()) {
+        cache_db_->close();
     }
 }
 
@@ -38,11 +41,15 @@ BigNumber DagCache::section() const {
     return cached_section_;
 }
 
-void DagCache::set_section(const BigNumber& section_id) {
+void DagCache::set_section(const SectionId& section_id, Force force) {
+    if (force == Force::None && cached_section_ >= section_id) {
+        return;
+    }
+
     cached_section_ = section_id;
 }
 
-std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
+std::pair<SectionId, Balances> DagCache::read_cached_balances() {
     Balances balances;
 
     if (!init_db()) {
@@ -50,7 +57,7 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
         return { BigNumber(-1), balances }; // TODO: expected
     }
 
-    const auto rows          = db_->select("SELECT * FROM balance_cache");
+    const auto rows          = cache_db_->select("SELECT * FROM balance_cache");
     auto       cache_section = cached_section_;
 
     for (const auto& row : rows) {
@@ -73,7 +80,7 @@ std::pair<BigNumber, Balances> DagCache::read_cached_balances() {
     return { cache_section, balances };
 }
 
-std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
+std::optional<std::pair<SectionId, Balances>> DagCache::read_cached_balances(
     const std::vector<std::pair<ActorId, TokenId>>& actor_token_pairs) {
     Balances balances;
 
@@ -105,7 +112,7 @@ std::optional<std::pair<BigNumber, Balances>> DagCache::read_cached_balances(
 
         query += boost::algorithm::join(conditions, " OR ");
 
-        const auto rows = db_->select(query, "balance_cache");
+        const auto rows = cache_db_->select(query, "balance_cache");
 
         for (const auto& row : rows) {
             auto actor_id = ActorId::create(row.at("actor_id"));
@@ -147,7 +154,7 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
         query += boost::algorithm::join(actor_ids_str, ", ");
         query += ")";
 
-        const auto rows = db_->select(query, "balance_cache");
+        const auto rows = cache_db_->select(query, "balance_cache");
 
         for (const auto& row : rows) {
             auto actor_id = ActorId::create(row.at("actor_id"));
@@ -163,7 +170,7 @@ std::optional<Balances> DagCache::get_cached_balances_for_actors(const std::vect
     return balances;
 }
 
-void DagCache::write_cached_balances(const Balances& balances, const std::optional<BigNumber>& section_id) {
+void DagCache::write_cached_balances(const Balances& balances, const std::optional<SectionId>& section_id) {
     // Check if database is initialized
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize db for write_cached_balances");
@@ -171,7 +178,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
     }
 
     // Start a transaction for efficiency
-    db_->query("BEGIN TRANSACTION");
+    cache_db_->query("BEGIN TRANSACTION");
 
     // Write each balance to the database
     for (const auto& [key, balance] : balances) {
@@ -186,12 +193,12 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         DbRow data = { { "actor_id", actor_id.to_string() },
                        { "token_id", token_id.to_string() },
                        { "balance", balance.to_string() } };
-        db_->replace("balance_cache", data);
+        cache_db_->replace("balance_cache", data);
         // }
     }
 
     // Commit transaction
-    db_->query("COMMIT");
+    cache_db_->query("COMMIT");
 
     // Update cached section if provided
     if (section_id.has_value()) {
@@ -209,7 +216,7 @@ BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const Toke
 
     DbRow binds = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
 
-    auto rows = db_->select(
+    auto rows = cache_db_->select(
         "SELECT balance FROM balance_cache WHERE actor_id = @actor_id AND token_id = "
         "@token_id",
         "balance_cache",
@@ -242,21 +249,21 @@ void DagCache::write_cached_balance(const ActorId&        actor_id,
     //     DbRow where = { { "actor_id", actor_id.to_string() }, { "token_id", token_id.to_string() } };
     //     db_->delete_row("balance_cache", where);
     // } else {
-    db_->replace("balance_cache", data);
+    cache_db_->replace("balance_cache", data);
     // }
 }
 
-BigNumber DagCache::calculate_genesis_section(const BigNumber& section_id) const {
+BigNumber DagCache::calculate_genesis_section(const SectionId& section_id) const {
     // Calculate the genesis section (multiple of Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
     return (section_id / Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS)
            * Config::DataStorage::CONSTRUCT_GENESIS_EVERY_BLOCKS;
 }
 
 Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
-                                      const BigNumber&            current_section,
-                                      const BigNumber&            first_saved_section,
-                                      std::optional<BigNumber>    to_section) {
-    eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
+                                      const SectionId&            current_section,
+                                      const SectionId&            first_saved_section,
+                                      std::optional<SectionId>    to_section) {
+    // eLog("[DagCache] Calculating balances for {} actors...", actor_ids.size());
     Balances balances;
 
     if (current_section == BigNumber(-1) || actor_ids.empty()) {
@@ -309,20 +316,23 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
     });
 
-    eLog("-----> {}", balances);
+    eLog("[Dag] Calculating balances: {}", balances);
 
     return balances;
 }
 
-bool DagCache::check_and_update_cache(const BigNumber& current_section) {
+CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
     // Calculate safe section ID based on lag
     // We only want to cache sections that are at least CACHE_LAG_SECTIONS behind the current section
+    // BigNumber cache_boundary = (current_section / 20) * 20;
+    // BigNumber threshold      = cache_boundary + CACHE_LAG_SECTIONS;
+
+    // if (current_section < threshold) {
     if (current_section < BigNumber(CACHE_LAG_SECTIONS)) {
-        // If we don't have enough sections yet, don't cache anything
         // eLog("[DagCache] Not enough sections for caching: current={}, required lag={}",
         //      current_section,
         //      CACHE_LAG_SECTIONS);
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // First, calculate the section with lag
@@ -330,6 +340,10 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
 
     // Then, find the nearest genesis section (multiple of CONSTRUCT_GENESIS_EVERY_BLOCKS)
     BigNumber safe_genesis_section = calculate_genesis_section(safe_section_with_lag);
+
+    if (safe_genesis_section > dag->current_section()) {
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
+    }
 
     // eLog("[DagCache] Checking cache update: current={}, with_lag={}, cached={}, safe_genesis={}",
     //      current_section,
@@ -340,13 +354,13 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     // Don't update if already at or ahead of safe section
     if (cached_section_ != BigNumber(-1) && safe_genesis_section <= cached_section_) {
         // eLog("[DagCache] No cache update needed: safe_genesis_section <= cached_section_");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // Don't update if would be moving backwards
     if (cached_section_ > safe_genesis_section) {
         eLog("[DagCache] Invalid cache update: cached_section_ > safe_genesis_section");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
     // Don't update if the distance between the current cache section and the new safe section
@@ -354,13 +368,13 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     if (cached_section_ != BigNumber(-1)
         && (safe_genesis_section - cached_section_) < BigNumber(CACHE_LAG_SECTIONS)) {
         // eLog("[DagCache] Skipping cache update: not enough new sections since last update");
-        return false;
+        return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
     }
 
-    eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
-         current_section,
-         cached_section_,
-         safe_genesis_section);
+    // eLog("[DagCache] Cache update needed: current section = {}, cached section = {}, safe genesis = {}",
+    //      current_section,
+    //      cached_section_,
+    //      safe_genesis_section);
 
     // Use read_section callback from DAG
     auto read_section_callback = [this](const BigNumber& section_id) -> std::optional<Section> {
@@ -368,34 +382,94 @@ bool DagCache::check_and_update_cache(const BigNumber& current_section) {
     };
 
     // Update cache to safe section (genesis + lag)
-    bool result = update_to_genesis_section(safe_genesis_section,
-                                            current_section,
-                                            dag->first_saved_section(),
-                                            read_section_callback);
+    auto [result, start_section] = this->update_to_genesis_section(safe_genesis_section,
+                                                                   current_section,
+                                                                   dag->first_saved_section(),
+                                                                   read_section_callback);
 
     if (result) {
         // Update the section range to reflect new cache
         dag->update_range();
-        return true;
+        return CacheResult { .result = true, .from = start_section, .to = safe_genesis_section };
     }
 
-    return false;
+    return CacheResult { .result = false, .from = BigNumber(-1), .to = BigNumber(-1) };
 }
 
-bool DagCache::update_to_genesis_section(
-    const BigNumber&                                        genesis_section,
-    const BigNumber&                                        current_section,
-    const BigNumber&                                        first_saved_section,
-    std::function<std::optional<Section>(const BigNumber&)> read_section_callback) {
+void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
+    if (dag == nullptr) {
+        return;
+    }
+    if (dag->status() != DagStatus::Ready) {
+        // ThreadPoolBoost::instance()->post([this] { // remove
+        auto res = this->check_and_update_cache(dag->current_section());
+
+        if (res.result) {
+            dag->update_range();
+            // return;
+            node->dag()->generate_hash_from_section(res.from);
+
+            auto control_hash = node->dag()->read_control(res.to);
+            if (!control_hash.has_value()) {
+                eTemp("[DagCache] Problem with control hash from {}", res.to);
+                dag->start_control(Force::Active, Force::None);
+                node->dag()->generate_hash_from_section(res.from);
+
+                auto control_hash = node->dag()->read_control(res.to);
+                if (!control_hash.has_value()) {
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                }
+            }
+        }
+        // });
+    } else {
+        auto res = this->check_and_update_cache(dag->current_section());
+
+        if (res.result) {
+            dag->update_range();
+
+            ThreadPoolBoost::instance()->post([this, res] {
+                auto last_hash    = node->dag()->generate_hash_from_section(res.from);
+                auto control_hash = node->dag()->read_control(res.to);
+                if (!control_hash.has_value()) {
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                    return;
+                }
+                if (!last_hash.has_value()) {
+                    eCritical("[DagCache] No last hash");
+                    return;
+                }
+
+                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
+                // eLog("[Dag] Send {}", hash_interval);
+                node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
+            });
+        }
+    }
+}
+
+std::pair<bool, SectionId> DagCache::update_to_genesis_section(
+    const SectionId&                                        genesis_section,
+    const SectionId&                                        current_section,
+    const SectionId&                                        first_saved_section,
+    std::function<std::optional<Section>(const SectionId&)> read_section_callback) {
     // If trying to update to same section, nothing to do
     if (cached_section_ == genesis_section) {
-        return true;
+        return { true, BigNumber(-1) };
     }
-    eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
 
-    BigNumber start_section;
+    bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
+    if (show) {
+        eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
+    }
+
+    SectionId start_section;
     if (cached_section_ != BigNumber(-1)) {
         start_section = cached_section_ + 1;
+        // if (cached_section_ == 0 && current_section < 20) {
+        //     start_section = 0; // ?
+        // }
     } else {
         start_section = first_saved_section;
     }
@@ -427,16 +501,16 @@ bool DagCache::update_to_genesis_section(
         }
     }
 
-    eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
+    // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
 
     // Initialize DB
     if (!init_db()) {
         eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
-        return false;
+        return { false, BigNumber(-1) };
     }
 
     // Start a transaction for efficiency
-    db_->query("BEGIN TRANSACTION");
+    cache_db_->query("BEGIN TRANSACTION");
 
     std::vector<std::pair<ActorId, TokenId>> actor_token_pairs(actor_token_set.begin(), actor_token_set.end());
 
@@ -444,11 +518,13 @@ bool DagCache::update_to_genesis_section(
     auto cached_balances_opt = read_cached_balances(actor_token_pairs);
     if (!cached_balances_opt.has_value()) {
         eLog("[DagCache] Failed to read cached balances");
-        db_->query("ROLLBACK");
-        return false;
+        cache_db_->query("ROLLBACK");
+        return { false, BigNumber(-1) };
     }
 
     Balances& balances = cached_balances_opt.value().second;
+    // auto      cache_res = read_cached_balances();                 // ?
+    // local_clear_less_balances(cache_res.first, cache_res.second); // ?
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -460,24 +536,29 @@ bool DagCache::update_to_genesis_section(
         // Process each transaction
         for (const auto& tx : section->transactions) {
             process_transaction(tx, balances);
+
+            if (dag->mode() == DagMode::Full) {
+                // write_index(tx.sender(), tx.receiver(), tx.section(), tx.timestamp());
+            }
         }
     }
 
     // Store non-zero balances in the database
     for (const auto& pair : actor_token_set) {
         auto it = balances.find(pair);
-        if (it != balances.end() && it->second != BigNumberFloat(0)) {
+        if (it != balances.end() /*&& it->second != BigNumberFloat(0)*/) {
             write_cached_balance(pair.first, pair.second, it->second);
         }
     }
 
     // Commit transaction
-    db_->query("COMMIT");
+    cache_db_->query("COMMIT");
     // Update cached section
-    cached_section_ = genesis_section;
-    eLog("[DagCache] Cache updated to section {}", cached_section_);
+    // cached_section_ = genesis_section;
+    set_section(genesis_section);
+    // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
-    return true;
+    return { true, start_section };
 }
 
 void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
@@ -489,17 +570,13 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     // Reward transactions
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
+
         balances[key] += tx.amount();
     }
     // Contract initialization
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
+
         balances[key] += tx.amount();
     }
     // Token conversion
@@ -509,16 +586,12 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
             if (from_token.has_value()) {
                 // Deduct from source token
                 auto from_key = std::make_pair(tx.sender(), from_token.value());
-                if (balances.find(from_key) == balances.end()) {
-                    balances[from_key] = BigNumberFloat(0);
-                }
+
                 balances[from_key] -= tx.amount();
 
                 // Add to destination token
                 auto to_key = std::make_pair(tx.sender(), tx.token());
-                if (balances.find(to_key) == balances.end()) {
-                    balances[to_key] = BigNumberFloat(0);
-                }
+
                 balances[to_key] += tx.amount();
             }
         }
@@ -528,17 +601,13 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
         // If receiver is valid, add funds
         if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
+
             balances[key] += tx.amount();
         }
         // If sender is valid, deduct funds
         if (!tx.sender().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
+
             balances[key] -= tx.amount();
         }
     }
@@ -549,7 +618,7 @@ bool DagCache::init_db() {
         return true;
     }
 
-    if (db_ && db_->is_open()) {
+    if (cache_db_ && cache_db_->is_open()) {
         db_initialized_ = true;
         return true;
     }
@@ -560,15 +629,15 @@ bool DagCache::init_db() {
     QDir().mkdir(QString::fromStdString(ChainConst::DAG_CACHE_FOLDER));
 
     std::string db_path = ChainConst::BALANCE_CACHE;
-    db_                 = std::make_unique<DbConnector>(db_path);
+    cache_db_           = std::make_unique<DbConnector>(db_path);
 
-    if (!db_->open()) {
+    if (!cache_db_->open()) {
         eLog("[DagCache] Failed to open cache database");
         return false;
     }
 
     // Create table if it doesn't exist
-    bool success = db_->query(Config::DataStorage::DagCacheCreate);
+    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate);
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
@@ -598,9 +667,10 @@ bool DagCache::init_db() {
 void DagCache::reset_db() {
     db_initialized_ = false;
     if (db_initialized_) {
-        db_->close();
+        cache_db_->close();
+        QFile::remove(ChainConst::BALANCE_CACHE.c_str());
     }
-    db_.reset();
+    cache_db_.reset();
 }
 
 void reverse_transaction(const Transaction& tx, Balances& balances) {
@@ -612,17 +682,11 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     // Reward transactions - reverse: subtract amount from sender
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
         balances[key] -= tx.amount();
     }
     // Contract initialization - reverse: subtract amount from sender
     else if (tx.type() == TransactionType::InitContract && !tx.sender().is_zero() && !tx.token().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());
-        if (balances.find(key) == balances.end()) {
-            balances[key] = BigNumberFloat(0);
-        }
         balances[key] -= tx.amount();
     }
     // Token conversion - reverse: add back to source, subtract from destination
@@ -632,16 +696,10 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
             if (from_token.has_value()) {
                 // Add back to source token (reverse of deduction)
                 auto from_key = std::make_pair(tx.sender(), from_token.value());
-                if (balances.find(from_key) == balances.end()) {
-                    balances[from_key] = BigNumberFloat(0);
-                }
                 balances[from_key] += tx.amount();
 
                 // Subtract from destination token (reverse of addition)
                 auto to_key = std::make_pair(tx.sender(), tx.token());
-                if (balances.find(to_key) == balances.end()) {
-                    balances[to_key] = BigNumberFloat(0);
-                }
                 balances[to_key] -= tx.amount();
             }
         }
@@ -651,30 +709,24 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
         // If receiver is valid, subtract funds (reverse of addition)
         if (!tx.receiver().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.receiver(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
             balances[key] -= tx.amount();
         }
 
         // If sender is valid, add funds back (reverse of deduction)
         if (!tx.sender().is_zero() && !tx.token().is_zero()) {
             auto key = std::make_pair(tx.sender(), tx.token());
-            if (balances.find(key) == balances.end()) {
-                balances[key] = BigNumberFloat(0);
-            }
             balances[key] += tx.amount();
         }
     }
 }
 
-std::set<ActorId> DagCache::local_clear_less_balances() {
-    Balances          balances;
+std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, const Balances& start_balances) {
+    auto              balances = start_balances;
     std::set<ActorId> actors;
 
-    eLog("[Dag] local_clear_less_balances");
+    // eLog("[Dag] Clear txs...");
 
-    for (auto i = BigNumber(1); i <= dag->current_section(); i++) {
+    for (auto i = from; i <= dag->current_section(); i++) {
         auto section = dag->read_section(i);
         if (!section.has_value() || section->transactions.empty() || section->id < 0) {
             continue;
@@ -695,13 +747,24 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
             //     eLog("{}\n", tx1);
             // }
 
+            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
+                continue;
+            }
+
             if (balances[{ tx.sender(), tx.token() }] < 0) {
-                eLog("[Dag] Removed... Section: {}, sender: {}, token: {}, balance: {}, timestamp: {}",
-                     tx.section(),
-                     tx.sender(),
-                     tx.token(),
-                     balances[{ tx.sender(), tx.token() }],
-                     tx.timestamp());
+#ifndef IS_RC
+                eInfo(
+                    "[Dag] Exorcised. Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
+                    "balance: {}, timestamp: {}",
+                    tx.section(),
+                    tx.sender(),
+                    tx.receiver(),
+                    tx.type(),
+                    tx.token(),
+                    tx.amount(),
+                    balances[{ tx.sender(), tx.token() }],
+                    tx.timestamp());
+#endif
 
                 reverse_transaction(tx, balances);
                 dag->local_remove_transaction(tx.section(), tx.hash());
@@ -710,6 +773,256 @@ std::set<ActorId> DagCache::local_clear_less_balances() {
         }
     }
 
-    eLog("[Dag] Removed for actors: {}", actors);
+    if (actors.size() != 0) {
+        eLog("[Dag] Removed for actors: {}", actors);
+    }
     return actors;
+}
+
+void DagCache::ensure_index_db_initialized() const {
+    std::call_once(init_flag_, [this]() {
+        QDir("dag/cache").mkpath(".");
+        index_db_ = std::make_unique<DbConnector>("dag/cache/Index.db");
+
+        if (!index_db_->open()) {
+            throw std::runtime_error("Failed to open DAG cache database");
+        }
+
+        std::string create_actors_query = R"(
+                CREATE TABLE IF NOT EXISTS actors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    actor_id TEXT UNIQUE NOT NULL
+                )
+            )";
+
+        if (!index_db_->create_table(create_actors_query)) {
+            throw std::runtime_error("Failed to create actors table");
+        }
+
+        std::string create_sections_query = R"(
+                CREATE TABLE IF NOT EXISTS actor_sections (
+                    actor_pk INTEGER NOT NULL,
+                    section_id TEXT NOT NULL,
+                    timestamp_ms INTEGER NOT NULL,
+                    PRIMARY KEY (actor_pk, section_id),
+                    FOREIGN KEY (actor_pk) REFERENCES actors(id)
+                )
+            )";
+
+        if (!index_db_->create_table(create_sections_query)) {
+            throw std::runtime_error("Failed to create actor_sections table");
+        }
+
+        index_db_->query("CREATE UNIQUE INDEX IF NOT EXISTS idx_actor_id ON actors(actor_id)");
+        index_db_->query("CREATE INDEX IF NOT EXISTS idx_actor_pk ON actor_sections(actor_pk)");
+        index_db_->query("CREATE INDEX IF NOT EXISTS idx_timestamp ON actor_sections(timestamp_ms)");
+        index_db_->query("CREATE INDEX IF NOT EXISTS idx_section_id ON actor_sections(section_id)");
+    });
+}
+
+std::int64_t DagCache::get_or_create_actor_pk(const std::string& actor_id) const {
+    std::string select_query = "SELECT id FROM actors WHERE actor_id = ?";
+    DbRow       binds        = { { "actor_id", actor_id } };
+    auto        results      = index_db_->select(select_query, "actors", binds);
+
+    if (!results.empty()) {
+        return std::stoll(results[0].at("id"));
+    }
+
+    DbRow actor_data = { { "actor_id", actor_id } };
+    if (!index_db_->insert("actors", actor_data)) {
+        throw std::runtime_error("Failed to insert actor: " + actor_id);
+    }
+
+    auto new_results = index_db_->select(select_query, "actors", binds);
+    if (new_results.empty()) {
+        throw std::runtime_error("Failed to get actor id after insert");
+    }
+
+    return std::stoll(new_results[0].at("id"));
+}
+
+void DagCache::write_index(const ActorId&   sender,
+                           const ActorId&   receiver,
+                           const SectionId& section_id,
+                           std::uint64_t    timestamp_ms) {
+    ensure_index_db_initialized();
+
+    std::string section_str   = section_id.to_string();
+    std::string sender_str    = sender.to_string();
+    std::string receiver_str  = receiver.to_string();
+    std::string timestamp_str = std::to_string(timestamp_ms);
+
+    auto sender_pk = get_or_create_actor_pk(sender_str);
+
+    DbRow sender_data = { { "actor_pk", std::to_string(sender_pk) },
+                          { "section_id", section_str },
+                          { "timestamp_ms", timestamp_str } };
+    index_db_->replace("actor_sections", sender_data);
+
+    if (sender_str != receiver_str) {
+        auto  receiver_pk   = get_or_create_actor_pk(receiver_str);
+        DbRow receiver_data = { { "actor_pk", std::to_string(receiver_pk) },
+                                { "section_id", section_str },
+                                { "timestamp_ms", timestamp_str } };
+        index_db_->replace("actor_sections", receiver_data);
+    }
+}
+
+std::vector<SectionId> DagCache::read_index(const ActorId& actor) {
+    ensure_index_db_initialized();
+
+    std::vector<BigNumber> sections;
+    std::string            actor_str = actor.to_string();
+
+    std::string query = R"(
+            SELECT s.section_id
+            FROM actor_sections s
+            JOIN actors a ON s.actor_pk = a.id
+            WHERE a.actor_id = ?
+            ORDER BY s.timestamp_ms
+        )";
+
+    DbRow binds   = { { "actor_id", actor_str } };
+    auto  results = index_db_->select(query, "actor_sections", binds);
+
+    sections.reserve(results.size());
+    for (const auto& row : results) {
+        auto it = row.find("section_id");
+        if (it != row.end() && !it->second.empty()) {
+            sections.emplace_back(it->second);
+        }
+    }
+
+    return sections;
+}
+
+bool DagCache::has_section(const ActorId& actor, const SectionId& section_id) const {
+    ensure_index_db_initialized();
+
+    std::string query = R"(
+            SELECT 1
+            FROM actor_sections s
+            JOIN actors a ON s.actor_pk = a.id
+            WHERE a.actor_id = ? AND s.section_id = ?
+            LIMIT 1
+        )";
+
+    DbRow binds = { { "actor_id", actor.to_string() }, { "section_id", section_id.to_string() } };
+
+    auto results = index_db_->select(query, "actor_sections", binds);
+    return !results.empty();
+}
+
+std::uint64_t DagCache::count_sections(const ActorId& actor) const {
+    ensure_index_db_initialized();
+
+    std::string query = R"(
+            SELECT COUNT(*) as count
+            FROM actor_sections s
+            JOIN actors a ON s.actor_pk = a.id
+            WHERE a.actor_id = ?
+        )";
+
+    DbRow binds   = { { "actor_id", actor.to_string() } };
+    auto  results = index_db_->select(query, "actor_sections", binds);
+
+    if (!results.empty()) {
+        return std::stoull(results[0].at("count"));
+    }
+    return 0;
+}
+
+std::vector<ActorId> DagCache::get_actors_with_section(const SectionId& section_id) const {
+    ensure_index_db_initialized();
+
+    std::vector<ActorId> actors;
+
+    std::string query = R"(
+            SELECT DISTINCT a.actor_id
+            FROM actor_sections s
+            JOIN actors a ON s.actor_pk = a.id
+            WHERE s.section_id = ?
+        )";
+
+    DbRow binds   = { { "section_id", section_id.to_string() } };
+    auto  results = index_db_->select(query, "actor_sections", binds);
+
+    actors.reserve(results.size());
+    for (const auto& row : results) {
+        auto it = row.find("actor_id");
+        if (it != row.end() && !it->second.empty()) {
+            actors.emplace_back(it->second);
+        }
+    }
+
+    return actors;
+}
+
+bool DagCache::has_daily_activity(const ActorId& actor, const std::string& time_period) const {
+    auto parse_result = Utils::parse_time_string(time_period);
+    if (!parse_result.has_value()) {
+        return false;
+    }
+
+    return has_daily_activity_ms(actor, parse_result.value());
+}
+
+bool DagCache::has_daily_activity_ms(const ActorId& actor, std::uint64_t period_ms) const {
+    ensure_index_db_initialized();
+
+    auto now_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+
+    auto start_time_ms = static_cast<std::uint64_t>(now_ms) - period_ms;
+
+    constexpr std::uint64_t ms_per_day     = 24ULL * 60 * 60 * 1000;
+    std::uint64_t           days_in_period = period_ms / ms_per_day;
+
+    if (days_in_period == 0) {
+        std::string query = R"(
+                SELECT COUNT(*) as count
+                FROM actor_sections s
+                JOIN actors a ON s.actor_pk = a.id
+                WHERE a.actor_id = ? AND s.timestamp_ms >= ?
+            )";
+
+        DbRow binds = { { "actor_id", actor.to_string() }, { "start_time", std::to_string(start_time_ms) } };
+
+        auto results = index_db_->select(query, "actor_sections", binds);
+
+        if (!results.empty()) {
+            return std::stoull(results[0].at("count")) > 0;
+        }
+
+        return false;
+    }
+
+    for (std::uint64_t day = 0; day < days_in_period; ++day) {
+        auto day_start = start_time_ms + (day * ms_per_day);
+        auto day_end   = day_start + ms_per_day;
+
+        std::string query = R"(
+                SELECT COUNT(*) as count
+                FROM actor_sections s
+                JOIN actors a ON s.actor_pk = a.id
+                WHERE a.actor_id = ?
+                AND s.timestamp_ms >= ?
+                AND s.timestamp_ms < ?
+                LIMIT 1
+            )";
+
+        DbRow binds = { { "actor_id", actor.to_string() },
+                        { "day_start", std::to_string(day_start) },
+                        { "day_end", std::to_string(day_end) } };
+
+        auto results = index_db_->select(query, "actor_sections", binds);
+
+        if (results.empty() || std::stoull(results[0].at("count")) == 0) {
+            return false;
+        }
+    }
+
+    return true;
 }

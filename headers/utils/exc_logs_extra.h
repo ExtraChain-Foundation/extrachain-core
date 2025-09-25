@@ -63,7 +63,7 @@ struct fmt::formatter<std::expected<T, E>> {
     }
 
     template <typename FormatContext>
-    auto format(const std::expected<T, E>& exp, FormatContext& ctx) const { // Добавлен const
+    auto format(const std::expected<T, E>& exp, FormatContext& ctx) const {
         if (exp.has_value()) {
             if constexpr (std::is_void_v<T>) {
                 return fmt::format_to(ctx.out(), "Ok(())");

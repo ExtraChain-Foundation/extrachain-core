@@ -32,14 +32,18 @@ static const int MINING_TIMER_TICK = 60000;
 class DataMiningManager : public QObject {
     Q_OBJECT
 
-    ExtraChainNode      *node;
-    const int            CoinProductionRate = 100;
-    const BigNumberFloat KoefReward         = BigNumberFloat("0.017", NumeralBase::Dec);
-    bool                 isRecalculate      = false;
-
 public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
 
+    /**
+     * @brief calculateCoins
+     * @param dataAmountStored
+     * @param dataAmountTotalStoredInNetwork
+     * @param circulativeSupply
+     * @param blockAmount
+     * @param coefficient
+     * @return
+     */
     BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored,
                                   BigNumberFloat dataAmountTotalStoredInNetwork,
                                   BigNumberFloat circulativeSupply,
@@ -55,13 +59,27 @@ public:
      * @brief calculate reward amound
      * @return amount of reward
      */
-    BigNumberFloat calculateRewardAmount() const;
-    BigNumberFloat calculateRewardAmount(const Dfs::Reward::RequestReward &requestReward) const;
+    BigNumberFloat calculate_reward_amount() const;
+    BigNumberFloat calculate_reward_amount(const Dfs::Reward::RequestReward &request_reward) const;
 
     /**
      * @brief Send reward amount
      */
-    bool network_request_coin_reward(const Dfs::Reward::RequestReward &requestReward, const Responder &responder);
+    bool network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward, const Responder &responder);
+
+    /**
+     * @brief set_koef_to_koef
+     * @param koef_to_koef
+     */
+    void set_koef_to_koef(const BigNumberFloat &koef_to_koef);
 
 private:
+    const int            max_reward_          = 2;
+    const BigNumberFloat koef_reward_dag_dfs_ = BigNumberFloat("0.017", NumeralBase::Dec);
+    const BigNumberFloat koef_reward_dag_     = BigNumberFloat("0.0063", NumeralBase::Dec); // 0.0063 - dfs + dag
+    const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015", NumeralBase::Dec);
+    BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
+    ExtraChainNode      *node;
+
+    std::map<ActorId, std::uint64_t> last_reward_;
 };

@@ -30,8 +30,6 @@ enum class MessageType {
     Custom     = 0,
     NewActor   = 1,
     Actor      = 2,
-    ActorCount = 3,
-    ActorAll   = 4,
     Actors     = 15,
     ActorsHash = 16,
 
@@ -41,8 +39,12 @@ enum class MessageType {
     DagTransactionResult = 31,
     DagSections          = 32,
     DagLightData         = 33,
+    DagIntervalHash      = 34,
 
     DagSyncLastInfo = 39,
+
+    DagControlRangeRequest  = 40,
+    DagControlRangeResponse = 41,
 
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
@@ -53,11 +55,12 @@ enum class MessageType {
 
     DfsFileState = 56,
     // DfsFileWant      = 57,
-    DfsStoreFragment = 58,
-    DfsFileRequest   = 59,
-    DfsFileFragment  = 60,
+    DfsFileExistNotification = 58,
+    DfsFileRequest           = 59,
+    DfsFileFragment          = 60,
     // DfsFileThanks   = 61,
-    DfsFileRemove = 62,
+    DfsFileRemove                = 62,
+    DfsFileRequestContinueUpload = 63,
 
     DfsCollectionRequest   = 70,
     DfsCollectionContent   = 71,
@@ -110,12 +113,12 @@ enum class SendMode {
 MSGPACK_ADD_ENUM(SendMode)
 
 struct MessageBody {
-    SendMode                        send_type;
-    MessageType                     message_type;
-    MessageStatus                   status;
-    std::string                     message_id;
-    ActorId                         sender_id;
-    ActorId                         init_sender_id;
+    SendMode      send_type;
+    MessageType   message_type;
+    MessageStatus status;
+    std::string   message_id;
+    ActorId       sender_id;
+    ActorId       init_sender_id;
     // std::string                     init_sender_identifier;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
@@ -213,7 +216,9 @@ inline MessageBody make_init_message(const std::string& data,
 }
 
 struct VPNMessage {
+    bool                     is_wireguard = false;
     std::string              initialSender;
+    std::set<std::string>    allSenders;
     std::string              initialSenderNetworkIdentifier;
     int                      vpnCommand;
     int                      vpnType;
@@ -229,8 +234,14 @@ struct VPNMessage {
     std::string              uuid;
     std::vector<std::string> allIPsToSet;
     std::string              senderID;
+    std::set<std::string>    blockedSenders;
 
-    MSGPACK_DEFINE(initialSender,
+    std::string              sing_uuid;
+    std::vector<std::string> short_ids;
+
+    MSGPACK_DEFINE(is_wireguard,
+                   initialSender,
+                   allSenders,
                    initialSenderNetworkIdentifier,
                    vpnCommand,
                    vpnType,
@@ -245,5 +256,8 @@ struct VPNMessage {
                    publicKey,
                    uuid,
                    allIPsToSet,
-                   senderID)
+                   senderID,
+                   blockedSenders,
+                   sing_uuid,
+                   short_ids)
 };

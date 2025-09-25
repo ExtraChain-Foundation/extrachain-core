@@ -148,7 +148,7 @@ public:
             return true;
         }
 
-        const auto actor_ids = node->accountController()->accounts_ids();
+        const auto actor_ids = node->account_controller()->accounts_ids();
         if (std::find(actor_ids.begin(), actor_ids.end(), actor_id) != actor_ids.end()) {
             return true;
         }
@@ -165,7 +165,20 @@ public:
     }
 
     void set_mode(DfsMode mode) {
+        if (dfs_mode_ == mode) {
+            // return;
+        }
+
+        eLog("[Dfs] Set mode to {}", mode);
         dfs_mode_ = mode;
+
+        auto settings     = Utils::read_settings();
+        settings.dfs_mode = this->dfs_mode_;
+        Utils::write_settings(settings);
+    }
+
+    bool is_dirs_loaded() {
+        return is_dirs_loaded_;
     }
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
@@ -344,11 +357,9 @@ public:
     void network_request_file_state(const ActorId     &owner_id,
                                     const std::string &file_id,
                                     const Responder   &responder);
-    void network_response_file_state(const ActorId     &owner_id,
-                                     const std::string &file_id,
-                                     Dfs::FileState     state,
-                                     const std::string &hash,
-                                     const Responder   &responder);
+    void network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder);
+    void network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder);
+    void network_file_exist_notification(const Dfs::Packets::FileState &data, const Responder &responder);
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
@@ -392,9 +403,23 @@ public:
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();
 
+    // TODO: use for store files?
+    std::expected<Dfs::DirRow, Dfs::DfsError> find_file_self(const ActorId &owner_id, const std::string &dfs_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const std::string &dfs_name); // TODO: add folder
+
+    void add_to_waiting_file(const ActorId &actor_id, const std::string &file_id) {
+        files_waiting_.insert({ actor_id, file_id });
+    }
+
 private:
     DirsManager dirs_manager_;
     LoadManager load_manager_;
+    bool        is_dirs_loaded_ = false;
+
+    std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
+    std::set<std::pair<ActorId, std::string>>    files_waiting_;
+
+    void check_all_files(std::string identifier);
 
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,
@@ -422,7 +447,6 @@ public:
     void  sendSizeRequestMsg(const ActorId &actorId) const;
     void  sendSizeReponseMsg(const DfsP::RequestDfsSize &msg, const Responder &responder); // TODO: const
     float percentVerified(std::vector<DfsP::VerifyFileMessage> &fileList);
-    void  loadVPNLocalizationFiles();
 
 public slots:
 
@@ -442,13 +466,14 @@ signals:
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);
     void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
+    void waitDownloaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void dirsLoaded();
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);
     void vectorRowAdded(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
     void vectorRowRemoved(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
 
-    //
-    void getRemovedVPNLocalizationInfo(const QString data, const std::string actorId);
-    void vpnLocalizationLoadedFromStorage(const std::string actorId, const std::string fileName);
+    friend DirsManager;
+    friend LoadManager;
 };

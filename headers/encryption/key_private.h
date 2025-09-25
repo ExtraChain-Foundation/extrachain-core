@@ -48,7 +48,8 @@ public:
     ~KeyPrivate() = default;
 
 public:
-    void generate();
+    void generate_random();
+    void generate_seed(const MasterSeed &seed, int index);
 
     Cryptography::CryptoResult encrypt(const Bytes &data, const PublicKey &receiver_public_key) const;
     Cryptography::CryptoResult decrypt(const Bytes &data, const PublicKey &sender_public_key) const;

@@ -31,6 +31,8 @@
 #include <filesystem>
 #include <sstream>
 
+#include "utils/exc_commands.h"
+
 #ifdef _WIN32
     #include <windows.h>
     #include <crtdbg.h>
@@ -55,9 +57,10 @@ enum class LogLevel {
 class Logger {
     std::ofstream     log_file;
     std::string       current_log_filename;
-    bool              debug_enabled       = false;
-    bool              file_output_enabled = false;
-    const std::string logs_directory      = "logs";
+    bool              debug_enabled          = false;
+    bool              file_output_enabled    = false;
+    bool              compact_console_output = false;
+    const std::string logs_directory         = "logs";
     std::thread::id   main_thread_id;
     std::string       file_name;
 
@@ -71,13 +74,14 @@ class Logger {
         std::tm bt    = *std::localtime(&timer);
         auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-        return fmt::format("{}-{:02d}-{:02d}-{:02d}.{:02d}.{:02d}.{:03d}.log",
+        return fmt::format("{}-{:04d}.{:02d}.{:02d}_{:02d}-{:02d}-{:02d}.log",
                            instance().file_name,
+                           bt.tm_year + 1900,
+                           bt.tm_mon + 1,
+                           bt.tm_mday,
                            bt.tm_hour,
                            bt.tm_min,
                            bt.tm_sec,
-                           bt.tm_mday,
-                           bt.tm_mon + 1,
                            ms.count());
     }
 
@@ -142,6 +146,14 @@ public:
 
     bool is_debug() const {
         return debug_enabled;
+    }
+
+    void set_compact_console(bool enabled) {
+        compact_console_output = enabled;
+    }
+
+    bool is_compact_console() const {
+        return compact_console_output;
     }
 
     void enable_filter(bool enable = true) {
@@ -246,6 +258,7 @@ namespace detail {
     [[noreturn]] inline void terminate_application(const std::string& message) {
         fmt::println("{}", message);
         std::abort();
+        std::exit(0);
     }
 #endif
 
@@ -347,7 +360,10 @@ namespace detail {
                       uint32_t                    line,
                       fmt::format_string<Args...> format_str,
                       Args&&... args) {
-        if (!should_log(level) || !Logger::instance().should_log(file))
+        bool should_log_console = should_log(level) && Logger::instance().should_log(file);
+        bool should_log_file    = Logger::instance().is_file_output();
+
+        if (!should_log_console && !should_log_file)
             return;
 
         thread_local fmt::memory_buffer log_buffer;
@@ -360,55 +376,70 @@ namespace detail {
         fmt::format_to(std::back_inserter(msg_buffer), format_str, std::forward<Args>(args)...);
 
         // Format base log
-        const auto level_name = get_level_name(level);
-        const bool has_level  = !level_name.empty();
+        if (should_log_console || should_log_file) {
+            const auto level_name = get_level_name(level);
+            const bool has_level  = !level_name.empty();
 
-        fmt::format_to(std::back_inserter(log_buffer),
-                       "{}{}{}{} [file:/{}:{}] [{}] {}",
-                       get_current_time(),
-                       has_level ? " [" : "",
-                       has_level ? level_name : "",
-                       has_level ? "]" : "",
-                       get_filename(file),
-                       line,
-                       get_thread_id(),
-                       fmt::string_view(msg_buffer.data(), msg_buffer.size()));
+            fmt::format_to(std::back_inserter(log_buffer),
+                           "{}{}{}{} [file:/{}:{}] [{}] {}",
+                           get_current_time(),
+                           has_level ? " [" : "",
+                           has_level ? level_name : "",
+                           has_level ? "]" : "",
+                           get_filename(file),
+                           line,
+                           get_thread_id(),
+                           fmt::string_view(msg_buffer.data(), msg_buffer.size()));
+        }
 
-        // Write to all outputs
-        auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
+        // Console output
+        if (should_log_console) {
+            auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
 
 #ifdef __ANDROID__
-        int android_priority = level == LogLevel::Debug      ? ANDROID_LOG_DEBUG
-                               : level == LogLevel::Info     ? ANDROID_LOG_INFO
-                               : level == LogLevel::Warning  ? ANDROID_LOG_WARN
-                               : level == LogLevel::Critical ? ANDROID_LOG_ERROR
-                               : level == LogLevel::Fatal    ? ANDROID_LOG_FATAL
-                                                             : ANDROID_LOG_INFO;
-        __android_log_print(android_priority,
-                            "ExtraChain",
-                            "%.*s",
-                            static_cast<int>(log_buffer.size()),
-                            log_buffer.data());
+            int android_priority = level == LogLevel::Debug      ? ANDROID_LOG_DEBUG
+                                   : level == LogLevel::Info     ? ANDROID_LOG_INFO
+                                   : level == LogLevel::Warning  ? ANDROID_LOG_WARN
+                                   : level == LogLevel::Critical ? ANDROID_LOG_ERROR
+                                   : level == LogLevel::Fatal    ? ANDROID_LOG_FATAL
+                                                                 : ANDROID_LOG_INFO;
+            __android_log_print(android_priority,
+                                "ExtraChain",
+                                "%.*s",
+                                static_cast<int>(log_buffer.size()),
+                                log_buffer.data());
 #else
     #ifdef _WIN32
-        #ifdef _WIN32
-        if (IsDebuggerPresent()) {
-            std::string debug_str(log_view.data(), log_view.size());
-            debug_str += '\n';
-            OutputDebugStringA(debug_str.c_str());
-        }
-        #endif
+            if (IsDebuggerPresent()) {
+                std::string debug_str(log_view.data(), log_view.size());
+                debug_str += '\n';
+                OutputDebugStringA(debug_str.c_str());
+            }
     #endif
 
-        // Console with color
-        fmt::print(stdout, get_level_style(level), "{}\n", log_view);
-        fflush(stdout);
+            // Console output - compact or full
+            if (Logger::instance().is_compact_console()) {
+                // Compact: only time and message
+                auto msg_view = fmt::string_view(msg_buffer.data(), msg_buffer.size());
+                SimpleConsole::preserveInput();
+                fmt::print(stdout, get_level_style(level), "[{}] {}\n", get_current_time(), msg_view);
+                SimpleConsole::restoreInput();
+            } else {
+                // Full format
+                fmt::print(stdout, get_level_style(level), "{}\n", log_view);
+            }
+            fflush(stdout);
 #endif
+        }
 
-        if (Logger::instance().is_file_output()) {
-            msg_buffer.clear();
-            fmt::format_to(std::back_inserter(msg_buffer), "{} {}\n", get_full_time(), log_view);
-            Logger::instance().write_to_file(std::string_view(msg_buffer.data(), msg_buffer.size()));
+        // File output - always write
+        if (should_log_file) {
+            auto log_view = fmt::string_view(log_buffer.data(), log_buffer.size());
+
+            thread_local fmt::memory_buffer file_buffer;
+            file_buffer.clear();
+            fmt::format_to(std::back_inserter(file_buffer), "{} {}\n", get_full_time(), log_view);
+            Logger::instance().write_to_file(std::string_view(file_buffer.data(), file_buffer.size()));
         }
     }
 

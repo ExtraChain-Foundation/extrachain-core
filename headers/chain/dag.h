@@ -19,7 +19,10 @@
 
 #pragma once
 
+#include <shared_mutex>
+
 #include <boost/describe.hpp>
+#include <QTimer>
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"
@@ -31,28 +34,77 @@
 class ExtraChainNode;
 class Responder;
 
+static const SectionId CONTROL_INTERVAL      = SectionId(20);
+static const int       CONTROL_INTERVAL_MOD  = 20;
+static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
+
+// helpers
+static inline bool is_aligned20(const SectionId &s) {
+    return (s % CONTROL_INTERVAL) == 0;
+}
+static inline SectionId align_down20(const SectionId &s) {
+    eLog("align_down20 {}", s);
+    SectionId m;
+    m = s % CONTROL_INTERVAL;
+    return m == 0 ? s : (s - m);
+}
+static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
+    return (a < b) ? b : a;
+}
+
+// generate control sections [from..to] with step 20
+static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to) {
+    std::vector<SectionId> v;
+    for (SectionId s = from; s <= to; s += CONTROL_INTERVAL_MOD)
+        v.push_back(s);
+    return v;
+}
+
 /**
  * @brief Represents a section in the chain
  *
  * A section contains a collection of transactions and metadata
- * including its ID and timestamp.
+ * including its id and timestamp.
  */
 struct Section {
-    BigNumber             id;
-    std::set<Transaction> transactions;
+    SectionId                  id;
+    std::set<Transaction>      transactions;
+    std::optional<std::string> control;    // hash, interval 1-20, 21-40, ..
+    std::optional<std::string> hash_cache; // ?
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
      *
      * @return std::set<std::string> Set of previous transaction hashes
      */
-    std::set<std::string> prev_hashs();
+    std::set<std::string> prev_hashs() const;
 
-    std::set<std::string> hashs();
+    /**
+     * @brief hashs
+     * @return
+     */
+    std::set<std::string> hashs() const;
 
-    std::uint64_t middle();
+    /**
+     * @brief middle
+     * @return
+     */
+    std::uint64_t middle() const;
+
+    /**
+     * @brief calculate_hash
+     * @return
+     */
+    std::string calculate_hash() const;
 };
-BOOST_DESCRIBE_STRUCT(Section, (), (transactions))
+BOOST_DESCRIBE_STRUCT(Section, (), (transactions, control))
+
+struct SectionDiff {
+    std::vector<Transaction> added_transactions;
+    std::vector<Transaction> removed_transactions;
+    std::vector<Transaction> modified_transactions;
+};
+BOOST_DESCRIBE_STRUCT(SectionDiff, (), (added_transactions, removed_transactions, modified_transactions))
 
 /**
  * @brief Represents the result of a transaction validation
@@ -72,11 +124,31 @@ BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
  * the ID of the last cached section
  */
 struct SectionRange {
-    std::string first;       // ID of the first saved section
-    std::string last;        // ID of the current (last) section
-    std::string last_cached; // ID of the last cached section
+    std::string first;       // id of the first saved section
+    std::string last;        // id of the current (last) section
+    std::string last_cached; // id of the last cached section
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
+
+struct DagControl {
+    SectionId   section_id;
+    std::string control;
+};
+BOOST_DESCRIBE_STRUCT(DagControl, (), (section_id, control))
+
+struct SectionSync {
+    SectionId               to;
+    std::set<Transaction>   txs;
+    std::vector<DagControl> controls; // need map?
+};
+BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
+
+struct HashInterval {
+    SectionId   from;
+    SectionId   to;
+    std::string hash;
+};
+BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -91,12 +163,17 @@ enum class DagSyncStatus {
  * @brief Enumeration of the DAG operational states
  */
 enum class DagStatus {
-    Started, // DAG has been initialized
-    Ready,   // DAG is operational and ready for transactions
-    Final,   // DAG is processing final operations
-    Sync,    // DAG is synchronizing with the network
-    Maybe,   // DAG is in a potential sync state
-    Timered, // DAG is processing timed operations
+    Started, // Dag has been initialized
+    Ready,   // Dag is operational and ready for transactions
+    Final,   // Dag is processing final operations
+    Sync,    // Dag is synchronizing with the network
+    Maybe,   // Dag is in a potential sync state
+    Timered, // Dag is processing timed operations
+};
+
+enum class WriteResult {
+    Write,
+    NoChanges
 };
 
 /**
@@ -106,11 +183,15 @@ enum class DagStatus {
  * and the timestamp of the genesis section / transaction
  */
 struct DagLastInfo {
-    BigNumber             last_section_id;
-    std::set<std::string> last_hash;
-    std::uint64_t         zero_date;
+    SectionId     last_section_id;
+    SectionId     last_control_section_id;
+    std::string   last_control_hash;
+    std::uint64_t zero_date;
+    DagStatus     status;
 };
-BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
+BOOST_DESCRIBE_STRUCT(DagLastInfo,
+                      (),
+                      (last_section_id, last_control_hash, last_control_section_id, zero_date, status))
 
 /**
  * @brief Package of data for light mode synchronization
@@ -119,11 +200,25 @@ BOOST_DESCRIBE_STRUCT(DagLastInfo, (), (last_section_id, last_hash, zero_date))
  * and transactions needed for light mode synchronization
  */
 struct DagLightPackage {
-    Balances                 cache;         // Cached account balances
-    BigNumber                cache_section; // ID of the section corresponding to the cache
-    std::vector<Transaction> txs;           // Transactions since the cached section
+    Balances                                       cache;         // Cached account balances
+    SectionId                                      cache_section; // Id of the section corresponding to the cache
+    std::set<Transaction>                          txs;           // Transactions since the cached section
+    std::vector<std::pair<SectionId, std::string>> controls;      // Control hashs
 };
-BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs))
+BOOST_DESCRIBE_STRUCT(DagLightPackage, (), (cache, cache_section, txs, controls))
+
+struct DagControlRangeRequest {
+    SectionId from;
+    SectionId to; // to >= from
+};
+BOOST_DESCRIBE_STRUCT(DagControlRangeRequest, (), (from, to))
+
+struct DagControlRangeResponse {
+    SectionId               from;
+    SectionId               to;
+    std::vector<DagControl> controls;
+};
+BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls))
 
 /**
  * @brief Directed Acyclic Chain implementation
@@ -141,14 +236,20 @@ public:
      */
     Dag(ExtraChainNode *node);
 
+    ~Dag();
+
     /**
      * @brief Get the current section ID
      *
-     * @return BigNumber The current (latest) section ID
+     * @return SectionId The current (latest) section ID
      */
-    BigNumber current_section() const;
+    SectionId current_section() const;
 
-    void set_current_section(const BigNumber &new_current_section);
+    /**
+     * @brief set_current_section
+     * @param new_current_section
+     */
+    void set_current_section(const SectionId &new_current_section);
 
     /**
      * @brief Get the current DAG operation mode
@@ -195,9 +296,16 @@ public:
     /**
      * @brief Get the ID of the first saved section
      *
-     * @return BigNumber The first saved section ID
+     * @return SectionId The first saved section ID
      */
-    BigNumber first_saved_section();
+    SectionId first_saved_section();
+
+    /**
+     * @brief file_section
+     * @param section
+     * @return
+     */
+    SectionId file_section(const SectionId &section) const;
 
     /**
      * @brief Get the folder path for a section
@@ -205,7 +313,7 @@ public:
      * @param section The section ID
      * @return std::string The folder path
      */
-    std::string file_folder(const BigNumber &section) const;
+    std::string file_folder(const SectionId &section) const;
 
     /**
      * @brief Get the file path for a section
@@ -213,7 +321,7 @@ public:
      * @param section The section ID
      * @return std::string The file path
      */
-    std::string file_path(const BigNumber &section) const;
+    std::string file_path(const SectionId &section) const;
 
     /**
      * @brief Prepare a transaction for submission
@@ -222,10 +330,12 @@ public:
      *
      * @param transaction The transaction to prepare
      * @param signer The actor who will sign the transaction
+     * @param ignore_zero Param for dag genesis
      * @return std::expected<Transaction, TransactionError> The prepared transaction or an error
      */
     std::expected<Transaction, TransactionError> prepare_transaction(const Transaction       &transaction,
-                                                                     const Actor<KeyPrivate> &signer);
+                                                                     const Actor<KeyPrivate> &signer,
+                                                                     bool                     ignore_zero = false);
 
     /**
      * @brief Send a transaction to the network
@@ -258,7 +368,7 @@ public:
      * @param hash The hash of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result);
+    void network_transaction_result(const std::string hash, TransactionProveError result, const Responder &responder);
 
     /**
      * @brief Process a section received from the network
@@ -274,7 +384,8 @@ public:
      * @param token_id The token ID to calculate balances for
      * @return std::unordered_map<ActorId, BigNumberFloat> Map of actor IDs to balances
      */
-    Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids);
+    Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids,
+                                      std::optional<SectionId>    to_section = std::nullopt);
 
     /**
      * @brief Add a transaction to the sent transactions list
@@ -298,7 +409,7 @@ public:
      * @param deep The maximum number of sections to search back (default: 100)
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_transaction(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction> search_duplicate(const std::string &hash, int deep = 100) const;
 
     /**
      * @brief Read a section from storage
@@ -306,7 +417,14 @@ public:
      * @param section_id The ID of the section to read
      * @return std::optional<Section> The section if found, or nullopt
      */
-    std::optional<Section> read_section(const BigNumber &section_id) const;
+    std::optional<Section> read_section(const SectionId &section_id) const;
+
+    /**
+     * @brief exists_section_file
+     * @param section_id
+     * @return
+     */
+    bool exists_section_file(const SectionId &section_id) const;
 
     /**
      * @brief Start chain synchronization
@@ -344,7 +462,7 @@ public:
      * @param to The ending section ID
      * @param responder The responder to send the request to
      */
-    void network_request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder);
+    void network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
     /**
      * @brief Process a sections response from the network
@@ -374,6 +492,13 @@ public:
     void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
 
     /**
+     * @brief network_hash_interval
+     * @param hash_interval
+     * @param responder
+     */
+    void network_hash_interval(const HashInterval &hash_interval, const Responder &responder);
+
+    /**
      * @brief Set the chain synchronization status
      *
      * @param status The new sync status
@@ -386,26 +511,40 @@ public:
      * Processes transactions that were received while the chain
      * was synchronizing with the network.
      */
-    void process_cached_transactions();
+    void process_cached_transactions(bool not_ready = false);
+
+    std::unordered_map<std::string, Transaction> sended_transactions() {
+        return sended_transactions_;
+    }
+
+    std::unordered_map<std::string, Transaction> failed_transactions() {
+        return failed_transactions_;
+    }
 
 private:
     ExtraChainNode                              *node;                 // Parent node reference
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet confirmed
+    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
+    std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
     DagCache                                     cache_;               // Balance cache for fast calculations
 
-    BigNumber current_section_     = BigNumber(-1);      // Current (latest) section ID
-    BigNumber first_saved_section_ = BigNumber(-1);      // First section ID saved in the chain
+    mutable std::shared_mutex section_mutex_; //
+    mutable std::mutex        range_mutex_;   //
+
+    SectionId current_section_     = SectionId(-1);      // Current (latest) section ID
+    SectionId first_saved_section_ = SectionId(-1);      // First section ID saved in the chain
     DagMode   mode_                = DagMode::Full;      // Current operation mode
     DagStatus status_              = DagStatus::Started; // Current operational status
 
     DagSyncStatus                                sync_status_  = DagSyncStatus::None; // Current sync status
     DagSyncStatus                                check_status_ = DagSyncStatus::None; // Current check status
-    BigNumber                                    sync_last_index;                     // Last section index to sync
-    int                                          requests_count = 0; // Number of outstanding requests
-    std::unordered_map<std::string, DagLastInfo> last_info_;         // Last chain info from peers
-    QTimer                                      *timer_sync;         // Timer for sync operations
+    SectionId                                    sync_last_index_;                    // Last section index to sync
+    int                                          requests_count_ = 0; // Number of outstanding requests
+    int                                          min_req_count_  = 5;
+    std::unordered_map<std::string, DagLastInfo> last_info_;  // Last chain info from peers
+    QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
+    bool                                         search_control_              = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
@@ -419,14 +558,14 @@ private:
      * @param to Ending section ID
      * @param responder Responder to send the request to
      */
-    void request_sections(const BigNumber &from, const BigNumber &to, const Responder &responder);
+    void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
     /**
      * @brief Send a sync request to the network
      *
      * Determines what to sync based on peer information and sends appropriate requests.
      */
-    void send_sync_request();
+    void handle_sync_request();
 
     /**
      * @brief Write a section to storage
@@ -435,6 +574,41 @@ private:
      * @return std::optional<bool> Success or failure
      */
     std::optional<bool> write_section(const Section &section);
+
+    /**
+     * @brief write_section_diff
+     * @param section
+     * @return
+     */
+    std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> write_section_diff(const Section &section);
+
+    /**
+     * @brief write_control
+     * @param section_id
+     * @param hash
+     * @return
+     */
+    std::optional<WriteResult> write_control(const SectionId &section_id, const std::string &hash);
+
+    /**
+     * @brief remove_control
+     * @param section_id
+     * @return
+     */
+    std::optional<WriteResult> remove_control(const SectionId &section_id);
+
+    /**
+     * @brief timer_tick
+     */
+    void timer_tick();
+
+    /**
+     * @brief calculate_section_diff
+     * @param old_section
+     * @param new_section
+     * @return
+     */
+    SectionDiff calculate_section_diff(const Section &old_section, const Section &new_section);
 
 public:
     /**
@@ -447,7 +621,7 @@ public:
      */
     bool save_transaction(const Transaction &transaction);
 
-    bool local_remove_transaction(const BigNumber &section_id, const std::string &hash);
+    bool local_remove_transaction(const SectionId &section_id, const std::string &hash);
 
     /**
      * @brief Save multiple transactions to storage in batch
@@ -459,7 +633,7 @@ public:
      * @param transactions Vector of transactions to save
      * @return bool True if all transactions were saved successfully, false otherwise
      */
-    std::optional<std::pair<BigNumber, BigNumber>> save_transactions(const std::vector<Transaction> &transactions);
+    std::optional<std::pair<SectionId, SectionId>> save_transactions(const std::set<Transaction> &transactions);
 
     void check_self(const Transaction &transaction);
 
@@ -476,5 +650,121 @@ public:
 
     void clear_dag();
 
+    void remove_sections(const SectionId &from);
+
+    /**
+     * @brief tx_list_log
+     * @param actor_id
+     */
+    void tx_list_log(const ActorId &actor_id);
+
+    /**
+     * @brief cache_log
+     */
+    void cache_log();
+
+    /**
+     * @brief sum
+     * @return
+     */
+    std::map<TokenId, BigNumberFloat> sum();
+
+    /**
+     * @brief last_month
+     * @return
+     */
+    std::set<ActorId> last_month();
+
+    BigNumberFloat sum_all_rewards();
+
+    /**
+     * @brief find_last_control
+     * @param from
+     * @param disable_braek
+     * @return
+     */
+    std::optional<DagControl> find_last_control(SectionId from = SectionId(-1), bool disable_break = false);
+
+    /**
+     * @brief read_control
+     * @param section_id
+     * @return
+     */
+    std::optional<DagControl> read_control(const SectionId &section_id);
+
+    /**
+     * @brief read_control_prev
+     * @param section_id
+     * @return
+     */
+    std::optional<DagControl> read_control_prev(const SectionId &section_id);
+
+    /**
+     * @brief read_control_next
+     * @param section_id
+     * @return
+     */
+    std::optional<DagControl> read_control_next(const SectionId &section_id);
+
+    /**
+     * @brief generate_hash_for_interval
+     * @param start
+     * @param last_hash
+     * @return
+     */
+    std::optional<std::string> generate_hash_for_interval(const SectionId &start, std::string &last_hash);
+
+    /**
+     * @brief generate_hash_from_section
+     * @param start
+     * @param full_generation
+     * @return
+     */
+    std::optional<std::string> generate_hash_from_section(const SectionId &start,
+                                                          Force            full_generation = Force::None,
+                                                          Force            qt_signals      = Force::Active);
+
+    /**
+     * @brief generate_hash
+     * @param start_section
+     * @return
+     */
+    bool generate_hash(const SectionId &start_section = SectionId(0), Force qt_signals = Force::Active);
+
+    /**
+     * @brief hash_interval
+     * @param from
+     * @param to
+     * @return
+     */
+    std::optional<std::string> hash_interval(const SectionId &from, const SectionId &to);
+
+    /**
+     * @brief start_control
+     */
+    void start_control(Force force = Force::None, Force qt_signals = Force::Active);
+
+    void clear_controls(const SectionId &from = SectionId(0));
+
+    /**
+     * @brief request_control_section
+     * @param section_id
+     * @param responder
+     */
+    void request_control_section(const SectionId &from_top, const Responder &responder);
+
+    /**
+     * @brief network_request_control_section
+     * @param dag_control
+     * @param responder
+     */
+    // void network_request_control_section(const DagControl &dag_control, const Responder &responder);
+    void network_request_control_section(const DagControlRangeRequest &control_request,
+                                         const Responder              &responder);
+
+    void network_control_range_response(const DagControlRangeResponse &control_response,
+                                        const Responder               &responder);
+
     friend class ExtraChainNode;
+    friend class DagCache;
 };

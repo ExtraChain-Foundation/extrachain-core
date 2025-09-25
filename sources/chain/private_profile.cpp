@@ -26,7 +26,8 @@
 PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
                                       const Actor<KeyPrivate> &main_actor,
                                       const std::string       &hash,
-                                      ExtraChainNode          *node) {
+                                      ExtraChainNode          *node,
+                                      bool                     is_save) {
     PrivateProfile user;
     user.actors_.push_back(system_actor);
     user.actors_.push_back(main_actor);
@@ -37,7 +38,9 @@ PrivateProfile PrivateProfile::create(const Actor<KeyPrivate> &system_actor,
     user.creation_date_ = Utils::current_date_ms();
     user.modified_date_ = user.creation_date_;
     user.node           = node;
-    user.save();
+    if (is_save) {
+        user.save();
+    }
     return user;
 }
 
@@ -122,6 +125,9 @@ const std::vector<Actor<KeyPrivate>> &PrivateProfile::imports() const {
 }
 
 std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, PrivateProfileError> PrivateProfile::main() const {
+    if (main_.is_zero()) {
+        eFatal("Zero main");
+    }
     return get_actor(main_);
 }
 
@@ -135,9 +141,12 @@ bool PrivateProfile::change_current(const ActorId &actorId) {
     return true;
 }
 
-void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor) {
+void PrivateProfile::add_wallet(const Actor<KeyPrivate> &actor, bool is_save) {
     actors_.push_back(actor);
-    save();
+
+    if (is_save) {
+        save();
+    }
 }
 
 bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &wallet_name) {
@@ -151,7 +160,7 @@ bool PrivateProfile::rename_wallet(const ActorId &actor_id, const std::string &w
     //     return false;
     // }
 
-    bool is_exists = node->actorIndex()->exists(actor_id);
+    bool is_exists = node->actor_index()->exists(actor_id);
     if (!is_exists) {
         return false;
     }
@@ -269,7 +278,7 @@ void PrivateProfile::load(const std::optional<KeyPass> &key) {
             main_actor.create(ActorType::User);
             this->actors_.insert(this->actors_.begin() + 1, main_actor);
             this->main_ = main_actor.id();
-            node->actorIndex()->store_new_actor(main_actor.to_public());
+            node->actor_index()->store_new_actor(main_actor.to_public());
         }
 
         this->save();
@@ -295,4 +304,140 @@ std::expected<std::string, ImportError> PrivateProfile::export_actor(const Actor
 
 void PrivateProfile::add_imported_actor(const Actor<KeyPrivate> &imported_actor) {
     imports_.push_back(imported_actor);
+}
+
+std::expected<void, bool> SeedProfile::save(const std::string &hash) {
+    if (hash.empty()) {
+        return std::unexpected(false);
+    }
+
+    auto encrypted = Cryptography::symmetric_encrypt_password(Bytes(seed_.begin(), seed_.end()), hash, true);
+    if (!encrypted.has_value()) {
+        eCritical("Incorrect seed profile save: encryption");
+        return std::unexpected(false);
+    }
+
+    auto base64 = Utils::to_base64(encrypted.value());
+
+    filename_ = fmt::format("{}/{}{}", Profiles::folder, actors_.front().id(), Profiles::format);
+
+    std::ofstream file(filename_, std::ios::binary);
+    if (!file) {
+        eFatal("Can't open file for writing");
+    }
+
+    if (!file.write(base64.c_str(), base64.size())) {
+        eFatal("Can't write");
+    }
+    file.close();
+
+    return {};
+}
+
+// std::variant<std::string, KeyPass>
+// std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(const std::string &file_name, const
+// std::string &hash) {
+//     SeedProfile profile;
+//     profile.file_name = Profiles::folder + Utils::platformDelimeter() + "PROFILE_FILE" + Profiles::format;
+
+//     std::ifstream file(profile.file_name, std::ios::binary);
+//     if (!file) {
+//         return std::unexpected(PrivateProfileReadError::File);
+//     }
+//     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+//     auto json_bytes = key.has_value() ? Cryptography::symmetric_decrypt(ByteArray(data).toBytes(), key.value())
+//                                       : Cryptography::symmetric_decrypt_password(ByteArray(data).toBytes(), hash_);
+//     if (!json_bytes.has_value()) {
+//         // eWarning("Incorrect private profile load");
+//         return std::unexpected(PrivateProfileReadError::Decrypt);
+//     }
+
+//     auto profile = Json::deserialize<PrivateProfile>(json_bytes.value());
+//     if (!profile.has_value()) {
+//         // eWarning("Incorrect private profile load: incorrect json");
+//         return std::unexpected(PrivateProfileReadError::Json);
+//     }
+
+//     return profile.value();
+// }
+
+std::expected<SeedProfile, PrivateProfileReadError> SeedProfile::load(
+    const std::string                        &file_name,
+    const std::variant<std::string, KeyPass> &key_or_password) {
+    SeedProfile profile;
+    profile.filename_ = Profiles::folder + Utils::platformDelimeter() + file_name + Profiles::format;
+
+    std::ifstream file(profile.filename_, std::ios::binary);
+    if (!file) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
+    std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    auto        from_base64 = Utils::from_base64(data);
+    if (!from_base64.has_value()) {
+        return std::unexpected(PrivateProfileReadError::File);
+    }
+
+    std::optional<std::string> seed;
+
+    std::visit(
+        [&](const auto &arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, std::string>) {
+                auto result =
+                    Cryptography::symmetric_decrypt_password(ByteArray(from_base64.value()).toBytes(), arg, true);
+                if (result.has_value()) {
+                    seed = ByteArray(result.value()).toString();
+                }
+            } else {
+                auto result = Cryptography::symmetric_decrypt(ByteArray(from_base64.value()).toBytes(), arg, true);
+                if (result.has_value()) {
+                    seed = ByteArray(result.value()).toString();
+                }
+            }
+        },
+        key_or_password);
+
+    if (!seed.has_value()) {
+        return std::unexpected(PrivateProfileReadError::Decrypt);
+    }
+
+    profile.seed_ = ByteArray(seed.value()).toArray<32>();
+    profile.generate();
+    return profile;
+}
+
+void SeedProfile::generate() {
+    for (int i = 0; i < 2; i++) {
+        Actor<KeyPrivate> actor;
+        actor.generate_from_seed(seed_, i, ActorType::User);
+        actors_.push_back(actor);
+    }
+}
+
+std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node) {
+    std::vector<Actor<KeyPrivate>> actor_ids;
+
+    for (int i = 2;; i++) {
+        Actor<KeyPrivate> actor;
+        actor.generate_from_seed(seed_, i, ActorType::User);
+
+        bool exists = node->actor_index()->exists(actor.id());
+        if (exists) {
+            auto actor_id   = actor.id();
+            bool vec_exists = std::any_of(actors_.begin(), actors_.end(), [actor_id](const auto &actor) {
+                return actor.id() == actor_id;
+            });
+            if (vec_exists) {
+                continue;
+            }
+
+            actor_ids.push_back(actor);
+            actors_.push_back(actor);
+        } else {
+            break;
+        }
+    }
+
+    return actor_ids;
 }

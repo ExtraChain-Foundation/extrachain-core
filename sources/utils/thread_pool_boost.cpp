@@ -24,6 +24,7 @@
 
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dfs;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
+static std::shared_ptr<ThreadPoolBoost> thread_pool_prove;
 static boost::detail::spinlock          mutex;
 
 ThreadPoolBoost::ThreadPoolBoost(size_t threads_count) {
@@ -66,6 +67,16 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dfs(const size_t thre
     return thread_pool_dfs;
 }
 
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_prove(size_t threads_count) {
+    boost::detail::spinlock::scoped_lock lock(mutex);
+
+    if (!thread_pool_prove) {
+        thread_pool_prove = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    }
+
+    return thread_pool_prove;
+}
+
 std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count) {
     boost::detail::spinlock::scoped_lock lock(mutex);
 
@@ -78,8 +89,18 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count)
 
 void ThreadPoolBoost::terminate() {
     boost::detail::spinlock::scoped_lock lock(mutex);
-    thread_pool_dfs.reset();
-    thread_pool_dag.reset();
+
+    if (thread_pool_dfs) {
+        thread_pool_dfs->m_thread_pool->stop();
+        thread_pool_dfs.reset();
+    }
+
+    if (thread_pool_dag) {
+        thread_pool_dag->m_thread_pool->stop();
+        thread_pool_dag.reset();
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void ThreadPoolBoost::join() {

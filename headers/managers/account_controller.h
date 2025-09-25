@@ -33,6 +33,11 @@ enum class LoadError {
     Multiple
 };
 
+enum class ProfileType {
+    Old,
+    New
+};
+
 /**
  * @brief The AccountController class
  * One client can have several accounts, so AccountController is storing this accounts
@@ -48,50 +53,71 @@ public:
      * @brief Generates a new actor and adds it into accounts list
      * @return created actor
      */
-    Actor<KeyPrivate> createProfile(const std::string               &hash,
-                                    ActorType                        type            = ActorType::User,
-                                    std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
-    Actor<KeyPrivate> createWallet(const ActorId     &profileActor = ActorId(),
-                                   const std::string &walletName   = std::string());
-    // createDAppMaster
-    Actor<KeyPrivate> createService(const ActorId                   &profileActor     = ActorId(),
-                                    std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
+    SeedProfile       create_profile(const std::string               &hash,
+                                     ActorType                        type,
+                                     std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
+    Actor<KeyPrivate> create_wallet(const ActorId     &profileActor = ActorId(),
+                                    const std::string &wallet_name  = std::string());
+    // Actor<KeyPrivate> create_dapp_master
+    Actor<KeyPrivate> create_service(const ActorId                   &profileActor     = ActorId(),
+                                     std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
 
-    void import_profile(const ImportedUser &imported_profile, const std::string &hash);
+    void import_old_profile(const ImportedUser &imported_profile, const std::string &hash);
 
     bool rename_wallet(const ActorId &profileActor, const ActorId &actorId, const std::string &walletName);
 
     std::expected<void, LoadError> load(const std::string &hash);
-    bool                           load_profile(const ActorId &actor_id, const std::string &hash);
-    std::set<ActorId>              multiple_profiles(const std::string &hash);
+    bool load_profile(const ActorId &actor_id, const std::string &hash, const std::optional<KeyPass> &key);
+    std::set<ActorId> multiple_profiles(const std::string &hash);
 
     // TODO: expected?
     const Actor<KeyPrivate> &system_actor();
 
-    PrivateProfile &getProfile(const ActorId &actorId);
+    PrivateProfile &profile(const ActorId &actorId);
     /**
      * @brief Gets current active profile
      * @return actor
      */
-    const PrivateProfile &currentProfile() const;
+    const PrivateProfile &current_profile() const;
 
     int  count() const;
     bool empty() const;
-    void changeCurrentProfile(const ActorId &actorId);
+    void change_current_profile(const ActorId &actorId);
 
     // const std::vector<Actor<KeyPrivate>> &accounts() const;
     const std::vector<Actor<KeyPrivate>> &accounts() const; // temp
     const std::vector<ActorId>            accounts_ids() const;
-    const Actor<KeyPrivate>              &currentWallet() const; // temp
+    const Actor<KeyPrivate>              &current_wallet() const; // temp
     void                                  clear();
 
-    static std::set<ActorId> profilesList();
+    static std::set<ActorId> profiles_list();
     void                     insert_to_profile_set(const ActorId &actorId);
 
 private:
     ExtraChainNode *node;
-    AutologinHash   autologinHash;
+    AutologinHash   autologin_hash; // for debug builds
 
-    std::vector<PrivateProfile> m_profiles;
-    ActorId                     m_currentProfile;
+    std::vector<PrivateProfile> profiles_;
+    ActorId                     current_profile_;
+    ProfileType                 profile_type_ = ProfileType::Old;
+
+public:
+    SeedProfile profile_seed;
+
+    ProfileType profile_type() {
+        return profile_type_;
+    }
+
+    std::vector<std::string> seed_mnemonic();
+    bool                     validate_mnemonic(const std::string &phrase);
+    std::string              seed_hex();
+
+    bool import_seed_phrase(const std::string &login, const std::string &password, const std::string &phrase);
+    bool import_seed_hex(const std::string &login, const std::string &password, const std::string &seed_hex);
+    bool import_seed(const std::string &login, const std::string &password, const MasterSeed &seed);
+
+    void dogenerate();
+
+signals:
+    void dogenerated();
 };

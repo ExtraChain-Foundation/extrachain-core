@@ -146,55 +146,71 @@ void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_ro
                             MessageStatus::Response);
 }
 
-void DirsManager::network_response_dir_rows(const ActorId&                  owner_id,
-                                            const std::vector<Dfs::DirRow>& dir_rows,
-                                            const Responder&                responder) {
-    // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
-    // TODO: add merge for sync dir file
+void DirsManager::network_response_dir_rows(
+    const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+    const Responder&                                                responder) {
+    ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
+        for (auto& [owner_id, dir_rows] : response_data) {
+            // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
+            // TODO: add merge for sync dir file
 
-    Dfs::initialize_actor_folder(owner_id);
+            Dfs::initialize_actor_folder(owner_id);
 
-    /*
-    auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
-    if (local_dir_rows.has_value()) {
-        for (const auto& network_row : dir_rows) {
-            auto it = local_dir_rows->find(network_row.file_id);
+            /*
+            auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
+            if (local_dir_rows.has_value()) {
+                for (const auto& network_row : dir_rows) {
+                    auto it = local_dir_rows->find(network_row.file_id);
 
-            if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
-                eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id, network_row.last_modified);
+                     if (it != local_dir_rows->end() && network_row.last_modified != it->second.last_modified) {
+                         eLog("Need to update: {} / {}, {}", owner_id, network_row.file_id,
+            network_row.last_modified);
+                     }
+                 }
+             }
+             */
+
+            // for removed
+            for (const auto& row : dir_rows) {
+                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
+                    auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
+                    if (!file_path.has_value()) {
+                        continue;
+                    }
+
+                    if (file_path->exists()) {
+                        node->dfs()->remove_local_file(owner_id, row.file_id);
+                        Dfs::Tables::ActorDirFile::update_file_state(owner_id,
+                                                                     row.file_id,
+                                                                     Dfs::FileState::Removed);
+                    }
+                }
             }
+
+            // Need to change adding
+            auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
+
+            // eTemp("~~~~~~~~~~~~~~~~b {}", res);
+
+            if (dir_rows.empty()) {
+                return;
+            }
+
+            auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
+            this->update_dirs(owner_id, max_value);
+
+            if (!node_enabled.load()) {
+                return;
+            }
+
+            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
         }
+    });
+
+    if (!node->dfs()->is_dirs_loaded_) {
+        node->dfs()->is_dirs_loaded_ = true;
+        emit node->dfs()->dirsLoaded();
     }
-    */
-
-    // temp sync for removed
-    for (const auto& row : dir_rows) {
-        if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
-            auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
-            if (!file_path.has_value()) {
-                continue;
-            }
-
-            if (file_path->exists()) {
-                node->dfs()->remove_local_file(owner_id, row.file_id);
-                Dfs::Tables::ActorDirFile::update_file_state(owner_id, row.file_id, Dfs::FileState::Removed);
-            }
-        }
-    }
-
-    // Need to change adding
-    auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
-
-    // eTemp("~~~~~~~~~~~~~~~~b {}", res);
-
-    if (dir_rows.empty()) {
-        return;
-    }
-
-    auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
-    this->update_dirs(owner_id, max_value);
-
-    node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {
@@ -209,9 +225,9 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        auto actors = node->actorIndex()->allActors();
+        auto actors = node->actor_index()->read_all_actors_ids();
 
-        auto network_id = node->actorIndex()->network_id();
+        auto network_id = node->actor_index()->network_id();
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
         std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
             return actor == network_id || actor == raccoon_id;
@@ -220,27 +236,27 @@ void DirsManager::network_request_all(const Responder& responder) {
         actors.insert(actors.begin(), network_id);
         actors.insert(actors.begin(), raccoon_id);
 
+        std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
+        response_data.reserve(actors.size());
+
         for (const auto& actor : actors) {
             auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
 
-            if (!dir_rows.has_value()) {
+            if (!dir_rows.has_value() || dir_rows->empty())
                 continue;
-            }
 
-            if (dir_rows->empty()) {
-                continue;
-            }
+            response_data.emplace_back(actor, dir_rows.value());
 
-            responder.send_response(std::make_pair(actor, dir_rows.value()),
-                                    MessageType::DfsSyncDirRows,
-                                    SendMode::Focused,
-                                    MessageStatus::Response);
+            // QThread::msleep(3);
 
-            QThread::msleep(3);
-
-            if (!node) {
-                return;
-            }
+            // if (!node) {
+            //     return;
+            // }
         }
+
+        responder.send_response(response_data,
+                                MessageType::DfsSyncDirRows,
+                                SendMode::Focused,
+                                MessageStatus::Response);
     });
 }
