@@ -82,9 +82,9 @@ struct ExtraChainSettings {
     std::optional<std::string> first_node;
     std::optional<DagMode>     dag_mode;
     std::optional<DfsMode>     dfs_mode;
-    std::optional<std::string> network_identifier;
+    std::optional<std::string> node_identifier;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, network_identifier))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier))
 
 class ByteArray {
 public:

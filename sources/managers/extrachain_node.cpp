@@ -967,33 +967,33 @@ void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
     token_manager_->final_token_creation(transaction);
 }
 
-std::string ExtraChainNode::generate_network_identifier() {
-    std::string network_identifier =
+std::string ExtraChainNode::generate_node_identifier() {
+    std::string node_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
                               + std::to_string(QRandomGenerator::global()->bounded(100000)));
 
-    auto settings               = Utils::read_settings();
-    settings.network_identifier = network_identifier;
+    auto settings            = Utils::read_settings();
+    settings.node_identifier = node_identifier;
     Utils::write_settings(settings);
-    network_identifier_ = network_identifier;
+    node_identifier_ = node_identifier;
 
-    return network_identifier;
+    return node_identifier;
 }
 
-std::string ExtraChainNode::network_identifier() {
-    if (!network_identifier_.empty()) {
-        return network_identifier_;
+std::string ExtraChainNode::node_identifier() {
+    if (!node_identifier_.empty()) {
+        return node_identifier_;
     }
 
     auto settings = Utils::read_settings();
 
-    if (!settings.network_identifier.has_value()) {
-        auto new_network_identifier = this->generate_network_identifier();
-        return new_network_identifier;
+    if (!settings.node_identifier.has_value()) {
+        auto new_node_identifier = this->generate_node_identifier();
+        return new_node_identifier;
     }
 
-    network_identifier_ = settings.network_identifier.value();
-    return network_identifier_;
+    node_identifier_ = settings.node_identifier.value();
+    return node_identifier_;
 }
 
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
@@ -1123,7 +1123,7 @@ void ExtraChainNode::prepare_folders() {
     QDir().mkpath(QString::fromStdString(ChainConst::DAG_FOLDER));
     QDir().mkpath(QString::fromStdString(ChainConst::ACTORS_FOLDER));
 
-    this->generate_network_identifier();
+    this->generate_node_identifier();
 }
 
 void ExtraChainNode::calculateBlockCount() {

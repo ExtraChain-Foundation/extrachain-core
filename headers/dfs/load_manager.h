@@ -80,7 +80,7 @@ class LoadManager : public QObject {
 public:
     explicit LoadManager(ExtraChainNode* node, QObject* parent = nullptr);
 
-    bool add_network_identifier(const Dfs::FileLink& file_link, std::string identifier);
+    bool add_node_identifier(const Dfs::FileLink& file_link, std::string identifier);
     void remove_active_download(const Dfs::FileLinkFragment& file_link_fragment);
     void add_to_queue(const ActorId&     owner_id,
                       const Dfs::DirRow& dir_row,

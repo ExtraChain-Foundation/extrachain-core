@@ -125,7 +125,7 @@ void NetworkManager::add_all_services_identifiers_to_message(MessageBody &msg) {
     }
     msg.nodes_identifiers_to_ignore_later.clear();
 
-    msg.nodes_identifiers_to_ignore_later.emplace(node->network_identifier());
+    msg.nodes_identifiers_to_ignore_later.emplace(node->node_identifier());
 
     auto connectionsLocked = *connections_;
     for (const auto &service : *connectionsLocked) {
@@ -311,7 +311,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                                 break;
                             }
 
-                            if (identifier == node->network_identifier()) {
+                            if (identifier == node->node_identifier()) {
                                 can_connect = false;
                                 break;
                             }
@@ -579,7 +579,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                             status,
                                             main_actor.id(),
                                             responder.message_id(),
-                                            node->network_identifier());
+                                            node->node_identifier());
 
     if (send_mode == SendMode::Broadcast) {
         this->add_all_services_identifiers_to_message(message);
@@ -1029,7 +1029,7 @@ void NetworkManager::message_received(const std::string &message,
         if (searchRes != network_forwarded_messages_locked->end()) {
             MessageBody message_edited = message_body;
             message_edited.sender_id   = node->account_controller()->system_actor().id();
-            message_edited.nodes_identifiers_to_ignore.emplace(node->network_identifier());
+            message_edited.nodes_identifiers_to_ignore.emplace(node->node_identifier());
 
             auto serialized = message_edited.serialize();
             send_message_connections(serialized + std::string(sign),
@@ -1431,7 +1431,7 @@ void NetworkManager::message_received(const std::string &message,
         if (status == MessageStatus::Request)
             node->dfs()->network_request_file_existance(link_result.value(), responder);
         else if (status == MessageStatus::Response)
-            node->dfs()->download_manager().add_network_identifier(link_result.value(), identifier);
+            node->dfs()->download_manager().add_node_identifier(link_result.value(), identifier);
 
         break;
     }

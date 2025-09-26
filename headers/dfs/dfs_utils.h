@@ -464,12 +464,13 @@ namespace Dfs {
             std::uint64_t bytes_received;
             BigNumber     sections_stored;
             Transaction   transaction;
-            std::string   network_identifier;
+            std::string   node_identifier;
         };
 
-        BOOST_DESCRIBE_STRUCT(RequestReward,
-                              (),
-                              (data_stored_size, bytes_sent, bytes_received, sections_stored, transaction))
+        BOOST_DESCRIBE_STRUCT(
+            RequestReward,
+            (),
+            (data_stored_size, bytes_sent, bytes_received, sections_stored, transaction, node_identifier))
     } // namespace Reward
 
     namespace Tables {

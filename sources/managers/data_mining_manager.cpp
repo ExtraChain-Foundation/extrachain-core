@@ -114,12 +114,12 @@ void DataMiningManager::request_reward() {
         return;
     }
 
-    auto requestReward = Dfs::Reward::RequestReward { .data_stored_size   = node->dfs()->sizeTaken(),
-                                                      .bytes_sent          = totalBytes.first,
-                                                      .bytes_received      = totalBytes.second,
-                                                      .sections_stored       = node->dag()->current_section(),
-                                                      .transaction        = tx_result.value(),
-                                                      .network_identifier = node->network_identifier() };
+    auto requestReward = Dfs::Reward::RequestReward { .data_stored_size = node->dfs()->sizeTaken(),
+                                                      .bytes_sent       = totalBytes.first,
+                                                      .bytes_received   = totalBytes.second,
+                                                      .sections_stored  = node->dag()->current_section(),
+                                                      .transaction      = tx_result.value(),
+                                                      .node_identifier  = node->node_identifier() };
 
     node->dag()->add_transaction_sended(tx_result.value());
     // node->dag()->add_transaction_sended(tx_result2.value());
@@ -224,32 +224,36 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         //
-        auto sender         = NodeId { .actor_id           = request_reward.transaction.sender(),
-                                       .network_identifier = request_reward.network_identifier };
-        auto last_reward_it = last_reward_.find(sender);
+        auto sender = NodeId { .actor_id        = request_reward.transaction.sender(),
+                               .node_identifier = request_reward.node_identifier };
 
-        if (last_reward_it != last_reward_.end()) {
+        auto &network_map = last_reward_[sender.actor_id];
+        auto  network_it  = network_map.find(sender.node_identifier);
+
+        if (network_it != network_map.end()) {
             auto current_time = Utils::current_date_ms();
-            auto time_diff_ms = current_time - last_reward_it->second;
-
+            auto time_diff_ms = current_time - network_it->second;
             if (time_diff_ms < 55000) {
 #ifndef IS_APP_CLIENT
                 eLog("[Reward] Ignore from {}, diff: {} ms", sender, time_diff_ms);
 #endif
                 return false;
             }
+        } else if (network_map.size() >= 5) {
+#ifndef IS_APP_CLIENT
+            eLog("[Reward] Reject new node identifier, limit reached: {}", sender);
+#endif
+            return false;
         }
 
-        // eLog("[Reward] Add request: {}", requestReward);
         auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
-
         if (!res1.has_value()) {
             if (res1.error() != TransactionProveError::TooSectionDiff) {
                 return false;
             }
         }
 
-        last_reward_[sender] = request_reward.transaction.timestamp();
+        network_map[sender.node_identifier] = request_reward.transaction.timestamp();
 
         return true;
     } else {

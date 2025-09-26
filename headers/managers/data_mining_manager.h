@@ -45,10 +45,10 @@ public:
      * @return
      */
     BigNumberFloat calculate_coins(BigNumberFloat dataAmountStored,
-                                  BigNumberFloat dataAmountTotalStoredInNetwork,
-                                  BigNumberFloat circulativeSupply,
-                                  BigNumberFloat blockAmount,
-                                  double         coefficient);
+                                   BigNumberFloat dataAmountTotalStoredInNetwork,
+                                   BigNumberFloat circulativeSupply,
+                                   BigNumberFloat blockAmount,
+                                   double         coefficient);
 
     /**
      * @brief Reward request
@@ -81,5 +81,5 @@ private:
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
     ExtraChainNode      *node;
 
-    std::unordered_map<NodeId, std::uint64_t> last_reward_;
+    std::unordered_map<ActorId, std::unordered_map<std::string, std::uint64_t>> last_reward_;
 };

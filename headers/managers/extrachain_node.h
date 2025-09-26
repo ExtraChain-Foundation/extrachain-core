@@ -140,7 +140,7 @@ private:
 
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
-    std::string                              network_identifier_;
+    std::string                              node_identifier_;
 
 public: // TODO
     std::vector<Actor<KeyPublic>>                 actors_broadcast_;
@@ -219,8 +219,8 @@ public:
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
 
-    std::string generate_network_identifier();
-    std::string network_identifier();
+    std::string generate_node_identifier();
+    std::string node_identifier();
 
     void          init_vpn(VpnFunctionClearType vpnClearFun);
     TokenManager* token_manager() const;

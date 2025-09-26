@@ -89,16 +89,16 @@ using TokenId = ActorId;
 
 struct NodeId {
     ActorId     actor_id;
-    std::string network_identifier;
+    std::string node_identifier;
 
     bool operator==(const NodeId &) const = default;
     bool operator<(const NodeId &other) const;
 
     bool empty() {
-        return actor_id.is_zero() || network_identifier.empty();
+        return actor_id.is_zero() || node_identifier.empty();
     }
 };
-BOOST_DESCRIBE_STRUCT(NodeId, (), (actor_id, network_identifier))
+BOOST_DESCRIBE_STRUCT(NodeId, (), (actor_id, node_identifier))
 
 namespace std {
     template <>
@@ -111,7 +111,7 @@ namespace std {
     template <>
     struct hash<NodeId> {
         size_t operator()(const NodeId &node_id) const {
-            return std::hash<std::string> {}(node_id.actor_id.to_string() + node_id.network_identifier);
+            return std::hash<std::string> {}(node_id.actor_id.to_string() + node_id.node_identifier);
         }
     };
 } // namespace std

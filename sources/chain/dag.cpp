@@ -239,7 +239,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
                                                                     const Responder   &responder) {
-    auto sender  = NodeId { .actor_id = transaction.sender(), .network_identifier = "" };
+    auto sender  = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
     auto last_it = last_txs_.find(sender);
 
     if (last_it != last_txs_.end()) {
