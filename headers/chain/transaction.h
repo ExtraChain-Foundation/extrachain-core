@@ -92,7 +92,8 @@ enum class TransactionProveError {
     SectionTooBig,                ///< Section number exceeds limits
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
     TooSectionDiff,               ///< Section difference too large
-    BigReward
+    BigReward,
+    TooOften
 };
 
 /**

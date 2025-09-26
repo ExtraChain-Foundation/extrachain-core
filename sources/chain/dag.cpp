@@ -223,13 +223,15 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
 
 std::expected<Transaction, TransactionError> Dag::send_transaction(const Transaction       &transaction,
                                                                    const Actor<KeyPrivate> &signer) {
-    auto tx = prepare_transaction(transaction, signer);
+    auto tx = this->prepare_transaction(transaction, signer);
     if (!tx.has_value()) {
         return std::unexpected(tx.error());
     }
 
+    //
+
     eLog("[Dag] Send {}", tx.value());
-    add_transaction_sended(tx.value());
+    this->add_transaction_sended(tx.value());
     node->network()->send_message(tx.value(), MessageType::DagTransaction, SendMode::Broadcast);
 
     return tx;
@@ -237,6 +239,21 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
                                                                     const Responder   &responder) {
+    auto sender  = NodeId { .actor_id = transaction.sender(), .network_identifier = "" };
+    auto last_it = last_txs_.find(sender);
+
+    if (last_it != last_txs_.end()) {
+        auto current_time = Utils::current_date_ms();
+        auto time_diff_ms = current_time - last_it->second;
+
+        if (time_diff_ms < 4500) {
+            eLog("[Dag] Ignore transaction from {}, diff: {} ms", sender, time_diff_ms);
+            return std::unexpected(TransactionProveError::TooOften);
+        }
+    }
+
+    last_txs_[sender] = transaction.timestamp();
+
     if (status_ != DagStatus::Final) {
         /*
         bool sync_timeout = false;
@@ -276,7 +293,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
     TransactionProveError res =
         this->prove_transaction(transaction,
                                 section.has_value() ? section->transactions : std::set<Transaction> {});
-    TransactionResult transaction_result { .hash = transaction.hash(), .result = res };
+    TransactionResult transaction_result { .section_id = transaction.section(),
+                                           .hash       = transaction.hash(),
+                                           .result     = res };
 
     if (res != TransactionProveError::NoError) {
         auto tx = transaction;
@@ -293,7 +312,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
                  transaction.section());
 
             if (tx.section() < this->current_section()) {
-                // sync
+                // need sync?
             }
         }
     } else {
@@ -313,6 +332,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
     }
 
     if (!responder.identifiers().empty()) {
+        // broadcast?
         responder.send_response(transaction_result,
                                 MessageType::DagTransactionResult,
                                 SendMode::Focused,
@@ -329,33 +349,31 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
     return {};
 }
 
-void Dag::network_transaction_result(const std::string     hash,
-                                     TransactionProveError result,
-                                     const Responder      &responder) {
-    if (sended_transactions_.find(hash) == sended_transactions_.end()) {
+void Dag::network_transaction_result(const TransactionResult &tx_result, const Responder &responder) {
+    if (sended_transactions_.find(tx_result.hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
         return;
     }
 
-    auto transaction = this->sended_transactions_[hash];
+    auto transaction = this->sended_transactions_[tx_result.hash];
     // this->sended_transactions.erase(hash);
 
-    if (result != TransactionProveError::NoError) {
+    if (tx_result.result != TransactionProveError::NoError) {
         eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
              transaction.section(),
              transaction.section().to_string(NumeralBase::Dec),
              transaction.hash(),
-             result);
+             tx_result.result);
 
         // if not approved > min (connections, 5)
-        this->sended_transactions_.erase(hash);
-        this->failed_transactions_.insert({ hash, transaction });
-        emit node->dagTxNotApproved(transaction.section(), hash);
+        this->sended_transactions_.erase(tx_result.hash);
+        this->failed_transactions_.insert({ tx_result.hash, transaction });
+        emit node->dagTxNotApproved(transaction.section(), tx_result.hash);
         return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
-        this->sended_transactions_.erase(hash);
-        emit node->dagTxApproved(transaction.section(), hash);
+        this->sended_transactions_.erase(tx_result.hash);
+        emit node->dagTxApproved(transaction.section(), tx_result.hash);
     }
 
     auto save_result = this->save_transaction(transaction);
@@ -366,7 +384,7 @@ void Dag::network_transaction_result(const std::string     hash,
         return;
     }
 
-    check_self(transaction);
+    this->check_self(transaction);
 }
 
 void Dag::check_self(const Transaction &transaction) {

@@ -92,9 +92,9 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
     local_inizialization();
     initialize_first_node();
 
-    reconnect_timer_             = new QTimer(this);
+    reconnect_timer_            = new QTimer(this);
     clear_network_caches_timer_ = new QTimer(this);
-    calculate_traffic_             = CalculateTraffic::GetInstance();
+    calculate_traffic_          = CalculateTraffic::GetInstance();
 
     connect(clear_network_caches_timer_, &QTimer::timeout, this, &NetworkManager::clear_network_caches);
     clear_network_caches_timer_->start(20000);
@@ -238,10 +238,10 @@ void NetworkManager::reconnection() {
 }
 
 void NetworkManager::setup_proxy(QNetworkProxy::ProxyType type,
-                                const QString           &hostName,
-                                quint16                  port,
-                                const QString           &user,
-                                const QString           &password) {
+                                 const QString           &hostName,
+                                 quint16                  port,
+                                 const QString           &user,
+                                 const QString           &password) {
     QNetworkProxy proxy;
     proxy.setType(type);
     proxy.setHostName(hostName);
@@ -346,9 +346,9 @@ void NetworkManager::remove_connection(const QString &identifier) {
 }
 
 void NetworkManager::check_port(const QString     ip,
-                               Network::Protocol protocol,
-                               const bool        request,
-                               const bool        isConstant) {
+                                Network::Protocol protocol,
+                                const bool        request,
+                                const bool        isConstant) {
     // if (active_connections_count() > Network::maxConnections) {
     //     return;
     // }
@@ -457,10 +457,10 @@ void NetworkManager::start_network() {
 }
 
 void NetworkManager::connect_to_node_slot(const QString    &ip,
-                                       Network::Protocol protocol,
-                                       const bool        request,
-                                       bool              isConstant,
-                                       const bool        is_light) {
+                                          Network::Protocol protocol,
+                                          const bool        request,
+                                          bool              isConstant,
+                                          const bool        is_light) {
     if (ip.toStdString() == first_node_) {
         isConstant = true;
     }
@@ -494,10 +494,10 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
 }
 
 void NetworkManager::connect_to_websocket(const QString &ip,
-                                        quint16        port,
-                                        bool           requestListNodes,
-                                        const bool     isConstant,
-                                        const bool     is_light) {
+                                          quint16        port,
+                                          bool           requestListNodes,
+                                          const bool     isConstant,
+                                          const bool     is_light) {
     if (ip.isEmpty()) {
         return;
     }
@@ -572,17 +572,22 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &mainActor = node->account_controller()->system_actor();
-    MessageBody message =
-        make_init_message(data_serialized, send_mode, type, status, mainActor.id(), responder.message_id());
+    auto       &main_actor = node->account_controller()->system_actor();
+    MessageBody message    = make_init_message(data_serialized,
+                                            send_mode,
+                                            type,
+                                            status,
+                                            main_actor.id(),
+                                            responder.message_id(),
+                                            node->network_identifier());
 
     if (send_mode == SendMode::Broadcast) {
-        add_all_services_identifiers_to_message(message);
+        this->add_all_services_identifiers_to_message(message);
     }
 
     auto serialized      = message.serialize();
     auto serialized_hash = message.calculate_hash();
-    auto sign_result     = mainActor.key().sign(ByteArray(serialized_hash).toBytes());
+    auto sign_result     = main_actor.key().sign(ByteArray(serialized_hash).toBytes());
     if (!sign_result.has_value()) {
         return "";
     }
@@ -777,8 +782,8 @@ void NetworkManager::send_brodcast_message_further(const NetworkPackageStorage &
 }
 
 void NetworkManager::save_to_cache(const std::string &serialized_message,
-                                 SendMode           send_mode,
-                                 const std::string &receiver_identifier) {
+                                   SendMode           send_mode,
+                                   const std::string &receiver_identifier) {
     return;
     if (send_mode != SendMode::Broadcast) {
         // return;
@@ -1008,6 +1013,7 @@ void NetworkManager::message_received(const std::string &message,
             //     type);
             return;
         }
+
         auto res = messages_->emplace(message_id, std::make_pair(identifier, QDateTime::currentDateTime()));
         if (!res.second) {
             // eWarning(
@@ -1614,7 +1620,7 @@ void NetworkManager::message_received(const std::string &message,
             break;
         }
 
-        node->dag()->network_transaction_result(transaction_result->hash, transaction_result->result, responder);
+        node->dag()->network_transaction_result(transaction_result.value(), responder);
         break;
     }
 
@@ -1781,9 +1787,9 @@ void NetworkManager::remove_socket_connection() {
 }
 
 void NetworkManager::socket_error(Network::SocketServiceError error,
-                                 QString                     errorData,
-                                 std::string                 ip,
-                                 std::string                 identifier) {
+                                  QString                     errorData,
+                                  std::string                 ip,
+                                  std::string                 identifier) {
     // if (QObject::sender() == nullptr) {
     //     return;
     // }
@@ -2022,9 +2028,9 @@ void NetworkManager::onNewWsConnection() {
     connectWsService(service);
     if (!needToDelete)
         reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),
-                                                                .port     = service->port(),
-                                                                .protocol = Network::Protocol::WebSocket },
-                                             "");
+                                                                 .port     = service->port(),
+                                                                 .protocol = Network::Protocol::WebSocket },
+                                              "");
 }
 
 bool NetworkManager::removeOneConnection() {

@@ -30,32 +30,32 @@ DataMiningManager::DataMiningManager(ExtraChainNode *node, QObject *parent)
     this->node = node;
 }
 
-BigNumberFloat DataMiningManager::calculateCoins(BigNumberFloat dataAmountStored,
-                                                 BigNumberFloat dataAmountTotalStoredInNetwork,
-                                                 BigNumberFloat circulativeSupply,
-                                                 BigNumberFloat blockAmount,
-                                                 double         coefficient) {
-    if (dataAmountStored == 0 || dataAmountTotalStoredInNetwork == 0 || circulativeSupply == 0
-        || blockAmount == 0) {
+BigNumberFloat DataMiningManager::calculate_coins(BigNumberFloat data_amount_stored,
+                                                  BigNumberFloat data_amount_total_stored_network,
+                                                  BigNumberFloat circulative_supply,
+                                                  BigNumberFloat block_amount,
+                                                  double         coefficient) {
+    if (data_amount_stored == 0 || data_amount_total_stored_network == 0 || circulative_supply == 0
+        || block_amount == 0) {
         return BigNumberFloat();
     }
-    BigNumberFloat coinProducedForNode(0);
-    coinProducedForNode =
-        (dataAmountStored / dataAmountTotalStoredInNetwork) * (circulativeSupply / blockAmount) * coefficient;
+    BigNumberFloat coin_produced_for_node(0);
+    coin_produced_for_node = (data_amount_stored / data_amount_total_stored_network)
+                             * (circulative_supply / block_amount) * coefficient;
 
-    if (coinProducedForNode < 1) {
+    if (coin_produced_for_node < 1) {
         coefficient *= 2;
-        coinProducedForNode = calculateCoins(dataAmountStored,
-                                             dataAmountTotalStoredInNetwork,
-                                             circulativeSupply,
-                                             blockAmount,
-                                             coefficient);
+        coin_produced_for_node = calculate_coins(data_amount_stored,
+                                                 data_amount_total_stored_network,
+                                                 circulative_supply,
+                                                 block_amount,
+                                                 coefficient);
     }
 
-    return coinProducedForNode;
+    return coin_produced_for_node;
 }
 
-void DataMiningManager::requestCoinReward() {
+void DataMiningManager::request_reward() {
 #if !defined(IS_APP_UI_CLIENT) && !defined(RACCOON_CLIENT_CONSOLE)
     return;
 #endif
@@ -114,11 +114,10 @@ void DataMiningManager::requestCoinReward() {
         return;
     }
 
-    auto requestReward = Dfs::Reward::RequestReward { .DataStoredSize     = node->dfs()->sizeTaken(),
-                                                      .TypeFunctioningObj = Dfs::Reward::Base,
-                                                      .BytesSent          = totalBytes.first,
-                                                      .BytesReceived      = totalBytes.second,
-                                                      .BlocksStored       = node->dag()->current_section(),
+    auto requestReward = Dfs::Reward::RequestReward { .data_stored_size   = node->dfs()->sizeTaken(),
+                                                      .bytes_sent          = totalBytes.first,
+                                                      .bytes_received      = totalBytes.second,
+                                                      .sections_stored       = node->dag()->current_section(),
                                                       .transaction        = tx_result.value(),
                                                       .network_identifier = node->network_identifier() };
 
@@ -184,7 +183,7 @@ BigNumberFloat DataMiningManager::calculate_reward_amount() const {
 }
 
 BigNumberFloat DataMiningManager::calculate_reward_amount(const Dfs::Reward::RequestReward &request_reward) const {
-    if (request_reward.BytesSent == 0 || node->dfs()->totalDfsSize() == 0) {
+    if (request_reward.bytes_sent == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("{} {} {}", "[Reward] Cannot calculate reward due to division by zero. BytesSent, total
         // dfs:"
         //, requestReward.BytesSent, node->dfs()->totalDfsSize());
@@ -207,9 +206,9 @@ BigNumberFloat DataMiningManager::calculate_reward_amount(const Dfs::Reward::Req
         current_section = BigNumberFloat(1);
     }
 
-    auto res = (BigNumberFloat { request_reward.DataStoredSize } / node->dfs()->totalDfsSize()
+    auto res = (BigNumberFloat { request_reward.data_stored_size } / node->dfs()->totalDfsSize()
                 + 1 / 1 // + BigNumberFloat { requestReward.BytesReceived } / requestReward.BytesSent
-                + BigNumberFloat { request_reward.BlocksStored } / current_section * 100);
+                + BigNumberFloat { request_reward.sections_stored } / current_section * 100);
     res *= koef_reward_;
     return res;
 }
@@ -225,7 +224,8 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         }
 
         //
-        auto sender = std::make_pair(request_reward.transaction.sender(), request_reward.network_identifier);
+        auto sender         = NodeId { .actor_id           = request_reward.transaction.sender(),
+                                       .network_identifier = request_reward.network_identifier };
         auto last_reward_it = last_reward_.find(sender);
 
         if (last_reward_it != last_reward_.end()) {

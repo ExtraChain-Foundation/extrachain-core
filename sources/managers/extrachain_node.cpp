@@ -33,6 +33,7 @@
 #include "chain/transaction.h"
 #include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"
+#include "managers/luminance_manager.h"
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/token_manager.h"
@@ -102,6 +103,7 @@ void ExtraChainNode::process() {
     prepare_folders();
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
+    luminance_manager_  = new LuminanceManager(this);
     network_manager_    = new NetworkManager(this);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
@@ -114,7 +116,6 @@ void ExtraChainNode::process() {
     // auto port            = "1212";
 
     // auto thread = ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_transactionManager, thread);
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
@@ -145,8 +146,6 @@ ExtraChainNode::~ExtraChainNode() {
 void ExtraChainNode::cleanUp() {
     delete dag_;
     network_manager_->deleteLater();
-    // m_blockchain->deleteLater();
-    // m_transactionManager->deleteLater();
     dfs_->deleteLater();
     delete chat_manager_;
 }
@@ -589,16 +588,20 @@ void ExtraChainNode::start() {
     });
 }
 
-bool ExtraChainNode::is_client_application() {
+bool ExtraChainNode::is_client_application() const {
     return is_client_application_;
 }
 
-Dag* ExtraChainNode::dag() {
+Dag* ExtraChainNode::dag() const {
     return dag_;
 }
 
-NetworkManager* ExtraChainNode::network() {
+NetworkManager* ExtraChainNode::network() const {
     return network_manager_;
+}
+
+LuminanceManager* ExtraChainNode::luminance_manager() const {
+    return luminance_manager_;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
@@ -941,7 +944,7 @@ std::string ExtraChainNode::transaction_error_description(const TransactionError
 }
 
 void ExtraChainNode::timer_reward_request() {
-    data_mining_manager()->requestCoinReward();
+    data_mining_manager()->request_reward();
 }
 
 void ExtraChainNode::timer_info_print() {
@@ -972,11 +975,16 @@ std::string ExtraChainNode::generate_network_identifier() {
     auto settings               = Utils::read_settings();
     settings.network_identifier = network_identifier;
     Utils::write_settings(settings);
+    network_identifier_ = network_identifier;
 
     return network_identifier;
 }
 
 std::string ExtraChainNode::network_identifier() {
+    if (!network_identifier_.empty()) {
+        return network_identifier_;
+    }
+
     auto settings = Utils::read_settings();
 
     if (!settings.network_identifier.has_value()) {
@@ -984,7 +992,8 @@ std::string ExtraChainNode::network_identifier() {
         return new_network_identifier;
     }
 
-    return settings.network_identifier.value();
+    network_identifier_ = settings.network_identifier.value();
+    return network_identifier_;
 }
 
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {

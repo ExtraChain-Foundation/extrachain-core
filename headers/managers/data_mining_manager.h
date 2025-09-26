@@ -36,7 +36,7 @@ public:
     DataMiningManager(ExtraChainNode *node, QObject *parent = nullptr);
 
     /**
-     * @brief calculateCoins
+     * @brief calculate_coins
      * @param dataAmountStored
      * @param dataAmountTotalStoredInNetwork
      * @param circulativeSupply
@@ -44,7 +44,7 @@ public:
      * @param coefficient
      * @return
      */
-    BigNumberFloat calculateCoins(BigNumberFloat dataAmountStored,
+    BigNumberFloat calculate_coins(BigNumberFloat dataAmountStored,
                                   BigNumberFloat dataAmountTotalStoredInNetwork,
                                   BigNumberFloat circulativeSupply,
                                   BigNumberFloat blockAmount,
@@ -53,7 +53,7 @@ public:
     /**
      * @brief Reward request
      * */
-    void requestCoinReward();
+    void request_reward();
 
     /**
      * @brief calculate reward amound
@@ -81,5 +81,5 @@ private:
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
     ExtraChainNode      *node;
 
-    std::map<std::pair<ActorId, std::string>, std::uint64_t> last_reward_;
+    std::unordered_map<NodeId, std::uint64_t> last_reward_;
 };

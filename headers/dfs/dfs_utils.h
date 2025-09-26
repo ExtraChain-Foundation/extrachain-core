@@ -456,27 +456,20 @@ namespace Dfs {
     } // namespace HistoricalOld
 
     namespace Reward {
-        static const int TOLERANCE = 100;
-
-        enum TypeFunctioning {
-            Base,
-            Test
-        };
+        static const int TOLERANCE = 2;
 
         struct RequestReward {
-            std::uint64_t   DataStoredSize;
-            TypeFunctioning TypeFunctioningObj;
-            std::uint64_t   BytesSent;
-            std::uint64_t   BytesReceived;
-            BigNumber       BlocksStored;
-            Transaction     transaction;
-            std::string     network_identifier;
+            std::uint64_t data_stored_size;
+            std::uint64_t bytes_sent;
+            std::uint64_t bytes_received;
+            BigNumber     sections_stored;
+            Transaction   transaction;
+            std::string   network_identifier;
         };
 
-        BOOST_DESCRIBE_STRUCT(
-            RequestReward,
-            (),
-            (DataStoredSize, TypeFunctioningObj, BytesSent, BytesReceived, BlocksStored, transaction))
+        BOOST_DESCRIBE_STRUCT(RequestReward,
+                              (),
+                              (data_stored_size, bytes_sent, bytes_received, sections_stored, transaction))
     } // namespace Reward
 
     namespace Tables {
@@ -642,7 +635,6 @@ namespace DfsB = Dfs::Basic;
 // MSGPACK_ADD_ENUM(Dfs::FileType)
 // MSGPACK_ADD_ENUM(Dfs::FileState)
 // MSGPACK_ADD_ENUM(Dfs::DataSecurity)
-MSGPACK_ADD_ENUM(Dfs::Reward::TypeFunctioning)
 
 namespace std {
     template <>

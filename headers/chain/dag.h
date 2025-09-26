@@ -112,10 +112,11 @@ BOOST_DESCRIBE_STRUCT(SectionDiff, (), (added_transactions, removed_transactions
  * Contains the transaction hash and the result of validation
  */
 struct TransactionResult {
+    SectionId             section_id;
     std::string           hash;
     TransactionProveError result;
 };
-BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
+BOOST_DESCRIBE_STRUCT(TransactionResult, (), (section_id, hash, result))
 
 /**
  * @brief Represents the range of sections in the chain
@@ -367,12 +368,10 @@ public:
      *
      * Updates the local state based on transaction validation results.
      *
-     * @param hash The hash of the transaction
+     * @param tx_result The tx_result of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string     hash,
-                                    TransactionProveError result,
-                                    const Responder      &responder);
+    void network_transaction_result(const TransactionResult &tx_result, const Responder &responder);
 
     /**
      * @brief Process a section received from the network
@@ -530,7 +529,8 @@ private:
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
     std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
     std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
-    DagCache                                     cache_;               // Balance cache for fast calculations
+    std::unordered_map<NodeId, std::uint64_t>    last_txs_;
+    DagCache                                     cache_; // Balance cache for fast calculations
 
     mutable std::shared_mutex section_mutex_; //
     mutable std::mutex        range_mutex_;   //
