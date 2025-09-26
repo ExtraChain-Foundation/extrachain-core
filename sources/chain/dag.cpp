@@ -239,20 +239,22 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
                                                                     const Responder   &responder) {
-    auto sender  = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
-    auto last_it = last_txs_.find(sender);
+    if (transaction.type() == TransactionType::Regular) {
+        auto sender  = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
+        auto last_it = last_txs_.find(sender);
 
-    if (last_it != last_txs_.end()) {
-        auto current_time = Utils::current_date_ms();
-        auto time_diff_ms = current_time - last_it->second;
+        if (last_it != last_txs_.end()) {
+            auto current_time = Utils::current_date_ms();
+            auto time_diff_ms = current_time - last_it->second;
 
-        if (time_diff_ms < 4500) {
-            eLog("[Dag] Ignore transaction from {}, diff: {} ms", sender, time_diff_ms);
-            return std::unexpected(TransactionProveError::TooOften);
+            if (time_diff_ms < 4500) {
+                eLog("[Dag] Ignore transaction from {}, diff: {} ms", sender, time_diff_ms);
+                return std::unexpected(TransactionProveError::TooOften);
+            }
         }
-    }
 
-    last_txs_[sender] = transaction.timestamp();
+        last_txs_[sender] = transaction.timestamp();
+    }
 
     if (status_ != DagStatus::Final) {
         /*
@@ -268,7 +270,9 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
             }
         }
 
-        return {};
+        if (status_ != DagStatus::Ready) {
+            return {};
+        }
 
         /*
         if (sync_timeout && transaction.section() > current_section_ + 5) {
@@ -331,21 +335,16 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         this->update_range();
     }
 
-    if (!responder.identifiers().empty()) {
-        // broadcast?
-        responder.send_response(transaction_result,
-                                MessageType::DagTransactionResult,
-                                SendMode::Focused,
-                                MessageStatus::Response);
-    }
+    // send broadcast to network with tx result
+    node->network()->send_broadcast(transaction_result,
+                                    MessageType::DagTransactionResult,
+                                    MessageStatus::NoStatus);
 
     if (res != TransactionProveError::NoError) {
         return std::unexpected(res);
     }
 
     this->check_self(transaction);
-    // });
-
     return {};
 }
 
@@ -1284,7 +1283,7 @@ void Dag::network_status_sync_request(const Responder &responder) {
 }
 
 void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
-    if (responder.luminance_weight() < 2) {
+    if (responder.luminance() < 2) {
         return;
     }
 
@@ -1621,7 +1620,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
         return;
     }
 
-    if (responder.luminance_weight() < 2) {
+    if (responder.luminance() < 2) {
         return;
     }
 
@@ -2605,7 +2604,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         return;
     }
 
-    if (responder.luminance_weight() < 2) {
+    if (responder.luminance() < 2) {
         return;
     }
 

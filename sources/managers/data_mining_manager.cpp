@@ -76,7 +76,7 @@ void DataMiningManager::request_reward() {
 #endif
 
     const auto actor      = node->account_controller()->system_actor();
-    auto       totalBytes = node->network()->calculate_traffic()->totalBytes();
+    auto       totalBytes = node->network()->calculate_traffic()->total_bytes();
     auto       amount     = calculate_reward_amount();
 
     // eLog("[Reward] Request: Actor: {}, Dfs size: {}, Reward: {}, Traffic sent/received: {}/{}, Blocks: {}",
@@ -118,8 +118,7 @@ void DataMiningManager::request_reward() {
                                                       .bytes_sent       = totalBytes.first,
                                                       .bytes_received   = totalBytes.second,
                                                       .sections_stored  = node->dag()->current_section(),
-                                                      .transaction      = tx_result.value(),
-                                                      .node_identifier  = node->node_identifier() };
+                                                      .transaction      = tx_result.value() };
 
     node->dag()->add_transaction_sended(tx_result.value());
     // node->dag()->add_transaction_sended(tx_result2.value());
@@ -142,7 +141,7 @@ void DataMiningManager::request_reward() {
 BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     // (dataStoredSize/dfsSize + bytesReceived/BytesSent)+(sectionsStoredSize/dagSize) * k (k=100)
     // node->dfs()->refresh_calculate();
-    const auto &totalBytes = node->network()->calculate_traffic()->totalBytes();
+    const auto &totalBytes = node->network()->calculate_traffic()->total_bytes();
 
     if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
         // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
@@ -220,12 +219,19 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 
     if (amount <= max_reward_ || calc - amount <= Dfs::Reward::TOLERANCE) {
         if (request_reward.transaction.sender() != request_reward.transaction.receiver()) {
+            eLog("Ignore reward, because tx sender != tx receiver, {} {}",
+                 request_reward.transaction.sender(),
+                 request_reward.transaction.receiver());
             return false;
         }
 
-        //
+        if (request_reward.transaction.sender() != responder.node_id().actor_id) {
+            eLog("Ignore reward, because tx sender != message sender");
+            return false;
+        }
+
         auto sender = NodeId { .actor_id        = request_reward.transaction.sender(),
-                               .node_identifier = request_reward.node_identifier };
+                               .node_identifier = responder.node_id().node_identifier };
 
         auto &network_map = last_reward_[sender.actor_id];
         auto  network_it  = network_map.find(sender.node_identifier);

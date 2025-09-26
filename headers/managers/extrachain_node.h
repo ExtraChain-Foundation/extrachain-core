@@ -129,6 +129,7 @@ private:
     ChatManager*       chat_manager_       = nullptr;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
+    QTimer*            timer_luminance_    = nullptr;
 
     bool                        started_               = false;
     bool                        is_client_application_ = false;
@@ -291,6 +292,7 @@ signals:
 
 private slots:
     void timer_reward_request();
+    void timer_luminance_autoremove();
     void timer_info_print();
 
 public:

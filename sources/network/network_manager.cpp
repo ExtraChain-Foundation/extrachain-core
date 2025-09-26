@@ -22,6 +22,7 @@
 #include "dfs/dfs_controller.h"
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
+#include "managers/luminance_manager.h"
 #include "network/upnpconnection.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
@@ -94,7 +95,7 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
 
     reconnect_timer_            = new QTimer(this);
     clear_network_caches_timer_ = new QTimer(this);
-    calculate_traffic_          = CalculateTraffic::GetInstance();
+    calculate_traffic_          = CalculateTraffic::get_instance();
 
     connect(clear_network_caches_timer_, &QTimer::timeout, this, &NetworkManager::clear_network_caches);
     clear_network_caches_timer_->start(20000);
@@ -466,7 +467,7 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
     }
 
     if (active_connections_count() >= Network::maxConnections) {
-        if (isConstant && !removeOneConnection()) {
+        if (isConstant && !remove_one_connection()) {
             eLog("[NetworkManager] Can't connect because the maximum number of connections");
             return;
         }
@@ -737,7 +738,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                           non_serialized_message);
 
         if (send_checked) {
-            calculate_traffic_->addBytesSent(service->ip().toStdString(), serialized_message.size());
+            calculate_traffic_->add_bytes_sent(service->ip().toStdString(), serialized_message.size());
             service->send_message(QByteArray::fromStdString(serialized_message), priority);
             if (send_mode == SendMode::Focused) {
                 break;
@@ -751,7 +752,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     }
 }
 
-void NetworkManager::send_brodcast_message_further(const NetworkPackageStorage &package_data) {
+void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage &package_data) {
     if (package_data.msg_body.send_type != SendMode::Broadcast) {
         eWarning("Send Broadcast Message error - wrong network send type: {}", package_data.msg_body.send_type);
         return;
@@ -960,6 +961,8 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     MessageBody message_body = message_body_expected.value();
+    const auto  node_id =
+        NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 
     /*
     auto sign_actor = node->actorIndex()->get_actor(message_body.init_sender_id, ActorGetType::NoRequest);
@@ -992,12 +995,13 @@ void NetworkManager::message_received(const std::string &message,
     }
     */
 
+    SendMode      send_type  = message_body.send_type;
     MessageType   type       = message_body.message_type;
     MessageStatus status     = message_body.status;
     std::string   serialized = message_body.data;
     std::string   mess_id    = message_body.message_id;
     std::string   message_id(mess_id.begin(), mess_id.end());
-    bool          is_luminance_weight = ip == first_node_;
+    bool          is_luminance = ip == first_node_;
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
@@ -1050,9 +1054,12 @@ void NetworkManager::message_received(const std::string &message,
     responder.set_message_id(message_id);
     responder.add_identifier(identifier);
     responder.set_message_type(type);
+    responder.set_node_id(node_id);
+    int luminance = node->luminance_manager()->read_luminance(node_id);
+    responder.set_luminance(luminance == -1 ? 1 : luminance);
 
-    if (is_luminance_weight) {
-        responder.set_luminance_weight(3.5);
+    if (is_luminance) {
+        responder.set_luminance(responder.luminance() * 10); //
     }
 
 #ifdef QT_DEBUG
@@ -1067,7 +1074,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 #endif
 
-    calculate_traffic_->addBytesReceived(ip, message.size());
+    calculate_traffic_->add_bytes_received(ip, message.size());
 
     if (type == MessageType::DagLightData) {
         eLog("DagLight {}", status);
@@ -1075,6 +1082,11 @@ void NetworkManager::message_received(const std::string &message,
 
     // QElapsedTimer timer;
     // timer.start();
+
+    // TODO: not global
+    if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
+        node->luminance_manager()->increment(node_id);
+    }
 
     // try {
     switch (type) {
@@ -1095,7 +1107,7 @@ void NetworkManager::message_received(const std::string &message,
         if (node->is_custom_app_) {
             emit customMessageReceived(package_data, custom_deserialize_result.value());
         } else {
-            send_brodcast_message_further(package_data);
+            send_broadcast_message_further(package_data);
         }
 
         break;
@@ -1192,7 +1204,7 @@ void NetworkManager::message_received(const std::string &message,
 
         auto actor_handling_result = node->actor_index()->network_store_new_actor(new_actor_result.value());
         if (actor_handling_result.has_value()) {
-            send_brodcast_message_further(package_data);
+            send_broadcast_message_further(package_data);
         }
         break;
     }
@@ -1359,7 +1371,7 @@ void NetworkManager::message_received(const std::string &message,
         node->dfs()->network_store_file(file_link_result->owner_id,
                                         file_link_result->dir_row,
                                         Dfs::NetworkStoreFile::Broadcast);
-        send_brodcast_message_further(package_data);
+        send_broadcast_message_further(package_data);
 
         break;
     }
@@ -1448,7 +1460,7 @@ void NetworkManager::message_received(const std::string &message,
                                                 file_remove->sign,
                                                 file_remove->last_modified);
         // if sign not verify only -> not broadrcast
-        send_brodcast_message_further(package_data);
+        send_broadcast_message_further(package_data);
         break;
     }
 
@@ -1512,7 +1524,7 @@ void NetworkManager::message_received(const std::string &message,
         node->dfs()->network_response_content_vector(db_content_result.value());
 
         if (type == MessageType::DfsVectorCreation) {
-            send_brodcast_message_further(package_data);
+            send_broadcast_message_further(package_data);
         }
         break;
     }
@@ -1528,7 +1540,7 @@ void NetworkManager::message_received(const std::string &message,
                                         db_content_result->file_id,
                                         db_content_result->row);
 
-        send_brodcast_message_further(package_data);
+        send_broadcast_message_further(package_data);
         break;
     }
 
@@ -1602,14 +1614,14 @@ void NetworkManager::message_received(const std::string &message,
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
         // if (res.has_value()) {
-        send_brodcast_message_further(package_data);
+        send_broadcast_message_further(package_data);
         // }
         break;
     }
 
     case MessageType::DagTransactionResult: {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
-        if (!is_luminance_weight) {
+        if (!is_luminance) {
             return;
         }
 #endif
@@ -1655,7 +1667,7 @@ void NetworkManager::message_received(const std::string &message,
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
-            if (!is_luminance_weight) {
+            if (!is_luminance) {
                 return;
             }
 #endif
@@ -1691,7 +1703,7 @@ void NetworkManager::message_received(const std::string &message,
             auto res = node->data_mining_manager()->network_request_coin_reward(reward_request, responder);
 
             if (res) {
-                send_brodcast_message_further(package_data);
+                send_broadcast_message_further(package_data);
             }
             break;
         }
@@ -2016,7 +2028,7 @@ void NetworkManager::onNewWsConnection() {
 
     bool needToDelete = false;
     if (active_connections_count() >= Network::maxConnections) {
-        if (!removeOneConnection()) {
+        if (!remove_one_connection()) {
             eLog(
                 "[NetworkManager] Can't connect from WS server because the maximum number of "
                 "constant connections reached!");
@@ -2033,7 +2045,7 @@ void NetworkManager::onNewWsConnection() {
                                               "");
 }
 
-bool NetworkManager::removeOneConnection() {
+bool NetworkManager::remove_one_connection() {
     auto connectionsLocked = *connections_;
     bool isChanged         = false;
 
@@ -2068,36 +2080,36 @@ bool NetworkManager::removeOneConnection() {
     return isChanged;
 }
 
-CalculateTraffic *CalculateTraffic::GetInstance() {
+CalculateTraffic *CalculateTraffic::get_instance() {
     if (calculateTraffic_ == nullptr) {
         calculateTraffic_ = new CalculateTraffic();
     }
     return calculateTraffic_;
 }
 
-void CalculateTraffic::addBytesSent(const std::string &ip, qint64 bytes) {
+void CalculateTraffic::add_bytes_sent(const std::string &ip, qint64 bytes) {
     std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesSent += bytes;
 }
 
-void CalculateTraffic::addBytesReceived(const std::string &ip, qint64 bytes) {
+void CalculateTraffic::add_bytes_received(const std::string &ip, qint64 bytes) {
     std::unique_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     m_trafficStats[ip].bytesReceived += bytes;
 }
 
-qint64 CalculateTraffic::totalBytesSentFromConnection(const std::string &ip) {
+qint64 CalculateTraffic::total_bytes_sent_from_connection(const std::string &ip) {
     std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     auto                                it = m_trafficStats.find(ip);
     return (it != m_trafficStats.end()) ? it->second.bytesSent : 0;
 }
 
-qint64 CalculateTraffic::totalBytesReceivedFromConnection(const std::string &ip) {
+qint64 CalculateTraffic::total_bytes_received_from_connection(const std::string &ip) {
     std::shared_lock<std::shared_mutex> lock(m_mutex);
     auto                                it = m_trafficStats.find(ip);
     return (it != m_trafficStats.end()) ? it->second.bytesReceived : 0;
 }
 
-std::pair<std::uint64_t, std::uint64_t> CalculateTraffic::totalBytes() {
+std::pair<std::uint64_t, std::uint64_t> CalculateTraffic::total_bytes() {
     std::shared_lock<std::shared_mutex> lock(m_mutex); // Lock mutex for thread safety
     return std::accumulate(m_trafficStats.begin(),
                            m_trafficStats.end(),

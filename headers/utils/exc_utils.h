@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         static const std::string LUMINANCE_TABLE_CREATE = "CREATE TABLE IF NOT EXISTS " + LUMINANCE_TABLE
                                                           + " ("
                                                           "node_id      TEXT PRIMARY KEY NOT NULL, "
-                                                          "reputation   INT              NOT NULL, "
+                                                          "luminance   INT              NOT NULL, "
                                                           "timestamp    INTEGER          NOT NULL  "
                                                           ");";
 
@@ -942,6 +942,13 @@ namespace Profiles {
     static const std::string profiles = "profiles";
     // static const std::string encrypt  = "encrypt";
 } // namespace Profiles
+
+namespace Luminance {
+    static const std::string FOLDER        = "luminance";
+    static const std::string DATABASE_NAME = "Luminance.db";
+    static const std::string DATABASE      = FOLDER + "/" + DATABASE_NAME;
+    const int                AUTOREMOVE_MS = 30000;
+} // namespace Luminance
 
 namespace SearchEnum {
     enum class BlockParam {

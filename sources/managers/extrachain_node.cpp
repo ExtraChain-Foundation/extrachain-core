@@ -125,6 +125,10 @@ void ExtraChainNode::process() {
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
     timer_info_->start(10000);
 
+    timer_luminance_ = new QTimer(this);
+    connect(timer_luminance_, &QTimer::timeout, this, &ExtraChainNode::timer_luminance_autoremove);
+    timer_luminance_->start(30000);
+
     init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
 
     connect_signals();
@@ -945,6 +949,10 @@ std::string ExtraChainNode::transaction_error_description(const TransactionError
 
 void ExtraChainNode::timer_reward_request() {
     data_mining_manager()->request_reward();
+}
+
+void ExtraChainNode::timer_luminance_autoremove() {
+    luminance_manager_->remove_old();
 }
 
 void ExtraChainNode::timer_info_print() {

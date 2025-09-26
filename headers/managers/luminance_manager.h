@@ -21,17 +21,37 @@
 
 #include <boost/describe/class.hpp>
 
-#include "chain/actor_id.h"
-
 class ExtraChainNode;
+class DbConnector;
+class NodeId;
 
 class LuminanceManager {
 public:
-    LuminanceManager(ExtraChainNode *node)
-        : node(node) {
-    }
+    LuminanceManager(ExtraChainNode *node);
     ~LuminanceManager() = default;
 
+    bool init_db();
+    void reset_db();
+
+    int read_luminance(const NodeId &node_id);
+
+    void increment(const NodeId &node_id);
+    void decrement(const NodeId &node_id);
+    void write_luminance(const NodeId &node_id, int luminance);
+    void remove_old();
+
 private:
+    enum class Operation {
+        Increment,
+        Decrement,
+        Set
+    };
+
+    void update_luminance(const NodeId &node_id, Operation op, int value = 0);
+
+private:
+    std::unique_ptr<DbConnector> luminance_db_;
+    bool                         db_initialized_ = false; // Whether db is initialized
+
     ExtraChainNode *node;
 };
