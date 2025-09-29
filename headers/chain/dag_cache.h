@@ -232,6 +232,7 @@ private:
     SectionId                    cached_section_ = SectionId(-1); // Current cached section id (genesis point)
     std::unique_ptr<DbConnector> cache_db_;                       // Database connection
     bool                         db_initialized_ = false;         // Whether DB is initialized
+    std::mutex                   mutex_;
 
 public:
     /**

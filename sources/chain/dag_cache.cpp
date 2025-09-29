@@ -614,6 +614,7 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
 }
 
 bool DagCache::init_db() {
+    std::unique_lock<std::mutex> lock(mutex_);
     if (db_initialized_) {
         return true;
     }
@@ -665,6 +666,7 @@ bool DagCache::init_db() {
 }
 
 void DagCache::reset_db() {
+    std::unique_lock<std::mutex> lock(mutex_);
     db_initialized_ = false;
     if (db_initialized_) {
         cache_db_->close();
