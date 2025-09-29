@@ -231,7 +231,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             auto current_time = Utils::current_date_ms();
             auto time_diff_ms = current_time - last_reward_it->second;
 
-            if (time_diff_ms < 55000) {
+            if (time_diff_ms < 50000) {
 #ifndef IS_R
                 eLog("[Reward] Ignore from {}, diff: {} ms", sender_id, time_diff_ms);
 #endif
@@ -246,7 +246,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             return false;
         }
 
-        last_reward_[sender_id] = request_reward.transaction.timestamp(); // Utils::current_date_ms();
+        last_reward_[sender_id] = Utils::current_date_ms();
 
         return true;
     } else {
