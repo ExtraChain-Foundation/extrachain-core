@@ -112,6 +112,7 @@ private:
     PullMode pull_mode = PullMode::All;
 
     SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority;
     SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>>
         m_amount_file_fragments_requests;
 
