@@ -239,7 +239,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
         if (network_it != network_map.end()) {
             auto current_time = Utils::current_date_ms();
             auto time_diff_ms = current_time - network_it->second;
-            if (time_diff_ms < 55000) {
+            if (time_diff_ms < 50000) {
 #ifndef IS_APP_CLIENT
                 eLog("[Reward] Ignore from {}, diff: {} ms", sender, time_diff_ms);
 #endif
@@ -259,7 +259,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             }
         }
 
-        network_map[sender.node_identifier] = request_reward.transaction.timestamp();
+        network_map[sender.node_identifier] = Utils::current_date_ms();;
 
         return true;
     } else {
