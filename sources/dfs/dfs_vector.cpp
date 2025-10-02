@@ -236,6 +236,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
     }
 
     for (auto &row : db_rows) {
+        // TODO: make security_data_ unique for actor / current (security_data_.receiver)
         auto decryption_res = decrypt_data(row, security_data_);
         if (!decryption_res.has_value()) {
             return std::unexpected(DfsVectorError::CollectionEmpty);

@@ -63,6 +63,7 @@ enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
+class ThothManager;
 
 enum class ImportProfileError {
     DataEmpty,
@@ -126,6 +127,7 @@ private:
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
     ChatManager*       chat_manager_       = nullptr;
+    ThothManager*      thoth_manager_      = nullptr;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
 
@@ -223,7 +225,8 @@ public:
     TokenManager* token_manager() const;
     bool          is_custom_app_;
 
-    ChatManager* chat_manager();
+    ChatManager*  chat_manager();
+    ThothManager* thoth_manager();
 
     VPNConfigStorage vpnConfigStorage;
 

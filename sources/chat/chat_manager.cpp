@@ -78,7 +78,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                  }
 
                                  auto message_row =
-                                     this->node->dfs()->get_vector_row(owner_id,
+                                     this->node->dfs()->read_vector_row(owner_id,
                                                                        dir_row.file_id,
                                                                        row["id"],
                                                                        encryption ? securiry_key
@@ -258,7 +258,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
     auto rows =
-        node->dfs()->get_vector_rows(my_chats->actor_id, my_chats->file_id, "where status = '1'", security_actor);
+        node->dfs()->read_vector_rows(my_chats->actor_id, my_chats->file_id, "where status = '1'", security_actor);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -299,7 +299,7 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
         encryption = false;
     }
 
-    auto db_rows = node->dfs()->get_vector_rows(owner_id,
+    auto db_rows = node->dfs()->read_vector_rows(owner_id,
                                                 file_id,
                                                 "where status = '1' ORDER by timestamp",
                                                 encryption ? security_key : Dfs::DataSecurityData());
@@ -344,7 +344,8 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
                                            file_id,
                                            message,
                                            chat_actor_,
-                                           encryption ? security_key : Dfs::DataSecurityData());
+                                           encryption ? security_key : Dfs::DataSecurityData(),
+                                           true);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
