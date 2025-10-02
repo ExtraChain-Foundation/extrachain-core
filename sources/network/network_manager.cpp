@@ -1001,7 +1001,7 @@ void NetworkManager::message_received(const std::string &message,
     std::string   serialized = message_body.data;
     std::string   mess_id    = message_body.message_id;
     std::string   message_id(mess_id.begin(), mess_id.end());
-    bool          is_luminance = ip == first_node_;
+    bool          is_luminance = node_id.actor_id == node->network_id();
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor

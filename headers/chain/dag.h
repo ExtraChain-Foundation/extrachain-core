@@ -69,8 +69,7 @@ static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control;    // hash, interval 1-20, 21-40, ..
-    std::optional<std::string> hash_cache; // ?
+    std::optional<std::string> control; // hash, interval 1-20, 21-40, ..
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
@@ -412,7 +411,13 @@ public:
      * @param deep The maximum number of sections to search back (default: 100)
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_duplicate(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 100) const;
+
+    std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
+                                                                                std::uint64_t  latest_timestamp,
+                                                                                std::uint64_t  time) const;
+
+    // TODO: search to future
 
     /**
      * @brief Read a section from storage

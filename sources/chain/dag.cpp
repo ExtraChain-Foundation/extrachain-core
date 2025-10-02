@@ -354,6 +354,8 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         return;
     }
 
+    // map of
+
     auto transaction = this->sended_transactions_[tx_result.hash];
     // this->sended_transactions.erase(hash);
 
@@ -947,7 +949,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Check for duplicate transaction
-    auto tx_result = search_duplicate(tx_copy.hash());
+    auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
     if (tx_result.has_value()) {
         return TransactionProveError::Duplicate;
     }
@@ -1152,7 +1154,7 @@ void Dag::update_range() {
     }
 }
 
-std::optional<Transaction> Dag::search_duplicate(const std::string &hash, int deep) const {
+std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int deep) const {
     int count = 0;
 
     for (SectionId i = current_section_ + 1; i >= first_saved_section_; i--) {
@@ -1175,6 +1177,35 @@ std::optional<Transaction> Dag::search_duplicate(const std::string &hash, int de
         count += 1;
         if (deep != 0 && count > deep) {
             return std::nullopt;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::pair<SectionId, std::string>> Dag::search_duplicate_by_sender(const ActorId &actor_id,
+                                                                                 std::uint64_t  latest_timestamp,
+                                                                                 std::uint64_t  time) const {
+
+    std::uint64_t threshold = latest_timestamp - time;
+
+    for (SectionId i = current_section_ + 1; i >= first_saved_section_; i--) {
+        auto section = this->read_section(i);
+        if (!section.has_value()) {
+            continue;
+        }
+        if (section->transactions.empty() || section->id < 0) {
+            continue;
+        }
+
+        for (auto &tx : section->transactions) {
+            if (tx.timestamp() < threshold) {
+                break; // continue
+            }
+
+            if (tx.sender() == actor_id) {
+                return std::pair { tx.section(), tx.hash() };
+            }
         }
     }
 
