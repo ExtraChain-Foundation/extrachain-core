@@ -198,7 +198,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
-    auto row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
+    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), owner_id, dir_row.file_id);
     if (row.has_value()) {
         if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
             auto file_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
@@ -313,7 +313,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
         return;
     }
 
-    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(file_link_fragment.file_link.owner_id,
+    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), file_link_fragment.file_link.owner_id,
                                                           file_link_fragment.file_link.file_id);
     if (!dir_row.has_value()) {
         // eCritical("LoadManager::share_stored_file, no dir_row. file_id: {}",
@@ -355,6 +355,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     std::string identifier = *responder.identifiers().begin();
     ThreadPoolBoost::instance_dfs()->post(
         [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
+            eLog("instance_dfs share_stored_file in");
             uint64_t offset = 0;
 
             for (const auto& fragment_number : file_link_fragment.fragment_numbers) {
@@ -404,6 +405,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             // }
 
             // emit node->dfs()->uploaded(file_link_fragment.file_link.owner_id, dir_row.value());
+            eLog("instance_dfs share_stored_file out");
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
@@ -415,7 +417,7 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
         return;
     }
 
-    auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
+    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value()) {
         return;
     }
@@ -466,6 +468,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
     m_amount_file_fragments_requests->erase(file_link_fragment);
 
     ThreadPoolBoost::instance_dfs()->post([this, file_content, identifier]() {
+        eLog("instance_dfs file_fragment_achieved in");
         const auto file_link =
             Dfs::FileLink { .owner_id = file_content.owner_id, .file_id = file_content.file_id };
         // eLog("[Dfs] LoadManager::file_fragment_achieved, achieved fragment to save. file_link: {}, offset: {},
@@ -479,6 +482,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                     // eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {},
                     // offset: {}, fragment_number: {}", file_link, file_content.offset,
                     // file_content.fragment_number);
+                    eLog("instance_dfs file_fragment_achieved out 1");
                     return;
                 }
             } else {
@@ -493,6 +497,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         const auto path = Dfs::Path::file_path(file_link.owner_id, file_link.file_id);
         if (!path.has_value()) {
             timer_runner(file_link);
+            eLog("instance_dfs file_fragment_achieved out 2");
             return;
         }
 
@@ -503,6 +508,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 // eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {},
                 // offset: {}, fragment_number: {}", file_link, file_content.offset, file_content.fragment_number);
                 timer_runner(file_link);
+                eLog("instance_dfs file_fragment_achieved out 3");
                 return;
             }
 
@@ -536,6 +542,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                         if (!is_downloaded) {
                             eLog("[Fragment] Ooops, something wrong. File not downloaded");
                             timer_runner(file_link);
+                            eLog("instance_dfs file_fragment_achieved out 4");
                             return;
                         }
 
@@ -563,11 +570,12 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 }
             }
         }
+        eLog("instance_dfs file_fragment_achieved out");
     });
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
-    Dfs::Tables::ActorDirFile::update_file_state(owner_id, dir_row.file_id, Dfs::FileState::Ready);
+    Dfs::Tables::DirsFile::ActorSpace::update_file_state(node->dfs()->get_db_instance(), owner_id, dir_row.file_id, Dfs::FileState::Ready);
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
 }

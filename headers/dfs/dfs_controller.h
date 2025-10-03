@@ -123,6 +123,8 @@ public:
     std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     DfsMode           dfs_mode_        = DfsMode::Full;
 
+    std::shared_ptr<DbConnector> get_db_instance();
+
     const std::set<ActorId> &priority_actors() const {
         return priority_actors_;
     }

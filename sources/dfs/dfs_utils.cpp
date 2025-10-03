@@ -77,63 +77,35 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
     return fmt::format("{:02x}", fmt::join(std::span(output, BLAKE3_OUT_LEN), ""));
 }
 
-std::vector<DbRow> Dfs::Tables::ActorDirFile::getFileDataByName(DbConnector *db, std::string name) {
-    std::string query = fmt::format("SELECT * FROM {} WHERE file_id = '{}'", TableName, name);
+std::vector<DbRow> Dfs::Tables::DirsFile::ActorSpace::getFileDataByName(const std::shared_ptr<DbConnector> db, std::string name) {
+    std::string query = fmt::format("SELECT * FROM {} WHERE file_id = '{}'", TableNameActorsFiles, name);
     return db->select(query);
 }
 
-std::string Dfs::Tables::ActorDirFile::getLastFileId(DbConnector &db) {
-    if (!db.is_open()) {
-        eFatal("Database {} not opened", db.file());
+std::string Dfs::Tables::DirsFile::ActorSpace::getLastFileId(const std::shared_ptr<DbConnector> db) {
+    if (!db->is_open()) {
+        eFatal("Database {} not opened", db->file());
     }
 
-    auto        result       = db.select(Dfs::Tables::last_file_id_query);
+    auto        result       = db->select(Dfs::Tables::last_file_id_query);
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
     return lastFileName;
 }
 
-DbConnector Dfs::Tables::ActorDirFile::get_actor_dir_file(const ActorId &owner_id) {
-    auto path        = actorDbPath(owner_id);
-    bool need_create = false;
-    try {
-        need_create = std::filesystem::file_size(path) == 0;
-    } catch (std::exception &) {
-        need_create = true;
-    }
-
-    if (need_create) {
-        Dfs::initialize_actor_folder(owner_id);
-    }
-
-    DbConnector db(path.string());
-    db.open();
-    return db;
-}
-
-std::filesystem::path Dfs::Tables::ActorDirFile::actorDbPath(const ActorId &actorId) {
-    std::string path = DfsB::DFS_FOLDER + Utils::platformDelimeter() + actorId.to_string()
-                       + Utils::platformDelimeter() + DfsB::fsMapName;
-    return path;
-}
-
-std::filesystem::path Dfs::Tables::ActorDirFile::storjDbPath(const ActorId     &actorId,
+std::filesystem::path Dfs::Tables::DirsFile::ActorSpace::storjDbPath(const ActorId     &actorId,
                                                              const std::string &storjName) {
     std::string path = DfsB::DFS_FOLDER + Utils::platformDelimeter() + actorId.to_string()
                        + Utils::platformDelimeter() + storjName;
     return path;
 }
 
-std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_rows(
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(
+    const std::shared_ptr<DbConnector> db,
     const ActorId &owner_id,
     std::uint64_t  last_modified) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        return std::unexpected(Dfs::DfsError::DirError);
-    }
-
     std::vector<Dfs::DirRow> dir_rows;
-    auto db_rows = db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
+    auto db_rows = db->select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableNameActorsFiles, last_modified));
 
     for (auto &row : db_rows) {
         auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
@@ -145,15 +117,10 @@ std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile
     return dir_rows;
 }
 
-std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::ActorDirFile::
-    get_dir_rows_map(const ActorId &owner_id, std::uint64_t last_modified) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        return std::unexpected(Dfs::DfsError::DirError);
-    }
-
+std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::
+    get_dir_rows_map(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, std::uint64_t last_modified) {
     std::unordered_map<std::string, Dfs::DirRow> dir_rows;
-    auto db_rows = db.select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableName, last_modified));
+    auto db_rows = db->select(fmt::format("SELECT * FROM {} WHERE last_modified >= {}", TableNameActorsFiles, last_modified));
 
     for (auto &row : db_rows) {
         auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
@@ -165,58 +132,46 @@ std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::
     return dir_rows;
 }
 
-std::expected<std::string, Dfs::DfsError> Dfs::Tables::ActorDirFile::last_file_id(const ActorId     &owner_id,
-                                                                                  const std::string &file_id) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        eFatal("Database {} not opened", db.file());
-    }
-
-    auto        result       = db.select(Dfs::Tables::last_file_id_query);
+std::expected<std::string, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::last_file_id(const std::shared_ptr<DbConnector> db,
+                                                                                          const ActorId     &owner_id,
+                                                                                        const std::string &file_id) {
+    auto        result       = db->select(Dfs::Tables::last_file_id_query);
     auto        prev_file_id = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string last_file_id = prev_file_id ? prev_file_id->at("file_id") : "";
     return last_file_id;
 }
 
-void Dfs::Tables::ActorDirFile::update_file_state(const ActorId    &actor_id,
+void Dfs::Tables::DirsFile::ActorSpace::update_file_state(const std::shared_ptr<DbConnector> db, const ActorId    &actor_id,
                                                   const std::string file_id,
                                                   FileState         state) {
-    auto actrDirFile = get_actor_dir_file(actor_id);
-    actrDirFile.update(fmt::format("UPDATE {} SET state = '{}' WHERE file_id = '{}'",
-                                   TableName,
+    db->update(fmt::format("UPDATE {} SET state = '{}' WHERE file_id = '{}'",
+                                   TableNameActorsFiles,
                                    std::to_underlying(state),
                                    file_id));
-    actrDirFile.close();
 }
 
-void Dfs::Tables::ActorDirFile::update_file_after_stored_remove(const ActorId     &actor_id,
+void Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
+                                                                        const ActorId     &actor_id,
                                                                 const std::string &file_id,
                                                                 const Signature   &sign,
                                                                 std::uint64_t      last_modified) {
-    auto dir_file = get_actor_dir_file(actor_id);
     auto query    = fmt::format(
         "UPDATE {} SET folder = NULL, name = '', hash = '', last_modified = '{}', size = 0, sign = "
            "'{}' WHERE "
            "file_id = '{}'",
-        TableName,
+        TableNameActorsFiles,
         last_modified,
         Utils::to_base64(sign),
         file_id);
-    dir_file.update(query);
-    dir_file.close();
+    db->update(query);
 
     eLog("update_file_after_stored_remove {}", query);
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row(const ActorId     &owner_id,
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_dir_row(const std::shared_ptr<DbConnector> db, const ActorId     &owner_id,
                                                                                  const std::string &search_value,
                                                                                  const std::string &field) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        return std::unexpected(Dfs::DfsError::DirError);
-    }
-
-    auto rows = db.select(fmt::format("SELECT * FROM {} WHERE {} = '{}';", TableName, field, search_value));
+    auto rows = db->select(fmt::format("SELECT * FROM {} WHERE {} = '{}';", TableNameActorsFiles, field, search_value));
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::DirError);
     }
@@ -231,23 +186,19 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::get_dir_row
     return dirRow.value();
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+    const std::shared_ptr<DbConnector> db,
     const ActorId     &owner_id,
     const std::string &folder,
     const std::string &name) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        return std::unexpected(Dfs::DfsError::DirError);
-    }
-
     std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
     std::string query        = fmt::format("SELECT * FROM {} WHERE {} name = '{}' AND state != '{}';",
-                                    TableName,
+                                    TableNameActorsFiles,
                                     query_folder,
                                     name,
                                     std::to_underlying(FileState::Removed));
 
-    auto rows = db.select(query);
+    auto rows = db->select(query);
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::NotExists);
     }
@@ -262,19 +213,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file
     return dirRow.value();
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file_by_hash(const ActorId &owner_id,
+std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::search_file_by_hash(const std::shared_ptr<DbConnector> db, const ActorId &owner_id,
                                                                                          const std::string &hash) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        return std::unexpected(Dfs::DfsError::DirError);
-    }
-
     std::string query = fmt::format("SELECT * FROM {} WHERE hash = '{}' AND state != '{}';",
-                                    TableName,
+                                    TableNameActorsFiles,
                                     hash,
                                     std::to_underlying(FileState::Removed));
 
-    auto rows = db.select(query);
+    auto rows = db->select(query);
     if (rows.empty()) {
         return std::unexpected(Dfs::DfsError::NotExists);
     }
@@ -289,17 +235,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::ActorDirFile::search_file
     return dirRow.value();
 }
 
-bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
+bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConnector> db,
+                                                    const ActorId           &owner_id,
                                             DirRow                  &dir_row,
                                             const Actor<KeyPrivate> &signer) {
-    auto dir_file = get_actor_dir_file(owner_id);
-
-    if (!dir_file.is_open()) {
-        return false;
-    }
-
     auto current_ms   = Utils::current_date_ms();
-    auto prev_file_id = DfsT::ActorDirFile::getLastFileId(dir_file);
+    auto prev_file_id = getLastFileId(db);
 
     dir_row.created       = current_ms;
     dir_row.last_modified = current_ms;
@@ -312,18 +253,12 @@ bool Dfs::Tables::ActorDirFile::add_dir_row(const ActorId           &owner_id,
     dir_row.sign = sign.value();
 
     auto dir_row_db = Utils::to_dbrow(dir_row);
-    bool res        = dir_file.replace(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
+    bool res        = db->replace(TableNameActorsFiles, dir_row_db);
 
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std::vector<DirRow> &dir_rows) {
-    auto dir_file = get_actor_dir_file(actor_id);
-
-    if (!dir_file.is_open()) {
-        return false;
-    }
-
+bool Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId &actor_id, const std::vector<DirRow> &dir_rows) {
     for (auto &dir_row : dir_rows) {
         if (dir_row.hash.empty()) {
             continue;
@@ -335,7 +270,7 @@ bool Dfs::Tables::ActorDirFile::add_dir_rows(const ActorId &actor_id, const std:
             dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
         }
 
-        dir_file.insert(Dfs::Tables::ActorDirFile::TableName, dir_row_db);
+        db->insert(TableNameActorsFiles, dir_row_db);
     }
 
     return true;
@@ -359,30 +294,17 @@ std::filesystem::path Dfs::Path::actorPath(const ActorId &actorId) {
     return DfsB::DFS_FOLDER + Utils::platformDelimeter() + actorId.to_string();
 }
 
-std::size_t Dfs::Tables::ActorDirFile::totalFileSize(const ActorId &actorId) {
-    auto db = get_actor_dir_file(actorId);
-    if (!db.is_open()) {
-        eFatal("Database {} error", db.file());
-        return 0;
-    }
-
-    auto count = db.count(TableName);
+std::size_t Dfs::Tables::DirsFile::ActorSpace::totalFileSize(const std::shared_ptr<DbConnector> db, const ActorId &actorId) {
+    auto count = db->count(TableNameActorsFiles);
     if (count == 0)
         return 0;
 
-    auto row = db.select(fmt::format("SELECT SUM(size) from {}", TableName)).at(0);
+    auto row = db->select(fmt::format("SELECT SUM(size) from {}", TableNameActorsFiles)).at(0);
     return std::stoll(row["SUM(size)"]);
 }
 
-std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     &actorId,
+std::uint64_t Dfs::Tables::DirsFile::ActorSpace::dataAmountStoredSize(const std::shared_ptr<DbConnector> db, const ActorId     &actorId,
                                                               const std::string &storjName) {
-    DbConnector db(storjDbPath(actorId, storjName).string());
-    db.open();
-    if (!db.is_open()) {
-        eFatal("Database error {}", db.file());
-        return 0;
-    }
-
     /*
     auto count = db.select(fmt::format("SELECT COUNT(size) from {}", DfsF::TableNameFragments))[0];
     if (std::stoi(count["COUNT(size)"]) == 0) {
@@ -397,7 +319,7 @@ std::uint64_t Dfs::Tables::ActorDirFile::dataAmountStoredSize(const ActorId     
     return 0;
 }
 
-std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection_hash_size(
+std::pair<std::string, uint64_t> Dfs::Tables::DirsFile::ActorSpace::calculate_collection_hash_size(
     const ActorId     &owner_id,
     const std::string &file_id,
     const std::string &sort_field) {
@@ -409,13 +331,7 @@ std::pair<std::string, uint64_t> Dfs::Tables::ActorDirFile::calculate_collection
     return res;
 }
 
-bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, DirRow &dir_row, bool with_sign) {
-    auto db = get_actor_dir_file(owner_id);
-    if (!db.is_open()) {
-        eFatal("Database error {}", db.file());
-        return 0;
-    }
-
+bool Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, DirRow &dir_row, bool with_sign) {
     std::string sign;
     if (with_sign) {
         sign = fmt::format(", sign = '{}'", Utils::to_base64(dir_row.sign));
@@ -423,13 +339,13 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, Di
 
     std::string query =
         fmt::format("UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE file_id = '{}'",
-                    TableName,
+                    TableNameActorsFiles,
                     dir_row.hash,
                     dir_row.size,
                     dir_row.last_modified,
                     sign,
                     dir_row.file_id);
-    auto upd = db.update(query);
+    auto upd = db->update(query);
     if (!upd) {
         return false;
     }
@@ -437,7 +353,7 @@ bool Dfs::Tables::ActorDirFile::update_file_metadata(const ActorId &owner_id, Di
     return true;
 }
 
-std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::ActorDirFile::get_file_content(
+std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::DirsFile::ActorSpace::get_file_content(
     const ActorId     &actor_id,
     const std::string &file_id) {
     auto path = Path::file_path(actor_id, file_id);
@@ -461,7 +377,7 @@ std::expected<std::vector<std::uint8_t>, Utils::ContentError> Dfs::Tables::Actor
     return content;
 }
 
-std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection_template_file_id(
+std::optional<Dfs::CollectionTemplate> Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(
     const ActorId     &actor_id,
     const std::string &file_id) {
     auto path = Path::file_path(actor_id, file_id);
@@ -487,10 +403,11 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
     return collection_template;
 }
 
-std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection_template_name(
+std::optional<Dfs::CollectionTemplate> Dfs::Tables::DirsFile::ActorSpace::get_collection_template_name(
+    const std::shared_ptr<DbConnector> db,
     const ActorId     &actor_id,
     const std::string &template_name) {
-    auto dir_row_exp = get_dir_row(actor_id, template_name, "name");
+    auto dir_row_exp = get_dir_row(db, actor_id, template_name, "name");
     if (!dir_row_exp.has_value()) {
         return std::nullopt;
     }
@@ -505,9 +422,9 @@ std::optional<Dfs::CollectionTemplate> Dfs::Tables::ActorDirFile::get_collection
     return collection_template;
 }
 
-std::expected<DbConnector, Dfs::DirsFile::DirsError> Dfs::DirsFile::database() {
-    DbConnector dirs_file(Dfs::Basic::dirsPath);
-    if (!dirs_file.open()) {
+std::expected<std::shared_ptr<DbConnector>, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::database() {
+    std::shared_ptr<DbConnector> dirs_file = std::make_shared<DbConnector>(Dfs::Basic::dirsPath);
+    if (!dirs_file->open()) {
         eCritical("[DirsFile] Can't open dirs file");
         return std::unexpected(DirsError::DirsNotOpen);
     }
@@ -515,33 +432,35 @@ std::expected<DbConnector, Dfs::DirsFile::DirsError> Dfs::DirsFile::database() {
     return dirs_file;
 }
 
-bool Dfs::DirsFile::create_file() {
+std::expected<std::shared_ptr<DbConnector>, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::create_file() {
     // create basic dirs file
-    auto db = database();
-    if (!db.has_value()) {
-        return false;
+    auto db_res = database();
+    if (!db_res.has_value()) {
+        return std::unexpected(DirsError::DirsNotOpen);
     }
-    if (!db->create_table(Dfs::Tables::DirsFile::CreateTableQuery)) {
-        return false;
-    }
-    db->close();
+    auto db = db_res.value();
 
-    return true;
+    if (!db->create_table(Dfs::Tables::DirsFile::CreateTableQueryDirs)) {
+        return std::unexpected(DirsError::Unknown);
+    }
+
+    db->query(DfsT::DirsFile::CreateTableQueryActorsFiles);
+    db->query(DfsT::DirsFile::CreateIndexActorsFilesActorId);
+    db->query(DfsT::DirsFile::CreateIndexActorsFilesLastModified);
+    db->query(DfsT::DirsFile::CreateIndexActorsFilesActorIdLastModified);
+    db->query(DfsT::DirsFile::CreateIndexActorsFilesPrevFileIdNotNull);
+
+    return db;
 }
 
-std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs::DirsFile::load_all() {
-    return load_from_modified(0);
+std::expected<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::load_all(const std::shared_ptr<DbConnector> db) {
+    return load_from_modified(db, 0);
 }
 
-std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs::DirsFile::load_from_modified(
-    uint64_t last_modified) {
-    auto db = database();
-    if (!db.has_value()) {
-        return {};
-    }
-
+std::expected<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::load_from_modified(
+    const std::shared_ptr<DbConnector> db, uint64_t last_modified) {
     auto query =
-        fmt::format("SELECT * FROM {} WHERE last_modified > {}", Dfs::Tables::DirsFile::TableName, last_modified);
+        fmt::format("SELECT * FROM {} WHERE last_modified > {}", Dfs::Tables::DirsFile::TableNameDirs, last_modified);
     auto                 all_dbrows = db->select(query);
     std::vector<DirsRow> dirs_rows;
     dirs_rows.reserve(all_dbrows.size());
@@ -557,14 +476,9 @@ std::expected<std::vector<Dfs::DirsFile::DirsRow>, Dfs::DirsFile::DirsError> Dfs
     return dirs_rows;
 }
 
-bool Dfs::DirsFile::insert(const DirsRow &dirs_row) {
-    auto db = database();
-    if (!db.has_value()) {
-        return false;
-    }
-
+bool Dfs::Tables::DirsFile::DirsSpace::insert(const std::shared_ptr<DbConnector> db, const DirsRow &dirs_row) {
     auto dbrow = Utils::to_dbrow(dirs_row);
-    bool res   = db->replace(Dfs::Tables::DirsFile::TableName, dbrow);
+    bool res   = db->replace(Dfs::Tables::DirsFile::TableNameDirs, dbrow);
 
     if (!res) {
         eWarning("[DirsManager] Can't update dirs file");
@@ -573,27 +487,17 @@ bool Dfs::DirsFile::insert(const DirsRow &dirs_row) {
     return res;
 }
 
-void Dfs::DirsFile::insert_vector(const std::vector<DirsRow> &dirs_rows) {
-    auto db = database();
-    if (!db.has_value()) {
-        return;
-    }
-
+void Dfs::Tables::DirsFile::DirsSpace::insert_vector(const std::shared_ptr<DbConnector> db, const std::vector<DirsRow> &dirs_rows) {
     // begin transaction
     for (const auto &dirs_row : dirs_rows) {
         auto dbrow = Utils::to_dbrow(dirs_row);
-        bool res   = db->insert(Dfs::Tables::DirsFile::TableName, dbrow);
+        bool res   = db->insert(Dfs::Tables::DirsFile::TableNameDirs, dbrow);
     }
     // end transaction
 }
 
-std::expected<std::uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_modified() {
-    auto db = database();
-    if (!db.has_value()) {
-        return std::unexpected(Dfs::DirsFile::DirsError::DirsNotOpen);
-    }
-
-    auto query      = fmt::format("SELECT MAX(last_modified) FROM {}", Dfs::Tables::DirsFile::TableName);
+std::expected<std::uint64_t, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::max_last_modified(const std::shared_ptr<DbConnector> db) {
+    auto query      = fmt::format("SELECT MAX(last_modified) FROM {}", Dfs::Tables::DirsFile::TableNameDirs);
     auto all_dbrows = db->select(query);
     if (all_dbrows.empty()) {
         return 0;
@@ -606,18 +510,13 @@ std::expected<std::uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::max_last_m
         std::uint64_t max_last = std::stoull(all_dbrows.front().at("MAX(last_modified)"));
         return max_last;
     } catch (const std::exception &) {
-        return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
+        return std::unexpected(DirsError::NoRows);
     }
 }
 
-std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::last_modified(const ActorId &actor_id) {
-    auto db = database();
-    if (!db.has_value()) {
-        return std::unexpected(Dfs::DirsFile::DirsError::DirsNotOpen);
-    }
-
+std::expected<uint64_t, Dfs::Tables::DirsFile::DirsSpace::DirsError> Dfs::Tables::DirsFile::DirsSpace::last_modified(const std::shared_ptr<DbConnector> db, const ActorId &actor_id) {
     auto query      = fmt::format("SELECT last_modified FROM {} WHERE actor_id = '{}'",
-                             Dfs::Tables::DirsFile::TableName,
+                             Dfs::Tables::DirsFile::TableNameDirs,
                              actor_id);
     auto all_dbrows = db->select(query);
     if (all_dbrows.empty()) {
@@ -631,13 +530,13 @@ std::expected<uint64_t, Dfs::DirsFile::DirsError> Dfs::DirsFile::last_modified(c
         std::uint64_t max_last = std::stoull(all_dbrows.front().at("last_modified"));
         return max_last;
     } catch (const std::exception &) {
-        return std::unexpected(Dfs::DirsFile::DirsError::NoRows);
+        return std::unexpected(DirsError::NoRows);
     }
 }
 
-void Dfs::DirsFile::update_row(const ActorId &actor_id, std::uint64_t last_modified) {
-    auto dirs_row = Dfs::DirsFile::DirsRow { .actor_id = actor_id, .last_modified = last_modified };
-    Dfs::DirsFile::insert(dirs_row);
+void Dfs::Tables::DirsFile::DirsSpace::update_row(const std::shared_ptr<DbConnector> db, const ActorId &actor_id, std::uint64_t last_modified) {
+    auto dirs_row = DirsRow { .actor_id = actor_id, .last_modified = last_modified };
+    insert(db, dirs_row);
 }
 
 void Dfs::initialize_actor_folder(const ActorId &actor_id) {
@@ -654,12 +553,6 @@ void Dfs::initialize_actor_folder(const ActorId &actor_id) {
     }
 
     std::filesystem::create_directories(actor_folder);
-
-    // create dir file
-    auto        path     = Dfs::Tables::ActorDirFile::actorDbPath(actor_id);
-    DbConnector dir_file = DbConnector(path);
-    dir_file.open();
-    dir_file.query(DfsT::ActorDirFile::CreateTableQuery);
 
     // requestDirData(actorId);
 }
