@@ -181,6 +181,8 @@ public:
         return is_dirs_loaded_;
     }
 
+    std::set<Dfs::FileLink> forces_files_;
+
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,
@@ -374,6 +376,8 @@ public:
     // TODO: get rows from collection
 
     // TODO: need two function: remove LOCAL file and remove file from STORE
+
+    void request_file(const ActorId &owner_id, const std::string &file_id);
 
     // visualMoveFile
     void broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row);

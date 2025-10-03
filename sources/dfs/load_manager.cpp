@@ -158,6 +158,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+    bool is_forced = node->dfs()->forces_files_.contains(file_link);
 
     if (!node_enabled.load()) {
         return;
@@ -172,7 +173,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         }
     }
 
-    bool is_full   = node->dfs()->mode() == DfsMode::Full;
+    bool is_full   = node->dfs()->mode() == DfsMode::Full || is_forced;
     bool need_load = is_full || node->dfs()->is_priority(owner_id);
 
     if (/*dir_row.type == Dfs::FileType::File && (dir_row.state != Dfs::FileState::Ready ||*/ !need_load /*)*/) {

@@ -1434,6 +1434,18 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
     return {};
 }
 
+void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
+    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
+    auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+
+    forces_files_.insert(file_link);
+
+    this->node->network()->send_message(file_link,
+                                        MessageType::DfsFileState,
+                                        SendMode::Neighbours,
+                                        MessageStatus::Request);
+}
+
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {
     auto file_data = Dfs::FileData { .owner_id = owner_id, .dir_row = dir_row };
     node->network()->send_broadcast(file_data, MessageType::DfsStoreFile);

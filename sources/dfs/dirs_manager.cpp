@@ -224,7 +224,8 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    ThreadPoolBoost::instance_dfs()->post([this, responder] {
+    std::thread([this, responder] {
+        // ThreadPoolBoost::instance_dfs()->post([this, responder] {
         auto actors = node->actor_index()->read_all_actors_ids();
 
         auto network_id = node->actor_index()->network_id();
@@ -258,5 +259,6 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
-    });
+        // });
+    }).detach();
 }
