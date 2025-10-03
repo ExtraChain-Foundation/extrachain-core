@@ -27,6 +27,7 @@ ThothManager::ThothManager(ExtraChainNode* node)
     QObject::connect(node->dfs(), &DfsController::waitDownloaded, [](ActorId owner_id, Dfs::DirRow dir_row) {
     });
     QObject::connect(node->dfs(), &DfsController::added, [this, &node](ActorId owner_id, Dfs::DirRow dir_row) {
+        // return;
         if (dir_row.actor_id == node->network_id() && dir_row.name == "Thoth") {
             this->owner_id_ = node->network_id();
             this->file_id_  = dir_row.file_id;
@@ -47,8 +48,11 @@ void ThothManager::stop() {
 }
 
 bool ThothManager::create_thoth_template() {
-    auto thoth_template = Dfs::CollectionTemplate::create("Thoth").value().add_fields(
-        { Dfs::Field::Blob("owner").not_null(), Dfs::Field::Blob("file_id").not_null() });
+    auto thoth_template =
+        Dfs::CollectionTemplate::create("Thoth").value().add_fields({ Dfs::Field::Blob("owner").not_null(),
+                                                                      Dfs::Field::Blob("file_id").not_null(),
+                                                                      Dfs::Field::Blob("os").not_null(),
+                                                                      Dfs::Field::Blob("token").not_null() });
 
     auto system_actor_id = node->account_controller()->system_actor().id();
     auto template_res    = node->dfs()->store_template(system_actor_id, thoth_template);
@@ -60,6 +64,29 @@ bool ThothManager::create_thoth_template() {
     return true;
 }
 
+bool ThothManager::create_thoth_vector() {
+    auto network_id = node->actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
+                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                  "Thoth");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto store_res =
+        node->dfs()->store_vector(network_id, network_id, "Thoth", network_id, search_result->file_id);
+    if (!store_res.has_value()) {
+        eCritical("Can't create Thoth database, because {}", store_res.error());
+        return false;
+    }
+
+    return true;
+}
 bool ThothManager::read_all() {
     auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
     if (!file_row.has_value()) {
@@ -85,30 +112,6 @@ bool ThothManager::read_all() {
     }
 
     // TODO: rows to infos_
-
-    return true;
-}
-
-bool ThothManager::create_thoth_vector() {
-    auto network_id = node->actor_index()->network_id();
-    if (network_id.is_zero()) {
-        return false;
-    }
-
-    auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Thoth");
-    if (!search_result.has_value()) {
-        return false;
-    }
-
-    auto store_res =
-        node->dfs()->store_vector(network_id, network_id, "Thoth", network_id, search_result->file_id);
-    if (!store_res.has_value()) {
-        eCritical("Can't create Thoth database, because {}", store_res.error());
-        return false;
-    }
 
     return true;
 }

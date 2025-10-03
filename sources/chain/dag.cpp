@@ -2345,6 +2345,8 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
 std::optional<std::string> Dag::hash_interval(const SectionId &from, const SectionId &to) {
     std::string section_hashs;
 
+    // TODO: if first < from or to
+
     if (status_ != DagStatus::Sync) {
         eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
              from.to_string(NumeralBase::Dec),

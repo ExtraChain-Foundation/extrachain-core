@@ -44,24 +44,22 @@ class ThothManager {
 public:
     ThothManager(ExtraChainNode* node);
 
-    void start();
-
-    void stop();
-
+    // for network
     bool create_thoth_template();
-    void read_thoth_records();
 
+    // for apps
+    bool create_thoth_vector();
     bool read_all();
-
     void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id);
-
     void network_thoth_record(const ActorId&     owner_id,
                               const std::string& file_id,
                               const std::string& os,
                               const std::string& token);
 
-    // for clients
-    bool create_thoth_vector();
+    void start();
+    void stop();
+
+    // for users
     bool add_thoth_record(const ActorId& owner_id, const std::string& file_id);
     // bool remove_thoth_record(const ActorId& owner_id, const std::st
 

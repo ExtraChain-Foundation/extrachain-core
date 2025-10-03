@@ -225,6 +225,7 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
+        // std::thread([this, responder] {
         auto actors = node->actor_index()->read_all_actors_ids();
 
         auto network_id = node->actor_index()->network_id();
@@ -249,9 +250,9 @@ void DirsManager::network_request_all(const Responder& responder) {
 
             // QThread::msleep(3);
 
-            // if (!node) {
-            //     return;
-            // }
+            if (!node_enabled.load()) {
+                return;
+            }
         }
 
         responder.send_response(response_data,
@@ -259,4 +260,5 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 SendMode::Focused,
                                 MessageStatus::Response);
     });
+    // }).detach();
 }
