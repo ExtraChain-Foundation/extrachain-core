@@ -87,6 +87,10 @@ public:
                                                      const std::string       &file_id,
                                                      const Chat::MessageText &message_text);
 
+    std::expected<bool, ChatError> add_audio_message(const ActorId           &owner_id,
+                                                     const std::string       &file_id,
+                                                     const Chat::MessageText &message_text);
+
     std::expected<bool, ChatError> add_file_message(const ActorId           &owner_id,
                                                     const std::string       &file_id,
                                                     const Chat::MessageText &message_text);
