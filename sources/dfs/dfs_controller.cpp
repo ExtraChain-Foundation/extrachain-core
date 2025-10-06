@@ -284,6 +284,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     // create new dir row
     Dfs::DirRow dir_row = { .actor_id      = author_id,
+                            .owner_id = owner_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = file_hash,
@@ -461,6 +462,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_collection(
     }
 
     Dfs::DirRow dir_row = { .actor_id      = author_id,
+                            .owner_id = owner_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = collection_hash,
@@ -560,6 +562,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     }
 
     Dfs::DirRow dir_row = { .actor_id      = author_id,
+                            .owner_id = owner_id,
                             .file_id       = file_id,
                             .prev_file_id  = "",
                             .hash          = vector_hash.value().first,
@@ -1578,7 +1581,7 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
     const std::string     ownerPath       = DfsB::DFS_FOLDER + pathDelim + owner_id.to_string() + pathDelim;
     std::filesystem::path realFilePath    = fmt::format("{}{}", ownerPath, file_name);
 
-    std::vector<DbRow>    actrDirData  = DfsT::DirsFile::ActorSpace::getFileDataByName(dirs_manager_.get_db_instance(), file_name);
+    std::vector<DbRow>    actrDirData  = DfsT::DirsFile::ActorSpace::getFileDataByName(dirs_manager_.get_db_instance(), owner_id, file_name);
     std::filesystem::path tempFilePath = fmt::format("temp{}{}", pathDelim, owner_id.to_string());
     if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("file_id");

@@ -234,6 +234,7 @@ namespace Dfs {
 
     struct DirRow {
         ActorId actor_id;
+        ActorId owner_id;
 
         std::string                file_id;
         std::optional<std::string> prev_file_id;
@@ -277,6 +278,7 @@ namespace Dfs {
     BOOST_DESCRIBE_STRUCT(DirRow,
                           (),
                           (actor_id,
+                           owner_id,
                            file_id,
                            prev_file_id,
                            hash,
@@ -491,7 +493,8 @@ namespace Dfs {
             //"owner_id      TEXT PRIMARY KEY  NOT NULL,"
             static const std::string CreateTableQueryActorsFiles = "CREATE TABLE IF NOT EXISTS " + TableNameActorsFiles
                                                         + "("
-                                                        "file_id       TEXT PRIMARY KEY  NOT NULL,"
+                                                        "owner_id      TEXT              NOT NULL,"
+                                                        "file_id       TEXT              NOT NULL,"
                                                         "prev_file_id  TEXT                UNIQUE,"
                                                         "actor_id      TEXT              NOT NULL,"
                                                         "hash          TEXT              NOT NULL,"
@@ -504,20 +507,24 @@ namespace Dfs {
                                                         "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
                                                         "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 4),"
                                                         "sign          TEXT              NOT NULL,"
+                                                        "PRIMARY KEY (owner_id, file_id),"
                                                         "UNIQUE(folder, name)"
                                                         ");";
 
-            static const std::string CreateIndexActorsFilesActorId =
-                "CREATE INDEX IF NOT EXISTS idx_files_actor_id ON " + TableNameActorsFiles + "(actor_id);";
+            static const std::string CreateIndexActorsFiles1 =
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_modified  ON " + TableNameActorsFiles + "(owner_id, last_modified);";
 
-            static const std::string CreateIndexActorsFilesLastModified =
-                "CREATE INDEX IF NOT EXISTS idx_files_last_modified ON " + TableNameActorsFiles + "(last_modified);";
+            static const std::string CreateIndexActorsFiles2 =
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_folder_name_state ON " + TableNameActorsFiles + "(owner_id, folder, name, state);";
 
-            static const std::string CreateIndexActorsFilesActorIdLastModified =
-                "CREATE INDEX IF NOT EXISTS idx_files_actor_last_mod ON " + TableNameActorsFiles + "(actor_id, last_modified);";
+            static const std::string CreateIndexActorsFiles3 =
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_hash_state ON " + TableNameActorsFiles + "(owner_id, hash, state);";
 
-            static const std::string CreateIndexActorsFilesPrevFileIdNotNull =
-                "CREATE INDEX IF NOT EXISTS idx_files_prev_file_id_notnull ON " + TableNameActorsFiles + "(prev_file_id) WHERE prev_file_id IS NOT NULL;";
+            static const std::string CreateIndexActorsFiles4 =
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_size ON " + TableNameActorsFiles + "(owner_id, size);";
+
+            static const std::string CreateIndexActorsFiles5 =
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_state ON " + TableNameActorsFiles + "(state);";
 
             namespace DirsSpace {
                 struct DirsRow {
@@ -546,7 +553,7 @@ namespace Dfs {
             } // namespace DirsFile
 
             namespace ActorSpace {
-                std::vector<DbRow> getFileDataByName(const std::shared_ptr<DbConnector> db, std::string name);
+                std::vector<DbRow> getFileDataByName(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, std::string name);
                 std::string        getLastFileId(const std::shared_ptr<DbConnector> db);
                 std::size_t        totalFileSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId);
                 std::uint64_t      dataAmountStoredSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId, const std::string& storjName);
@@ -585,10 +592,10 @@ namespace Dfs {
                     const std::string& file_id);
 
                 // TODO: add expected
-                void update_file_state(const std::shared_ptr<DbConnector> db, const ActorId& actor_id, const std::string file_id, Dfs::FileState state);
+                void update_file_state(const std::shared_ptr<DbConnector> db, const ActorId& owner_id, const std::string file_id, Dfs::FileState state);
 
                 void update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
-                                                     const ActorId&     actor_id,
+                                                     const ActorId&     owner_id,
                                                      const std::string& file_id,
                                                      const Signature&   sign,
                                                      std::uint64_t      last_modified);
