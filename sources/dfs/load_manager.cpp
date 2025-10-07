@@ -168,8 +168,16 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     {
         auto active_downloads_locked = *m_active_downloads;
 
+        if (is_forced) {
+            node->dfs()->forces_files_.erase(file_link);
+        }
+
         if (active_downloads_locked->contains(file_link)) {
-            return;
+            if (is_forced) {
+                active_downloads_locked->erase(file_link);
+            } else {
+                return;
+            }
         }
     }
 
