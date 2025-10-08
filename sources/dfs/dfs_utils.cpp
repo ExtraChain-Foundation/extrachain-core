@@ -146,8 +146,8 @@ void Dfs::Tables::DirsFile::ActorSpace::update_file_state(const std::shared_ptr<
                                                   FileState         state) {
     db->update(fmt::format("UPDATE {} SET state = '{}' WHERE owner_id='{}' AND file_id = '{}'",
                                    TableNameActorsFiles,
-                                   owner_id.to_string(),
                                    std::to_underlying(state),
+                                   owner_id.to_string(),
                                    file_id));
 }
 

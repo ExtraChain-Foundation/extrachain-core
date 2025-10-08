@@ -183,12 +183,15 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     }
 
     // Don't add if already in queue or active downloads
+    if (is_priority)
     {
-        auto active_downloads_locked = *m_active_downloads;
-
-        if (active_downloads_locked->contains(file_link)) {
+        if (m_active_downloads_priority->contains(file_link))
             return;
-        }
+    }
+    else
+    {
+        if (m_active_downloads->contains(file_link))
+            return;
     }
 
     bool is_full   = node->dfs()->mode() == DfsMode::Full;
@@ -489,7 +492,6 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 ReadStorage read_storage { .amount_fragments   = file_content.full_amount_fragments,
                                            .fragments_achieved = {} };
                 // read_storage.offsets_read_progress.emplace(file_content.offset, false);
-
                 active_reads_locked->emplace(file_link, read_storage);
             }
         }
@@ -515,59 +517,70 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto active_reads_locked = *m_active_reads;
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end())
+            {
                 item->second.fragments_achieved.emplace(file_content.fragment_number);
+            }
         }
 
         {
             auto active_reads_locked = *m_active_reads;
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
-                auto active_downloads_locked = *m_active_downloads;
-                auto res                     = active_downloads_locked->find(file_link);
-                if (res != active_downloads_locked->end()) {
-                    for (auto& item : res->second.identifier_list) {
-                        if (item.first == identifier) {
-                            item.second.counter--;
-                            break;
-                        }
-                    }
+                bool is_priority = node->dfs()->is_priority(file_content.owner_id);
 
-                    if (item->second.fragments_achieved.size() == item->second.amount_fragments) {
-                        active_reads_locked->erase(item);
-
-                        auto dir_row       = res->second.dir_row;
-                        bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
-                                                                                     file_link.file_id,
-                                                                                     dir_row.hash);
-                        if (!is_downloaded) {
-                            eLog("[Fragment] Ooops, something wrong. File not downloaded");
-                            timer_runner(file_link);
-                            eLog("instance_dfs file_fragment_achieved out 4");
-                            return;
-                        }
-
-                        bool notify_neighbours = res->second.notify_neighbours;
-
-                        active_downloads_locked->erase(res);
-                        // eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
-
-                        finish_him(file_link.owner_id, dir_row);
-
-                        if (notify_neighbours)
-                            broadcast_file_exist(file_link.owner_id, file_link.file_id);
-                    } else {
-                        if (res->second.amount_fragments == 0) {
-                            res->second.amount_fragments = file_content.full_amount_fragments;
-                            for (int i = 0; i < res->second.amount_fragments; ++i) {
-                                if (i + 1 != file_content.fragment_number)
-                                    res->second.fragments_left.emplace(i + 1);
+                auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) {
+                    auto active_downloads_locked = *active_downloads;
+                    auto res                     = active_downloads_locked->find(file_link);
+                    if (res != active_downloads_locked->end()) {
+                        for (auto& item : res->second.identifier_list) {
+                            if (item.first == identifier) {
+                                item.second.counter--;
+                                break;
                             }
-                        } else {
-                            res->second.fragments_left.erase(file_content.fragment_number);
                         }
+
+                        if (item->second.fragments_achieved.size() == item->second.amount_fragments) {
+                            active_reads_locked->erase(item);
+
+                            auto dir_row       = res->second.dir_row;
+                            bool is_downloaded = node->dfs()->is_file_already_downloaded(file_link.owner_id,
+                                                                                         file_link.file_id,
+                                                                                         dir_row.hash);
+                            if (!is_downloaded) {
+                                eLog("[Fragment] Ooops, something wrong. File not downloaded");
+                                timer_runner(file_link);
+                                eLog("instance_dfs file_fragment_achieved out 4");
+                                return;
+                            }
+
+                            bool notify_neighbours = res->second.notify_neighbours;
+
+                            active_downloads_locked->erase(res);
+                            // eLog("[Dfs] LoadManager::file_fragment_achieved, file downloaded: {}", file_link);
+
+                            finish_him(file_link.owner_id, dir_row);
+
+                            if (notify_neighbours)
+                                broadcast_file_exist(file_link.owner_id, file_link.file_id);
+                        } else {
+                            if (res->second.amount_fragments == 0) {
+                                res->second.amount_fragments = file_content.full_amount_fragments;
+                                for (int i = 0; i < res->second.amount_fragments; ++i) {
+                                    if (i + 1 != file_content.fragment_number)
+                                        res->second.fragments_left.emplace(i + 1);
+                                }
+                            } else {
+                                res->second.fragments_left.erase(file_content.fragment_number);
+                            }
+                        }
+                        timer_runner(file_link);
                     }
-                    timer_runner(file_link);
-                }
+                };
+
+                if (is_priority)
+                    process_func(m_active_downloads_priority);
+                else
+                    process_func(m_active_downloads);
             }
         }
         eLog("instance_dfs file_fragment_achieved out");
