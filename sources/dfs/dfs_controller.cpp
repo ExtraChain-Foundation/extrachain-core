@@ -664,6 +664,10 @@ std::expected<DbRow, DfsVectorError> DfsController::get_vector_row(const ActorId
                                                                    const std::string           &file_id,
                                                                    const std::string           &primary_data,
                                                                    const Dfs::DataSecurityData &security_data) {
+    if (!node_enabled.load()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     auto v = DfsVector::load(node,
                              node->account_controller()->current_profile().main()->get(),
                              owner_id,
@@ -687,6 +691,10 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsController::get_vector_rows
     const std::string           &file_id,
     const std::string           &where_statement,
     const Dfs::DataSecurityData &security_data) {
+    if (!node_enabled.load()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     auto v = DfsVector::load(node,
                              node->account_controller()->system_actor(),
                              owner_id,
