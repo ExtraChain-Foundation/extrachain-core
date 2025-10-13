@@ -22,6 +22,7 @@
 #include <string>
 #include <expected>
 
+#include <QObject>
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "network/network_manager.h"
@@ -35,7 +36,8 @@ enum class DirsError {
     DownloadManagerError
 };
 
-class DirsManager {
+class DirsManager: public QObject {
+    Q_OBJECT
 public:
     DirsManager(ExtraChainNode* node);
     ~DirsManager();
@@ -60,7 +62,13 @@ public:
 
     std::shared_ptr<DbConnector> get_db_instance();
 
+signals:
+    void convertion_started();
+    void convertion_finished();
+
 private:
+    void old_dfs_to_new_dfs_converter();
+
     std::shared_ptr<DbConnector> db_;
     ExtraChainNode* node;
 };
