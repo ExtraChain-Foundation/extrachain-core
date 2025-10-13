@@ -19,6 +19,7 @@
 
 #include "dfs/dfs_vector.h"
 
+#include "dfs/dfs_controller.h"
 #include "utils/exc_utils.h"
 
 DfsVector::DfsVector(ExtraChainNode              *node,
@@ -252,6 +253,7 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
+        node->dfs()->request_file(file_actor_id_, file_id_);
         eCritical("[DfsVector] Can't find {}", vector_path_.native());
         return std::unexpected(DfsVectorError::Unknown);
     }

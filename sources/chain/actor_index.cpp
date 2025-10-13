@@ -382,7 +382,7 @@ std::expected<void, ActorSaveError> ActorIndex::save_actors() {
     for (const auto &[id, actor] : actors_todo_map_) {
         auto result = this->add(actor.id(), actor.toJson());
         if (!result.has_value()) {
-            eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
+            // eWarning("[ActorIndex] Saving actor {} error: {}", actor.id(), result.error());
             continue;
         }
 

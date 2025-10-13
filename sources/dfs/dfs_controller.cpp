@@ -667,6 +667,10 @@ std::expected<DbRow, DfsVectorError> DfsController::read_vector_row(const ActorI
                                                                     const std::string           &file_id,
                                                                     const std::string           &primary_data,
                                                                     const Dfs::DataSecurityData &security_data) {
+    if (!node_enabled.load()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     auto v = DfsVector::load(node,
                              node->account_controller()->current_profile().main()->get(),
                              owner_id,
@@ -690,6 +694,10 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsController::read_vector_row
     const std::string           &file_id,
     const std::string           &where_statement,
     const Dfs::DataSecurityData &security_data) {
+    if (!node_enabled.load()) {
+        return std::unexpected(DfsVectorError::Unknown);
+    }
+
     auto v = DfsVector::load(node,
                              node->account_controller()->system_actor(),
                              owner_id,
@@ -1468,6 +1476,18 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
     std::filesystem::remove(file_path->native());
     emit localRemoved(owner_id, file_id);
     return {};
+}
+
+void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
+    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
+    auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+
+    forces_files_.insert(file_link);
+
+    this->node->network()->send_message(file_link,
+                                        MessageType::DfsFileState,
+                                        SendMode::Neighbours,
+                                        MessageStatus::Request);
 }
 
 void DfsController::broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row) {

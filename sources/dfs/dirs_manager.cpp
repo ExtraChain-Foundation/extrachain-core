@@ -203,6 +203,21 @@ void DirsManager::network_response_dir_rows(
                 return;
             }
 
+            if (owner_id == node->network_id()) {
+                auto rows = dir_rows;
+                for (auto it = rows.begin(); it != rows.end();) {
+                    if (it->name == "Usernames") {
+                        node->dfs()->request_file(owner_id, it->file_id);
+                        it = rows.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+
+                node->dfs()->download_manager().add_to_queue(owner_id, rows, *responder.identifiers().begin());
+                continue;
+            }
+
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
         }
     });
@@ -224,8 +239,8 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        // std::thread([this, responder] {
+    std::thread([this, responder] {
+        // ThreadPoolBoost::instance_dfs()->post([this, responder] {
         auto actors = node->actor_index()->read_all_actors_ids();
 
         auto network_id = node->actor_index()->network_id();
@@ -259,6 +274,6 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
-    });
-    // }).detach();
+        // });
+    }).detach();
 }
