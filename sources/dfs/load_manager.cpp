@@ -140,7 +140,7 @@ void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_
     m_amount_file_fragments_requests->erase(file_link_fragment);
 }
 
-bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::string identifier) {
+bool LoadManager::add_node_identifier(const Dfs::FileLink& file_link, std::string identifier) {
     auto active_downloads_locked = *m_active_downloads;
     auto it                      = active_downloads_locked->find(file_link);
     if (it != active_downloads_locked->end()) {
@@ -267,7 +267,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         //         responder);
     } else {
         // eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
-        add_network_identifier(file_link, identifier);
+        add_node_identifier(file_link, identifier);
     }
 }
 

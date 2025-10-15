@@ -113,13 +113,13 @@ enum class SendMode {
 MSGPACK_ADD_ENUM(SendMode)
 
 struct MessageBody {
-    SendMode      send_type;
-    MessageType   message_type;
-    MessageStatus status;
-    std::string   message_id;
-    ActorId       sender_id;
-    ActorId       init_sender_id;
-    // std::string                     init_sender_identifier;
+    SendMode                        send_type;
+    MessageType                     message_type;
+    MessageStatus                   status;
+    std::string                     message_id;
+    ActorId                         sender_id;
+    ActorId                         init_sender_id;
+    std::string                     init_sender_identifier;
     std::unordered_set<std::string> nodes_identifiers_to_ignore;
     std::unordered_set<std::string> nodes_identifiers_to_ignore_later;
     std::string                     data;
@@ -160,6 +160,7 @@ struct MessageBody {
                    message_id,
                    sender_id,
                    init_sender_id,
+                   init_sender_identifier,
                    nodes_identifiers_to_ignore,
                    nodes_identifiers_to_ignore_later,
                    data)
@@ -199,7 +200,8 @@ inline MessageBody make_init_message(const std::string& data,
                                      MessageType        type,
                                      MessageStatus      status,
                                      const ActorId&     sender,
-                                     std::string        to_message_id) {
+                                     std::string        to_message_id,
+                                     std::string        sender_identifier) {
     if (!to_message_id.empty() && to_message_id.length() != 15) {
         eFatal("make message error: incorrect message id size");
     }
@@ -210,7 +212,8 @@ inline MessageBody make_init_message(const std::string& data,
                             .message_id     = !to_message_id.empty() ? to_message_id : generate_message_id(),
                             .sender_id      = sender,
                             .init_sender_id = sender,
-                            .data           = data };
+                            .init_sender_identifier = sender_identifier,
+                            .data                   = data };
 
     return message;
 }

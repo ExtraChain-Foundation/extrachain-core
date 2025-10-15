@@ -291,7 +291,10 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
     auto to = to_section.has_value() ? to_section.value() : current_section;
     for (BigNumber i = balance_start_section; i <= to; i++) {
         auto section = dag->read_section(i);
-        if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+        if (!section.has_value()) {
+            continue;
+        }
+        if (section->transactions.empty() || section->id < 0) {
             continue;
         }
 
@@ -479,8 +482,15 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     // Scan from start_section to genesis_section to collect actor-token pairs
     for (BigNumber i = start_section; i <= genesis_section; i++) {
         auto section = read_section_callback(i);
-        if (!section.has_value() || section->transactions.empty()) {
+        if (!section.has_value()) {
             continue;
+        }
+        if (section->transactions.empty()) {
+            continue;
+        }
+
+        if (i % BigNumber(20000) == 0) {
+            eLog("update_to_genesis_section scan on 0x{} / {}", i, i.to_printable_string());
         }
 
         for (const auto& tx : section->transactions) {
@@ -522,14 +532,17 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         return { false, BigNumber(-1) };
     }
 
-    Balances& balances = cached_balances_opt.value().second;
-    // auto      cache_res = read_cached_balances();                 // ?
-    // local_clear_less_balances(cache_res.first, cache_res.second); // ?
+    Balances& balances  = cached_balances_opt.value().second;
+    auto      cache_res = read_cached_balances();                 // ?
+    local_clear_less_balances(cache_res.first, cache_res.second); // ?
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
         auto section = read_section_callback(i);
-        if (!section.has_value() || section->transactions.empty()) {
+        if (!section.has_value()) {
+            continue;
+        }
+        if (section->transactions.empty()) {
             continue;
         }
 
@@ -728,7 +741,10 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
 
     for (auto i = from; i <= dag->current_section(); i++) {
         auto section = dag->read_section(i);
-        if (!section.has_value() || section->transactions.empty() || section->id < 0) {
+        if (!section.has_value()) {
+            continue;
+        }
+        if (section->transactions.empty() || section->id < 0) {
             continue;
         }
 
@@ -752,7 +768,7 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
             }
 
             if (balances[{ tx.sender(), tx.token() }] < 0) {
-#ifndef IS_RC
+#ifndef IS_APP_UI_CLIENT
                 eInfo(
                     "[Dag] Exorcised. Section: {}, sender: {}, receiver: {}, type: {}, token: {}, amount: {}, "
                     "balance: {}, timestamp: {}",

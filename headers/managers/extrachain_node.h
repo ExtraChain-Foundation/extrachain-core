@@ -44,7 +44,7 @@ class DfsController;
 class ActorIndex;
 class Dag;
 class NetworkManager;
-class TransactionManager;
+class LuminanceManager;
 class AccountController;
 class Transaction;
 class ActorId;
@@ -121,6 +121,7 @@ private:
     DfsController*     dfs_                = nullptr;
     ActorIndex*        actor_index_        = nullptr;
     Dag*               dag_                = nullptr;
+    LuminanceManager*  luminance_manager_  = nullptr;
     NetworkManager*    network_manager_    = nullptr;
     AccountController* account_controller_ = nullptr;
     DataMiningManager* dmm_                = nullptr;
@@ -128,6 +129,7 @@ private:
     ChatManager*       chat_manager_       = nullptr;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
+    QTimer*            timer_luminance_    = nullptr;
 
     bool                        started_               = false;
     bool                        is_client_application_ = false;
@@ -139,6 +141,7 @@ private:
 
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
+    std::string                              node_identifier_;
 
 public: // TODO
     std::vector<Actor<KeyPublic>>                 actors_broadcast_;
@@ -164,12 +167,13 @@ public:
     // not only for the one
     bool create_subscription_vector(const std::string& file_name);
     void start();
-    bool is_client_application();
+    bool is_client_application() const;
 
     std::pair<QString, QString> init_public_ip_and_country() const;
 
-    Dag*               dag();
-    NetworkManager*    network();
+    Dag*               dag() const;
+    NetworkManager*    network() const;
+    LuminanceManager*  luminance_manager() const;
     AccountController* account_controller() const;
     ActorIndex*        actor_index() const;
     DfsController*     dfs() const;
@@ -216,8 +220,8 @@ public:
     ActorId network_id();
     // TODO: prepareImportUser: get visual info about file
 
-    std::string generate_network_identifier();
-    std::string network_identifier();
+    std::string generate_node_identifier();
+    std::string node_identifier();
 
     void          init_vpn(VpnFunctionClearType vpnClearFun);
     TokenManager* token_manager() const;
@@ -289,6 +293,7 @@ signals:
 
 private slots:
     void timer_reward_request();
+    void timer_luminance_autoremove();
     void timer_info_print();
 
 public:
