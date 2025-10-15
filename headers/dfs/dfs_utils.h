@@ -503,12 +503,11 @@ namespace Dfs {
                                                         "size          INTEGER           NOT NULL,"
                                                         "created       INTEGER           NOT NULL,"
                                                         "last_modified INTEGER           NOT NULL,"
-                                                        "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 39),"
+                                                        "type          INTEGER           NOT NULL CHECK (type BETWEEN 0 AND 40),"
                                                         "encryption    INTEGER           NOT NULL CHECK (encryption BETWEEN 0 AND 1),"
                                                         "state         INTEGER           NOT NULL CHECK (state BETWEEN 0 AND 4),"
                                                         "sign          TEXT              NOT NULL,"
-                                                        "PRIMARY KEY (owner_id, file_id),"
-                                                        "UNIQUE(folder, name)"
+                                                        "PRIMARY KEY (owner_id, file_id)"
                                                         ");";
 
             static const std::string CreateIndexActorsFiles1 =
@@ -606,7 +605,7 @@ namespace Dfs {
                 std::optional<Dfs::CollectionTemplate> get_collection_template_name(const std::shared_ptr<DbConnector> db, const ActorId&     actor_id,
                                                                                     const std::string& template_name);
                 bool add_dir_row(const std::shared_ptr<DbConnector> db, const ActorId& owner_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
-                bool add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
+                std::pair<bool, std::vector<Dfs::DirRow>> add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
 
                 std::pair<std::string, uint64_t> calculate_collection_hash_size(
                     const ActorId&     owner_id,

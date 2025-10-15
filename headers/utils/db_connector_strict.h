@@ -88,7 +88,8 @@ public:
 
         query += ")";
 
-        dbmutex.lock();
+        // dbmutex.lock();
+        std::unique_lock lock(dbmutex);
         char* errMsg = nullptr;
         int   rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
 
@@ -98,7 +99,7 @@ public:
             if (errMsg) {
                 sqlite3_free(errMsg);
             }
-            dbmutex.unlock();
+            // dbmutex.unlock();
             return false;
         }
 
@@ -106,7 +107,7 @@ public:
         eLog("{} (true): {}", file().c_str(), query.c_str());
 #endif
 
-        dbmutex.unlock();
+        // dbmutex.unlock();
         return true;
     }
 
@@ -247,10 +248,11 @@ private:
 
         eLog("[DbConnector] Generated query: {}", query);
 
-        dbmutex.lock();
+        std::unique_lock lock(dbmutex);
+        // dbmutex.lock();
         sqlite3_stmt* stmt = NULL;
         int           rc   = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);
-        dbmutex.unlock();
+        // dbmutex.unlock();
 
         if (rc != SQLITE_OK) {
             eLog("[DbConnector] Prepare error: {}", sqlite3_errmsg(db));
@@ -263,12 +265,12 @@ private:
             return false;
         }
 
-        dbmutex.lock();
+        // dbmutex.lock();
         if (rc != SQLITE_OK) {
             eLog().nospace() << file() << "(false):" << query;
             eLog("[DbConnector] ImplementationInsertStrict: prepare failed: {}", sqlite3_errmsg(db));
             sqlite3_finalize(stmt);
-            dbmutex.unlock();
+            // dbmutex.unlock();
             return false;
         }
 
@@ -277,7 +279,7 @@ private:
             eLog("[DbConnector] ImplementationInsertStrict: Execution failed: {}", sqlite3_errmsg(db));
             eLog("{} (false): {}", file(), query);
             sqlite3_finalize(stmt);
-            dbmutex.unlock();
+            // dbmutex.unlock();
             return false;
         }
 
@@ -286,7 +288,7 @@ private:
 #endif
 
         sqlite3_finalize(stmt);
-        dbmutex.unlock();
+        // dbmutex.unlock();
         return true;
     }
 };

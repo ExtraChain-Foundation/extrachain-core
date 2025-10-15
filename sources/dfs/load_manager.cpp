@@ -282,7 +282,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         //         SendMode::Focused,
         //         MessageStatus::NoStatus,
         //         responder);
-        eLog("m_active_downloads{}->emplace: {}", is_priority ? "_priority" : "", file_link.hash());
+        eLog("m_active_downloads{}->emplace: {}", is_priority ? "_priority" : "", file_link);
     } else {
         // eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
         add_network_identifier(file_link, identifier);
@@ -547,7 +547,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                          file_link.file_id,
                                                                                          dir_row.hash);
                             if (!is_downloaded) {
-                                eLog("[Fragment] Ooops, something wrong. File not downloaded");
+                                eLog("[Fragment] Ooops, something wrong. File not downloaded. File link: {}", file_link);
                                 timer_runner(file_link);
                                 eLog("instance_dfs file_fragment_achieved out 4");
                                 return;

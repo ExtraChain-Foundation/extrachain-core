@@ -287,22 +287,22 @@ void DirsManager::network_response_dir_rows(
             }
 
             // Need to change adding
-            auto res = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
+            auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
 
             // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
-            if (dir_rows.empty()) {
+            if (dir_rows_res.empty()) {
                 return;
             }
 
-            auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
+            auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
             this->update_dirs(owner_id, max_value);
 
             if (!node_enabled.load()) {
                 return;
             }
 
-            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
         }
         eLog("instance_dfs network_response_dir_rows out");
     });

@@ -833,7 +833,9 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value())
+    {
         return false; // TODO: temp, need expected
+    }
     if (dir_row->hash == hash && dir_row->state != Dfs::FileState::Ready) {
         // return true; // TODO: that's all
     }

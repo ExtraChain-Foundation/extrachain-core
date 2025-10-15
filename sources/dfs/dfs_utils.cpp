@@ -262,7 +262,10 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
     return res;
 }
 
-bool Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId &actor_id, const std::vector<DirRow> &dir_rows) {
+std::pair<bool, std::vector<Dfs::DirRow>> Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId &actor_id, const std::vector<DirRow> &dir_rows) {
+    std::vector<Dfs::DirRow> result_dir_row;
+    result_dir_row.reserve(dir_rows.size());
+
     for (auto &dir_row : dir_rows) {
         if (dir_row.hash.empty()) {
             continue;
@@ -274,10 +277,15 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(const std::shared_ptr<DbCon
             dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
         }
 
-        db->insert(TableNameActorsFiles, dir_row_db);
+        bool res = db->insert(TableNameActorsFiles, dir_row_db);
+
+        if (res)
+            result_dir_row.emplace_back(dir_row);
+        else
+            eLog("ActorSpace::add_dir_rows failed: {} ; {}", dir_row.owner_id, dir_row.file_id);
     }
 
-    return true;
+    return {true, result_dir_row};
 }
 
 std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::string &file_id) {
