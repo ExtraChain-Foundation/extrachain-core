@@ -36,7 +36,7 @@ enum class DirsError {
     DownloadManagerError
 };
 
-class DirsManager: public QObject {
+class DirsManager : public QObject {
     Q_OBJECT
 public:
     DirsManager(ExtraChainNode* node);
@@ -49,10 +49,12 @@ public:
     void network_response_sync(std::uint64_t max_last_modified, const Responder& responder);
 
     void send_from_last_modified(std::uint64_t last_modified, const Responder& responder);
-    void network_response_from_last_modified(const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
-                                             const Responder&                           responder);
+    void network_response_from_last_modified(
+        const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
+        const Responder&                                              responder);
 
-    void network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row, const Responder& responder);
+    void network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row,
+                                  const Responder&                                 responder);
     void network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
                                    const Responder&                                                responder);
 
@@ -61,14 +63,13 @@ public:
     void network_request_all(const Responder& responder);
 
     std::shared_ptr<DbConnector> get_db_instance();
+    void                         old_dfs_to_new_dfs_converter();
 
 signals:
     void convertion_started();
     void convertion_finished();
 
 private:
-    void old_dfs_to_new_dfs_converter();
-
     std::shared_ptr<DbConnector> db_;
-    ExtraChainNode* node;
+    ExtraChainNode*              node;
 };

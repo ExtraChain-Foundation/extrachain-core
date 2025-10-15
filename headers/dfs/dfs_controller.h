@@ -398,7 +398,7 @@ public:
                                                      const FsPath      &output_folder);
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::DFS_FOLDER) const;
 
-    DirsManager &dirs_manager();
+    DirsManager *dirs_manager();
     LoadManager &download_manager();
 
     void sync(const std::string &identifier);
@@ -414,9 +414,9 @@ public:
     }
 
 private:
-    DirsManager dirs_manager_;
-    LoadManager load_manager_;
-    bool        is_dirs_loaded_ = false;
+    DirsManager *dirs_manager_;
+    LoadManager  load_manager_;
+    bool         is_dirs_loaded_ = false;
 
     std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
@@ -475,6 +475,7 @@ signals:
     void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);
     void vectorRowAdded(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
     void vectorRowRemoved(ActorId owner_id, Dfs::DirRow dir_row, DbRow row);
+    void convertion_begin();
 
     friend DirsManager;
     friend LoadManager;
