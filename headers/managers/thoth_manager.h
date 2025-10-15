@@ -37,10 +37,18 @@ struct ThothData {
 BOOST_DESCRIBE_STRUCT(ThothData, (), (id, timestamp, actor, owner, file_id, os, token, custom))
 
 struct ThothInfo {
-    std::string os;
-    std::string token;
+    std::string       os;
+    std::string       token;
+    std::set<ActorId> ignored;
+
+    auto operator<=>(const ThothInfo&) const = default;
 };
-BOOST_DESCRIBE_STRUCT(ThothInfo, (), (os, token))
+BOOST_DESCRIBE_STRUCT(ThothInfo, (), (os, token, ignored))
+
+struct ThothCustom {
+    std::set<ActorId> ignored;
+};
+BOOST_DESCRIBE_STRUCT(ThothCustom, (), (ignored));
 
 class ExtraChainNode;
 
@@ -67,7 +75,7 @@ public:
     void stop();
 
     // for users
-    bool add_thoth_record(const ActorId& owner_id, const std::string& file_id);
+    bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
     // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
 
     bool send_to_service(const ThothInfo& info);
@@ -82,9 +90,9 @@ private:
     bool          enabled_ = false;
     std::uint16_t port_    = 5425;
 
-    ActorId                            owner_id_;
-    std::string                        file_id_;
-    std::map<Dfs::FileLink, ThothInfo> infos_;
+    ActorId                                      owner_id_;
+    std::string                                  file_id_;
+    std::map<Dfs::FileLink, std::set<ThothInfo>> infos_;
 
     // #ifdef Q_OS_IOS
     std::string ios_token_;

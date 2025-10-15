@@ -210,7 +210,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     invite(chat.value());
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
-    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id);
+    auto custom = ThothCustom { .ignored = { chat->owner_id } };
+    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
 
     return chat;
 }
