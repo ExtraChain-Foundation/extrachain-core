@@ -63,6 +63,7 @@ enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
+class ThothManager;
 
 enum class ImportProfileError {
     DataEmpty,
@@ -102,7 +103,7 @@ public:
 
     ~ExtraChainNodeWrapper();
 
-    void Init(bool makeAsync = false);
+    void init(bool makeAsync = false);
 
     ExtraChainNode* node;
 
@@ -127,6 +128,7 @@ private:
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
     ChatManager*       chat_manager_       = nullptr;
+    ThothManager*      thoth_manager_      = nullptr;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
     QTimer*            timer_luminance_    = nullptr;
@@ -227,7 +229,8 @@ public:
     TokenManager* token_manager() const;
     bool          is_custom_app_;
 
-    ChatManager* chat_manager();
+    ChatManager*  chat_manager();
+    ThothManager* thoth_manager();
 
     VPNConfigStorage vpnConfigStorage;
 
@@ -284,6 +287,7 @@ signals:
 
     void chatsLoaded();
     void chatAdded(Chat::Chat chat);
+    void chatUpdated(Chat::Chat chat);
     void messageAdded(ActorId owner_id, std::string file_id, Chat::Message msg);
     void messageRemoved(ActorId owner_id, std::string file_id, std::string id);
 

@@ -37,6 +37,7 @@
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/token_manager.h"
+#include "managers/thoth_manager.h"
 #include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
@@ -66,7 +67,7 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     }
 }
 
-void ExtraChainNodeWrapper::Init(bool makeAsync) {
+void ExtraChainNodeWrapper::init(bool makeAsync) {
     if (makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
@@ -110,6 +111,7 @@ void ExtraChainNode::process() {
     dmm_                = new DataMiningManager(this);
     token_manager_      = new TokenManager(this);
     chat_manager_       = new ChatManager(this);
+    thoth_manager_      = new ThothManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
@@ -382,7 +384,7 @@ bool ExtraChainNode::create_renames_template() {
 }
 
 DfsFileStatus ExtraChainNode::create_renames_vector() {
-    auto row = this->dfs()->read_file_status("Renames");
+    auto row = this->dfs()->read_file_status_self("Renames");
     if (row.has_value()) {
         return DfsFileStatus::Existed;
     }
@@ -425,7 +427,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
         return res;
     }
 
-    auto row = this->dfs()->read_file_status("Renames");
+    auto row = this->dfs()->read_file_status_self("Renames");
     if (!row.has_value()) {
         auto res = this->create_renames_vector();
 
@@ -463,7 +465,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
 }
 
 std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames() {
-    auto row     = this->dfs()->read_file_status("Renames");
+    auto row     = this->dfs()->read_file_status_self("Renames");
     auto main_id = account_controller_->current_profile().main_id();
 
     if (!row.has_value()) {
@@ -477,7 +479,7 @@ std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames(
     }
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
-    auto actors         = this->dfs()->get_vector_rows(main_id, row->file_id, "", security_actor);
+    auto actors         = this->dfs()->read_vector_rows(main_id, row->file_id, "", security_actor);
 
     if (!actors.has_value()) {
         return {};
@@ -655,6 +657,10 @@ TokenManager* ExtraChainNode::token_manager() const {
 
 ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
+}
+
+ThothManager* ExtraChainNode::thoth_manager() {
+    return thoth_manager_;
 }
 
 bool ExtraChainNode::add_subscription(const ActorId&     owner_id,

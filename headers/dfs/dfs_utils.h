@@ -344,8 +344,9 @@ namespace Dfs {
             ActorId     owner_id;
             std::string file_id;
             DbRow       row;
+            bool        thothed = false;
         };
-        BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row))
+        BOOST_DESCRIBE_STRUCT(VectorRowAdd, (), (owner_id, file_id, row, thothed))
 
         struct VectorRowRemove {
             ActorId     owner_id;

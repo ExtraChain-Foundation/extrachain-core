@@ -388,7 +388,7 @@ QString Utils::dataDir(const QString &newDir) {
     static QString current = "extrachain-data";
 
     if (!newDir.isEmpty())
-        current = Utils::fixFileName(newDir);
+        current = Utils::fix_file_name(newDir);
 
     return current;
 }
@@ -435,7 +435,7 @@ std::string Utils::generate_random_hex(size_t length) {
     return result;
 }
 
-QString Utils::detectCompiler() {
+QString Utils::detect_compiler() {
 #ifdef __clang__
     #if __clang_major__ < 11
         #error "Clang must be version 11 or higher"
@@ -542,7 +542,7 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
     return entry;
 }
 
-QString Utils::fixFileName(const QString &fileName, const QString &replaceSymbol) {
+QString Utils::fix_file_name(const QString &fileName, const QString &replaceSymbol) {
     QString fixedName = fileName.simplified();
     fixedName         = fixedName.replace(QRegularExpression("[+%@!:*?/\"<>|«»]+"), replaceSymbol);
     fixedName         = fixedName.replace("\\", replaceSymbol);
@@ -569,11 +569,11 @@ std::string Utils::extrachainVersion() {
     return extrachain_version;
 }
 
-std::string Utils::sodiumVersion() {
+std::string Utils::sodium_version() {
     return sodium_version_string();
 }
 
-std::string Utils::boostVersion() {
+std::string Utils::boost_version() {
     int major = BOOST_VERSION / 100000;
     int minor = BOOST_VERSION / 100 % 1000;
     int patch = BOOST_VERSION % 100;
