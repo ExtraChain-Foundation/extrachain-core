@@ -22,6 +22,8 @@
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 
+class QNetworkAccessManager;
+
 struct ThothData {
     std::string   id;
     std::uint64_t timestamp = 0;
@@ -30,38 +32,49 @@ struct ThothData {
     std::string   file_id;
     std::string   os;
     std::string   token;
+    std::string   custom;
 };
-BOOST_DESCRIBE_STRUCT(ThothData, (), (id, timestamp, actor, owner, file_id, os, token))
+BOOST_DESCRIBE_STRUCT(ThothData, (), (id, timestamp, actor, owner, file_id, os, token, custom))
 
 struct ThothInfo {
     std::string os;
     std::string token;
 };
+BOOST_DESCRIBE_STRUCT(ThothInfo, (), (os, token))
 
 class ExtraChainNode;
 
-class ThothManager {
+enum class ThothType {
+    ChatMessage
+};
+
+class ThothManager : public QObject {
+    Q_OBJECT
+
 public:
-    ThothManager(ExtraChainNode* node);
+    ThothManager(ExtraChainNode* node, QObject* parent = nullptr);
 
     // for network
     bool create_thoth_template();
 
     // for apps
     bool create_thoth_vector();
-    bool read_all();
-    void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id);
-    void network_thoth_record(const ActorId&     owner_id,
-                              const std::string& file_id,
-                              const std::string& os,
-                              const std::string& token);
+    bool read_all(bool is_my);
+    void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
+    void network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
 
     void start();
     void stop();
 
     // for users
     bool add_thoth_record(const ActorId& owner_id, const std::string& file_id);
-    // bool remove_thoth_record(const ActorId& owner_id, const std::st
+    // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
+
+    bool send_to_service(const ThothInfo& info);
+
+    void set_ios_token(const std::string& token) {
+        ios_token_ = token;
+    }
 
 private:
     ExtraChainNode* node;
@@ -72,4 +85,15 @@ private:
     ActorId                            owner_id_;
     std::string                        file_id_;
     std::map<Dfs::FileLink, ThothInfo> infos_;
+
+    // #ifdef Q_OS_IOS
+    std::string ios_token_;
+    // #endif
+
+signals:
+    void sendSuccess(const QString& response);
+    void sendFailed(const QString& error);
+
+private:
+    QNetworkAccessManager* m_networkManager;
 };

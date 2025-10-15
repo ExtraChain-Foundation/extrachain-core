@@ -66,7 +66,7 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     }
 }
 
-void ExtraChainNodeWrapper::Init(bool makeAsync) {
+void ExtraChainNodeWrapper::init(bool makeAsync) {
     if (makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);

@@ -25,6 +25,7 @@
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "chain/actor_index.h"
+#include "managers/thoth_manager.h"
 
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
@@ -89,10 +90,10 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
                                  auto message_row =
                                      this->node->dfs()->read_vector_row(owner_id,
-                                                                       dir_row.file_id,
-                                                                       row["id"],
-                                                                       encryption ? securiry_key
-                                                                                  : Dfs::DataSecurityData());
+                                                                        dir_row.file_id,
+                                                                        row["id"],
+                                                                        encryption ? securiry_key
+                                                                                   : Dfs::DataSecurityData());
                                  if (!message_row.has_value()) {
                                      return;
                                  }
@@ -209,6 +210,8 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     invite(chat.value());
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
+    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id);
+
     return chat;
 }
 
@@ -314,9 +317,9 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
     }
 
     auto db_rows = node->dfs()->read_vector_rows(owner_id,
-                                                file_id,
-                                                "where status = '1' ORDER by timestamp",
-                                                encryption ? security_key : Dfs::DataSecurityData());
+                                                 file_id,
+                                                 "where status = '1' ORDER by timestamp",
+                                                 encryption ? security_key : Dfs::DataSecurityData());
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -349,10 +352,10 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
 
     auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
 
-    auto db_row = node->dfs()->get_vector_rows(owner_id,
-                                               file_id,
-                                               "where status = '1' ORDER by timestamp DESC LIMIT 1",
-                                               security_key);
+    auto db_row = node->dfs()->read_vector_rows(owner_id,
+                                                file_id,
+                                                "where status = '1' ORDER by timestamp DESC LIMIT 1",
+                                                security_key);
     if (!db_row.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }

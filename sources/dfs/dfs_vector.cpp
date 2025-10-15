@@ -238,7 +238,15 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 
     for (auto &row : db_rows) {
         // TODO: make security_data_ unique for actor / current (security_data_.receiver)
-        auto decryption_res = decrypt_data(row, security_data_);
+        Dfs::DataSecurityData adjusted_security_data = security_data_;
+
+        if (auto *actor_data = std::get_if<Dfs::DataSecurityActor>(&adjusted_security_data)) {
+            if (actor_data->sender_id.is_zero()) {
+                actor_data->sender_id = ActorId(row["actor"]);
+            }
+        }
+
+        auto decryption_res = decrypt_data(row, adjusted_security_data);
         if (!decryption_res.has_value()) {
             return std::unexpected(DfsVectorError::CollectionEmpty);
         }
@@ -418,6 +426,7 @@ bool DfsVector::local_add(const DbRow &row, bool check) {
     if (!db.open()) {
         return false;
     }
+
     bool res = db.replace("Vector", row);
     db.close();
     return res;
@@ -602,10 +611,21 @@ std::expected<DbRow, DfsVectorError> DfsVector::decrypt_data(const DbRow        
     } else if (const auto *security_actor = std::get_if<Dfs::DataSecurityActor>(&security_data)) {
         auto sender   = node->account_controller()->current_profile().get_actor(security_actor->sender_id);
         auto receiver = node->actor_index()->read_actor(security_actor->receiver_id);
+
         if (sender.has_value() && receiver.has_value()) {
             decryptor = [s = sender.value(), r = receiver.value()](const ByteArray &data) {
                 return s.get().key().decrypt(data.toBytes(), r.key().public_key());
             };
+        } else if (!sender.has_value() && receiver.has_value()) {
+            auto receiver_private =
+                node->account_controller()->current_profile().get_actor(security_actor->receiver_id);
+            auto sender_public = node->actor_index()->read_actor(security_actor->sender_id);
+
+            if (receiver_private.has_value() && sender_public.has_value()) {
+                decryptor = [r = receiver_private.value(), s = sender_public.value()](const ByteArray &data) {
+                    return r.get().key().decrypt(data.toBytes(), s.key().public_key());
+                };
+            }
         }
     } else if (const auto *security_key = std::get_if<Dfs::DataSecurityKey>(&security_data)) {
         decryptor = [key = security_key->key](const ByteArray &data) {

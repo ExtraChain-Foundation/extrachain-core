@@ -379,8 +379,6 @@ public:
 
     // TODO: need two function: remove LOCAL file and remove file from STORE
 
-    void request_file(const ActorId &owner_id, const std::string &file_id);
-
     // visualMoveFile
     void broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     void sync_stored(const Dfs::FileData &file_data, const Responder &responder);

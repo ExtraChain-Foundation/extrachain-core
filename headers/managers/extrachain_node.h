@@ -103,7 +103,7 @@ public:
 
     ~ExtraChainNodeWrapper();
 
-    void Init(bool makeAsync = false);
+    void init(bool makeAsync = false);
 
     ExtraChainNode* node;
 

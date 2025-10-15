@@ -542,8 +542,8 @@ namespace Utils {
     }
 
     EXTRACHAIN_EXPORT std::string extrachainVersion();
-    EXTRACHAIN_EXPORT std::string sodiumVersion();
-    EXTRACHAIN_EXPORT std::string boostVersion();
+    EXTRACHAIN_EXPORT std::string sodium_version();
+    EXTRACHAIN_EXPORT std::string boost_version();
     EXTRACHAIN_EXPORT std::string boostAsioVersion();
 
     enum class NumberParseError {
@@ -858,9 +858,9 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT void wipeDataFiles();
 
-    EXTRACHAIN_EXPORT QString              detectCompiler();
+    EXTRACHAIN_EXPORT QString              detect_compiler();
     EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-    EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+    EXTRACHAIN_EXPORT QString fix_file_name(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
 
     EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
