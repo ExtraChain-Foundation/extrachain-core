@@ -50,6 +50,13 @@ struct ThothCustom {
 };
 BOOST_DESCRIBE_STRUCT(ThothCustom, (), (ignored));
 
+struct ThothServiceMessage {
+    std::string device_token;
+    std::string title;
+    std::string body;
+};
+BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (device_token, title, body));
+
 class ExtraChainNode;
 
 enum class ThothType {
@@ -78,11 +85,10 @@ public:
     bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
     // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
 
-    bool send_to_service(const ThothInfo& info);
+    bool send_to_service(const ThothInfo& info, const std::string& username);
 
-    void set_ios_token(const std::string& token) {
-        ios_token_ = token;
-    }
+    void        set_ios_token(const std::string& token);
+    std::string read_username(const ActorId& actor_id);
 
 private:
     ExtraChainNode* node;
@@ -93,6 +99,7 @@ private:
     ActorId                                      owner_id_;
     std::string                                  file_id_;
     std::map<Dfs::FileLink, std::set<ThothInfo>> infos_;
+    std::string                                  usernames_file_id_;
 
     // #ifdef Q_OS_IOS
     std::string ios_token_;

@@ -41,7 +41,9 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
         if (owner_id == node->network_id() && dir_row.name == "Thoth") {
             this->owner_id_ = node->network_id();
             this->file_id_  = dir_row.file_id;
-            this->read_all(!enabled_);
+            if (enabled_) {
+                this->read_all(!enabled_);
+            }
         }
     });
 }
@@ -216,11 +218,13 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
     }
 
     for (const auto& el : std::as_const(infos_[file_link])) {
-        if (el.ignored.contains(ActorId(row.at("actor")))) {
+        auto actor_id = ActorId(row.at("actor"));
+        if (el.ignored.contains(actor_id)) {
             continue;
         }
 
-        this->send_to_service(el);
+        auto username = this->read_username(actor_id);
+        this->send_to_service(el, username);
     }
 }
 
@@ -248,19 +252,18 @@ void ThothManager::network_thoth_record(const ActorId& owner_id, const std::stri
     infos_[file_link].insert(thoth_info);
 }
 
-bool ThothManager::send_to_service(const ThothInfo& info) {
+bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
     QUrl            url("http://localhost:5425/send");
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
-    QJsonObject json;
-    json["device_token"] = QString::fromStdString(info.token);
-    json["title"]        = "RaccoonLine Messenger";
-    json["body"]         = "Raccoon Coony brings word from the shadows"; // use username?
+    auto service_message =
+        ThothServiceMessage { .device_token = info.token,
+                              .title        = "Messenger",
+                              .body         = username.empty() ? "Raccoon brings word from the shadows"
+                                                               : fmt::format("Message from @{}", username) };
 
-    QJsonDocument doc(json);
-    QByteArray    data = doc.toJson();
-
+    QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
     QNetworkReply* reply = m_networkManager->post(request, data);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -275,4 +278,41 @@ bool ThothManager::send_to_service(const ThothInfo& info) {
     });
 
     return true;
+}
+
+void ThothManager::set_ios_token(const std::string& token) {
+    ios_token_ = token;
+}
+
+std::string ThothManager::read_username(const ActorId& actor_id) {
+    if (actor_id.is_zero()) {
+        return "";
+    }
+
+    if (usernames_file_id_.empty()) {
+        auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(node->network_id(),
+                                                                                       Dfs::Basic::TEMPLATE_VECTOR,
+                                                                                       "Usernames");
+
+        if (!search_result.has_value()) {
+            return "";
+        }
+
+        if (search_result->state == Dfs::FileState::Ready) {
+            this->usernames_file_id_ = search_result->file_id;
+        } else {
+            return "";
+        }
+    }
+
+    auto row = node->dfs()->read_vector_row(node->network_id(), usernames_file_id_, actor_id.to_string());
+    if (!row.has_value()) {
+        return "";
+    }
+
+    if (row->find("name") == row->end()) {
+        return "";
+    }
+
+    return row->at("name").c_str();
 }

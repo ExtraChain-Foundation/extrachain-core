@@ -100,11 +100,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    // auto search_result =
-    //     Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
-    // if (search_result.has_value()) {
-    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
-    // }
+    auto search_result =
+        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id, visual_folder, visual_name);
+    if (search_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirDuplicate);
+    }
 
     auto fpath_result = FsPath::create(file_path);
     if (!fpath_result.has_value()) {
@@ -830,8 +830,9 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
     }
 
     auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, file_id);
-    if (!dir_row.has_value())
+    if (!dir_row.has_value()) {
         return false; // TODO: temp, need expected
+    }
     if (dir_row->hash == hash && dir_row->state != Dfs::FileState::Ready) {
         // return true; // TODO: that's all
     }
