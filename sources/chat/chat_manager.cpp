@@ -675,5 +675,9 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
 
     add_new_message_joined(chat.owner_id, chat.file_id, main_actor.id());
+
+    auto custom = ThothCustom { .ignored = { main_actor.id() } };
+    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
+
     return true;
 }
