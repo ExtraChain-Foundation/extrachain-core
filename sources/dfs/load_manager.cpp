@@ -160,6 +160,11 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
     bool is_forced = node->dfs()->forces_files_.contains(file_link);
 
+    auto dir_row2 = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
+    if (!dir_row2.has_value()) {
+        return;
+    }
+
     if (!node_enabled.load()) {
         return;
     }
@@ -519,7 +524,12 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                      file_link.file_id,
                                                                                      dir_row.hash);
                         if (!is_downloaded) {
-                            eLog("[Fragment] Ooops, something wrong. File not downloaded");
+                            // eLog("[Fragment] Ooops, something wrong. File not downloaded: {}/{} {}/{}",
+                            //      file_link.owner_id,
+                            //      dir_row.file_id,
+                            //      dir_row.folder,
+                            //      dir_row.name);
+                            // eLog("--> {}", file_content);
                             timer_runner(file_link);
                             return;
                         }
