@@ -626,7 +626,6 @@ void ChatManager::update_dfs_files() {
 }
 
 bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
-
     if (dir_row.folder != CHAT_DAPP_INVITE_FOLDER) {
         return false;
     }

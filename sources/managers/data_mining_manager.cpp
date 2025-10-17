@@ -229,10 +229,8 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             eLog("Ignore reward, because tx sender != message sender");
             return false;
         }
-
-        auto sender = NodeId { .actor_id        = request_reward.transaction.sender(),
-                               .node_identifier = responder.node_id().node_identifier };
-
+        auto  sender      = NodeId { .actor_id        = request_reward.transaction.sender(),
+                                     .node_identifier = responder.node_id().node_identifier };
         auto &network_map = last_reward_[sender.actor_id];
         auto  network_it  = network_map.find(sender.node_identifier);
 
@@ -246,12 +244,18 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
                 return false;
             }
         } else if (network_map.size() >= 5) {
-#ifndef IS_APP_CLIENT
-            eLog("[Reward] Reject new node identifier, limit reached: {}", sender);
-#endif
-            return false;
-        }
+            auto current_time = Utils::current_date_ms();
+            std::erase_if(network_map, [current_time](const auto& pair) {
+                return current_time - pair.second > 90000;
+            });
 
+            if (network_map.size() >= 5) {
+#ifndef IS_APP_CLIENT
+                eLog("[Reward] Reject new node identifier, limit reached: {}", sender);
+#endif
+                return false;
+            }
+        }
         auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
         if (!res1.has_value()) {
             if (res1.error() != TransactionProveError::TooSectionDiff) {
@@ -259,7 +263,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             }
         }
 
-        network_map[sender.node_identifier] = Utils::current_date_ms();;
+        network_map[sender.node_identifier] = Utils::current_date_ms();
 
         return true;
     } else {
