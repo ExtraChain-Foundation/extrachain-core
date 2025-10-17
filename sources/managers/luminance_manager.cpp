@@ -112,14 +112,14 @@ void LuminanceManager::write_luminance(const NodeId &node_id, int luminance) {
 }
 
 void LuminanceManager::remove_old() {
-    eTemp("[LuminanceManager] Remove old");
+    // eTemp("[LuminanceManager] Remove old");
     auto now       = Utils::current_date_ms();
     auto threshold = now - Luminance::AUTOREMOVE_MS;
     luminance_db_->query(fmt::format("DELETE FROM luminance WHERE timestamp < {}", threshold));
 }
 
 void LuminanceManager::update_luminance(const NodeId &node_id, Operation op, int value) {
-    eTemp("[LuminanceManager] update_luminance: {}, {}, {}", node_id, op, value);
+    // eTemp("[LuminanceManager] update_luminance: {}, {}, {}", node_id, op, value);
     auto        node_id_str = fmt::format("{}_{}", node_id.actor_id, node_id.node_identifier);
     auto        now         = Utils::current_date_ms();
     std::string update_expr;
