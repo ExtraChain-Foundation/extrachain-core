@@ -258,9 +258,10 @@ public:
                         const std::string           &file_id,
                         T                            row,
                         const ActorId               &signer_id     = ActorId(),
-                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
+                        bool                         thothed       = false) {
         auto db_row  = Utils::to_dbrow(row);
-        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, signer_id, security_data);
+        auto dir_row = this->add_vector_row(owner_id, file_id, db_row, signer_id, security_data, thothed);
         return dir_row;
     }
 
@@ -268,20 +269,21 @@ public:
                         const std::string           &file_id,
                         DbRow                        row,
                         const ActorId               &signer_id     = ActorId(),
-                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+                        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
+                        bool                         thothed       = false);
 
     bool remove_vector_row(const ActorId     &owner_id,
                            const std::string &file_id,
                            const std::string &primary_data,
                            const ActorId     &signer_id = ActorId());
 
-    std::expected<DbRow, DfsVectorError> get_vector_row(
+    std::expected<DbRow, DfsVectorError> read_vector_row(
         const ActorId               &owner_id,
         const std::string           &file_id,
         const std::string           &primary_data,
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    std::expected<std::vector<DbRow>, DfsVectorError> get_vector_rows(
+    std::expected<std::vector<DbRow>, DfsVectorError> read_vector_rows(
         const ActorId               &owner_id,
         const std::string           &file_id,
         const std::string           &where_statement = "",
@@ -377,8 +379,6 @@ public:
 
     // TODO: need two function: remove LOCAL file and remove file from STORE
 
-    void request_file(const ActorId &owner_id, const std::string &file_id);
-
     // visualMoveFile
     void broadcast_stored(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     void sync_stored(const Dfs::FileData &file_data, const Responder &responder);
@@ -409,11 +409,14 @@ public:
 
     // TODO: use for store files?
     std::expected<Dfs::DirRow, Dfs::DfsError> find_file_self(const ActorId &owner_id, const std::string &dfs_name);
-    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const std::string &dfs_name); // TODO: add folder
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status_self(const std::string &dfs_name);
 
-    void add_to_waiting_file(const ActorId &actor_id, const std::string &file_id) {
-        files_waiting_.insert({ actor_id, file_id });
-    }
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const ActorId     &owner_id,
+                                                               const std::string &dfs_name);
+
+    void add_to_waiting_file(const ActorId &owner_id, const std::string &file_id);
+    void download_waiting_files();
+    void request_file(const ActorId &owner_id, const std::string &file_id);
 
 private:
     DirsManager dirs_manager_;
@@ -460,17 +463,17 @@ public:
     bool          writeAvailable(std::size_t = 10000);
 
 signals:
-    void stored(ActorId owner_id, Dfs::DirRow dirRow);
-    void added(ActorId owner_id, Dfs::DirRow dirRow);
-    void updated(ActorId owner_id, Dfs::DirRow dirRow);
+    void stored(ActorId owner_id, Dfs::DirRow dir_row);
+    void added(ActorId owner_id, Dfs::DirRow dir_row);
+    void updated(ActorId owner_id, Dfs::DirRow dir_row);
     void removed(ActorId owner_id, std::string file_id);
     void localRemoved(ActorId owner_id, std::string file_id);
 
-    void uploaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void uploaded(ActorId owner_id, Dfs::DirRow dir_row);
     void uploadProgress(ActorId owner_id, std::string file_id, int progress);
-    void downloaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void downloaded(ActorId owner_id, Dfs::DirRow dir_row);
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
-    void waitDownloaded(ActorId owner_id, Dfs::DirRow dirRow);
+    void waitDownloaded(ActorId owner_id, Dfs::DirRow dir_row);
     void dirsLoaded();
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile

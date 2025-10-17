@@ -69,8 +69,7 @@ static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to
 struct Section {
     SectionId                  id;
     std::set<Transaction>      transactions;
-    std::optional<std::string> control;    // hash, interval 1-20, 21-40, ..
-    std::optional<std::string> hash_cache; // ?
+    std::optional<std::string> control; // hash, interval 1-20, 21-40, ..
 
     /**
      * @brief Get all previous transaction hashes referenced by transactions in this section
@@ -112,10 +111,11 @@ BOOST_DESCRIBE_STRUCT(SectionDiff, (), (added_transactions, removed_transactions
  * Contains the transaction hash and the result of validation
  */
 struct TransactionResult {
+    SectionId             section_id;
     std::string           hash;
     TransactionProveError result;
 };
-BOOST_DESCRIBE_STRUCT(TransactionResult, (), (hash, result))
+BOOST_DESCRIBE_STRUCT(TransactionResult, (), (section_id, hash, result))
 
 /**
  * @brief Represents the range of sections in the chain
@@ -140,6 +140,7 @@ struct SectionSync {
     SectionId               to;
     std::set<Transaction>   txs;
     std::vector<DagControl> controls; // need map?
+    SectionId               last_section;
 };
 BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
 
@@ -358,17 +359,18 @@ public:
      * @param responder The responder to send the result to
      * @return std::expected<void, bool> Success or failure
      */
-    std::expected<void, bool> network_transaction(const Transaction &transaction, const Responder &responder);
+    std::expected<void, TransactionProveError> network_transaction(const Transaction &transaction,
+                                                                   const Responder   &responder);
 
     /**
      * @brief Process a transaction validation result from the network
      *
      * Updates the local state based on transaction validation results.
      *
-     * @param hash The hash of the transaction
+     * @param tx_result The tx_result of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const std::string hash, TransactionProveError result, const Responder &responder);
+    void network_transaction_result(const TransactionResult &tx_result, const Responder &responder);
 
     /**
      * @brief Process a section received from the network
@@ -409,7 +411,13 @@ public:
      * @param deep The maximum number of sections to search back (default: 100)
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_duplicate(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 100) const;
+
+    std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
+                                                                                std::uint64_t  latest_timestamp,
+                                                                                std::uint64_t  time) const;
+
+    // TODO: search to future
 
     /**
      * @brief Read a section from storage
@@ -526,7 +534,8 @@ private:
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
     std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
     std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
-    DagCache                                     cache_;               // Balance cache for fast calculations
+    std::unordered_map<NodeId, std::uint64_t>    last_txs_;
+    DagCache                                     cache_; // Balance cache for fast calculations
 
     mutable std::shared_mutex section_mutex_; //
     mutable std::mutex        range_mutex_;   //
@@ -545,6 +554,7 @@ private:
     QTimer                                      *timer_sync_; // Timer for sync operations
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
+    bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
@@ -656,7 +666,7 @@ public:
      * @brief tx_list_log
      * @param actor_id
      */
-    void tx_list_log(const ActorId &actor_id);
+    void tx_list_log(const ActorId &actor_id, bool ignore_reward = false);
 
     /**
      * @brief cache_log
@@ -745,6 +755,8 @@ public:
     void start_control(Force force = Force::None, Force qt_signals = Force::Active);
 
     void clear_controls(const SectionId &from = SectionId(0));
+
+    void clear_controls_async(const SectionId &from = SectionId(0));
 
     /**
      * @brief request_control_section

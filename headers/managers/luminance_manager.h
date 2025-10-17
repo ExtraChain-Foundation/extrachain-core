@@ -19,7 +19,39 @@
 
 #pragma once
 
-#include <string>
+#include <boost/describe/class.hpp>
 
-// Release: 0.23.4
-static const std::string extrachain_version = "0.23.5";
+class ExtraChainNode;
+class DbConnector;
+struct NodeId;
+
+class LuminanceManager {
+public:
+    LuminanceManager(ExtraChainNode *node);
+    ~LuminanceManager() = default;
+
+    bool init_db();
+    void reset_db();
+
+    int read_luminance(const NodeId &node_id);
+
+    void increment(const NodeId &node_id);
+    void decrement(const NodeId &node_id);
+    void write_luminance(const NodeId &node_id, int luminance);
+    void remove_old();
+
+private:
+    enum class Operation {
+        Increment,
+        Decrement,
+        Set
+    };
+
+    void update_luminance(const NodeId &node_id, Operation op, int value = 0);
+
+private:
+    std::unique_ptr<DbConnector> luminance_db_;
+    bool                         db_initialized_ = false; // Whether db is initialized
+
+    ExtraChainNode *node;
+};

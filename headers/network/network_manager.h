@@ -64,22 +64,22 @@ public:
     CalculateTraffic& operator=(const CalculateTraffic&) = delete;
 
     // Static method to access the Singleton instance
-    static CalculateTraffic* GetInstance();
+    static CalculateTraffic* get_instance();
 
     // Method for adding sent bytes data for a specific connection
-    void addBytesSent(const std::string& ip, qint64 bytes);
+    void add_bytes_sent(const std::string& ip, qint64 bytes);
 
     // Method for adding received bytes data for a specific connection
-    void addBytesReceived(const std::string& connectionId, qint64 bytes);
+    void add_bytes_received(const std::string& connectionId, qint64 bytes);
 
     // Method for getting the total number of sent bytes data for a specific connection
-    qint64 totalBytesSentFromConnection(const std::string& ip);
+    qint64 total_bytes_sent_from_connection(const std::string& ip);
 
     // Method for getting the total number of received bytes data for a specific connection
-    qint64 totalBytesReceivedFromConnection(const std::string& ip);
+    qint64 total_bytes_received_from_connection(const std::string& ip);
 
     // Method for gettint pair of sent and recieved bytes from all connections
-    std::pair<uint64_t, uint64_t> totalBytes();
+    std::pair<uint64_t, uint64_t> total_bytes();
 };
 
 struct NetworkReconnect {
@@ -161,8 +161,12 @@ public:
         return identifiers_;
     }
 
-    double luminance_weight() const {
-        return luminance_weight_;
+    const NodeId& node_id() const {
+        return node_id_;
+    }
+
+    int luminance() const {
+        return luminance_;
     }
 
     bool add_identifier(const std::string& identifier) {
@@ -189,8 +193,12 @@ public:
         message_type_ = type;
     }
 
-    void set_luminance_weight(double new_weight) {
-        luminance_weight_ = new_weight;
+    void set_node_id(const NodeId& node_id) {
+        node_id_ = node_id;
+    }
+
+    void set_luminance(int luminance) {
+        luminance_ = luminance;
     }
 
     Responder with_new_message_id() const {
@@ -215,8 +223,9 @@ private:
     // MessageStatus                   message_status_;
     std::unordered_set<std::string> identifiers_;
     std::string                     message_id_;
-    double                          luminance_weight_ = 1;
-    NetworkManager*                 network_manager   = nullptr;
+    NodeId                          node_id_;
+    int                             luminance_      = 0;
+    NetworkManager*                 network_manager = nullptr;
 };
 
 /**
@@ -268,7 +277,7 @@ public:
     void                        local_inizialization();
     std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
 
-    bool removeOneConnection();
+    bool remove_one_connection();
 
     std::string getNetworkVPNHash() noexcept;
     void        setNetworkVPNHash() noexcept;
@@ -306,17 +315,17 @@ public slots:
 signals:
     void finished(); // ThreadPool
     void connect_to_node(const QString&    ip,
-                       Network::Protocol protocol,
-                       const bool        request    = false,
-                       const bool        isConstant = false,
-                       const bool        is_light   = false);
+                         Network::Protocol protocol,
+                         const bool        request    = false,
+                         const bool        isConstant = false,
+                         const bool        is_light   = false);
 
 protected:
     void connect_to_websocket(const QString& ip,
-                            quint16        port,
-                            bool           requestListNodes = false,
-                            const bool     isConstant       = false,
-                            const bool     is_light         = false);
+                              quint16        port,
+                              bool           requestListNodes = false,
+                              const bool     isConstant       = false,
+                              const bool     is_light         = false);
 
     /**
      * @brief NetworkManager::check_message_count
@@ -335,21 +344,24 @@ protected slots:
 public slots:
     void start_network();
     void connect_to_node_slot(const QString&    ip,
-                           Network::Protocol protocol,
-                           const bool        request    = false,
-                           bool              isConstant = false,
-                           const bool        is_light   = false);
+                              Network::Protocol protocol,
+                              const bool        request    = false,
+                              bool              isConstant = false,
+                              const bool        is_light   = false);
     void process();
     void reconnection();
     void setup_proxy(QNetworkProxy::ProxyType type,
-                    const QString&           hostName,
-                    quint16                  port,
-                    const QString&           user,
-                    const QString&           password);
+                     const QString&           hostName,
+                     quint16                  port,
+                     const QString&           user,
+                     const QString&           password);
 
 private slots:
     void remove_socket_connection();
-    void socket_error(Network::SocketServiceError error, QString errorData, std::string ip, std::string identifier);
+    void socket_error(Network::SocketServiceError error,
+                      QString                     errorData,
+                      std::string                 ip,
+                      std::string                 identifier);
 
 public:
     QString local_ip(); // TODO: remove
@@ -358,11 +370,11 @@ public:
     std::string first_node();
     bool        save_first_node(const std::string_view first_node);
 
-    void send_brodcast_message_further(const NetworkPackageStorage& package_data);
+    void send_broadcast_message_further(const NetworkPackageStorage& package_data);
 
     void save_to_cache(const std::string& serialized_message,
-                     SendMode           send_mode,
-                     const std::string& receiver_identifier);
+                       SendMode           send_mode,
+                       const std::string& receiver_identifier);
     void send_from_cache();
     bool is_connection_exists(const std::string& identifier);
     bool is_active_connection_exists();

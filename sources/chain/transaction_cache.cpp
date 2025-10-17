@@ -53,11 +53,11 @@ void TransactionCache::cache() {
         return;
     }
 
-#ifndef IS_R
+#ifndef IS_APP_CLIENT
     return;
 #endif
 
-    eLog("[TransactionCache] Start first cache");
+    // eLog("[TransactionCache] Start first cache");
 
     // TODO
     // auto ids = node->accountController()->accountsIds();
@@ -74,7 +74,7 @@ void TransactionCache::cache() {
     //     }
     // }
 
-    eLog("[TransactionCache] Finish first cache");
+    // eLog("[TransactionCache] Finish first cache");
 }
 
 void TransactionCache::adding(const Transaction &transaction) {

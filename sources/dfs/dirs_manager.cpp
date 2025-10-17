@@ -265,9 +265,9 @@ void DirsManager::network_request_all(const Responder& responder) {
 
             // QThread::msleep(3);
 
-            // if (!node) {
-            //     return;
-            // }
+            if (!node_enabled.load()) {
+                return;
+            }
         }
 
         responder.send_response(response_data,
