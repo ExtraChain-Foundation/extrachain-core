@@ -23,7 +23,7 @@
 
 class ExtraChainNode;
 class DbConnector;
-class NodeId;
+struct NodeId;
 
 class LuminanceManager {
 public:
