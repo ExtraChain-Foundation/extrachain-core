@@ -111,13 +111,13 @@ NetworkManager::NetworkManager(ExtraChainNode *node)
         std::string a = Network::currentIdentifier().toStdString();
         eLog("[WS] Current Identifier print: {}", a);
 
-        auto connectionsLocked = *m_connections;
-        for (const auto &service : *connectionsLocked) {
-            std::string b = service->identifier().toStdString();
-            eLog("[WS] Service ident: {}", b);
-        }
-    });
-    */
+         auto connectionsLocked = *m_connections;
+         for (const auto &service : *connectionsLocked) {
+             std::string b = service->identifier().toStdString();
+             eLog("[WS] Service ident: {}", b);
+         }
+     });
+     */
 }
 
 void NetworkManager::add_all_services_identifiers_to_message(MessageBody &msg) {
@@ -976,24 +976,24 @@ void NetworkManager::message_received(const std::string &message,
         sign_actor = actor_result.value();
     }
 
-    if (sign_actor.has_value()) {
-        auto verify = sign_actor.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
-                                                      ByteArray(sign.data()).toArray<crypto_sign_BYTES>());
-        if (!verify.has_value()) {
-            eWarning("[Network] Can't verify message");
-            return;
-        }
-        if (!verify) {
-            eWarning("[Network] Sign package is invalid!");
-            return;
-        }
+     if (sign_actor.has_value()) {
+         auto verify = sign_actor.value().key().verify(ByteArray(message_body.calculate_hash()).toBytes(),
+                                                       ByteArray(sign.data()).toArray<crypto_sign_BYTES>());
+         if (!verify.has_value()) {
+             eWarning("[Network] Can't verify message");
+             return;
+         }
+         if (!verify) {
+             eWarning("[Network] Sign package is invalid!");
+             return;
+         }
 
-    } else {
-        // if (message_body.message_type != MessageType::NewActor) {
-        return;
-        // }
-    }
-    */
+      } else {
+          // if (message_body.message_type != MessageType::NewActor) {
+          return;
+          // }
+      }
+      */
 
     SendMode      send_type  = message_body.send_type;
     MessageType   type       = message_body.message_type;
@@ -1565,44 +1565,44 @@ void NetworkManager::message_received(const std::string &message,
                    break;
                }
 
-                case MessageStatus::Response: {
-                    auto serialized_messages_result =
-            MessagePack::deserialize<std::vector<std::string>>(serialized); if
-            (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
-            list of serialized messages in {} state", type, status); break;
-                    }
-                    auto verify_files_result =
-                        MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
-                    if (!verify_files_result.has_value()) {
-                        eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
-            state", type, status); break;
-                    }
-                    float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
-                    break;
-                }
-                }
-                break;
-            }
+                 case MessageStatus::Response: {
+                     auto serialized_messages_result =
+             MessagePack::deserialize<std::vector<std::string>>(serialized); if
+             (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
+             list of serialized messages in {} state", type, status); break;
+                     }
+                     auto verify_files_result =
+                         MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+                     if (!verify_files_result.has_value()) {
+                         eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
+             state", type, status); break;
+                     }
+                     float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
+                     break;
+                 }
+                 }
+                 break;
+             }
 
-               case MessageStatus::Response: {
-                   auto serialized_messages_result =
-           MessagePack::deserialize<std::vector<std::string>>(serialized); if
-           (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
-           list of serialized messages in {} state", type, status); break;
-                   }
-                   auto verify_files_result =
-                       MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
-                   if (!verify_files_result.has_value()) {
-                       eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
-           state", type, status); break;
-                   }
-                   float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
-                   break;
-               }
-               }
-               break;
-           }
-       */
+                 case MessageStatus::Response: {
+                     auto serialized_messages_result =
+             MessagePack::deserialize<std::vector<std::string>>(serialized); if
+             (!serialized_messages_result.has_value()) { eWarning("[NetworkManager] {} deserialization failed for
+             list of serialized messages in {} state", type, status); break;
+                     }
+                     auto verify_files_result =
+                         MessagePack::deserialize_container<DfsP::VerifyFileMessage>(serialized_messages_result.value());
+                     if (!verify_files_result.has_value()) {
+                         eWarning("[NetworkManager] {} deserialization failed for list of verify messages in {}
+             state", type, status); break;
+                     }
+                     float verify_percent = node->dfs()->percentVerified(verify_files_result.value());
+                     break;
+                 }
+                 }
+                 break;
+             }
+         */
 
     case MessageType::DagTransaction: {
         auto transaction_result = MessagePack::deserialize<Transaction>(serialized);
@@ -1714,6 +1714,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
+#ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
+        if (!is_luminance) {
+            return;
+        }
+#endif
+
         if (status == MessageStatus::Request) {
             auto last_info_result = MessagePack::deserialize<bool>(serialized);
             if (!last_info_result.has_value()) {
@@ -1746,6 +1752,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
+#ifdef IS_APP_UI // only for ui clients
+        if (!is_luminance) {
+            return;
+        }
+#endif
+
         auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
@@ -1757,6 +1769,12 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeResponse: {
+#ifdef IS_APP_UI // only for ui clients
+        if (!is_luminance) {
+            return;
+        }
+#endif
+
         auto dag_control = MessagePack::deserialize<DagControlRangeResponse>(serialized);
         if (!dag_control.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dag control", type);
