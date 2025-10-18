@@ -1752,10 +1752,8 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
-#ifdef IS_APP_UI // only for ui clients
-        if (!is_luminance) {
-            return;
-        }
+#ifdef IS_APP_CLIENT // only for not app clients
+        return;
 #endif
 
         auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
@@ -1769,7 +1767,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeResponse: {
-#ifdef IS_APP_UI // only for ui clients
+#ifdef IS_APP_CLIENT // only for ui clients
         if (!is_luminance) {
             return;
         }
