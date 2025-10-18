@@ -70,16 +70,6 @@ BigNumber::BigNumber(const cpp_int &number) {
     UPDATE_DEBUG()
 }
 
-BigNumber::BigNumber(int number) {
-    this->m_data = cpp_int(number);
-    UPDATE_DEBUG()
-}
-
-BigNumber::BigNumber(long long number) {
-    this->m_data = cpp_int(number);
-    UPDATE_DEBUG()
-}
-
 BigNumber BigNumber::operator&(const BigNumber &value) {
     BigNumber da(m_data & value.data());
     return da;
@@ -255,6 +245,21 @@ std::string BigNumber::to_string(NumeralBase numSystem) const {
             return "-" + ss.str();
         }
     }
+}
+
+std::string BigNumber::to_printable_string() const {
+    auto res = this->to_string(NumeralBase::Dec);
+    if (res.length() < 6)
+        return res;
+
+    std::string result;
+    int         counter = 0;
+    for (int i = res.length() - 1; i >= 0; i--) {
+        result = res[i] + result;
+        if (++counter % 3 == 0 && i != 0)
+            result = " " + result;
+    }
+    return result;
 }
 
 std::optional<int> BigNumber::to_int() const {

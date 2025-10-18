@@ -87,11 +87,31 @@ MAKE_CUSTOM_MAGICAL(ActorId)
 
 using TokenId = ActorId;
 
+struct NodeId {
+    ActorId     actor_id;
+    std::string node_identifier;
+
+    bool operator==(const NodeId &) const = default;
+    bool operator<(const NodeId &other) const;
+
+    bool empty() {
+        return actor_id.is_zero() || node_identifier.empty();
+    }
+};
+BOOST_DESCRIBE_STRUCT(NodeId, (), (actor_id, node_identifier))
+
 namespace std {
     template <>
     struct hash<ActorId> {
         size_t operator()(const ActorId &id) const {
             return std::hash<std::string> {}(id.value());
+        }
+    };
+
+    template <>
+    struct hash<NodeId> {
+        size_t operator()(const NodeId &node_id) const {
+            return std::hash<std::string> {}(node_id.actor_id.to_string() + node_id.node_identifier);
         }
     };
 } // namespace std

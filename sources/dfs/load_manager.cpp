@@ -140,7 +140,7 @@ void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_
     m_amount_file_fragments_requests->erase(file_link_fragment);
 }
 
-bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::string identifier) {
+bool LoadManager::add_node_identifier(const Dfs::FileLink& file_link, std::string identifier) {
     auto active_downloads_locked = *m_active_downloads;
     auto it                      = active_downloads_locked->find(file_link);
     if (it != active_downloads_locked->end()) {
@@ -158,6 +158,12 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const std::string& identifier,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+    bool is_forced = node->dfs()->forces_files_.contains(file_link);
+
+    auto dir_row2 = Dfs::Tables::ActorDirFile::get_dir_row(owner_id, dir_row.file_id);
+    if (!dir_row2.has_value()) {
+        return;
+    }
 
     if (!node_enabled.load()) {
         return;
@@ -167,13 +173,21 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     {
         auto active_downloads_locked = *m_active_downloads;
 
+        if (is_forced) {
+            node->dfs()->forces_files_.erase(file_link);
+        }
+
         if (active_downloads_locked->contains(file_link)) {
-            return;
+            if (is_forced) {
+                active_downloads_locked->erase(file_link);
+            } else {
+                return;
+            }
         }
     }
 
     bool is_full   = node->dfs()->mode() == DfsMode::Full;
-    bool need_load = is_full || node->dfs()->is_priority(owner_id);
+    bool need_load = is_full || node->dfs()->is_priority(owner_id) || is_forced;
 
     if (/*dir_row.type == Dfs::FileType::File && (dir_row.state != Dfs::FileState::Ready ||*/ !need_load /*)*/) {
         return;
@@ -258,7 +272,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         //         responder);
     } else {
         // eWarning("LoadManager::add_to_queue, file_link exist: {}. Adding identifier to the list...", file_link);
-        add_network_identifier(file_link, identifier);
+        add_node_identifier(file_link, identifier);
     }
 }
 
@@ -510,7 +524,12 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                      file_link.file_id,
                                                                                      dir_row.hash);
                         if (!is_downloaded) {
-                            eLog("[Fragment] Ooops, something wrong. File not downloaded");
+                            // eLog("[Fragment] Ooops, something wrong. File not downloaded: {}/{} {}/{}",
+                            //      file_link.owner_id,
+                            //      dir_row.file_id,
+                            //      dir_row.folder,
+                            //      dir_row.name);
+                            // eLog("--> {}", file_content);
                             timer_runner(file_link);
                             return;
                         }

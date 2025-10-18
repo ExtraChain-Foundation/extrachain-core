@@ -145,7 +145,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 3. Identifier check
-    if (handshake.identifier == node->network_identifier()) {
+    if (handshake.identifier == node->node_identifier()) {
         emit error(Network::SocketServiceError::IncompatibleIdentifier,
                    "",
                    ip_.toStdString(),
@@ -233,7 +233,7 @@ void SocketService::closeSocket() {
 QByteArray SocketService::generate_first_message() {
     HandshakeMessage msg { .network_id   = node->actor_index()->network_id().to_string(),
                            .version      = extrachain_version,
-                           .identifier   = node->network_identifier(),
+                           .identifier   = node->node_identifier(),
                            .your_ip      = ip_.toStdString(),
                            .connections  = {},
                            .is_available = true,
