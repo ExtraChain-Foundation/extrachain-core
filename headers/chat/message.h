@@ -30,8 +30,10 @@ namespace Chat {
         Join,    // 3
         Image,   // 4
         Gif,     // 5
-        Video,   // 6
-        File,    // 7
+        Audio,   // 6
+        Voice,   // 7
+        Video,   // 8
+        File,    // 9
     };
 
     struct MessageData {

@@ -33,9 +33,11 @@
 #include "chain/transaction.h"
 #include "encryption/encryption_tools.h"
 #include "managers/account_controller.h"
+#include "managers/luminance_manager.h"
 #include "managers/data_mining_manager.h"
 // #include "managers/thread_pool.h"
 #include "managers/token_manager.h"
+#include "managers/thoth_manager.h"
 #include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
@@ -65,7 +67,7 @@ ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
     }
 }
 
-void ExtraChainNodeWrapper::Init(bool makeAsync) {
+void ExtraChainNodeWrapper::init(bool makeAsync) {
     if (makeAsync) {
         m_thread = new QThread();
         node->moveToThread(m_thread);
@@ -102,19 +104,20 @@ void ExtraChainNode::process() {
     prepare_folders();
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
+    luminance_manager_  = new LuminanceManager(this);
     network_manager_    = new NetworkManager(this);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
     dmm_                = new DataMiningManager(this);
     token_manager_      = new TokenManager(this);
     chat_manager_       = new ChatManager(this);
+    thoth_manager_      = new ThothManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
     // auto port            = "1212";
 
     // auto thread = ThreadPool::addThread(m_blockchain);
-    // ThreadPool::addThread(m_transactionManager, thread);
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
@@ -123,6 +126,10 @@ void ExtraChainNode::process() {
     timer_info_ = new QTimer(this);
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
     timer_info_->start(10000);
+
+    timer_luminance_ = new QTimer(this);
+    connect(timer_luminance_, &QTimer::timeout, this, &ExtraChainNode::timer_luminance_autoremove);
+    timer_luminance_->start(30000);
 
     init_public_ip_and_country_ = network_manager_->search_public_ip_and_country_();
 
@@ -145,8 +152,6 @@ ExtraChainNode::~ExtraChainNode() {
 void ExtraChainNode::cleanUp() {
     delete dag_;
     network_manager_->deleteLater();
-    // m_blockchain->deleteLater();
-    // m_transactionManager->deleteLater();
     dfs_->deleteLater();
     delete chat_manager_;
 }
@@ -379,7 +384,7 @@ bool ExtraChainNode::create_renames_template() {
 }
 
 DfsFileStatus ExtraChainNode::create_renames_vector() {
-    auto row = this->dfs()->read_file_status("Renames");
+    auto row = this->dfs()->read_file_status_self("Renames");
     if (row.has_value()) {
         return DfsFileStatus::Existed;
     }
@@ -422,7 +427,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
         return res;
     }
 
-    auto row = this->dfs()->read_file_status("Renames");
+    auto row = this->dfs()->read_file_status_self("Renames");
     if (!row.has_value()) {
         auto res = this->create_renames_vector();
 
@@ -460,7 +465,7 @@ bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::stri
 }
 
 std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames() {
-    auto row     = this->dfs()->read_file_status("Renames");
+    auto row     = this->dfs()->read_file_status_self("Renames");
     auto main_id = account_controller_->current_profile().main_id();
 
     if (!row.has_value()) {
@@ -474,7 +479,7 @@ std::vector<std::pair<ActorId, std::string>> ExtraChainNode::read_actor_renames(
     }
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = main_id };
-    auto actors         = this->dfs()->get_vector_rows(main_id, row->file_id, "", security_actor);
+    auto actors         = this->dfs()->read_vector_rows(main_id, row->file_id, "", security_actor);
 
     if (!actors.has_value()) {
         return {};
@@ -507,7 +512,7 @@ void ExtraChainNode::start() {
     }
 
     // Version compatibility: 0.17.0 (temp)
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     QThreadPool::globalInstance()->start([this]() {
         auto system_id     = account_controller_->system_actor().id();
         auto main_id       = account_controller_->current_profile().main_id();
@@ -544,7 +549,7 @@ void ExtraChainNode::start() {
 #endif
 
     // Version compatibility: 0.19.2 (temp)
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     QThreadPool::globalInstance()->start([this]() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -589,16 +594,20 @@ void ExtraChainNode::start() {
     });
 }
 
-bool ExtraChainNode::is_client_application() {
+bool ExtraChainNode::is_client_application() const {
     return is_client_application_;
 }
 
-Dag* ExtraChainNode::dag() {
+Dag* ExtraChainNode::dag() const {
     return dag_;
 }
 
-NetworkManager* ExtraChainNode::network() {
+NetworkManager* ExtraChainNode::network() const {
     return network_manager_;
+}
+
+LuminanceManager* ExtraChainNode::luminance_manager() const {
+    return luminance_manager_;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(Transaction tx) {
@@ -648,6 +657,10 @@ TokenManager* ExtraChainNode::token_manager() const {
 
 ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
+}
+
+ThothManager* ExtraChainNode::thoth_manager() {
+    return thoth_manager_;
 }
 
 bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
@@ -941,7 +954,11 @@ std::string ExtraChainNode::transaction_error_description(const TransactionError
 }
 
 void ExtraChainNode::timer_reward_request() {
-    data_mining_manager()->requestCoinReward();
+    data_mining_manager()->request_reward();
+}
+
+void ExtraChainNode::timer_luminance_autoremove() {
+    luminance_manager_->remove_old();
 }
 
 void ExtraChainNode::timer_info_print() {
@@ -964,27 +981,33 @@ void ExtraChainNode::selfTxInitContractAdded(const Transaction& transaction) {
     token_manager_->final_token_creation(transaction);
 }
 
-std::string ExtraChainNode::generate_network_identifier() {
-    std::string network_identifier =
+std::string ExtraChainNode::generate_node_identifier() {
+    std::string node_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
                               + std::to_string(QRandomGenerator::global()->bounded(100000)));
 
-    auto settings               = Utils::read_settings();
-    settings.network_identifier = network_identifier;
+    auto settings            = Utils::read_settings();
+    settings.node_identifier = node_identifier;
     Utils::write_settings(settings);
+    node_identifier_ = node_identifier;
 
-    return network_identifier;
+    return node_identifier;
 }
 
-std::string ExtraChainNode::network_identifier() {
-    auto settings = Utils::read_settings();
-
-    if (!settings.network_identifier.has_value()) {
-        auto new_network_identifier = generate_network_identifier();
-        return new_network_identifier;
+std::string ExtraChainNode::node_identifier() {
+    if (!node_identifier_.empty()) {
+        return node_identifier_;
     }
 
-    return settings.network_identifier.value();
+    auto settings = Utils::read_settings();
+
+    if (!settings.node_identifier.has_value()) {
+        auto new_node_identifier = this->generate_node_identifier();
+        return new_node_identifier;
+    }
+
+    node_identifier_ = settings.node_identifier.value();
+    return node_identifier_;
 }
 
 void ExtraChainNode::notificationToken(QString os, QString actorId, QString token) {
@@ -1060,7 +1083,7 @@ void ExtraChainNode::connect_signals() {
                     return;
                 }
 
-#ifdef IS_R
+#ifdef IS_APP_CLIENT
                 if (ip == network_manager_->first_node()) {
                     dag_->start_check();
                 }
@@ -1114,7 +1137,7 @@ void ExtraChainNode::prepare_folders() {
     QDir().mkpath(QString::fromStdString(ChainConst::DAG_FOLDER));
     QDir().mkpath(QString::fromStdString(ChainConst::ACTORS_FOLDER));
 
-    generate_network_identifier();
+    this->generate_node_identifier();
 }
 
 void ExtraChainNode::calculateBlockCount() {

@@ -25,6 +25,7 @@
 #include "managers/extrachain_node.h"
 #include "managers/account_controller.h"
 #include "chain/actor_index.h"
+#include "managers/thoth_manager.h"
 
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
@@ -33,7 +34,7 @@ ChatManager::ChatManager(ExtraChainNode* node)
             return;
         }
 
-        auto my_chats = get_my_chats();
+        auto my_chats = this->read_my_chats_row();
         if (my_chats.has_value()) {
             if (my_chats->file_id == dir_row.file_id) {
                 emit this->node->chatsLoaded();
@@ -60,6 +61,16 @@ ChatManager::ChatManager(ExtraChainNode* node)
         }
     });
 
+    QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
+        for (const auto& chat : std::as_const(chats_)) {
+            if (chat.owner_id != owner_id && chat.file_id != dir_row.file_id) {
+                continue;
+            }
+
+            emit node->chatUpdated(chat);
+        }
+    });
+
     QObject::connect(node->dfs(),
                      &DfsController::vectorRowAdded,
                      [this](ActorId owner_id, Dfs::DirRow dir_row, DbRow row) {
@@ -78,11 +89,11 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                  }
 
                                  auto message_row =
-                                     this->node->dfs()->get_vector_row(owner_id,
-                                                                       dir_row.file_id,
-                                                                       row["id"],
-                                                                       encryption ? securiry_key
-                                                                                  : Dfs::DataSecurityData());
+                                     this->node->dfs()->read_vector_row(owner_id,
+                                                                        dir_row.file_id,
+                                                                        row["id"],
+                                                                        encryption ? securiry_key
+                                                                                   : Dfs::DataSecurityData());
                                  if (!message_row.has_value()) {
                                      return;
                                  }
@@ -200,6 +211,9 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     invite(chat.value());
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
+    auto custom = ThothCustom { .ignored = { chat->owner_id } };
+    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
+
     return chat;
 }
 
@@ -251,7 +265,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     auto main_actor = node->account_controller()->current_profile().main()->get();
-    auto my_chats   = get_my_chats();
+    auto my_chats   = this->read_my_chats_row();
 
     if (!my_chats.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -259,7 +273,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
 
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_ };
     auto rows =
-        node->dfs()->get_vector_rows(my_chats->actor_id, my_chats->file_id, "where status = '1'", security_actor);
+        node->dfs()->read_vector_rows(my_chats->actor_id, my_chats->file_id, "where status = '1'", security_actor);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -278,7 +292,11 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         if (!chat.has_value()) {
             continue;
         }
+
         chats.push_back(chat.value());
+
+        chat.value().chat_key = {};
+        // eTemp("[ChatManager] Chat: {}", chat.value());
     }
 
     chats_ = chats;
@@ -288,7 +306,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_messages(const ActorId&     owner_id,
                                                                                      const std::string& file_id,
                                                                                      bool               quick) {
-    auto chat = get_chat(owner_id, file_id);
+    auto chat = this->get_chat(owner_id, file_id);
     if (!quick && !chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -300,10 +318,10 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
         encryption = false;
     }
 
-    auto db_rows = node->dfs()->get_vector_rows(owner_id,
-                                                file_id,
-                                                "where status = '1' ORDER by timestamp",
-                                                encryption ? security_key : Dfs::DataSecurityData());
+    auto db_rows = node->dfs()->read_vector_rows(owner_id,
+                                                 file_id,
+                                                 "where status = '1' ORDER by timestamp",
+                                                 encryption ? security_key : Dfs::DataSecurityData());
 
     if (!db_rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
@@ -327,6 +345,39 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
     return messages;
 }
 
+std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const ActorId&     owner_id,
+                                                                       const std::string& file_id) {
+    auto chat = this->get_chat(owner_id, file_id);
+    if (!chat.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
+
+    auto db_row = node->dfs()->read_vector_rows(owner_id,
+                                                file_id,
+                                                "where status = '1' ORDER by timestamp DESC LIMIT 1",
+                                                security_key);
+    if (!db_row.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    if (db_row->empty()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto row = db_row->at(0);
+    row.erase("sign");
+    row.erase("status");
+
+    auto message = Utils::from_dbrow<Chat::Message>(row);
+    if (!message.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    return message.value();
+}
+
 std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       owner_id,
                                                             const std::string&   file_id,
                                                             const Chat::Message& message) {
@@ -345,7 +396,8 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
                                            file_id,
                                            message,
                                            chat_actor_,
-                                           encryption ? security_key : Dfs::DataSecurityData());
+                                           encryption ? security_key : Dfs::DataSecurityData(),
+                                           true);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
@@ -421,6 +473,14 @@ std::expected<bool, ChatError> ChatManager::add_video_message(const ActorId&    
     return add_new_message(owner_id, file_id, message);
 }
 
+std::expected<bool, ChatError> ChatManager::add_audio_message(const ActorId&           owner_id,
+                                                              const std::string&       file_id,
+                                                              const Chat::MessageText& message_text) {
+    auto message_data = Chat::MessageData { .type = Chat::MessageType::Audio, .data = message_text.text };
+    auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
+    return add_new_message(owner_id, file_id, message);
+}
+
 std::expected<bool, ChatError> ChatManager::add_file_message(const ActorId&           owner_id,
                                                              const std::string&       file_id,
                                                              const Chat::MessageText& message_text) {
@@ -443,7 +503,7 @@ std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     ow
 }
 
 std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
-    auto my_chats_result = get_my_chats();
+    auto my_chats_result = this->read_my_chats_row();
     if (my_chats_result.has_value()) {
         return my_chats_result.value();
     }
@@ -480,7 +540,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
     return store_chats_res.value();
 }
 
-std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
+std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
     static Dfs::DirRow my_chats;
     if (!my_chats.empty()) {
         return my_chats;
@@ -526,7 +586,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::get_my_chats() {
 std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::Chat& chat) {
     // TODO: checks if chat exists
 
-    auto my_chats = get_my_chats();
+    auto my_chats = this->read_my_chats_row();
     if (!my_chats.has_value()) {
         auto my_chats_result = create_mychats();
         if (!my_chats_result.has_value()) {
@@ -561,8 +621,13 @@ std::optional<Chat::Chat> ChatManager::get_chat(const ActorId& owner_id, const s
     return std::nullopt;
 }
 
-bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+void ChatManager::update_dfs_files() {
+    for (const auto& chat : chats_) {
+        node->dfs()->request_file(chat.owner_id, chat.file_id);
+    }
+}
 
+bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
     if (dir_row.folder != CHAT_DAPP_INVITE_FOLDER) {
         return false;
     }
@@ -611,5 +676,9 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
 
     add_new_message_joined(chat.owner_id, chat.file_id, main_actor.id());
+
+    auto custom = ThothCustom { .ignored = { main_actor.id() } };
+    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
+
     return true;
 }

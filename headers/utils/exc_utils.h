@@ -82,9 +82,9 @@ struct ExtraChainSettings {
     std::optional<std::string> first_node;
     std::optional<DagMode>     dag_mode;
     std::optional<DfsMode>     dfs_mode;
-    std::optional<std::string> network_identifier;
+    std::optional<std::string> node_identifier;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, network_identifier))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier))
 
 class ByteArray {
 public:
@@ -224,11 +224,11 @@ namespace Network {
 
     static bool    isStartedServer = true;
     static quint16 maxConnections =
-#ifdef IS_RC
+#ifdef IS_APP_UI_CLIENT
     #if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
-        3
-    #else
         4
+    #else
+        5
     #endif
 #else
         1000
@@ -282,56 +282,13 @@ CREATE TABLE IF NOT EXISTS balance_cache (
 );
 )";
 
-        static const std::string BlockTable = "Block";
-        static const std::string BlockTableCreate = "CREATE TABLE IF NOT EXISTS " + BlockTable
-                                            + " ( "
-                                              "type         TEXT  NOT NULL, "
-                                              "id           TEXT  NOT NULL, "
-                                              "date         TEXT  NOT NULL, "
-                                              "data         TEXT          , "
-                                              "prevHash     TEXT  NOT NULL, "
-                                              "hash         TEXT  NOT NULL  "
-                                              ");";
-        static const std::string TxBlockTable = "Transactions";
-        static const std::string TxBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + TxBlockTable
-                                              + " ("
-                                                "type         INT   NOT NULL, "
-                                                "sender       TEXT  NOT NULL, "
-                                                "receiver     TEXT  NOT NULL, "
-                                                "amount       TEXT  NOT NULL, "
-                                                "data         TEXT          , "
-                                                "token        TEXT  NOT NULL, "
-                                                "prev_block    TEXT  NOT NULL, "
-                                                "hash         TEXT  NOT NULL, "
-                                                "signature    TEXT  NOT NULL "
-                                                ");";
-        static const std::string SignTable = "Signatures";
-        static const std::string SignBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + SignTable
-                                                + " ("
-                                                  "actorId      TEXT PRIMARY KEY NOT NULL, "
-                                                  "signature    TEXT             NOT NULL, "
-                                                  "isApprove    INTEGER CHECK(isApprove IN (0, 1))"
-                                                  ");";
-
-        static const std::string GenesisBlockTable = "GenesisBlock";
-        static const std::string GenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + GenesisBlockTable
-                                                   + " ("
-                                                     "type         TEXT  NOT NULL, "
-                                                     "id           TEXT  NOT NULL, "
-                                                     "date         TEXT  NOT NULL, "
-                                                     "data         TEXT          , "
-                                                     "prevHash     TEXT  NOT NULL, "
-                                                     "hash         TEXT  NOT NULL, "
-                                                     "prevGenHash  TEXT            "
-                                                     ");";
-        static const std::string RowGenesisBlockTable = "GenesisDataRow";
-        static const std::string RowGenesisBlockTableCreate = "CREATE TABLE IF NOT EXISTS " + RowGenesisBlockTable
-                                                      + " ("
-                                                        "actorId    TEXT  NOT NULL, "
-                                                        "state      TEXT  NOT NULL, "
-                                                        "token      TEXT  NOT NULL, "
-                                                        "type       TEXT  NOT NULL "
-                                                        ");";
+        static const std::string LUMINANCE_TABLE = "luminance";
+        static const std::string LUMINANCE_TABLE_CREATE = "CREATE TABLE IF NOT EXISTS " + LUMINANCE_TABLE
+                                                          + " ("
+                                                          "node_id      TEXT PRIMARY KEY NOT NULL, "
+                                                          "luminance   INT              NOT NULL, "
+                                                          "timestamp    INTEGER          NOT NULL  "
+                                                          ");";
 
         static const std::string tokensCacheTable = "Tokens";
         static const std::string tokensCacheTableCreate = "CREATE TABLE IF NOT EXISTS " + tokensCacheTable
@@ -542,8 +499,8 @@ namespace Utils {
     }
 
     EXTRACHAIN_EXPORT std::string extrachainVersion();
-    EXTRACHAIN_EXPORT std::string sodiumVersion();
-    EXTRACHAIN_EXPORT std::string boostVersion();
+    EXTRACHAIN_EXPORT std::string sodium_version();
+    EXTRACHAIN_EXPORT std::string boost_version();
     EXTRACHAIN_EXPORT std::string boostAsioVersion();
 
     enum class NumberParseError {
@@ -858,9 +815,9 @@ namespace Utils {
      */
     EXTRACHAIN_EXPORT void wipeDataFiles();
 
-    EXTRACHAIN_EXPORT QString              detectCompiler();
+    EXTRACHAIN_EXPORT QString              detect_compiler();
     EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
-    EXTRACHAIN_EXPORT QString fixFileName(const QString &fileName, const QString &replaceSymbol = "_");
+    EXTRACHAIN_EXPORT QString fix_file_name(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
 
     EXTRACHAIN_EXPORT bool is_valid_domain(const std::string_view domain);
@@ -985,6 +942,13 @@ namespace Profiles {
     static const std::string profiles = "profiles";
     // static const std::string encrypt  = "encrypt";
 } // namespace Profiles
+
+namespace Luminance {
+    static const std::string FOLDER        = "luminance";
+    static const std::string DATABASE_NAME = "Luminance.db";
+    static const std::string DATABASE      = FOLDER + "/" + DATABASE_NAME;
+    const int                AUTOREMOVE_MS = 30000;
+} // namespace Luminance
 
 namespace SearchEnum {
     enum class BlockParam {

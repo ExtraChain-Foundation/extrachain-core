@@ -56,8 +56,9 @@ public:
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
                                                                             const std::string &file_id,
                                                                             bool               quick = false);
+    std::expected<Chat::Message, ChatError> read_last_message(const ActorId &owner_id, const std::string &file_id);
 
-    std::expected<Dfs::DirRow, ChatError> get_my_chats();
+    std::expected<Dfs::DirRow, ChatError> read_my_chats_row();
 
     std::expected<bool, ChatError> add_new_message(const ActorId       &owner_id,
                                                    const std::string   &file_id,
@@ -87,6 +88,10 @@ public:
                                                      const std::string       &file_id,
                                                      const Chat::MessageText &message_text);
 
+    std::expected<bool, ChatError> add_audio_message(const ActorId           &owner_id,
+                                                     const std::string       &file_id,
+                                                     const Chat::MessageText &message_text);
+
     std::expected<bool, ChatError> add_file_message(const ActorId           &owner_id,
                                                     const std::string       &file_id,
                                                     const Chat::MessageText &message_text);
@@ -96,6 +101,8 @@ public:
                                                   const std::string &message_id);
 
     std::optional<Chat::Chat> get_chat(const ActorId &owner_id, const std::string &file_id);
+
+    void update_dfs_files();
 
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
