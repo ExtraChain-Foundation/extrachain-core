@@ -94,6 +94,9 @@ void DirsManager::old_dfs_to_new_dfs_converter()
 
         int processed_files = 0;
         int deleted_files = 0;
+        size_t total = std::distance(std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER), std::filesystem::directory_iterator{});
+        eLog("Total entries: {}", total);
+        // return;
 
         for (const auto& entry : std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER)) {
             if (entry.is_directory()) {

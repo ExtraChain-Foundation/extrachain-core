@@ -121,6 +121,7 @@ public:
 
     // auto: + network id + local actors
     std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    std::set<Dfs::FileLink> priority_file_link_;
     DfsMode           dfs_mode_        = DfsMode::Full;
 
     std::shared_ptr<DbConnector> get_db_instance();
@@ -145,19 +146,42 @@ public:
         return priority_actors_.find(actor_id) != priority_actors_.end();
     }
 
+    void add_priority_file_link(const Dfs::FileLink &file_link) {
+        priority_file_link_.insert(file_link);
+    }
+
+    void remove_priority_file_link(const Dfs::FileLink &file_link) {
+        priority_file_link_.erase(file_link);
+    }
+
+    void clear_priority_file_link() {
+        priority_file_link_.clear();
+    }
+
+    bool contains_priority_file_link(const Dfs::FileLink &file_link) const {
+        return priority_file_link_.find(file_link) != priority_file_link_.end();
+    }
+
     bool is_priority(const ActorId &actor_id) const {
-        if (actor_id == node->network_id()) {
+        if (actor_id == node->network_id())
             return true;
-        }
 
         const auto actor_ids = node->account_controller()->accounts_ids();
-        if (std::find(actor_ids.begin(), actor_ids.end(), actor_id) != actor_ids.end()) {
+        if (std::find(actor_ids.begin(), actor_ids.end(), actor_id) != actor_ids.end())
             return true;
-        }
 
-        if (contains_priority_actor(actor_id)) {
+        if (contains_priority_actor(actor_id))
             return true;
-        }
+
+        return false;
+    }
+
+    bool is_priority(const Dfs::FileLink& file_link) const {
+        if (is_priority(file_link.owner_id))
+            return true;
+
+        if (contains_priority_file_link(file_link))
+            return true;
 
         return false;
     }

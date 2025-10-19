@@ -140,7 +140,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 }
 
 void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_fragment) {
-    bool is_priority = node->dfs()->is_priority(file_link_fragment.file_link.owner_id);
+    bool is_priority = node->dfs()->is_priority(file_link_fragment.file_link);
     if (is_priority)
         m_active_downloads_priority->erase(file_link_fragment.file_link);
     else
@@ -150,7 +150,7 @@ void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_
 }
 
 bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::string identifier) {
-    bool is_priority = node->dfs()->is_priority(file_link.owner_id);
+    bool is_priority = node->dfs()->is_priority(file_link);
 
     auto process_func = [&file_link, &identifier, &is_priority](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads)
     {
@@ -167,7 +167,7 @@ bool LoadManager::add_network_identifier(const Dfs::FileLink& file_link, std::st
         return false;
     };
 
-    return process_func(node->dfs()->is_priority(file_link.owner_id) ? m_active_downloads_priority : m_active_downloads);
+    return process_func(node->dfs()->is_priority(file_link) ? m_active_downloads_priority : m_active_downloads);
 }
 
 void LoadManager::add_to_queue(const ActorId&     owner_id,
@@ -176,7 +176,7 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                const bool         notify_neighbours) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
 
-    bool is_priority = node->dfs()->is_priority(owner_id);
+    bool is_priority = node->dfs()->is_priority(file_link);
 
     if (!node_enabled.load()) {
         return;
@@ -293,13 +293,13 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                const std::string&              identifier) {
     bool is_full   = node->dfs()->mode() == DfsMode::Full;
-    bool need_load = is_full || node->dfs()->is_priority(owner_id);
 
     for (const auto& dir_row : dir_rows) {
         if (dir_row.state == Dfs::FileState::Removed) {
             continue;
         }
 
+        bool need_load = is_full || node->dfs()->is_priority(Dfs::FileLink{ .owner_id = owner_id, .file_id = dir_row.file_id });
         if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }
@@ -526,7 +526,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto active_reads_locked = *m_active_reads;
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
-                bool is_priority = node->dfs()->is_priority(file_content.owner_id);
+                bool is_priority = node->dfs()->is_priority(file_link);
 
                 auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) {
                     auto active_downloads_locked = *active_downloads;
