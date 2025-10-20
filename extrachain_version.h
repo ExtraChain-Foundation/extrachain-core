@@ -21,5 +21,5 @@
 
 #include <string>
 
-// Release: 0.23.5
-static const std::string extrachain_version = "0.23.5";
+// Release: 0.24.0
+static const std::string extrachain_version = "0.24.0";
