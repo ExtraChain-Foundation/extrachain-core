@@ -155,7 +155,7 @@ public:
     bool create_new_network(const std::string& login, const std::string& password);
     bool create_new_dag();
 
-    bool create_data_private_template();
+    bool create_data_template();
     bool create_usernames_vector();
     bool create_chat_templates();
     bool create_subscription_template();
