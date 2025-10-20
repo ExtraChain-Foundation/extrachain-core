@@ -878,14 +878,15 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 }
 
 void DfsController::refresh_calculate() {
-    ThreadPoolBoost::instance_dfs()->post([this]() {
-        eLog("instance_dfs refresh_calculate in");
-        auto dfs_size  = calculate_size();
-        m_sizeTaken    = dfs_size.local;
-        m_totalDfsSize = dfs_size.all;
-        // TODO: update prepare status
-        eLog("instance_dfs refresh_calculate out");
-    });
+    eTemp("instance_dfs refresh_calculate in");
+
+    auto dfs_size  = calculate_size();
+    m_sizeTaken    = dfs_size.local;
+    m_totalDfsSize = dfs_size.all;
+    // TODO: update prepare status
+    eLog("[Dfs] Size: {}", dfs_size);
+
+    eTemp("instance_dfs refresh_calculate out");
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const ActorId     &owner_id,
@@ -1771,20 +1772,19 @@ Dfs::DfsSize DfsController::calculate_size() {
     Dfs::DfsSize dfs_size;
 
     auto db_instance = dirs_manager_.get_db_instance();
-    auto all_actors = node->actor_index()->read_all_actors_ids();
-    for (const auto &actor_id : all_actors) {
-        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, actor_id);
-        if (!dir_rows.has_value()) {
-            continue;
-        }
+    auto rows = db_instance->select(fmt::format("SELECT "
+        "SUM(CASE WHEN state = {} THEN size ELSE 0 END) as size_taken, "
+        "SUM(size) as size_total "
+        "FROM {}", int(Dfs::FileState::Ready), Dfs::Tables::DirsFile::TableNameActorsFiles));
 
-        for (const auto &row : dir_rows.value()) {
-            dfs_size.all += row.size;
+    if (rows.empty()) {
+        return dfs_size;
+    }
 
-            if (row.state == Dfs::FileState::Ready) {
-                dfs_size.local += row.size;
-            }
-        }
+    try {
+    dfs_size.all = std::stoull(rows[0].at("size_total"));
+    dfs_size.local = std::stoull(rows[0].at("size_taken"));
+    } catch (std::exception& e) {
     }
 
     m_totalDfsSize = dfs_size.all;

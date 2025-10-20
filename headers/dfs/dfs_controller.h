@@ -87,6 +87,7 @@ namespace Dfs {
         std::size_t all   = 0;
         std::size_t local = 0;
     };
+    BOOST_DESCRIBE_STRUCT(DfsSize, (), (all, local));
 } // namespace Dfs
 
 class ThreadAddFiles;
