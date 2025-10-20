@@ -82,12 +82,12 @@ std::vector<DbRow> Dfs::Tables::DirsFile::ActorSpace::getFileDataByName(const st
     return db->select(query);
 }
 
-std::string Dfs::Tables::DirsFile::ActorSpace::getLastFileId(const std::shared_ptr<DbConnector> db) {
+std::string Dfs::Tables::DirsFile::ActorSpace::read_last_file_id(const std::shared_ptr<DbConnector> db, const ActorId &owner_id) {
     if (!db->is_open()) {
         eFatal("Database {} not opened", db->file());
     }
 
-    auto        result       = db->select(Dfs::Tables::last_file_id_query);
+    auto        result       = db->select(Dfs::Tables::last_file_id_query(owner_id));
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
     return lastFileName;
@@ -135,7 +135,7 @@ std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> Dfs::
 std::expected<std::string, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::last_file_id(const std::shared_ptr<DbConnector> db,
                                                                                           const ActorId     &owner_id,
                                                                                         const std::string &file_id) {
-    auto        result       = db->select(Dfs::Tables::last_file_id_query);
+    auto        result       = db->select(Dfs::Tables::last_file_id_query(owner_id));
     auto        prev_file_id = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string last_file_id = prev_file_id ? prev_file_id->at("file_id") : "";
     return last_file_id;
@@ -244,7 +244,7 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
                                             DirRow                  &dir_row,
                                             const Actor<KeyPrivate> &signer) {
     auto current_ms   = Utils::current_date_ms();
-    auto prev_file_id = getLastFileId(db);
+    auto prev_file_id = read_last_file_id(db, owner_id);
 
     dir_row.created       = current_ms;
     dir_row.last_modified = current_ms;

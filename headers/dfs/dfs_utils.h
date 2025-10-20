@@ -547,7 +547,7 @@ namespace Dfs {
 
             namespace ActorSpace {
                 std::vector<DbRow> getFileDataByName(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, std::string name);
-                std::string        getLastFileId(const std::shared_ptr<DbConnector> db);
+                std::string        read_last_file_id(const std::shared_ptr<DbConnector> db, const ActorId &owner_id);
                 std::size_t        totalFileSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId);
                 std::uint64_t      dataAmountStoredSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId, const std::string& storjName);
 
@@ -618,13 +618,17 @@ namespace Dfs {
                                                    "signature  TEXT NOT NULL"
                                                    ");";
 
-        static const std::string last_file_id_query = "WITH end_files AS ("
-            "SELECT f1.file_id, f1.prev_file_id, COUNT(*) OVER() as cnt "
-            "FROM " + Dfs::Tables::DirsFile::TableNameActorsFiles + " f1 "
-            "LEFT JOIN " + Dfs::Tables::DirsFile::TableNameActorsFiles + " f2 ON f1.file_id = f2.prev_file_id "
-            "WHERE f2.prev_file_id IS NULL "
-            ") "
-            "SELECT file_id FROM end_files WHERE cnt = 1";
+        static std::string last_file_id_query(const ActorId& owner_id) {
+            return "WITH end_files AS ("
+                   "SELECT f1.file_id, f1.prev_file_id, COUNT(*) OVER() as cnt "
+                   "FROM " + Dfs::Tables::DirsFile::TableNameActorsFiles + " f1 "
+                   "LEFT JOIN " + Dfs::Tables::DirsFile::TableNameActorsFiles + " f2 "
+                   "ON f1.file_id = f2.prev_file_id "
+                   "WHERE f1.owner_id = '" + owner_id.to_string() + "' "
+                   "AND f2.prev_file_id IS NULL "
+                   ") "
+                   "SELECT file_id FROM end_files WHERE cnt = 1";
+        }
 
         static const std::string filesTableFull = "SELECT * FROM " + Dfs::Tables::DirsFile::TableNameActorsFiles;
     } // namespace Tables
