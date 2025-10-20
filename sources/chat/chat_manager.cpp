@@ -211,7 +211,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
     auto custom = ThothCustom { .ignored = { chat->owner_id } };
-    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
+    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, custom);
 
     return chat;
 }
@@ -676,7 +676,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     add_new_message_joined(chat.owner_id, chat.file_id, main_actor.id());
 
     auto custom = ThothCustom { .ignored = { main_actor.id() } };
-    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
+    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, custom);
 
     return true;
 }

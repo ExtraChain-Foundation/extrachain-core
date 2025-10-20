@@ -104,7 +104,11 @@ bool ThothManager::create_thoth_vector() {
 
 // TODO: read for user
 
-bool ThothManager::read_all(bool is_my) {
+bool ThothManager::read_all() {
+    if (node->account_controller()->system_actor().id() != node->network_id()) {
+        return false;
+    }
+
     auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
     if (!file_row.has_value()) {
         // TODO: wait for exists
@@ -125,14 +129,10 @@ bool ThothManager::read_all(bool is_my) {
     owner_id_ = node->network_id();
     file_id_  = file_row->file_id;
 
-    auto security_key =
-        Dfs::DataSecurityActor { .sender_id = is_my ? node->account_controller()->system_actor().id() : ActorId(),
-                                 .receiver_id = node->network_id() };
+    auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(), .receiver_id = node->network_id() };
 
-    auto where =
-        is_my ? fmt::format("where status = '1' AND actor = '{}'", node->account_controller()->system_actor().id())
-              : "where status = '1'";
-    auto rows = node->dfs()->read_vector_rows(owner_id_, file_id_, where, security_key);
+    auto where = "where status = '1'";
+    auto rows  = node->dfs()->read_vector_rows(owner_id_, file_id_, where, security_key);
     if (!rows.has_value()) {
         return false;
     }
@@ -153,7 +153,7 @@ bool ThothManager::read_all(bool is_my) {
 
 bool ThothManager::add_thoth_record(const ActorId&     owner_id,
                                     const std::string& file_id,
-                                    const std::string& custom) {
+                                    const ThothCustom& custom) {
     if (ios_token_.empty()) {
         return false;
     }
@@ -178,11 +178,12 @@ bool ThothManager::add_thoth_record(const ActorId&     owner_id,
 
     // check db file, queue
 
-    auto thoth_data = ThothData { .id        = Utils::generate_random_hex(6),
-                                  .timestamp = 0,
-                                  .actor     = system_id,
-                                  .owner     = owner_id,
-                                  .file_id   = file_id,
+    auto custom_string = Json::serialize(custom);
+    auto thoth_data    = ThothData { .id        = Utils::generate_random_hex(6),
+                                     .timestamp = 0,
+                                     .actor     = system_id,
+                                     .owner     = owner_id,
+                                     .file_id   = file_id,
 #ifdef Q_OS_IOS
                                   .os = "iOS",
 #endif
@@ -190,7 +191,7 @@ bool ThothManager::add_thoth_record(const ActorId&     owner_id,
                                   .os = "Android",
 #endif
                                   .token  = ios_token_,
-                                  .custom = custom };
+                                  .custom = custom_string };
 
     // DbRow row          = { { "owner", owner_id.to_string() }, { "file", file_id } };
     auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
@@ -200,8 +201,30 @@ bool ThothManager::add_thoth_record(const ActorId&     owner_id,
         return false;
     }
 
+    auto my_data = ThothMyData { .thoth_owner = node->network_id(),
+                                 .thoth_file  = file_id,
+                                 .thoth_id    = "",
+                                 .db_owner    = ActorId(),
+                                 .db_file     = "",
+#ifdef Q_OS_IOS
+                                 .os = "iOS",
+#endif
+                                 .token  = ios_token_,
+                                 .custom = custom };
+
     return res;
 }
+
+// struct ThothMyData {
+//     std::string thoth_owner;
+//     std::string thoth_file;
+//     std::string thoth_id;
+//     std::string db_owner;
+//     std::string db_file;
+//     std::string os;
+//     std::string token;
+//     ThothCustom custom;
+// };
 
 void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
     if (!enabled_) {

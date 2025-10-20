@@ -57,6 +57,23 @@ struct ThothServiceMessage {
 };
 BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (device_token, title, body));
 
+struct ThothMyData {
+    ActorId     thoth_owner;
+    std::string thoth_file;
+    std::string thoth_id;
+    ActorId     db_owner;
+    std::string db_file;
+    std::string os;
+    std::string token;
+    ThothCustom custom;
+};
+
+struct ThothMyDataService {
+    std::string   id;
+    std::uint64_t timestamp = 0;
+    std::string   data;
+};
+
 class ExtraChainNode;
 
 enum class ThothType {
@@ -74,7 +91,7 @@ public:
 
     // for apps
     bool create_thoth_vector();
-    bool read_all(bool is_my);
+    bool read_all();
     void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
     void network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
 
@@ -82,7 +99,8 @@ public:
     void stop();
 
     // for users
-    bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
+    bool add_thoth_record(const ActorId& owner_id, const std::string& file_id, const ThothCustom &custom);
+    bool add_my_thoth_record();
     // bool remove_thoth_record(const ActorId& owner_id, const std::string& file_id)
 
     bool send_to_service(const ThothInfo& info, const std::string& username);
