@@ -207,6 +207,22 @@ bool ExtraChainNode::create_new_dag() {
     return true;
 }
 
+bool ExtraChainNode::create_data_private_template() {
+    auto data_template = Dfs::CollectionTemplate::create("DataPrivate")
+    .value()
+        .use_id()
+        .add_fields({ Dfs::Field::Blob("data").not_null() });
+
+    auto system_actor_id = this->account_controller()->system_actor().id();
+    auto template_res    = this->dfs()->store_template(system_actor_id, data_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create Data Private template, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
 bool ExtraChainNode::create_usernames_vector() {
     auto vector_template =
         Dfs::CollectionTemplate::create("Usernames").value().add_fields({ Dfs::Field::String("name").unique() });

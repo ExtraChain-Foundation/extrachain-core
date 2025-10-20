@@ -71,6 +71,7 @@ public:
 
     // for network
     bool create_thoth_template();
+    bool create_data_private_template();
 
     // for apps
     bool create_thoth_vector();

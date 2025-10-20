@@ -143,8 +143,8 @@ bool ThothManager::read_all(bool is_my) {
         auto thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
                                       .token   = rows->at(0).at("token"),
                                       .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
-        eLog("Loaded --------- : {}", thoth_info);
-        eLog("Loaded --------- : {}", file_link);
+        // eTemp("Loaded --------- : {}", thoth_info);
+        // eTemp("Loaded --------- : {}", file_link);
         infos_[file_link].insert(thoth_info);
     }
 
