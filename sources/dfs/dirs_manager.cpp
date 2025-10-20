@@ -119,6 +119,11 @@ void DirsManager::old_dfs_to_new_dfs_converter()
                         eCritical("DirsManager::old_dfs_to_new_dfs_converter, copy data error. File is not deleted: {}", dir_file);
                     }
                 }
+
+                if (std::filesystem::is_empty(sub_dir)) {
+                    std::filesystem::remove(sub_dir);
+                    eLog("DirsManager::old_dfs_to_new_dfs_converter, empty folder deleted {}.", sub_dir);
+                }
             }
         }
 
