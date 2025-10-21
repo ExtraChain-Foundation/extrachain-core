@@ -647,11 +647,11 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
         return false;
     }
 
-    // char *expanded = sqlite3_expanded_sql(stmt);
-    // if (expanded) {
-    //     eLog("DbConnector::implementation_insert, FULL QUERY:\n{}", expanded);
-    //     sqlite3_free(expanded);
-    // }
+    char *expanded = sqlite3_expanded_sql(stmt);
+    if (expanded) {
+        eLog("DbConnector::implementation_insert, FULL QUERY:\n{}", expanded);
+        sqlite3_free(expanded);
+    }
 
     // dbmutex.lock();
     if (rc != SQLITE_OK) {
