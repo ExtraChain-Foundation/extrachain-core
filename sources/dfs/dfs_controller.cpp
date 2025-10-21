@@ -878,15 +878,11 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 }
 
 void DfsController::refresh_calculate() {
-    eTemp("instance_dfs refresh_calculate in");
-
     auto dfs_size  = calculate_size();
     m_sizeTaken    = dfs_size.local;
     m_totalDfsSize = dfs_size.all;
     // TODO: update prepare status
     eLog("[Dfs] Size: {}", dfs_size);
-
-    eTemp("instance_dfs refresh_calculate out");
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const ActorId     &owner_id,
@@ -1294,10 +1290,8 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 void DfsController::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
-        eLog("instance_dfs network_response_content_vector in");
         auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
         if (!dfs_vector_result.has_value()) {
-            eLog("instance_dfs network_response_content_vector out 1");
             return;
         }
 
@@ -1312,7 +1306,6 @@ void DfsController::network_response_content_vector(
         load_manager_.remove_active_download(file_link_fragment);
 
         load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
-        eLog("instance_dfs network_response_content_vector out");
     });
 }
 
@@ -2077,12 +2070,10 @@ void DfsController::check_all_files(std::string identifier) {
 void DfsController::sync(const std::string &identifier) {
     static std::once_flag check_flag;
     ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
-        eLog("instance_dfs sync in");
         std::call_once(check_flag, [this, &identifier]() {
             check_all_files(identifier);
         });
         dirs_manager_.temp_sync_all(identifier);
-        eLog("instance_dfs sync out");
     });
 }
 

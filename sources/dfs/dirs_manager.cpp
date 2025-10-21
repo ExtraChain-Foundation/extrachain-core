@@ -96,7 +96,6 @@ void DirsManager::old_dfs_to_new_dfs_converter()
         int deleted_files = 0;
         size_t total = std::distance(std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER), std::filesystem::directory_iterator{});
         eLog("Total entries: {}", total);
-        // return;
 
         for (const auto& entry : std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER)) {
             if (entry.is_directory()) {
@@ -253,10 +252,7 @@ void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpac
 void DirsManager::network_response_dir_rows(
     const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
     const Responder&                                                responder) {
-    eLog("PARAMPAMPAM before");
     ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
-        eLog("PARAMPAMPAM inside");
-        eLog("instance_dfs network_response_dir_rows in");
         for (auto& [owner_id, dir_rows] : response_data) {
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
             // TODO: add merge for sync dir file
@@ -327,7 +323,6 @@ void DirsManager::network_response_dir_rows(
 
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
         }
-        eLog("instance_dfs network_response_dir_rows out");
     });
 
     if (!node->dfs()->is_dirs_loaded_) {
@@ -348,27 +343,19 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 
 void DirsManager::network_request_all(const Responder& responder) {
     ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        eLog("instance_dfs network_request_all in");
         auto actors = node->actor_index()->read_all_actors_ids();
-        eLog("network_request_all first after start");
 
         auto network_id = node->actor_index()->network_id();
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-        eLog("network_request_all 2");
         std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
             return actor == network_id || actor == raccoon_id;
         });
-        eLog("network_request_all 3");
 
         actors.insert(actors.begin(), network_id);
         actors.insert(actors.begin(), raccoon_id);
 
-        eLog("network_request_all 4");
-
         std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
         response_data.reserve(actors.size());
-
-        eLog("network_request_all 5, {}", actors.size());
 
         for (const auto& actor : actors) {
             auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
@@ -385,14 +372,10 @@ void DirsManager::network_request_all(const Responder& responder) {
             }
         }
 
-        eLog("network_request_all 6");
-
         responder.send_response(response_data,
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
-
-        eLog("instance_dfs network_request_all out");
     });
 }
 
