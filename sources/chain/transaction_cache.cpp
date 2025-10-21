@@ -99,6 +99,10 @@ void TransactionCache::adding(const Transaction &transaction) {
 }
 
 void TransactionCache::prepare(ActorId actor_id, ActorId token, bool reward_hidden, std::uint64_t from_time) {
+    if (actor_id.is_zero()) {
+        return;
+    }
+
     eLog("[TransactionCache] Prepare for {} with from time: {}", actor_id, from_time);
 
     std::string adding_query;

@@ -65,41 +65,41 @@ std::vector<FileData> FileDataManager::updateFileList(const ActorId &actorId) {
     const auto            pathToActorFolder = Dfs::Path::actorPath(actorId);
     std::vector<FileData> fileStructs;
 
-    auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actorId);
-    if (!dir_rows.has_value()) {
-        return fileStructs;
-    }
+    // auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(actorId);
+    // if (!dir_rows.has_value()) {
+    //     return fileStructs;
+    // }
 
-    // directory_iterator
-    for (const auto &dir : dir_rows.value()) {
-        const auto nameFile = dir.file_id;
-        /* if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
-            continue;
-        */
+    // // directory_iterator
+    // for (const auto &dir : dir_rows.value()) {
+    //     const auto nameFile = dir.file_id;
+    //     /* if (nameFile == DfsB::fsMapName || nameFile.extension() == DfsF::Extension)
+    //         continue;
+    //     */
 
-        FileStatus status = FileStatus::None;
-        switch (dir.state) {
-        case Dfs::FileState::Ready:
-            status = FileStatus::Downloaded;
-            break;
-        case Dfs::FileState::Partial:
-            status = FileStatus::Loading;
-            break;
-        case Dfs::FileState::Known:
-            status = FileStatus::NotLoaded;
-            break;
-        default:
-            status = FileStatus::NotLoaded;
-            break;
-        }
+    //     FileStatus status = FileStatus::None;
+    //     switch (dir.state) {
+    //     case Dfs::FileState::Ready:
+    //         status = FileStatus::Downloaded;
+    //         break;
+    //     case Dfs::FileState::Partial:
+    //         status = FileStatus::Loading;
+    //         break;
+    //     case Dfs::FileState::Known:
+    //         status = FileStatus::NotLoaded;
+    //         break;
+    //     default:
+    //         status = FileStatus::NotLoaded;
+    //         break;
+    //     }
 
-        FileData fileStruct =
-            FileData { .nameFile = dir.file_id, .pathFile = dir.visual_path(), .status = status };
-        fileStructs.emplace_back(fileStruct);
-    }
+    //     FileData fileStruct =
+    //         FileData { .nameFile = dir.file_id, .pathFile = dir.visual_path(), .status = status };
+    //     fileStructs.emplace_back(fileStruct);
+    // }
 
-    // save to cache
-    cachedData[actorId] = fileStructs;
+    // // save to cache
+    // cachedData[actorId] = fileStructs;
 
     return fileStructs;
 }

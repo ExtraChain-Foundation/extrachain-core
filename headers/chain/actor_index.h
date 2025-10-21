@@ -113,7 +113,7 @@ public:
     Actor<KeyPublic> read_actor_old(const ActorId &id);
 
     std::expected<Actor<KeyPublic>, ActorIndexError> read_actor(const ActorId &id,
-                                                               ActorGetType   get_type = ActorGetType::Request);
+                                                                ActorGetType   get_type = ActorGetType::Request);
 
     /**
      * @brief read_by_id

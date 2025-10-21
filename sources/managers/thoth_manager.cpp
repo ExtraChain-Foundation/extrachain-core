@@ -85,9 +85,10 @@ bool ThothManager::create_thoth_vector() {
     }
 
     auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Thoth");
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "Thoth");
     if (!search_result.has_value()) {
         return false;
     }
@@ -143,8 +144,8 @@ bool ThothManager::read_all(bool is_my) {
         auto thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
                                       .token   = rows->at(0).at("token"),
                                       .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
-        eLog("Loaded --------- : {}", thoth_info);
-        eLog("Loaded --------- : {}", file_link);
+        // eLog("Loaded --------- : {}", thoth_info);
+        // eLog("Loaded --------- : {}", file_link);
         infos_[file_link].insert(thoth_info);
     }
 
@@ -290,9 +291,11 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
     }
 
     if (usernames_file_id_.empty()) {
-        auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(node->network_id(),
-                                                                                       Dfs::Basic::TEMPLATE_VECTOR,
-                                                                                       "Usernames");
+        auto search_result =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                              node->network_id(),
+                                                                              Dfs::Basic::TEMPLATE_VECTOR,
+                                                                              "Usernames");
 
         if (!search_result.has_value()) {
             return "";
