@@ -673,8 +673,8 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
 
     int changes = sqlite3_changes(db);
     if (changes == 0 && !isReplace) {
-        // eWarning("[DbConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
-        // eWarning("[DbConnector] {}(false): {}", file(), query);
+        eWarning("[DbConnector] ImplementationInsert: No rows affected: {}", sqlite3_errmsg(db));
+        eWarning("[DbConnector] {}(false): {}", file(), query);
         sqlite3_finalize(stmt);
         // dbmutex.unlock();
         return false;
