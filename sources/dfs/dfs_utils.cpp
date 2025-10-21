@@ -380,7 +380,7 @@ bool Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(const std::shared_p
     }
 
     std::string query = fmt::format(
-        "UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE owner_id = '{}' file_id = '{}'",
+        "UPDATE {} SET hash = '{}', size = '{}', last_modified = '{}'{} WHERE owner_id = '{}' AND file_id = '{}'",
         TableNameActorsFiles,
         dir_row.hash,
         dir_row.size,
