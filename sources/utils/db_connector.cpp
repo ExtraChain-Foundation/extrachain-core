@@ -156,7 +156,7 @@ std::vector<DbRow> DbConnector::select(std::string query, std::string tableName,
     }
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock   lock(dbmutex);
     sqlite3_stmt      *stmt;
     std::vector<DbRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -237,7 +237,7 @@ std::unique_ptr<DbIterator> DbConnector::select_while(std::string query, std::st
     }
 
     // dbmutex.lock();
-    std::unique_lock lock(dbmutex);
+    std::unique_lock   lock(dbmutex);
     sqlite3_stmt      *stmt;
     std::vector<DbRow> res;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
@@ -300,8 +300,8 @@ bool DbConnector::update(const std::string &table_name, const DbRow &set_data, c
 
     // dbmutex.lock();
     std::unique_lock lock(dbmutex);
-    sqlite3_stmt *stmt = NULL;
-    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    sqlite3_stmt    *stmt = NULL;
+    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
     // dbmutex.unlock();
 
     int bind_index = 1;
@@ -410,8 +410,8 @@ bool DbConnector::delete_row(const std::string &tableName, const DbRow &data) {
 
     // dbmutex.lock();
     std::unique_lock lock(dbmutex);
-    sqlite3_stmt *stmt = NULL;
-    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    sqlite3_stmt    *stmt = NULL;
+    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 
     // dbmutex.unlock();
     if (!implementation_prepare(tableName, data, stmt)) {
@@ -512,7 +512,7 @@ bool DbConnector::query(std::string query) {
 
     // dbmutex.lock();
     std::unique_lock lock(dbmutex);
-    sqlite3_stmt *stmt;
+    sqlite3_stmt    *stmt;
     sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, nullptr);
     int res = sqlite3_step(stmt);
 
@@ -635,8 +635,8 @@ bool DbConnector::implementation_insert(const std::string &tableName, const DbRo
 
     // dbmutex.lock();
     std::unique_lock lock(dbmutex);
-    sqlite3_stmt *stmt = NULL;
-    int           rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
+    sqlite3_stmt    *stmt = NULL;
+    int              rc   = sqlite3_prepare_v2(db, query.c_str(), -1, &stmt, NULL);
 
     // dbmutex.unlock();
     if (!implementation_prepare(tableName, data, stmt)) {

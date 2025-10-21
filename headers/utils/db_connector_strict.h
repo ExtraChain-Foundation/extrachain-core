@@ -90,8 +90,8 @@ public:
 
         // dbmutex.lock();
         std::unique_lock lock(dbmutex);
-        char* errMsg = nullptr;
-        int   rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
+        char*            errMsg = nullptr;
+        int              rc     = sqlite3_exec(db, query.c_str(), nullptr, nullptr, &errMsg);
 
         if (rc != SQLITE_OK) {
             eLog("[DbConnector] CreateTableStrict failed: {}", (errMsg ? errMsg : "unknown error"));

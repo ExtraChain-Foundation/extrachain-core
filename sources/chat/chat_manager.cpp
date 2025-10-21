@@ -51,7 +51,8 @@ ChatManager::ChatManager(ExtraChainNode* node)
     QObject::connect(node, &ExtraChainNode::ready, [this]() {
         auto main_id = this->node->account_controller()->current_profile().main_id();
 
-        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(this->node->dfs()->get_db_instance(), main_id); // TODO: add where / field
+        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(this->node->dfs()->get_db_instance(),
+                                                                        main_id); // TODO: add where / field
         if (!dir_rows.has_value()) {
             return;
         }
@@ -132,7 +133,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     // ... check if chats is exists ...
 
     auto db_instance = node->dfs()->get_db_instance();
-    auto rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, main_actor_id);
+    auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, main_actor_id);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -147,9 +148,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     }
 
     auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance, network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Chat");
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "Chat");
     if (!search_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -513,11 +515,11 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
         return std::unexpected(ChatError::Unknown);
     }
 
-
     auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(), network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  CHAT_MY_CHATS);
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          CHAT_MY_CHATS);
     if (!search_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -548,7 +550,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
 
     auto main_actor_id = node->account_controller()->current_profile().main_id();
     chat_actor_        = main_actor_id;
-    auto rows          = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(node->dfs()->get_db_instance(), main_actor_id);
+    auto rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(node->dfs()->get_db_instance(), main_actor_id);
     if (!rows.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }

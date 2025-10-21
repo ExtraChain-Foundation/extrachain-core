@@ -505,16 +505,20 @@ namespace Dfs {
                                                         ");";
 
             static const std::string CreateIndexActorsFiles1 =
-                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_modified  ON " + TableNameActorsFiles + "(owner_id, last_modified);";
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_modified  ON " + TableNameActorsFiles
+                + "(owner_id, last_modified);";
 
             static const std::string CreateIndexActorsFiles2 =
-                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_folder_name_state ON " + TableNameActorsFiles + "(owner_id, folder, name, state);";
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_folder_name_state ON " + TableNameActorsFiles
+                + "(owner_id, folder, name, state);";
 
             static const std::string CreateIndexActorsFiles3 =
-                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_hash_state ON " + TableNameActorsFiles + "(owner_id, hash, state);";
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_hash_state ON " + TableNameActorsFiles
+                + "(owner_id, hash, state);";
 
             static const std::string CreateIndexActorsFiles4 =
-                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_size ON " + TableNameActorsFiles + "(owner_id, size);";
+                "CREATE INDEX IF NOT EXISTS idx_actorsfiles_owner_size ON " + TableNameActorsFiles
+                + "(owner_id, size);";
 
             static const std::string CreateIndexActorsFiles5 =
                 "CREATE INDEX IF NOT EXISTS idx_actorsfiles_state ON " + TableNameActorsFiles + "(state);";
@@ -533,51 +537,65 @@ namespace Dfs {
                 };
 
                 std::expected<std::shared_ptr<DbConnector>, DirsError> database();
-                std::expected<std::shared_ptr<DbConnector>, Dfs::Tables::DirsFile::DirsSpace::DirsError>                                  create_file();
+                std::expected<std::shared_ptr<DbConnector>, Dfs::Tables::DirsFile::DirsSpace::DirsError>
+                create_file();
 
                 std::expected<std::uint64_t, DirsError> max_last_modified(const std::shared_ptr<DbConnector> db);
-                std::expected<std::uint64_t, DirsError> last_modified(const std::shared_ptr<DbConnector> db, const ActorId& actor_id);
-                void update_row(const std::shared_ptr<DbConnector> db, const ActorId& actor_id, std::uint64_t last_modified);
+                std::expected<std::uint64_t, DirsError> last_modified(const std::shared_ptr<DbConnector> db,
+                                                                      const ActorId&                     actor_id);
+                void                                    update_row(const std::shared_ptr<DbConnector> db,
+                                                                   const ActorId&                     actor_id,
+                                                                   std::uint64_t                      last_modified);
                 std::expected<std::vector<DirsRow>, DirsError> load_all(const std::shared_ptr<DbConnector> db);
-                std::expected<std::vector<DirsRow>, DirsError> load_from_modified(const std::shared_ptr<DbConnector> db, std::uint64_t last_modified);
+                std::expected<std::vector<DirsRow>, DirsError> load_from_modified(
+                    const std::shared_ptr<DbConnector> db,
+                    std::uint64_t                      last_modified);
 
                 bool insert(const std::shared_ptr<DbConnector> db, const DirsRow& dirs_row);
                 void insert_vector(const std::shared_ptr<DbConnector> db, const std::vector<DirsRow>& dirs_rows);
-            } // namespace DirsFile
+            } // namespace DirsSpace
 
             namespace ActorSpace {
-                std::vector<DbRow> getFileDataByName(const std::shared_ptr<DbConnector> db, const ActorId &owner_id, std::string name);
-                std::string        read_last_file_id(const std::shared_ptr<DbConnector> db, const ActorId &owner_id);
-                std::size_t        totalFileSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId);
-                std::uint64_t      dataAmountStoredSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId, const std::string& storjName);
+                std::vector<DbRow> getFileDataByName(const std::shared_ptr<DbConnector> db,
+                                                     const ActorId&                     owner_id,
+                                                     std::string                        name);
+                std::string   read_last_file_id(const std::shared_ptr<DbConnector> db, const ActorId& owner_id);
+                std::size_t   totalFileSize(const std::shared_ptr<DbConnector> db, const ActorId& actorId);
+                std::uint64_t dataAmountStoredSize(const std::shared_ptr<DbConnector> db,
+                                                   const ActorId&                     actorId,
+                                                   const std::string&                 storjName);
 
                 std::filesystem::path storjDbPath(const ActorId& actorId, const std::string& storjName);
 
                 // TODO: field: stringto enum class
-                std::expected<Dfs::DirRow, Dfs::DfsError>              get_dir_row(const std::shared_ptr<DbConnector> db,
-                                                                                   const ActorId&     owner_id,
-                                                                                   const std::string& search_value,
-                                                                                   const std::string& field = "file_id");
-                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(const std::shared_ptr<DbConnector> db,
-                                                                                    const ActorId& owner_id,
-                                                                                    std::uint64_t  last_modified = 0);
+                std::expected<Dfs::DirRow, Dfs::DfsError> get_dir_row(const std::shared_ptr<DbConnector> db,
+                                                                      const ActorId&                     owner_id,
+                                                                      const std::string& search_value,
+                                                                      const std::string& field = "file_id");
+                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    std::uint64_t                      last_modified = 0);
 
                 std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> get_dir_rows_map(
                     const std::shared_ptr<DbConnector> db,
-                    const ActorId& owner_id,
-                    std::uint64_t  last_modified = 0);
+                    const ActorId&                     owner_id,
+                    std::uint64_t                      last_modified = 0);
 
-                std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(const std::shared_ptr<DbConnector> db,
-                                                                                         const ActorId&     owner_id,
-                                                                                         const std::string& folder,
-                                                                                         const std::string& name);
+                std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_folder_and_name(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 folder,
+                    const std::string&                 name);
 
-                std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_hash(const std::shared_ptr<DbConnector> db, const ActorId&     owner_id,
-                                                                              const std::string& hash);
+                std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_hash(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 hash);
 
                 std::expected<std::string, Dfs::DfsError> last_file_id(const std::shared_ptr<DbConnector> db,
-                                                                       const ActorId&     owner_id,
-                                                                       const std::string& file_id);
+                                                                       const ActorId&                     owner_id,
+                                                                       const std::string&                 file_id);
 
                 // TODO: search in dir row: by file type, by name, get folder, ...
                 std::expected<std::vector<std::uint8_t>, Utils::ContentError> get_file_content(
@@ -585,27 +603,40 @@ namespace Dfs {
                     const std::string& file_id);
 
                 // TODO: add expected
-                void update_file_state(const std::shared_ptr<DbConnector> db, const ActorId& owner_id, const std::string file_id, Dfs::FileState state);
+                void update_file_state(const std::shared_ptr<DbConnector> db,
+                                       const ActorId&                     owner_id,
+                                       const std::string                  file_id,
+                                       Dfs::FileState                     state);
 
                 void update_file_after_stored_remove(const std::shared_ptr<DbConnector> db,
-                                                     const ActorId&     owner_id,
-                                                     const std::string& file_id,
-                                                     const Signature&   sign,
-                                                     std::uint64_t      last_modified);
+                                                     const ActorId&                     owner_id,
+                                                     const std::string&                 file_id,
+                                                     const Signature&                   sign,
+                                                     std::uint64_t                      last_modified);
 
                 // TODO: expected
                 std::optional<Dfs::CollectionTemplate> get_collection_template_file_id(const ActorId&     actor_id,
                                                                                        const std::string& file_id);
-                std::optional<Dfs::CollectionTemplate> get_collection_template_name(const std::shared_ptr<DbConnector> db, const ActorId&     actor_id,
-                                                                                    const std::string& template_name);
-                bool add_dir_row(const std::shared_ptr<DbConnector> db, const ActorId& owner_id, DirRow& dir_row, const Actor<KeyPrivate>& signer);
-                std::pair<bool, std::vector<Dfs::DirRow>> add_dir_rows(const std::shared_ptr<DbConnector> db, const ActorId& actor_id, const std::vector<Dfs::DirRow>& dir_rows);
+                std::optional<Dfs::CollectionTemplate> get_collection_template_name(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     actor_id,
+                    const std::string&                 template_name);
+                bool                                      add_dir_row(const std::shared_ptr<DbConnector> db,
+                                                                      const ActorId&                     owner_id,
+                                                                      DirRow&                            dir_row,
+                                                                      const Actor<KeyPrivate>&           signer);
+                std::pair<bool, std::vector<Dfs::DirRow>> add_dir_rows(const std::shared_ptr<DbConnector> db,
+                                                                       const ActorId&                     actor_id,
+                                                                       const std::vector<Dfs::DirRow>& dir_rows);
 
                 std::pair<std::string, uint64_t> calculate_collection_hash_size(
                     const ActorId&     owner_id,
                     const std::string& file_id,
                     const std::string& sort_field = "actor");
-                bool update_file_metadata(const std::shared_ptr<DbConnector> db, const ActorId& owner_id, DirRow& dir_row, bool with_sign = true);
+                bool update_file_metadata(const std::shared_ptr<DbConnector> db,
+                                          const ActorId&                     owner_id,
+                                          DirRow&                            dir_row,
+                                          bool                               with_sign = true);
             } // namespace ActorSpace
         } // namespace DirsFile
 

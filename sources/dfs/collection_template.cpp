@@ -171,7 +171,8 @@ namespace Dfs {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, CollectionTemplateLink>) {
                     auto vector_template =
-                        Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(arg.owner_id, arg.file_id);
+                        Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(arg.owner_id,
+                                                                                           arg.file_id);
                     if (!vector_template.has_value()) {
                         return std::nullopt;
                     }

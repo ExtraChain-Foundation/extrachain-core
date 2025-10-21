@@ -20,4 +20,4 @@
 #include "managers/thread_pool.h"
 
 bool                ThreadPool::is_first = true;
-std::set<QThread *> ThreadPool::threads = {};
+std::set<QThread *> ThreadPool::threads  = {};

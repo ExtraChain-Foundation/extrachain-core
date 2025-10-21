@@ -121,9 +121,9 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
-    std::set<ActorId> priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     std::set<Dfs::FileLink> priority_file_link_;
-    DfsMode           dfs_mode_        = DfsMode::Full;
+    DfsMode                 dfs_mode_ = DfsMode::Full;
 
     std::shared_ptr<DbConnector> get_db_instance();
 
@@ -177,7 +177,7 @@ public:
         return false;
     }
 
-    bool is_priority(const Dfs::FileLink& file_link) const {
+    bool is_priority(const Dfs::FileLink &file_link) const {
         if (is_priority(file_link.owner_id))
             return true;
 

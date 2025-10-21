@@ -280,7 +280,7 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
 
         auto vector_template_file_id =
             Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(vector_template_link->owner_id,
-                                                                       vector_template_link->file_id);
+                                                                               vector_template_link->file_id);
 
         if (!vector_template_file_id.has_value()) {
             return std::unexpected(DfsVectorError::Unknown);

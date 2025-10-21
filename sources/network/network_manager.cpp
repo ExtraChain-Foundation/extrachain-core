@@ -1317,7 +1317,8 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DfsSyncDirsRows: {
-        auto dirs_rows_result = MessagePack::deserialize<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>>(serialized);
+        auto dirs_rows_result =
+            MessagePack::deserialize<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>>(serialized);
         if (!dirs_rows_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
@@ -1345,7 +1346,6 @@ void NetworkManager::message_received(const std::string &message,
                 return;
             }
 
-            eLog("PARAMPAMPAM");
             node->dfs()->dirs_manager().network_response_dir_rows(dirs_row_result.value(), responder);
         }
         break;

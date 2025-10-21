@@ -29,7 +29,7 @@ enum class NetworkVPNType;
 
 struct VPNConfigStorage {
     struct VPNHandhakeCache {
-        bool is_sended = false;
+        bool        is_sended = false;
         std::string uuid;
         // std::string              requesterIP;
         std::string              requesterNetworkIdentifier;
@@ -58,15 +58,15 @@ struct VPNConfigStorage {
         std::string nextNodeID;
         std::string nextNodeIP;
         std::string nextNodeNetworkIdentifier;
-        qint64      lastRunExecuteTS = -1;
+        qint64      lastRunExecuteTS     = -1;
         qint64      lastUpdateRequsterTS = -1;
         qint64      lastUpdateNextTS;
         qint64      lastSendedNextTS;
 
         qint64 lastWGTimestampRequester = -1;
         qint64 lastWGTimestampNext      = -1;
-        qint64 lastSingUploadedBytes = -1;
-        qint64 lastSingDownloadedBytes = -1;
+        qint64 lastSingUploadedBytes    = -1;
+        qint64 lastSingDownloadedBytes  = -1;
     };
 
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
