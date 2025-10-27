@@ -151,6 +151,12 @@ enum class DbConnectorType {
 };
 // FORMAT_ENUM(DbConnectorType)
 
+enum class DbConnectorResult {
+    NoErrors,
+    Errors,
+    NoChanges
+};
+
 // TODO: while select, open check in query, std::vector<DBColumn>
 
 class EXTRACHAIN_EXPORT DbConnector {

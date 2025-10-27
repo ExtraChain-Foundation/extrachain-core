@@ -285,9 +285,11 @@ CREATE TABLE IF NOT EXISTS balance_cache (
         static const std::string LUMINANCE_TABLE = "luminance";
         static const std::string LUMINANCE_TABLE_CREATE = "CREATE TABLE IF NOT EXISTS " + LUMINANCE_TABLE
                                                           + " ("
-                                                          "node_id      TEXT PRIMARY KEY NOT NULL, "
-                                                          "luminance   INT              NOT NULL, "
-                                                          "timestamp    INTEGER          NOT NULL  "
+                                                          "actor_id         TEXT     NOT NULL, "
+                                                          "node_identifier  TEXT     NOT NULL, "
+                                                          "luminance        INT      NOT NULL, "
+                                                          "timestamp        INTEGER  NOT NULL, "
+                                                          "PRIMARY KEY (actor_id, node_identifier)"
                                                           ");";
 
         static const std::string tokensCacheTable = "Tokens";

@@ -236,7 +236,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
             auto sender   = node->account_controller()->current_profile().get_actor(security_actor->sender_id);
             auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
             // TODO: checks
-            auto res = sender->get().key().encrypt_file(new_file_path, dfs_path, receiver.key().public_key());
+            auto res = sender->get().key().encrypt_file(new_file_path, dfs_path, receiver.public_key());
             if (!res.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -1873,7 +1873,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
             auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
 
             auto encrypted_name =
-                sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+                sender->get().key().encrypt(ByteArray(visual_name_new).toBytes(), receiver.public_key());
             if (!encrypted_name.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -1881,7 +1881,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
             if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
                 auto encrypted_folder = sender->get().key().encrypt(ByteArray(visual_folder_new.value()).toBytes(),
-                                                                    receiver.key().public_key());
+                                                                    receiver.public_key());
                 if (!encrypted_folder.has_value()) {
                     return std::unexpected(Dfs::DfsError::IncorrectEncryption);
                 }
@@ -1962,7 +1962,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
             auto receiver = node->actor_index()->read_actor_old(security_actor->receiver_id);
 
             auto decrypted_name =
-                sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.key().public_key());
+                sender->get().key().decrypt(ByteArray(visual_name_new).toBytes(), receiver.public_key());
             if (!decrypted_name.has_value()) {
                 return std::unexpected(Dfs::DfsError::IncorrectEncryption);
             }
@@ -1970,7 +1970,7 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
 
             if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
                 auto decrypted_folder = sender->get().key().decrypt(ByteArray(visual_folder_new.value()).toBytes(),
-                                                                    receiver.key().public_key());
+                                                                    receiver.public_key());
                 if (!decrypted_folder.has_value()) {
                     return std::unexpected(Dfs::DfsError::IncorrectEncryption);
                 }

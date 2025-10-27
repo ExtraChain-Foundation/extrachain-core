@@ -125,6 +125,10 @@ public:
         return actor;
     }
 
+    const PublicKey &public_key() const {
+        return key_.public_key();
+    }
+
     void set_id(const ActorId &id) {
         id_ = id;
     }
@@ -169,17 +173,18 @@ public:
         return array;
     }
 
-    static Actor<T> fromJson(const QByteArray &serialized) {
+    static std::optional<Actor<T>> fromJson(const QByteArray &serialized) {
         if (serialized.isEmpty()) {
             eFatal("[Actor] json is empty");
         }
 
         Actor<T> actor;
         auto     array = QJsonDocument::fromJson(serialized).array();
+
         if (array.size() < 3) {
-            eFatal("?1");
-            return actor;
+            return std::nullopt;
         }
+
         actor.set_id(ActorId(array[0].toString().toStdString()));
         actor.set_type(ActorType(array[1].toInt()));
         auto pub = ByteArray::fromBase64(array[2].toString()).toArray<crypto_sign_PUBLICKEYBYTES>();
@@ -199,7 +204,7 @@ public:
         return actor;
     }
 
-    static Actor<T> fromJson(const std::string &serialized) {
+    static std::optional<Actor<T>> fromJson(const std::string &serialized) {
         return fromJson(QByteArray::fromStdString(serialized));
     }
 

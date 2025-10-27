@@ -99,8 +99,11 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
     if (predefine_token_id.empty())
         token_actor = node->account_controller()->create_service();
     else {
-        auto temp_actor = token_actor.fromJson(QByteArray::fromStdString(predefine_token_id));
-        token_actor     = node->account_controller()->create_service({}, temp_actor);
+        auto temp_actor = Actor<KeyPrivate>::fromJson(QByteArray::fromStdString(predefine_token_id));
+        if (!temp_actor.has_value()) {
+            eFatal("token error");
+        }
+        token_actor = node->account_controller()->create_service({}, temp_actor.value());
     }
 
     auto token_data = TokenData { .token_id = token_actor.id(),

@@ -20,8 +20,7 @@
 #ifndef ISOCKETSERVICE_H
 #define ISOCKETSERVICE_H
 
-#include "encryption/key_private.h"
-#include "encryption/key_public.h"
+#include "chain/actor.h"
 #include "utils/exc_utils.h"
 
 #include <queue>
@@ -86,9 +85,8 @@ public:
     void                      set_constant(bool isConstant);
     bool                      is_vpn() const;
     void                      set_vpn(bool isVPN);
-    SocketMode                mode() {
-        return mode_;
-    }
+    SocketMode                mode();
+    NodeId node_id();
 
     std::uint64_t timestamp() const;
 
@@ -139,10 +137,9 @@ protected:
     static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
     bool                    waiting_buffer_space_ = false;
 
-    KeyPrivate priv_   = KeyPrivate();
-    KeyPublic  pub_    = KeyPublic();
-    bool       is_pub_ = false;
-    bool       closed_ = false;
+    Actor<KeyPublic> actor_;
+    bool             is_pub_ = false;
+    bool             closed_ = false;
 };
 
 BOOST_DESCRIBE_STRUCT(

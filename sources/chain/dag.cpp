@@ -320,7 +320,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
             }
         }
     } else {
-        eLog("[Dag] Transaction from network approved: {}", transaction);
+        eLog("[Dag] Transaction from network approved: ✔ {}", transaction);
     }
 
     if (res == TransactionProveError::NoError) {
@@ -372,7 +372,7 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         emit node->dagTxNotApproved(transaction.section(), tx_result.hash);
         return;
     } else {
-        eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
+        eLog("[Dag] Our transaction approved: ✔ {} / {}", transaction.section(), transaction.hash());
         this->sended_transactions_.erase(tx_result.hash);
         emit node->dagTxApproved(transaction.section(), tx_result.hash);
     }

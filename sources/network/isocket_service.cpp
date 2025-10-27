@@ -30,7 +30,6 @@
 SocketService::SocketService(ExtraChainNode *node, QObject *parent)
     : node(node)
     , QObject(parent) {
-    priv_.generate_random();
 }
 
 const QString &SocketService::identifier() const {
@@ -79,6 +78,14 @@ bool SocketService::is_vpn() const {
 
 void SocketService::set_vpn(bool isVPN) {
     is_vpn_ = isVPN;
+}
+
+SocketMode SocketService::mode() {
+    return mode_;
+}
+
+NodeId SocketService::node_id() {
+    return NodeId { .actor_id = actor_.id(), .node_identifier = identifier_.toStdString() };
 }
 
 std::uint64_t SocketService::timestamp() const {
@@ -263,11 +270,12 @@ QByteArray SocketService::generate_first_message() {
 }
 
 QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
-    if (pub_.empty()) {
+    if (actor_.empty()) {
         return "";
     }
 
-    auto encrypt_result = priv_.encrypt(ByteArray(message).toBytes(), pub_.public_key());
+    auto encrypt_result = node->account_controller()->system_actor().key().encrypt(ByteArray(message).toBytes(),
+                                                                                   actor_.public_key());
     if (!encrypt_result.has_value()) {
         return "";
     }
@@ -277,10 +285,13 @@ QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
 }
 
 QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
-    if (pub_.empty())
-        eFatal("Socket decrypt error");
+    if (actor_.empty()) {
+        eCritical("Socket public decrypt error");
+        return "";
+    }
 
-    auto decrypt_result = priv_.decrypt(ByteArray(message).toBytes(), pub_.public_key());
+    auto decrypt_result = node->account_controller()->system_actor().key().decrypt(ByteArray(message).toBytes(),
+                                                                                   actor_.public_key());
     if (!decrypt_result.has_value()) {
         return "";
     }

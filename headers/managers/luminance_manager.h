@@ -19,11 +19,24 @@
 
 #pragma once
 
+#include "chain/actor_id.h"
+
 #include <boost/describe/class.hpp>
 
 class ExtraChainNode;
 class DbConnector;
-struct NodeId;
+class Responder;
+
+struct LuminanceData {
+    std::unordered_map<NodeId, int> data;
+};
+BOOST_DESCRIBE_STRUCT(LuminanceData, (), (data))
+
+namespace Luminance {
+    constexpr int   TRUST_THRESHOLD    = 5;     // Абсолютная погрешность в единицах luminance
+    constexpr float MATCH_THRESHOLD    = 0.90f; // 90% совпадение = хорошо
+    constexpr float RELATIVE_THRESHOLD = 0.10f; // 10% относительная погрешность
+} // namespace Luminance
 
 class LuminanceManager {
 public:
@@ -33,12 +46,20 @@ public:
     bool init_db();
     void reset_db();
 
-    int read_luminance(const NodeId &node_id);
+    LuminanceData read_all_luminances();
+    LuminanceData read_luminances(const std::vector<NodeId> &node_ids);
+    LuminanceData read_luminances(const std::vector<ActorId> &actors_ids);
+    int           read_luminance(const ActorId &node_id);
+    int           read_luminance(const NodeId &node_id);
 
     void increment(const NodeId &node_id);
     void decrement(const NodeId &node_id);
     void write_luminance(const NodeId &node_id, int luminance);
     void remove_old();
+
+    void request_luminances(const std::vector<NodeId> &node_ids);
+    void network_request_luminances(const std::vector<NodeId> &actors_ids, const Responder &responder);
+    void network_response_luminances(const LuminanceData &luminance_data);
 
 private:
     enum class Operation {

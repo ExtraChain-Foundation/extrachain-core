@@ -97,6 +97,10 @@ struct NodeId {
     bool empty() {
         return actor_id.is_zero() || node_identifier.empty();
     }
+
+    bool is_same_actor(const ActorId &actor_id) {
+        return this->actor_id == actor_id;
+    }
 };
 BOOST_DESCRIBE_STRUCT(NodeId, (), (actor_id, node_identifier))
 

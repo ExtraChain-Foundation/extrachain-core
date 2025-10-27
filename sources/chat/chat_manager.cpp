@@ -652,7 +652,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     }
     auto from_actor = from_actor_result.value();
 
-    auto content = main_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
+    auto content = main_actor.key().decrypt(encrypted.value(), from_actor.public_key());
     if (!content.has_value()) {
         return false;
     }

@@ -215,16 +215,16 @@ void WebSocketService::onTextMessage(const QString &message) {
         return;
 
     if (!is_pub_) {
-        auto pub_result = Utils::from_base64(message.toStdString());
-        if (!pub_result.has_value()) {
-            emit error(Network::SocketServiceError::IncorrectPublicKey,
-                       "",
-                       ip_.toStdString(),
-                       identifier_.toStdString());
+        auto pub_result = message.toLatin1();
+
+        auto actor_network = Actor<KeyPublic>::fromJson(pub_result);
+        if (!actor_network.has_value()) {
+            eCritical("SLLOSOLS");
+            this->closeSocket();
             return;
         }
 
-        pub_    = KeyPublic(ByteArray(pub_result.value()).toArray<crypto_sign_PUBLICKEYBYTES>());
+        actor_  = actor_network.value();
         is_pub_ = true;
 
         handshake();
@@ -460,7 +460,7 @@ void WebSocketService::connections() {
 }
 
 void WebSocketService::send_public_key() {
-    auto pub_key_str = Utils::to_base64(ByteArray(priv_.public_key()).toString());
+    auto pub_key_str = node->account_controller()->system_actor().toJson();
 
     if (m_ws == nullptr) {
         return;
@@ -475,7 +475,7 @@ void WebSocketService::send_public_key() {
         return;
     }
 
-    auto written = m_ws->sendTextMessage(QString::fromStdString(pub_key_str));
+    auto written = m_ws->sendTextMessage(pub_key_str);
     if (written < 0) {
         eCritical("[WS] Handshake send failed");
         emit error(Network::SocketServiceError::IncorrectHandshake,

@@ -31,7 +31,8 @@ class Responder;
 enum class ActorIndexError {
     Unknown,
     NoActor,
-    ZeroActor
+    ZeroActor,
+    ActorFileData
 };
 
 enum class ActorSaveError {
@@ -112,7 +113,7 @@ public:
      */
     Actor<KeyPublic> read_actor_old(const ActorId &id);
 
-    std::expected<Actor<KeyPublic>, ActorIndexError> read_actor(const ActorId &id,
+    std::expected<Actor<KeyPublic>, ActorIndexError> read_actor(const ActorId &actor_id,
                                                                 ActorGetType   get_type = ActorGetType::Request);
 
     /**

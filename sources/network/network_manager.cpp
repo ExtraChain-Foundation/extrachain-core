@@ -1276,6 +1276,30 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
 
+    case MessageType::Luminance: {
+        if (status == MessageStatus::Request) {
+            auto nodes_result = MessagePack::deserialize<std::vector<NodeId>>(serialized);
+
+            if (!nodes_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for Luminance", type);
+                break;
+            }
+
+            node->luminance_manager()->network_request_luminances(nodes_result.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto luminance_data_result = MessagePack::deserialize<LuminanceData>(serialized);
+
+            if (!luminance_data_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for last modified", type);
+                break;
+            }
+
+            node->luminance_manager()->network_response_luminances(luminance_data_result.value());
+        }
+
+        break;
+    }
+
         // case MessageType::DfsDirData: {
         //     if (status == MessageStatus::Request) {
         //         auto dir_actor_id_result = MessagePack::deserialize<ActorId>(serialized);

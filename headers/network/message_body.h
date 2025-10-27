@@ -32,7 +32,7 @@ enum class MessageType {
     Actor      = 2,
     Actors     = 15,
     ActorsHash = 16,
-
+    Luminance  = 17,
     CoinReward = 19,
 
     DagTransaction       = 30,

@@ -1023,7 +1023,7 @@ void ExtraChainNode::notificationToken(QString os, QString actorId, QString toke
     if (first.empty())
         return;
     auto& mainKey   = account_controller_->system_actor().key();
-    auto& publicKey = first.key().public_key();
+    auto& publicKey = first.public_key();
 
     // std::map<std::string, std::string> map = { { "actor", actorId.toStdString() },
     //                                            { "token", mainKey.encrypt(token.toStdString(),

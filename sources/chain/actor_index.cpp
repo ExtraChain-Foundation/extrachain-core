@@ -49,35 +49,30 @@ ActorIndex::ActorIndex(ExtraChainNode *node)
 }
 
 Actor<KeyPublic> ActorIndex::read_actor_old(const ActorId &id) {
-    if (id.is_zero()) {
-        eWarning("[ActorIndex] Error: try get actor with id: {}", id);
+    auto actor = this->read_actor(id);
+    if (!actor.has_value()) {
         return Actor<KeyPublic>();
     }
-
-    QByteArray serializedActor = this->read_by_id(id);
-    if (!serializedActor.isEmpty()) {
-        auto actor = Actor<KeyPublic>::fromJson(serializedActor);
-        return actor;
-    } else {
-        this->send_get_actor_message(id);
-        eWarning("[ActorIndex] There no actor with id: {}", id);
-        return Actor<KeyPublic>();
-    }
+    return actor.value();
 }
 
-std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::read_actor(const ActorId &id, ActorGetType get_type) {
-    if (id.is_zero()) {
-        eWarning("[ActorIndex] Error: try get actor with id: {}", id);
+std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::read_actor(const ActorId &actor_id,
+                                                                        ActorGetType   get_type) {
+    if (actor_id.is_zero()) {
+        eWarning("[ActorIndex] Error: try get actor with id: {}", actor_id);
         return std::unexpected(ActorIndexError::ZeroActor);
     }
 
-    std::string serialized_actor = this->read_by_id(id).toStdString();
+    std::string serialized_actor = this->read_by_id(actor_id).toStdString();
     if (!serialized_actor.empty()) {
         auto actor = Actor<KeyPublic>::fromJson(serialized_actor);
-        return actor;
+        if (!actor.has_value()) {
+            return std::unexpected(ActorIndexError::ActorFileData);
+        }
+        return actor.value();
     } else {
         if (get_type == ActorGetType::Request) {
-            this->send_get_actor_message(id);
+            this->send_get_actor_message(actor_id);
         }
 
         // eWarning("[ActorIndex] There no actor with id: {}", id);

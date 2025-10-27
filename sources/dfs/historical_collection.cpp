@@ -548,7 +548,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::encrypt_data(
                 return DbRow {};
             }
             encryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s.get().key().encrypt(data.toBytes(), r.key().public_key());
+                return s.get().key().encrypt(data.toBytes(), r.public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {
@@ -603,7 +603,7 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
                 return DbRow {};
             }
             decryptor = [s = sender.value(), r = receiver.value(), this](const ByteArray &data) {
-                return s.get().key().decrypt(data.toBytes(), r.key().public_key());
+                return s.get().key().decrypt(data.toBytes(), r.public_key());
             };
         }
     } else if (data_security == Dfs::DataSecurity::Key) {

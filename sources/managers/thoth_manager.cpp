@@ -138,12 +138,13 @@ bool ThothManager::read_all(bool is_my) {
         return false;
     }
 
-    for (const auto& row : *rows) {
-        auto file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
-        auto custom     = Json::deserialize<ThothCustom>(rows->at(0).at("custom"));
-        auto thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
-                                      .token   = rows->at(0).at("token"),
-                                      .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
+    for (const auto& row : rows.value()) {
+        auto  file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
+        auto& custom_str = rows->at(0).at("custom");
+        auto  custom     = custom_str.empty() ? ThothCustom {} : Json::deserialize<ThothCustom>(custom_str);
+        auto  thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
+                                       .token   = rows->at(0).at("token"),
+                                       .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
         // eLog("Loaded --------- : {}", thoth_info);
         // eLog("Loaded --------- : {}", file_link);
         infos_[file_link].insert(thoth_info);
