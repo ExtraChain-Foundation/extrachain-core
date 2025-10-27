@@ -2212,6 +2212,10 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
             country = "United States";
         }
 
+        if (country == "The Netherlands") {
+            country = "Netherlands";
+        }
+
         eLog("Country: {}", country);
         cache.insert(ip, country);
         return { ip, country };
