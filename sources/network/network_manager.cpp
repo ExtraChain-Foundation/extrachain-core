@@ -90,6 +90,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
+    if (!first_nodes_.empty()) {
+        first_node_ = first_nodes_.front();
+    }
+
     local_inizialization();
     initialize_first_node();
 
@@ -161,11 +165,11 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
-    if (node->account_controller()->empty()) {
+    if (this->node->account_controller()->empty()) {
         return;
     }
 
-    if (failed_ips_.contains(first_node_)) {
+    if (this->failed_ips_.contains(this->first_node_)) {
         return;
     }
 
@@ -175,11 +179,11 @@ void NetworkManager::reconnection() {
     // }
 
     bool                      skip_first_node = false;
-    auto                      need_reconnect  = reconn_;
+    auto                      need_reconnect  = this->reconn_;
     std::set<SocketService *> to_close;
 
     {
-        auto connectionsLocked = *connections_;
+        auto connectionsLocked = *this->connections_;
         for (const auto &el : *connectionsLocked) {
             // eLog("_____________");
             if (el->is_closed()) {
@@ -189,7 +193,7 @@ void NetworkManager::reconnection() {
                 continue;
             }
 
-            if (el->ip() == first_node_) {
+            if (el->ip() == this->first_node_) {
                 bool is_early = Utils::current_date_ms() - el->timestamp() < 30000;
 
                 if (!is_early && !el->is_active()) {
@@ -217,19 +221,37 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        eLog("[Network] Reconnect to first node {}", first_node_);
-        emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        if (this->check_port_sync(QString::fromStdString(this->first_node_),
+                                  Network::Protocol::WebSocket,
+                                  false,
+                                  true)) {
+            eLog("[Network] Reconnect to first node (priority) {}", this->first_node_);
+            emit this->connect_to_node(QString::fromStdString(this->first_node_), Network::Protocol::WebSocket);
+            return;
+        }
+
+        if (this->first_nodes_.size() > 1) {
+            QString second_node = QString::fromStdString(this->first_nodes_[1]);
+            if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
+                eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
+                this->save_first_node(second_node.toStdString());
+                emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
+                return;
+            }
+        }
+
+        eLog("[Network] First nodes unavailable, waiting for next retry...");
         return;
     }
 
     for (const auto &[ip, count] : need_reconnect) {
         eLog("[Network] Reconnect to node: {}", ip);
 
-        if (failed_ips_.contains(ip)) {
+        if (this->failed_ips_.contains(ip)) {
             continue;
         }
 
-        emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        emit this->connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
         // reconn_[ip] += 1; // count
 
         // if (reconn_[ip] > 1000) {
@@ -381,6 +403,33 @@ void NetworkManager::check_port(const QString     ip,
 
     socket->connectToHost(QHostAddress(ip), wsPort);
     // timer->start(timeoutMs);
+}
+
+bool NetworkManager::check_port_sync(const QString    &ip,
+                                     Network::Protocol protocol,
+                                     const bool        request,
+                                     const bool        isConstant) {
+    QTcpSocket socket;
+
+    socket.connectToHost(QHostAddress(ip), wsPort);
+
+    if (!socket.waitForConnected(1600)) {
+        eLog("[Network] Failed to connect to {}:{} - {}",
+             ip.toStdString(),
+             wsPort,
+             socket.errorString().toStdString());
+        return false;
+    }
+
+    socket.disconnectFromHost();
+
+    if (socket.state() != QAbstractSocket::UnconnectedState) {
+        socket.waitForDisconnected(1000);
+    }
+
+    connect_to_node_slot(ip, protocol, request, isConstant);
+
+    return true;
 }
 
 NetworkManager::~NetworkManager() {

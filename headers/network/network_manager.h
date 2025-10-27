@@ -263,13 +263,20 @@ private:
 
     std::string network_hash_for_vpn_;
 
-    std::string public_ip_;
-    std::string first_node_ =
+    std::string              public_ip_;
+    std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
-        "57.128.191.73"; // test node
+        {
+            "57.128.191.73", // test node
+            // ""               // test 2
+        };
 #else
-        "51.68.181.52"; // exc node
+        {
+            "51.68.181.52", // exc node 1
+            "149.33.19.250" // exc node 2
+        };
 #endif
+    std::string first_node_;
 
 public:
     explicit NetworkManager(ExtraChainNode* node);
@@ -311,6 +318,7 @@ public:
 public slots:
     void remove_connection(const QString& identifier);
     void check_port(const QString ip, Network::Protocol protocol, const bool request, const bool isConstant);
+    bool check_port_sync(const QString& ip, Network::Protocol protocol, const bool request, const bool isConstant);
 
 signals:
     void finished(); // ThreadPool
