@@ -221,17 +221,17 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        if (this->check_port_sync(QString::fromStdString(this->first_node_),
+        if (this->check_port_sync(QString::fromStdString(first_node_),
                                   Network::Protocol::WebSocket,
                                   false,
                                   true)) {
-            eLog("[Network] Reconnect to first node (priority) {}", this->first_node_);
-            emit this->connect_to_node(QString::fromStdString(this->first_node_), Network::Protocol::WebSocket);
+            eLog("[Network] Reconnect to first node (priority) {}", first_node_);
+            emit this->connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
             return;
         }
 
-        if (this->first_nodes_.size() > 1) {
-            QString second_node = QString::fromStdString(this->first_nodes_[1]);
+        if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
+            QString second_node = QString::fromStdString(first_nodes_[1]);
             if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
                 eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
                 this->save_first_node(second_node.toStdString());
@@ -1098,6 +1098,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
+    bool                        is_node = ip == first_node_;
 
     Responder responder(this);
     responder.set_message_id(message_id);
@@ -1765,7 +1766,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagSyncLastInfo: {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
-        if (!is_luminance) {
+        if (!is_luminance && !is_node) {
             return;
         }
 #endif

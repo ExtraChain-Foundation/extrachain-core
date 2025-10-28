@@ -267,13 +267,13 @@ private:
     std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
         {
-            "57.128.191.73", // test node
-            // ""               // test 2
+            "57.128.191.73", // test node 1
+            "57.128.191.74"  // test node 2
         };
 #else
         {
-            "51.68.181.52", // exc node 1
-            "149.33.19.250" // exc node 2
+            "51.68.181.52", // release node 1
+            "149.33.19.250" // release node 2
         };
 #endif
     std::string first_node_;
