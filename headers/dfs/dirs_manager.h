@@ -22,6 +22,7 @@
 #include <string>
 #include <expected>
 
+#include <QObject>
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "network/network_manager.h"
@@ -35,9 +36,11 @@ enum class DirsError {
     DownloadManagerError
 };
 
-class DirsManager {
+class DirsManager : public QObject {
+    Q_OBJECT
 public:
     DirsManager(ExtraChainNode* node);
+    ~DirsManager();
 
     void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
 
@@ -46,10 +49,12 @@ public:
     void network_response_sync(std::uint64_t max_last_modified, const Responder& responder);
 
     void send_from_last_modified(std::uint64_t last_modified, const Responder& responder);
-    void network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
-                                             const Responder&                           responder);
+    void network_response_from_last_modified(
+        const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
+        const Responder&                                              responder);
 
-    void network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const Responder& responder);
+    void network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row,
+                                  const Responder&                                 responder);
     void network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
                                    const Responder&                                                responder);
 
@@ -57,6 +62,15 @@ public:
     void temp_sync_all(const std::string& identifier);
     void network_request_all(const Responder& responder);
 
+    std::shared_ptr<DbConnector> get_db_instance();
+
+signals:
+    void convertion_started();
+    void convertion_finished();
+
 private:
-    ExtraChainNode* node;
+    void old_dfs_to_new_dfs_converter();
+
+    std::shared_ptr<DbConnector> db_;
+    ExtraChainNode*              node;
 };

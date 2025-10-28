@@ -40,7 +40,7 @@
 struct sqlite3;
 struct sqlite3_stmt;
 
-static QMutex dbmutex;
+static std::recursive_mutex dbmutex;
 
 using DbRow      = std::unordered_map<std::string, std::string>;
 using DbRowBytes = std::unordered_map<std::string, std::vector<std::uint8_t>>;

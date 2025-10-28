@@ -312,9 +312,10 @@ bool ExtraChainNode::create_token_vector() {
     }
 
     auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "TokensCache");
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "TokensCache");
     if (!search_result.has_value()) {
         return false;
     }
@@ -350,9 +351,10 @@ bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     }
 
     auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Subscription");
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "Subscription");
     if (!search_result.has_value()) {
         return false;
     }
@@ -396,9 +398,10 @@ DfsFileStatus ExtraChainNode::create_renames_vector() {
     }
 
     auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "Renames");
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "Renames");
     if (!search_result.has_value()) {
         return DfsFileStatus::CantCreate;
     }
@@ -518,7 +521,7 @@ void ExtraChainNode::start() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
-        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(system_id);
+        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(dfs_->get_db_instance(), system_id);
 
         if (!dir_rows.has_value()) {
             return;
@@ -554,7 +557,7 @@ void ExtraChainNode::start() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
 
-        auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(main_id);
+        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(dfs_->get_db_instance(), main_id);
 
         if (!dir_rows.has_value()) {
             return;

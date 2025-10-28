@@ -68,7 +68,7 @@ void DataMiningManager::request_reward() {
         return;
     }
 
-#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID)
+#if !defined(QT_DEBUG) && !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     if (node->dag()->mode() == DagMode::Light && node->dfs()->mode() == DfsMode::Light
         && koef_to_koef_ == BigNumberFloat(1)) {
         return;
@@ -245,7 +245,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             }
         } else if (network_map.size() >= 5) {
             auto current_time = Utils::current_date_ms();
-            std::erase_if(network_map, [current_time](const auto& pair) {
+            std::erase_if(network_map, [current_time](const auto &pair) {
                 return current_time - pair.second > 90000;
             });
 

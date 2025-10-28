@@ -28,19 +28,126 @@
 #include "utils/thread_pool_boost.h"
 
 DirsManager::DirsManager(ExtraChainNode* node)
-    : node(node) {
+    : QObject(node)
+    , node(node) {
     // create dfs folder
     std::filesystem::create_directories(DfsB::DFS_FOLDER);
 
     // basic creation of dirs file
-    bool dirs_result = Dfs::DirsFile::create_file();
-    if (!dirs_result) {
+    auto db_res = Dfs::Tables::DirsFile::DirsSpace::create_file();
+    if (!db_res.has_value()) {
         eFatal("[DirsManager] Can't create basic .dirs file");
+    }
+    db_ = db_res.value();
+
+    // OLD DFS -> NEW DFS converter
+    old_dfs_to_new_dfs_converter();
+}
+
+DirsManager::~DirsManager() {
+    db_->close();
+}
+
+void DirsManager::old_dfs_to_new_dfs_converter() {
+    auto copy_data = [&](const std::string& dir_file, const std::string& owner_id) -> bool {
+        std::unique_ptr<DbConnector> db_old = std::make_unique<DbConnector>(dir_file);
+        if (!db_old->open()) {
+            eCritical("DirsManager::old_dfs_to_new_dfs_converter, Can't open .dir file");
+            return false;
+        }
+
+        char* errMsg = nullptr;
+
+        static const std::string select_old_query =
+            "SELECT file_id, prev_file_id, actor_id, hash, folder, name, size, "
+            "created, last_modified, type, encryption, state, sign FROM Files;";
+
+        auto old_db_data = db_old->select(select_old_query);
+        db_old->close();
+
+        db_->query("BEGIN TRANSACTION");
+        for (auto& db_row : old_db_data) {
+            db_row.emplace("owner_id", owner_id);
+            db_->insert(Dfs::Tables::DirsFile::TableNameActorsFiles, db_row);
+        }
+        db_->query("COMMIT");
+        return true;
+    };
+    try {
+        static std::filesystem::path tempFileIsConverted = Dfs::Basic::DFS_FOLDER + "/.converted";
+        if (std::filesystem::exists(tempFileIsConverted)) {
+            eLog("DirsManager::old_dfs_to_new_dfs_converter, .converted file already exists.");
+            return;
+        }
+
+        if (!std::filesystem::exists(Dfs::Basic::DFS_FOLDER)
+            || !std::filesystem::is_directory(Dfs::Basic::DFS_FOLDER)) {
+            eCritical("DirsManager::old_dfs_to_new_dfs_converter, directory {} not exist.",
+                      Dfs::Basic::DFS_FOLDER);
+            return;
+        }
+
+        emit convertion_started();
+
+        int    processed_files = 0;
+        int    deleted_files   = 0;
+        size_t total           = std::distance(std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER),
+                                     std::filesystem::directory_iterator {});
+        eLog("Total entries: {}", total);
+
+        for (const auto& entry : std::filesystem::directory_iterator(Dfs::Basic::DFS_FOLDER)) {
+            if (entry.is_directory()) {
+                std::string sub_dir      = entry.path().string();
+                std::string sub_dir_name = entry.path().filename().string();
+                std::string dir_file     = sub_dir + "/.dir";
+
+                if (std::filesystem::exists(dir_file)) {
+                    processed_files++;
+
+                    if (copy_data(dir_file, sub_dir_name)) {
+                        try {
+                            std::filesystem::remove(dir_file);
+                            eLog("DirsManager::old_dfs_to_new_dfs_converter, file deleted {}.", dir_file);
+                            deleted_files++;
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            eCritical("DirsManager::old_dfs_to_new_dfs_converter, file deletion '{}' error: {}",
+                                      dir_file,
+                                      e.what());
+                        }
+                    } else {
+                        eCritical(
+                            "DirsManager::old_dfs_to_new_dfs_converter, copy data error. File is not deleted: {}",
+                            dir_file);
+                    }
+                }
+
+                if (std::filesystem::is_empty(sub_dir)) {
+                    std::filesystem::remove(sub_dir);
+                    eLog("DirsManager::old_dfs_to_new_dfs_converter, empty folder deleted {}.", sub_dir);
+                }
+            }
+        }
+
+        std::ofstream tempFile(tempFileIsConverted);
+        if (tempFile) {
+            tempFile << "DFS converted\n";
+            tempFile.close();
+            eLog("DirsManager::old_dfs_to_new_dfs_converter, .converted file created.");
+        } else
+            eLog("DirsManager::old_dfs_to_new_dfs_converter, .converted file cannot be created.");
+
+        eLog("DirsManager::old_dfs_to_new_dfs_converter, work done. Proccessed files: {}, Deleted files: {}.",
+             processed_files,
+             deleted_files);
+
+        emit convertion_finished();
+    } catch (const std::filesystem::filesystem_error& e) {
+        eCritical("DirsManager::old_dfs_to_new_dfs_converter, filesystem error: {}", e.what());
     }
 }
 
 void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
-    auto max_last_modified = Dfs::DirsFile::max_last_modified();
+    auto max_last_modified = Dfs::Tables::DirsFile::DirsSpace::max_last_modified(db_);
     if (!max_last_modified.has_value()) {
         return;
     }
@@ -48,7 +155,7 @@ void DirsManager::update_dirs(const ActorId& actor_id, uint64_t last_modified) {
         return;
     }
 
-    Dfs::DirsFile::update_row(actor_id, last_modified);
+    Dfs::Tables::DirsFile::DirsSpace::update_row(db_, actor_id, last_modified);
 }
 
 void DirsManager::sync(const std::string& identifier) {
@@ -67,7 +174,7 @@ void DirsManager::sync(const std::string& identifier) {
 }
 
 void DirsManager::network_request_sync(const Responder& responder) {
-    auto max_last_modified = Dfs::DirsFile::max_last_modified();
+    auto max_last_modified = Dfs::Tables::DirsFile::DirsSpace::max_last_modified(db_);
     if (!max_last_modified.has_value()) {
         eFatal("[Dfs] Sync error");
     }
@@ -86,7 +193,7 @@ void DirsManager::network_response_sync(uint64_t max_last_modified, const Respon
 void DirsManager::send_from_last_modified(uint64_t last_modified, const Responder& responder) {
     if (last_modified > 300'000)
         last_modified -= 300'000;
-    auto allall = Dfs::DirsFile::load_from_modified(last_modified);
+    auto allall = Dfs::Tables::DirsFile::DirsSpace::load_from_modified(db_, last_modified);
     if (!allall.has_value()) {
         return;
     }
@@ -105,8 +212,9 @@ void DirsManager::send_from_last_modified(uint64_t last_modified, const Responde
                             MessageStatus::Response);
 }
 
-void DirsManager::network_response_from_last_modified(const std::vector<Dfs::DirsFile::DirsRow>& dirs_rows,
-                                                      const Responder&                           responder) {
+void DirsManager::network_response_from_last_modified(
+    const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
+    const Responder&                                              responder) {
     return;
 
     // eTemp("!_!_!_! {}", dirs_rows);
@@ -115,7 +223,7 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
 
     for (const auto& dirs_row : dirs_rows) {
         // actors.push_back(dirs_row.actor_id);
-        auto last_modified = Dfs::DirsFile::last_modified(dirs_row.actor_id);
+        auto last_modified = Dfs::Tables::DirsFile::DirsSpace::last_modified(db_, dirs_row.actor_id);
         if (!last_modified.has_value()) {
             return;
         }
@@ -123,18 +231,21 @@ void DirsManager::network_response_from_last_modified(const std::vector<Dfs::Dir
             continue;
         }
 
-        responder.send_response(Dfs::DirsFile::DirsRow { .actor_id      = dirs_row.actor_id,
-                                                         .last_modified = last_modified.value() },
+        responder.send_response(Dfs::Tables::DirsFile::DirsSpace::DirsRow { .actor_id = dirs_row.actor_id,
+                                                                            .last_modified =
+                                                                                last_modified.value() },
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Request);
     }
 }
 
-void DirsManager::network_request_dir_rows(const Dfs::DirsFile::DirsRow& dirs_row, const Responder& responder) {
+void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row,
+                                           const Responder&                                 responder) {
     return;
 
-    auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(dirs_row.actor_id, dirs_row.last_modified);
+    auto dir_rows =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, dirs_row.actor_id, dirs_row.last_modified);
 
     if (!dir_rows.has_value()) {
         return;
@@ -180,23 +291,24 @@ void DirsManager::network_response_dir_rows(
 
                     if (file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
-                        Dfs::Tables::ActorDirFile::update_file_state(owner_id,
-                                                                     row.file_id,
-                                                                     Dfs::FileState::Removed);
+                        Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
+                                                                             owner_id,
+                                                                             row.file_id,
+                                                                             Dfs::FileState::Removed);
                     }
                 }
             }
 
             // Need to change adding
-            auto res = Dfs::Tables::ActorDirFile::add_dir_rows(owner_id, dir_rows);
+            auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
 
             // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
-            if (dir_rows.empty()) {
+            if (dir_rows_res.empty()) {
                 return;
             }
 
-            auto max_value = std::ranges::max(dir_rows, {}, &Dfs::DirRow::last_modified).last_modified;
+            auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
             this->update_dirs(owner_id, max_value);
 
             if (!node_enabled.load()) {
@@ -218,7 +330,7 @@ void DirsManager::network_response_dir_rows(
                 continue;
             }
 
-            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows, *responder.identifiers().begin());
+            node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
         }
     });
 
@@ -239,8 +351,7 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
 }
 
 void DirsManager::network_request_all(const Responder& responder) {
-    std::thread([this, responder] {
-        // ThreadPoolBoost::instance_dfs()->post([this, responder] {
+    ThreadPoolBoost::instance_dfs()->post([this, responder] {
         auto actors = node->actor_index()->read_all_actors_ids();
 
         auto network_id = node->actor_index()->network_id();
@@ -256,7 +367,7 @@ void DirsManager::network_request_all(const Responder& responder) {
         response_data.reserve(actors.size());
 
         for (const auto& actor : actors) {
-            auto dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows(actor, 0);
+            auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
 
             if (!dir_rows.has_value() || dir_rows->empty())
                 continue;
@@ -274,6 +385,9 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
-        // });
-    }).detach();
+    });
+}
+
+std::shared_ptr<DbConnector> DirsManager::get_db_instance() {
+    return db_;
 }

@@ -90,6 +90,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
+    if (!first_nodes_.empty()) {
+        first_node_ = first_nodes_.front();
+    }
+
     local_inizialization();
     initialize_first_node();
 
@@ -161,11 +165,11 @@ void NetworkManager::process() {
 }
 
 void NetworkManager::reconnection() {
-    if (node->account_controller()->empty()) {
+    if (this->node->account_controller()->empty()) {
         return;
     }
 
-    if (failed_ips_.contains(first_node_)) {
+    if (this->failed_ips_.contains(this->first_node_)) {
         return;
     }
 
@@ -175,11 +179,11 @@ void NetworkManager::reconnection() {
     // }
 
     bool                      skip_first_node = false;
-    auto                      need_reconnect  = reconn_;
+    auto                      need_reconnect  = this->reconn_;
     std::set<SocketService *> to_close;
 
     {
-        auto connectionsLocked = *connections_;
+        auto connectionsLocked = *this->connections_;
         for (const auto &el : *connectionsLocked) {
             // eLog("_____________");
             if (el->is_closed()) {
@@ -189,7 +193,7 @@ void NetworkManager::reconnection() {
                 continue;
             }
 
-            if (el->ip() == first_node_) {
+            if (el->ip() == this->first_node_) {
                 bool is_early = Utils::current_date_ms() - el->timestamp() < 30000;
 
                 if (!is_early && !el->is_active()) {
@@ -217,19 +221,37 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        eLog("[Network] Reconnect to first node {}", first_node_);
-        emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        if (this->check_port_sync(QString::fromStdString(first_node_),
+                                  Network::Protocol::WebSocket,
+                                  false,
+                                  true)) {
+            eLog("[Network] Reconnect to first node (priority) {}", first_node_);
+            emit this->connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+            return;
+        }
+
+        if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
+            QString second_node = QString::fromStdString(first_nodes_[1]);
+            if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
+                eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
+                this->save_first_node(second_node.toStdString());
+                emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
+                return;
+            }
+        }
+
+        eLog("[Network] First nodes unavailable, waiting for next retry...");
         return;
     }
 
     for (const auto &[ip, count] : need_reconnect) {
         eLog("[Network] Reconnect to node: {}", ip);
 
-        if (failed_ips_.contains(ip)) {
+        if (this->failed_ips_.contains(ip)) {
             continue;
         }
 
-        emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
+        emit this->connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
         // reconn_[ip] += 1; // count
 
         // if (reconn_[ip] > 1000) {
@@ -381,6 +403,33 @@ void NetworkManager::check_port(const QString     ip,
 
     socket->connectToHost(QHostAddress(ip), wsPort);
     // timer->start(timeoutMs);
+}
+
+bool NetworkManager::check_port_sync(const QString    &ip,
+                                     Network::Protocol protocol,
+                                     const bool        request,
+                                     const bool        isConstant) {
+    QTcpSocket socket;
+
+    socket.connectToHost(QHostAddress(ip), wsPort);
+
+    if (!socket.waitForConnected(1600)) {
+        eLog("[Network] Failed to connect to {}:{} - {}",
+             ip.toStdString(),
+             wsPort,
+             socket.errorString().toStdString());
+        return false;
+    }
+
+    socket.disconnectFromHost();
+
+    if (socket.state() != QAbstractSocket::UnconnectedState) {
+        socket.waitForDisconnected(1000);
+    }
+
+    connect_to_node_slot(ip, protocol, request, isConstant);
+
+    return true;
 }
 
 NetworkManager::~NetworkManager() {
@@ -1049,6 +1098,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     const NetworkPackageStorage package_data(message_body, identifier, std::string(sign));
+    bool                        is_node = ip == first_node_;
 
     Responder responder(this);
     responder.set_message_id(message_id);
@@ -1317,7 +1367,8 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DfsSyncDirsRows: {
-        auto dirs_rows_result = MessagePack::deserialize<std::vector<Dfs::DirsFile::DirsRow>>(serialized);
+        auto dirs_rows_result =
+            MessagePack::deserialize<std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>>(serialized);
         if (!dirs_rows_result.has_value()) {
             eWarning("[NetworkManager] {} deserialization failed for dirs rows", type);
             break;
@@ -1330,7 +1381,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DfsSyncDirRows: {
         if (status == MessageStatus::Request) {
-            auto dirs_row_result = MessagePack::deserialize<Dfs::DirsFile::DirsRow>(serialized);
+            auto dirs_row_result = MessagePack::deserialize<Dfs::Tables::DirsFile::DirsSpace::DirsRow>(serialized);
             if (!dirs_row_result.has_value()) {
                 eWarning("[NetworkManager] {} deserialization failed for dirs row", type);
                 return;
@@ -1715,7 +1766,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagSyncLastInfo: {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
-        if (!is_luminance) {
+        if (!is_luminance && !is_node) {
             return;
         }
 #endif
@@ -1752,10 +1803,8 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeRequest: {
-#ifdef IS_APP_UI // only for ui clients
-        if (!is_luminance) {
-            return;
-        }
+#ifdef IS_APP_CLIENT // only for not app clients
+        return;
 #endif
 
         auto dag_control = MessagePack::deserialize<DagControlRangeRequest>(serialized);
@@ -1769,7 +1818,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagControlRangeResponse: {
-#ifdef IS_APP_UI // only for ui clients
+#ifdef IS_APP_CLIENT // only for ui clients
         if (!is_luminance) {
             return;
         }
@@ -2211,6 +2260,10 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
 
         if (country == "United States of America") {
             country = "United States";
+        }
+
+        if (country == "The Netherlands") {
+            country = "Netherlands";
         }
 
         eLog("Country: {}", country);
