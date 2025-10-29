@@ -240,12 +240,7 @@ void LuminanceManager::request_luminances(const std::vector<NodeId> &node_ids) {
 
 void LuminanceManager::network_request_luminances(const std::vector<NodeId> &actors_ids,
                                                   const Responder           &responder) {
-    // Обработка запроса и отправка ответа
-
-    // Читаем luminance для запрошенных NodeId одним запросом
     LuminanceData response_data = this->read_luminances(actors_ids);
-
-    // Отправляем ответ через responder
     responder.send_response(response_data, MessageType::Luminance, SendMode::Focused, MessageStatus::Response);
 
     eTemp("[LuminanceManager] Sent luminance data for {} nodes", response_data.data.size());

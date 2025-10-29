@@ -92,7 +92,10 @@ struct NodeId {
     std::string node_identifier;
 
     bool operator==(const NodeId &) const = default;
-    bool operator<(const NodeId &other) const;
+    bool operator<(const NodeId& other) const  {
+        return std::tie(actor_id, node_identifier)
+             < std::tie(other.actor_id, other.node_identifier);
+    }
 
     bool empty() {
         return actor_id.is_zero() || node_identifier.empty();

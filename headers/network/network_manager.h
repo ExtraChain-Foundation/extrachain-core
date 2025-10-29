@@ -425,7 +425,7 @@ public:
 
 signals:
     void newSocketActivated();
-    void newSocketActivatedWithParams(const std::string ip, const std::string identifier);
+    void newSocketActivatedWithParams(const std::string ip, const NodeId nodeId);
     void connectionStatusChanged(bool status);
     void connectionsCountChanged(int socketsCount);
     void connectionError(Network::SocketServiceError error, QString ip, QString identifier, QString errorData);

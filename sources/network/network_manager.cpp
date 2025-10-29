@@ -263,7 +263,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
 
         auto service = qobject_cast<SocketService *>(senderObj);
 
-        emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
+        emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->node_id());
         emit this->newSocketActivated();
 
         if (service->mode() == SocketMode::Full && service->ip() != first_node()) {

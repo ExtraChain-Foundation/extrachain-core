@@ -42,6 +42,7 @@
 #include "dfs/collection_template.h"
 // #include "managers/restApiServerManager.h"
 #include "network/network_manager.h"
+#include "network/isocket_service.h"
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
@@ -1063,7 +1064,7 @@ void ExtraChainNode::connect_signals() {
 
     connect(network_manager_,
             &NetworkManager::newSocketActivatedWithParams,
-            [this](const std::string ip, const std::string identifier) {
+            [this](const std::string ip, const NodeId nodeId) {
                 eLog("[WS] Start sync...");
 
                 if (!actors_broadcast_.empty()) {
@@ -1076,13 +1077,13 @@ void ExtraChainNode::connect_signals() {
                 }
 
                 Responder responder(network_manager_);
-                responder.add_identifier(identifier);
+                responder.add_identifier(nodeId.node_identifier);
                 actor_index_->send_system_actor(responder);
 
                 actor_index_->request_actors_hash(responder);
 
                 if (!actor_index_->is_prepare()) {
-                    identifiers_after_actors_sync_.insert({ ip, identifier });
+                    identifiers_after_actors_sync_.insert({ ip, nodeId.node_identifier });
                     return;
                 }
 
@@ -1093,8 +1094,13 @@ void ExtraChainNode::connect_signals() {
 #else
                 dag_->start_check();
 #endif
+                std::vector<NodeId> nodes;
+                for (const auto& connection : **network_manager_->connections()) {
+                    nodes.emplace_back(connection->node_id());
+                }
 
-                dfs_->sync(identifier);
+                luminance_manager_->network_request_luminances(nodes, responder);
+                dfs_->sync(nodeId.node_identifier);
             });
 
     connect(network_manager_, &NetworkManager::newSocketActivated, [this]() {
