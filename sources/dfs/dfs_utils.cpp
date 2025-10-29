@@ -172,8 +172,7 @@ void Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(const st
                                                                         std::uint64_t      last_modified) {
     auto query = fmt::format(
         "UPDATE {} SET folder = NULL, name = '', hash = '', last_modified = '{}', size = 0, sign = "
-        "'{}' WHERE owner_id = '{}' AND"
-        "file_id = '{}'",
+        "'{}' WHERE owner_id = '{}' AND file_id = '{}'",
         TableNameActorsFiles,
         last_modified,
         Utils::to_base64(sign),
@@ -304,10 +303,11 @@ std::pair<bool, std::vector<Dfs::DirRow>> Dfs::Tables::DirsFile::ActorSpace::add
 
         bool res = db->insert(TableNameActorsFiles, dir_row_db);
 
-        if (res)
+        if (res) {
             result_dir_row.emplace_back(dir_row);
-        else
-            eLog("ActorSpace::add_dir_rows failed: {} ; {}", dir_row.owner_id, dir_row.file_id);
+        }
+        // else
+        //     eLog("ActorSpace::add_dir_rows failed: {} ; {}", dir_row.owner_id, dir_row.file_id);
     }
 
     return { true, result_dir_row };

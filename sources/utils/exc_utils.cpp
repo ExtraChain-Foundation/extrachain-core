@@ -370,17 +370,29 @@ void Utils::wipeDataFiles() {
 }
 
 qint64 Utils::diskAvailableMemory() {
+#ifdef Q_OS_ANDROID
+    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+#else
     QStorageInfo x(qApp->applicationDirPath());
+#endif
     return x.bytesAvailable();
 }
 
 qint64 Utils::diskFreeMemory() {
+#ifdef Q_OS_ANDROID
+    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+#else
     QStorageInfo x(qApp->applicationDirPath());
+#endif
     return x.bytesFree();
 }
 
 qint64 Utils::diskTotalMemory() {
+#ifdef Q_OS_ANDROID
+    QStorageInfo x(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+#else
     QStorageInfo x(qApp->applicationDirPath());
+#endif
     return x.bytesTotal();
 }
 
