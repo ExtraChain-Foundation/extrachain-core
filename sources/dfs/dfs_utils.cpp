@@ -96,6 +96,16 @@ std::string Dfs::Tables::DirsFile::ActorSpace::read_last_file_id(const std::shar
     auto        result       = db->select(Dfs::Tables::last_file_id_query(owner_id));
     auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
     std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
+
+    if (lastFileName.empty()) {
+        auto result =
+            db->select(fmt::format("SELECT file_id FROM {} WHERE owner_id = '{}' ORDER by created DESC LIMIT 1",
+                                   TableNameActorsFiles,
+                                   owner_id));
+        auto prevRowOpt = result.empty() ? std::optional<DbRow> {} : result[0];
+        lastFileName    = prevRowOpt ? prevRowOpt->at("file_id") : "";
+    }
+
     return lastFileName;
 }
 
@@ -266,6 +276,10 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
                                                     const Actor<KeyPrivate>           &signer) {
     auto current_ms   = Utils::current_date_ms();
     auto prev_file_id = read_last_file_id(db, owner_id);
+
+    if (prev_file_id.empty()) {
+        return false;
+    }
 
     dir_row.created       = current_ms;
     dir_row.last_modified = current_ms;

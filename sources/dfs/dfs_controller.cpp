@@ -319,7 +319,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                               dir_row,
                                                               author_actor.value());
     if (!res) {
-        // TODO: remove file?
+        QFile(dfs_path.native().string().data()).remove();
         return std::unexpected(Dfs::DfsError::DirError);
     }
 

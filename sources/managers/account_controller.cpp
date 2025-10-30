@@ -20,6 +20,7 @@
 #include "managers/account_controller.h"
 
 #include "managers/extrachain_node.h"
+#include "dfs/dfs_controller.h"
 
 AccountController::AccountController(ExtraChainNode *node)
     : QObject(node)
@@ -194,6 +195,8 @@ bool AccountController::load_profile(const ActorId                &actor_id,
             if (node->actor_index()->read_by_id(actor.id()).isEmpty()) {
                 node->actor_index()->save_actor(actor.to_public());
             }
+
+            node->dfs()->add_priority_actor(actor.id());
         }
 
         profiles_.push_back(profile);

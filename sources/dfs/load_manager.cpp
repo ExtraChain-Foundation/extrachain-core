@@ -274,6 +274,13 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     // eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
+    try {
+        std::filesystem::create_directories(fmt::format("{}/{}", DfsB::DFS_FOLDER, owner_id));
+    } catch (const std::exception& e) {
+        eWarning("[LoadManager] Failed to create directory: {}", e.what());
+        return;
+    }
+
     auto load_info = LoadInfo { .dir_row = dir_row };
     // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
     LoadInfo::Attempts attempts { .counter = 0 };

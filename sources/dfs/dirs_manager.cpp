@@ -305,7 +305,7 @@ void DirsManager::network_response_dir_rows(
             // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
             if (dir_rows_res.empty()) {
-                return;
+                continue;
             }
 
             auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
