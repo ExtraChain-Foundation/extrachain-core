@@ -1727,7 +1727,7 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
-#ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
+#ifdef IS_APP_CLIENT // only for ui clients, not for consoles, luminance priority
             if (!is_luminance) {
                 return;
             }
@@ -1775,7 +1775,7 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::DagSyncLastInfo: {
-#ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
+#ifdef IS_APP_CLIENT // only for ui clients, not for consoles, luminance priority
         if (!is_luminance && !is_node) {
             return;
         }
