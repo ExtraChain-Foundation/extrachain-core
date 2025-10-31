@@ -119,12 +119,14 @@ std::filesystem::path Dfs::Tables::DirsFile::ActorSpace::storjDbPath(const Actor
 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(
     const std::shared_ptr<DbConnector> db,
     const ActorId                     &owner_id,
-    std::uint64_t                      last_modified) {
+    std::uint64_t                      last_modified,
+    const std::string                 &post_query) {
     std::vector<Dfs::DirRow> dir_rows;
-    auto db_rows = db->select(fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND last_modified >= {}",
+    auto db_rows = db->select(fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND last_modified >= {} {}",
                                           TableNameActorsFiles,
                                           owner_id.to_string(),
-                                          last_modified));
+                                          last_modified,
+                                          post_query));
 
     for (auto &row : db_rows) {
         auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
@@ -281,9 +283,15 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
         return false;
     }
 
-    dir_row.created       = current_ms;
-    dir_row.last_modified = current_ms;
-    dir_row.prev_file_id  = prev_file_id;
+    if (dir_row.created == 0) {
+        dir_row.created = current_ms;
+    }
+
+    if (dir_row.last_modified == 0) {
+        dir_row.last_modified = current_ms;
+    }
+
+    dir_row.prev_file_id = prev_file_id;
 
     auto sign = signer.key().sign(dir_row.calculate_hash(owner_id));
     if (!sign.has_value()) {

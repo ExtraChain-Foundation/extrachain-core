@@ -157,6 +157,10 @@ public:
         return message_id_;
     }
 
+    const std::string& ip() const {
+        return ip_;
+    }
+
     const std::unordered_set<std::string>& identifiers() const {
         return identifiers_;
     }
@@ -183,6 +187,10 @@ public:
         }
 
         return identifiers_.erase(identifier) != 0;
+    }
+
+    void set_ip(const std::string& ip) {
+        ip_ = ip;
     }
 
     void set_message_id(const std::string& message_id) {
@@ -221,6 +229,7 @@ private:
 
     MessageType message_type_;
     // MessageStatus                   message_status_;
+    std::string                     ip_;
     std::unordered_set<std::string> identifiers_;
     std::string                     message_id_;
     NodeId                          node_id_;

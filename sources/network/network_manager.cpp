@@ -952,7 +952,7 @@ bool NetworkManager::is_active_connection_exists() {
     }
 
     for (const auto &el : *connectionsLocked) {
-        if (el->is_active()) {
+        if (el && el->is_active()) {
             return true;
         }
     }
@@ -968,7 +968,7 @@ int NetworkManager::active_connections_count() {
 
     int count = 0;
     for (const auto &el : *connectionsLocked) {
-        if (el->is_active()) {
+        if (el && el->is_active()) {
             count++;
         }
     }
@@ -1115,6 +1115,8 @@ void NetworkManager::message_received(const std::string &message,
     responder.add_identifier(identifier);
     responder.set_message_type(type);
     responder.set_node_id(node_id);
+    responder.set_ip(ip);
+
     int luminance = node->luminance_manager()->read_luminance(node_id);
     responder.set_luminance(luminance == -1 ? 1 : luminance);
 
