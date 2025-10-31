@@ -437,8 +437,6 @@ bool NetworkManager::check_port_sync(const QString    &ip,
         socket.waitForDisconnected(1000);
     }
 
-    connect_to_node_slot(ip, protocol, request, isConstant);
-
     return true;
 }
 
