@@ -431,6 +431,25 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
         if (res.result) {
             dag->update_range();
 
+            if (dag->mode() == DagMode::Light) {
+                auto last_hash    = node->dag()->generate_hash_from_section(res.from);
+                auto control_hash = node->dag()->read_control(res.to);
+                if (!control_hash.has_value()) {
+                    eCritical("[DagCache] Problem with control hash from {}", res.to);
+                    return;
+                }
+                if (!last_hash.has_value()) {
+                    eCritical("[DagCache] No last hash");
+                    return;
+                }
+
+                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+                eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
+                // eLog("[Dag] Send {}", hash_interval);
+                node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
+                return;
+            }
+
             ThreadPoolBoost::instance()->post([this, res] {
                 auto last_hash    = node->dag()->generate_hash_from_section(res.from);
                 auto control_hash = node->dag()->read_control(res.to);
