@@ -509,15 +509,17 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath&
                                                                    const PublicKey&  receiver_public_key,
                                                                    size_t            block_size) {
     auto valid = validate_encryption_paths(input_path, output_path);
-    if (!valid) {
+    if (!valid.has_value()) {
+        eLog("[FileEncryption] Invalid: {}", valid.error());
         return valid;
     }
 
     try {
         std::ifstream in(input_path.native(), std::ios::binary | std::ios::in);
         std::ofstream out(output_path.native(), std::ios::binary | std::ios::out | std::ios::trunc);
-        if (!in || !out)
+        if (!in || !out) {
             return std::unexpected(FsError::IoError);
+        }
 
         block_size = ((block_size / 8) + 1) * 8;
         std::vector<uint8_t> buffer(block_size);
@@ -525,20 +527,24 @@ std::expected<bool, FsError> Cryptography::asymmetric_encrypt_file(const FsPath&
         while (in.good()) {
             in.read(reinterpret_cast<char*>(buffer.data()), block_size);
             auto bytes_read = in.gcount();
-            if (bytes_read <= 0)
+            if (bytes_read <= 0) {
                 break;
+            }
 
             buffer.resize(bytes_read);
             auto encrypted = asymmetric_encrypt(buffer, sender_secret_key, receiver_public_key);
-            if (!encrypted.has_value())
+            if (!encrypted.has_value()) {
                 return std::unexpected(FsError::IoError);
+            }
 
-            if (!out.write(reinterpret_cast<const char*>(encrypted->data()), encrypted->size()))
+            if (!out.write(reinterpret_cast<const char*>(encrypted->data()), encrypted->size())) {
                 return std::unexpected(FsError::IoError);
+            }
         }
 
-        if (!in.eof())
+        if (!in.eof()) {
             return std::unexpected(FsError::IoError);
+        }
 
         out.flush();
         auto size_result = output_path.file_size();

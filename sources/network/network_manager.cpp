@@ -55,6 +55,35 @@ bool NetworkManager::server_status(Network::Protocol protocol) const {
     return false;
 }
 
+void NetworkManager::connect_network() {
+    if (!Utils::vector_contains(first_nodes_, first_node_)) {
+        emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        return;
+    }
+
+    if (this->check_port_sync(QString::fromStdString(first_nodes_[0]),
+                              Network::Protocol::WebSocket,
+                              false,
+                              true)) {
+        eLog("[Network] Reconnect to first node (priority) {}", first_nodes_[0]);
+        this->save_first_node(first_nodes_[0]);
+        emit this->connect_to_node(QString::fromStdString(first_nodes_[0]), Network::Protocol::WebSocket);
+        return;
+    }
+
+    if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
+        QString second_node = QString::fromStdString(first_nodes_[1]);
+        if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
+            eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
+            this->save_first_node(second_node.toStdString());
+            emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
+            return;
+        }
+    }
+
+    eLog("[Network] First nodes unavailable, waiting for next retry...");
+}
+
 SafePtr<std::map<NetworkReconnect, QString>> NetworkManager::reconnections() {
     return reconnections_to_identifier_;
 }
@@ -221,26 +250,7 @@ void NetworkManager::reconnection() {
     }
 
     if (!skip_first_node) {
-        if (this->check_port_sync(QString::fromStdString(first_node_),
-                                  Network::Protocol::WebSocket,
-                                  false,
-                                  true)) {
-            eLog("[Network] Reconnect to first node (priority) {}", first_node_);
-            emit this->connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
-            return;
-        }
-
-        if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
-            QString second_node = QString::fromStdString(first_nodes_[1]);
-            if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
-                eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
-                this->save_first_node(second_node.toStdString());
-                emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
-                return;
-            }
-        }
-
-        eLog("[Network] First nodes unavailable, waiting for next retry...");
+        this->connect_network();
         return;
     }
 
@@ -426,8 +436,6 @@ bool NetworkManager::check_port_sync(const QString    &ip,
     if (socket.state() != QAbstractSocket::UnconnectedState) {
         socket.waitForDisconnected(1000);
     }
-
-    connect_to_node_slot(ip, protocol, request, isConstant);
 
     return true;
 }
@@ -942,7 +950,7 @@ bool NetworkManager::is_active_connection_exists() {
     }
 
     for (const auto &el : *connectionsLocked) {
-        if (el->is_active()) {
+        if (el && el->is_active()) {
             return true;
         }
     }
@@ -958,7 +966,7 @@ int NetworkManager::active_connections_count() {
 
     int count = 0;
     for (const auto &el : *connectionsLocked) {
-        if (el->is_active()) {
+        if (el && el->is_active()) {
             count++;
         }
     }
@@ -1105,6 +1113,8 @@ void NetworkManager::message_received(const std::string &message,
     responder.add_identifier(identifier);
     responder.set_message_type(type);
     responder.set_node_id(node_id);
+    responder.set_ip(ip);
+
     int luminance = node->luminance_manager()->read_luminance(node_id);
     responder.set_luminance(luminance == -1 ? 1 : luminance);
 
@@ -1878,7 +1888,8 @@ void NetworkManager::socket_error(Network::SocketServiceError error,
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
-        || error == Network::SocketServiceError::VersionTooNew) {
+        || error == Network::SocketServiceError::VersionTooNew
+        || error == Network::SocketServiceError::PeerUnavailable) {
         reconn_.erase(ip);
         failed_ips_.insert(ip);
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
@@ -2264,6 +2275,10 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
 
         if (country == "The Netherlands") {
             country = "Netherlands";
+        }
+
+        if (country == "Türkiye") {
+            country = "Turkey";
         }
 
         eLog("Country: {}", country);

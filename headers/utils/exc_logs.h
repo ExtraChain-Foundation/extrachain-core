@@ -287,6 +287,15 @@ namespace detail {
                            ms.count());
     }
 
+    inline std::string get_date_time() {
+        auto    now   = std::chrono::system_clock::now();
+        auto    ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+        auto    timer = std::chrono::system_clock::to_time_t(now);
+        std::tm bt    = *std::localtime(&timer);
+
+        return fmt::format("{:04d}.{:02d}.{:02d}", bt.tm_year + 1900, bt.tm_mon + 1, bt.tm_mday);
+    }
+
     inline std::string get_thread_id() {
         if (Logger::instance().is_main_thread()) {
             return "main";
@@ -438,7 +447,7 @@ namespace detail {
 
             thread_local fmt::memory_buffer file_buffer;
             file_buffer.clear();
-            fmt::format_to(std::back_inserter(file_buffer), "{} {}\n", get_full_time(), log_view);
+            fmt::format_to(std::back_inserter(file_buffer), "{} {}\n", get_date_time(), log_view);
             Logger::instance().write_to_file(std::string_view(file_buffer.data(), file_buffer.size()));
         }
     }

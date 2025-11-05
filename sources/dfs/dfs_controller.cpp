@@ -177,14 +177,21 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     }
     auto file_size = file_size_result.value();
     // if size == 0 -> return
-    if (!writeAvailable(file_size)) {
-        return std::unexpected(Dfs::DfsError::StorageFull);
-    }
+    // if (!writeAvailable(file_size)) {
+    //     return std::unexpected(Dfs::DfsError::StorageFull);
+    // }
 
     std::string           file_id = create_file_id(file_path);
     std::filesystem::path place_in_dfs =
         DfsB::fsActrRootW + DfsB::separator + owner_id.toQString().toStdWString() + DfsB::separator;
     auto dfs_path = Dfs::Path::file_path(owner_id, file_id).value();
+
+    try {
+        std::filesystem::create_directories(place_in_dfs);
+    } catch (const std::exception &e) {
+        eWarning("[Dfs] Failed to create directory: {}", e.what());
+        return std::unexpected(Dfs::DfsError::NotWritable);
+    }
 
     if (dfs_path.exists()) {
         // TODO: maybe just regen id?
@@ -312,7 +319,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
                                                               dir_row,
                                                               author_actor.value());
     if (!res) {
-        // TODO: remove file?
+        QFile(dfs_path.native().string().data()).remove();
         return std::unexpected(Dfs::DfsError::DirError);
     }
 
@@ -547,6 +554,17 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     auto        actor    = node->account_controller()->current_profile().get_actor(owner_id);
     if (!actor.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    try {
+        auto parent_dir = dfs_path.parent_path();
+        if (!parent_dir.has_value()) {
+            return std::unexpected(Dfs::DfsError::NotWritable);
+        }
+        std::filesystem::create_directories(parent_dir->native());
+    } catch (const std::exception &e) {
+        eWarning("[Dfs] Failed to create directory: {}", e.what());
+        return std::unexpected(Dfs::DfsError::NotWritable);
     }
 
     auto dfs_vector =
