@@ -274,6 +274,13 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     // eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
 
+    try {
+        std::filesystem::create_directories(fmt::format("{}/{}", DfsB::DFS_FOLDER, owner_id));
+    } catch (const std::exception& e) {
+        eWarning("[LoadManager] Failed to create directory: {}", e.what());
+        return;
+    }
+
     auto load_info = LoadInfo { .dir_row = dir_row };
     // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
     LoadInfo::Attempts attempts { .counter = 0 };
@@ -307,6 +314,10 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 void LoadManager::add_to_queue(const ActorId&                  owner_id,
                                const std::vector<Dfs::DirRow>& dir_rows,
                                const std::string&              identifier) {
+    if (dir_rows.empty()) {
+        return;
+    }
+
     bool is_full = node->dfs()->mode() == DfsMode::Full;
 
     for (const auto& dir_row : dir_rows) {
@@ -599,6 +610,8 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
+    eLog("[LoadManager] Finish {} / {}", owner_id, dir_row.file_id);
+
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(node->dfs()->get_db_instance(),
                                                          owner_id,
                                                          dir_row.file_id,

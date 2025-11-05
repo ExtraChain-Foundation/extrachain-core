@@ -266,6 +266,7 @@ void DirsManager::network_response_dir_rows(
             // TODO: add merge for sync dir file
 
             Dfs::initialize_actor_folder(owner_id);
+            std::vector<Dfs::DirRow> dir_rows_todo;
 
             /*
             auto local_dir_rows = Dfs::Tables::ActorDirFile::get_dir_rows_map(owner_id);
@@ -283,18 +284,25 @@ void DirsManager::network_response_dir_rows(
 
             // for removed
             for (const auto& row : dir_rows) {
-                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
-                    auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
-                    if (!file_path.has_value()) {
-                        continue;
-                    }
+                auto file_path = Dfs::Path::file_path(owner_id, row.file_id);
+                if (!file_path.has_value()) {
+                    continue;
+                }
 
+                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
                     if (file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
                         Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
                                                                              owner_id,
                                                                              row.file_id,
                                                                              Dfs::FileState::Removed);
+                    }
+                }
+
+                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
+                    if (!file_path->exists()) { // TODO: size
+                        // eLog("Not exists: {} {}", owner_id, row.file_id);
+                        dir_rows_todo.push_back(row);
                     }
                 }
             }
@@ -304,12 +312,10 @@ void DirsManager::network_response_dir_rows(
 
             // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
-            if (dir_rows_res.empty()) {
-                return;
+            if (!dir_rows_res.empty()) {
+                auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
+                this->update_dirs(owner_id, max_value);
             }
-
-            auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
-            this->update_dirs(owner_id, max_value);
 
             if (!node_enabled.load()) {
                 return;
@@ -331,6 +337,9 @@ void DirsManager::network_response_dir_rows(
             }
 
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
+            node->dfs()->download_manager().add_to_queue(owner_id,
+                                                         dir_rows_todo,
+                                                         *responder.identifiers().begin());
         }
     });
 

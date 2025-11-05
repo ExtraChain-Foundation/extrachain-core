@@ -575,7 +575,8 @@ namespace Dfs {
                 std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_dir_rows(
                     const std::shared_ptr<DbConnector> db,
                     const ActorId&                     owner_id,
-                    std::uint64_t                      last_modified = 0);
+                    std::uint64_t                      last_modified = 0,
+                    const std::string&                 post_query    = "");
 
                 std::expected<std::unordered_map<std::string, Dfs::DirRow>, Dfs::DfsError> get_dir_rows_map(
                     const std::shared_ptr<DbConnector> db,

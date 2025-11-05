@@ -951,6 +951,9 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Check for duplicate transaction
     auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
     if (tx_result.has_value()) {
+        // TODO
+        // if (tx == tx_result.value()) {
+        // }
         return TransactionProveError::Duplicate;
     }
 
@@ -2397,6 +2400,10 @@ bool Dag::generate_hash(const SectionId &start_section, Force qt_signals) {
 #endif
 
     eTemp("[Dag] Generate hash from {}", start_section);
+
+    if (start_section == BigNumber(0) && current_section_ > 20 && mode_ == DagMode::Light) {
+        return false;
+    }
 
     if (qt_signals == Force::Active) {
         emit node->dagControlStarted();

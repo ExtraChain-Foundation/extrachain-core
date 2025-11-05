@@ -256,6 +256,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
                 return false;
             }
         }
+
         auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
         if (!res1.has_value()) {
             if (res1.error() != TransactionProveError::TooSectionDiff) {
