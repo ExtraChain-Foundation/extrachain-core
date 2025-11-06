@@ -98,6 +98,7 @@ namespace Dfs {
         static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
         static const std::string TEMPLATE_CHAT                = ":Chat";
+        static const std::string TEMPLATE_JANUS               = ":Janus";
     } // namespace Basic
 
     enum class FileIdError {

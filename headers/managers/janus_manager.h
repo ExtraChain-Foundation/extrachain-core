@@ -19,15 +19,16 @@
 
 #pragma once
 
+#include <boost/describe.hpp>
 #include "chain/actor_id.h"
 
-#include <string>
-#include <vector>
-#include <cstdint>
-#include <optional>
-#include <boost/describe.hpp>
+class ExtraChainNode;
+class DbConnector;
+struct NodeId;
 
-struct FileLink;
+namespace Dfs {
+    struct FileLink;
+}
 
 enum class ContainerType {
     CppCompiler,
@@ -39,50 +40,132 @@ enum class ContainerType {
     DockerCustom
 };
 
-BOOST_DESCRIBE_ENUM(ContainerType,
-                    CppCompiler,
-                    PythonRuntime,
-                    JavaJdk,
-                    NodeJs,
-                    GoCompiler,
-                    RustCompiler,
-                    DockerCustom)
+enum class SoftwareFramework {
+    TensorFlow,
+    PyTorch,
+    Keras,
+    ScikitLearn,
+    MXNet,
+    Caffe,
+    Caffe2,
+    Theano,
+    Torch,
+    ONNXRuntime,
+    OpenCV,
+    FastAI,
+    PaddlePaddle,
+    MindSpore,
+    JAX,
+    HuggingFaceTransformers,
+    DeepSpeed,
+    Ray,
+    OpenVINO,
+    TVM
+};
+
+enum class ExtraCondition {
+    Windows11Pro,
+    MacOSSequoia,
+    Ubuntu2404LTS,
+    IOS18SDK,
+    Android15,
+    NVIDIAGeForceGTX1660Super,
+    AMDRadeonRX6800,
+    IntelArcA770,
+    NVIDIACUDAToolkit124,
+    AMDAdrenalin245,
+    Qt68,
+    Boost186,
+    OpenSSL33,
+    FFmpeg70,
+    OpenCV50,
+    Xcode16,
+    AndroidStudioKoala,
+    VisualStudio2022,
+    CMake330,
+    VcpkgPackageManager,
+    DockerDesktop
+};
 
 struct JanusTask {
     std::string title;
     std::string description;
+    std::string code;
 
-    std::optional<uint32_t> min_gpu_count;
-    uint32_t                min_cpu_cores;
-    uint64_t                min_ram_mb;
-    std::optional<uint64_t> min_vram_mb;
-    bool                    ssd_required = false;
+    // Hardware requirements
+    std::optional<std::string> gpu_model;
+    std::optional<uint32_t>    min_gpu_count;
+    std::optional<std::string> cpu_model;
+    uint32_t                   min_cpu_cores;
+    uint64_t                   min_ram_mb;
+    std::optional<uint64_t>    min_vram_mb;
+    bool                       ssd_required = false;
 
-    ContainerType              container_type;
-    std::optional<std::string> container_version;
+    // Software requirements
+    ContainerType container_type;
+    // std::optional<std::string>     container_version;
+    std::vector<SoftwareFramework> software_frameworks;
+    std::vector<ExtraCondition>    extra_conditions;
 
+    // Execution parameters
     uint64_t created_at;
-    uint32_t max_execution_time; // in secs
+    uint32_t max_execution_time; // in hours
+    uint64_t budget_agp;
 
-    std::vector<FileLink> files;
+    // Security & validation
+    bool encrypt_data_and_code = false;
+    bool auto_accept           = false;
+    bool multiple_check        = false;
 
-    // std::optional<std::string> entry_point;
-    // std::vector<std::string>   dependencies;
+    // Files
+    std::vector<Dfs::FileLink> files;
 };
-
 BOOST_DESCRIBE_STRUCT(JanusTask,
                       (),
                       (title,
                        description,
+                       code,
+                       gpu_model,
                        min_gpu_count,
+                       cpu_model,
                        min_cpu_cores,
                        min_ram_mb,
                        min_vram_mb,
                        ssd_required,
                        container_type,
-                       container_version,
+                       // container_version,
+                       software_frameworks,
+                       extra_conditions,
                        created_at,
                        max_execution_time,
-                       files /*,
-                       entry_point,
-                       dependencies */))
+                       budget_agp,
+                       encrypt_data_and_code,
+                       auto_accept,
+                       multiple_check,
+                       files))
+
+struct JanusData {
+    std::string   id;
+    std::uint64_t timestamp = 0;
+    ActorId       actor;
+    ActorId       owner;
+    std::string   file_id;
+    int           state;
+};
+BOOST_DESCRIBE_STRUCT(JanusData, (), (id, timestamp, actor, owner, file_id, state))
+
+class JanusManager {
+public:
+    JanusManager(ExtraChainNode* node);
+    ~JanusManager() = default;
+
+    bool create_task(JanusTask task);
+
+    bool create_janus_template();
+    bool create_janus_vector();
+
+    bool add_janus_task(const ActorId& owner_id, const std::string& file_id);
+
+private:
+    ExtraChainNode* node;
+};
