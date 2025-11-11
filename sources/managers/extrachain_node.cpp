@@ -962,7 +962,7 @@ void ExtraChainNode::timer_reward_request() {
 }
 
 void ExtraChainNode::timer_luminance_autoremove() {
-    luminance_manager_->remove_old();
+    //luminance_manager_->remove_old();
 }
 
 void ExtraChainNode::timer_info_print() {
@@ -1064,9 +1064,8 @@ void ExtraChainNode::connect_signals() {
 
     connect(network_manager_,
             &NetworkManager::newSocketActivatedWithParams,
-            [this](const std::string ip, const NodeId nodeId) {
+            [this](const std::string ip, const NodeId node_id) {
                 eLog("[WS] Start sync...");
-
                 if (!actors_broadcast_.empty()) {
                     auto actors_broadcast = actors_broadcast_;
                     actors_broadcast_.clear();
@@ -1077,13 +1076,29 @@ void ExtraChainNode::connect_signals() {
                 }
 
                 Responder responder(network_manager_);
-                responder.add_identifier(nodeId.node_identifier);
+                responder.add_identifier(node_id.node_identifier);
                 actor_index_->send_system_actor(responder);
-
                 actor_index_->request_actors_hash(responder);
+                std::vector<NodeId> nodes;
+                auto network_connections = **network_manager_->connections();
+                eLog("[EXTRACHAIN NODE] network_connections: {}", network_connections.size());
+                for (const auto& connection : network_connections) {
+                    auto conn_node_id = connection->node_id();
+                    eLog("[EXTRACHAIN NODE LUM] conn_node_id: {} | node_id.node_identifier: {} ",conn_node_id, node_id.node_identifier );
+                    if(conn_node_id.node_identifier != node_id.node_identifier){
+                        nodes.emplace_back(conn_node_id);
+                    }
+                }
+
+                eLog("[EXTRACHAIN NODE] nodes count: {}", nodes.size());
+
+                eLog("[EXTRACHAIN NODE] luminance_manager_->request_luminances(nodes)");
+                luminance_manager_->request_luminances(nodes);
+
+                eLog("[EXTRACHAIN NODE] actor_index_->is_prepare(): {}", actor_index_->is_prepare());
 
                 if (!actor_index_->is_prepare()) {
-                    identifiers_after_actors_sync_.insert({ ip, nodeId.node_identifier });
+                    identifiers_after_actors_sync_.insert({ ip, node_id.node_identifier });
                     return;
                 }
 
@@ -1094,13 +1109,8 @@ void ExtraChainNode::connect_signals() {
 #else
                 dag_->start_check();
 #endif
-                std::vector<NodeId> nodes;
-                for (const auto& connection : **network_manager_->connections()) {
-                    nodes.emplace_back(connection->node_id());
-                }
-
-                luminance_manager_->network_request_luminances(nodes, responder);
-                dfs_->sync(nodeId.node_identifier);
+                
+                dfs_->sync(node_id.node_identifier);
             });
 
     connect(network_manager_, &NetworkManager::newSocketActivated, [this]() {
@@ -1108,6 +1118,7 @@ void ExtraChainNode::connect_signals() {
     });
 
     connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
+        eLog("[EXTRACHAIN NODE] &ActorIndex::firstSyncEnded");
         dag_->start_check();
 
         for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {

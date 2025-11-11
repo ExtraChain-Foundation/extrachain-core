@@ -646,7 +646,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!is_active_connection_exists()) {
-        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
+        eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
         save_to_cache(serialized_message, send_mode, receiver_identifier);
         return;
     }
@@ -1056,10 +1056,12 @@ void NetworkManager::message_received(const std::string &message,
     responder.set_message_type(type);
     responder.set_node_id(node_id);
     int luminance = node->luminance_manager()->read_luminance(node_id);
+    eLog("[Network Message] **** node->luminance_manager()->read_luminance : {}",luminance);
     responder.set_luminance(luminance == -1 ? 1 : luminance);
 
     if (is_luminance) {
-        responder.set_luminance(responder.luminance() * 10); //
+        eLog("[Network Message] **** set_luminance : {}", responder.luminance() * 10);
+        responder.set_luminance(responder.luminance() * 10);
     }
 
 #ifdef QT_DEBUG
@@ -1085,6 +1087,7 @@ void NetworkManager::message_received(const std::string &message,
 
     // TODO: not global
     if (send_type == SendMode::Broadcast && type != MessageType::Custom) {
+        eLog("[Network Message] **** node->luminance_manager()->increment : {}", responder.luminance() * 10);
         node->luminance_manager()->increment(node_id);
     }
 
@@ -1277,7 +1280,9 @@ void NetworkManager::message_received(const std::string &message,
     }
 
     case MessageType::Luminance: {
+        eLog("[Luminance] ************** MessageType::Luminance");
         if (status == MessageStatus::Request) {
+            eLog("[Luminance] ************** MessageStatus::Request");
             auto nodes_result = MessagePack::deserialize<std::vector<NodeId>>(serialized);
 
             if (!nodes_result.has_value()) {
@@ -1285,8 +1290,10 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
+            eLog("[Luminance] ************** network_request_luminances: {}", nodes_result.value());
             node->luminance_manager()->network_request_luminances(nodes_result.value(), responder);
         } else if (status == MessageStatus::Response) {
+            eLog("[Luminance] ************** Response");
             auto luminance_data_result = MessagePack::deserialize<LuminanceData>(serialized);
 
             if (!luminance_data_result.has_value()) {
@@ -1294,6 +1301,7 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
+            eLog("[Luminance] ************** Response network_response_luminances: {}", luminance_data_result.value());
             node->luminance_manager()->network_response_luminances(luminance_data_result.value());
         }
 

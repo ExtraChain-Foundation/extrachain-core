@@ -22,6 +22,9 @@
 #include "chain/actor_id.h"
 
 #include <boost/describe/class.hpp>
+#include <optional>
+#include <chrono>
+#include <set>
 
 class ExtraChainNode;
 class DbConnector;
@@ -29,13 +32,22 @@ class Responder;
 
 struct LuminanceData {
     std::unordered_map<NodeId, int> data;
+    // узел который отправил реквест
+    std::optional<NodeId> source; 
 };
-BOOST_DESCRIBE_STRUCT(LuminanceData, (), (data))
+BOOST_DESCRIBE_STRUCT(LuminanceData, (), (data, source))
 
 namespace Luminance {
-    constexpr int   TRUST_THRESHOLD    = 5;     // Абсолютная погрешность в единицах luminance
-    constexpr float MATCH_THRESHOLD    = 0.90f; // 90% совпадение = хорошо
-    constexpr float RELATIVE_THRESHOLD = 0.10f; // 10% относительная погрешность
+    constexpr int   TRUST_THRESHOLD    = 5;
+    constexpr float MATCH_THRESHOLD    = 0.90f;
+    constexpr float RELATIVE_THRESHOLD = 0.10f;
+
+    constexpr size_t MIN_RESPONSES_FOR_CONSENSUS = 3;
+    constexpr std::chrono::seconds VALIDATION_TIMEOUT = std::chrono::seconds(10);
+    constexpr double RATIO_TOLERANCE = 0.15; // 15%
+    constexpr int MIN_EVENTS_FOR_STATS = 10;
+    constexpr double EXTREME_RATIO_LIMIT = 100.0;
+    constexpr double EPSILON = 1e-6;
 } // namespace Luminance
 
 class LuminanceManager {
@@ -70,9 +82,30 @@ private:
 
     void update_luminance(const NodeId &node_id, Operation op, int value = 0);
 
+    struct ValidationState {
+        std::unordered_map<NodeId, LuminanceData> responses; // <NodeId ответившего, Его данные>
+        std::chrono::steady_clock::time_point timeout;
+        std::set<NodeId> target_nodes; // О ком мы спрашивали
+    };
+
+    void validate_consensus();
+
+    struct NodeClassification {
+        enum class State { Honest, Suspicious, Unknown };
+        State state = State::Unknown;
+        double consensus_ratio = 0.0;
+        double match_rate = 0.0;
+    };
+
+    std::unordered_map<NodeId, double> normalize(const LuminanceData &d) const;
+    std::unordered_map<NodeId, double> compute_consensus(const std::vector<std::unordered_map<NodeId, double>>& norms) const;
+    std::unordered_map<NodeId, NodeClassification> classify_nodes(const ValidationState& state, const std::unordered_map<NodeId, double>& consensus) const;
+    bool sanity_check(const ValidationState& state, const NodeId& node) const;
+
 private:
-    std::unique_ptr<DbConnector> luminance_db_;
-    bool                         db_initialized_ = false; // Whether db is initialized
+    std::unique_ptr<DbConnector>   luminance_db_;
+    bool                           db_initialized_ = false; // Whether db is initialized
+    std::optional<ValidationState> active_validation_;
 
     ExtraChainNode *node;
 };
