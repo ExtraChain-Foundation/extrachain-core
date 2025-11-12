@@ -959,10 +959,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const Ac
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status(const ActorId     &owner_id,
-                                                                          const std::string &dfs_name) {
+                                                                          const std::string &dfs_name,
+                                                                          const std::string &folder) {
     return Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
                                                                              owner_id,
-                                                                             Dfs::Basic::TEMPLATE_VECTOR,
+                                                                             folder,
                                                                              dfs_name);
 }
 

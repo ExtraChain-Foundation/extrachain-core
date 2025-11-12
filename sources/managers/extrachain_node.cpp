@@ -479,7 +479,8 @@ std::optional<std::string> ExtraChainNode::add_file_id(const ActorId&     vector
                                                        int                state,
                                                        FileIdState        with_state) {
     auto file_row = dfs_->read_file_status(this->network_id(),
-                                           with_state == FileIdState::With ? "FilesListState" : "FilesList");
+                                           with_state == FileIdState::With ? "FilesListState" : "FilesList",
+                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
     if (!file_row.has_value()) {
         // TODO: wait for exists
         return std::nullopt;

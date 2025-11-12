@@ -438,8 +438,10 @@ public:
     std::expected<Dfs::DirRow, Dfs::DfsError> find_file_self(const ActorId &owner_id, const std::string &dfs_name);
     std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status_self(const std::string &dfs_name);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const ActorId     &owner_id,
-                                                               const std::string &dfs_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(
+        const ActorId     &owner_id,
+        const std::string &dfs_name,
+        const std::string &folder = Dfs::Basic::TEMPLATE_VECTOR);
 
     void add_to_waiting_file(const ActorId &owner_id, const std::string &file_id);
     void download_waiting_files();
