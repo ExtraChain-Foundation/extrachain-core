@@ -963,7 +963,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status(const 
     return Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
                                                                              owner_id,
                                                                              Dfs::Basic::TEMPLATE_VECTOR,
-                                                                             "Thoth");
+                                                                             dfs_name);
 }
 
 void DfsController::add_to_waiting_file(const ActorId &owner_id, const std::string &file_id) {

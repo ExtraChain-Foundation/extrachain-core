@@ -20,11 +20,14 @@
 #pragma once
 
 #include <boost/describe.hpp>
+
 #include "chain/actor_id.h"
+#include "dfs/dfs_utils.h"
 
 class ExtraChainNode;
 class DbConnector;
 struct NodeId;
+class BigNumberFloat;
 
 namespace Dfs {
     struct FileLink;
@@ -88,6 +91,8 @@ enum class ExtraCondition {
 };
 
 struct JanusTask {
+    ActorId     owner_id;
+    std::string file_id;
     std::string title;
     std::string description;
     std::string code;
@@ -95,17 +100,16 @@ struct JanusTask {
     // Hardware requirements
     std::optional<std::string> gpu_model;
     std::optional<uint32_t>    min_gpu_count;
+    std::optional<uint64_t>    min_vram_mb;
     std::optional<std::string> cpu_model;
     uint32_t                   min_cpu_cores;
     uint64_t                   min_ram_mb;
-    std::optional<uint64_t>    min_vram_mb;
     bool                       ssd_required = false;
 
     // Software requirements
-    ContainerType container_type;
-    // std::optional<std::string>     container_version;
-    std::vector<SoftwareFramework> software_frameworks;
-    std::vector<ExtraCondition>    extra_conditions;
+    ContainerType            container_type;
+    std::vector<std::string> software_frameworks;
+    std::vector<std::string> extra_conditions;
 
     // Execution parameters
     uint64_t created_at;
@@ -122,15 +126,17 @@ struct JanusTask {
 };
 BOOST_DESCRIBE_STRUCT(JanusTask,
                       (),
-                      (title,
+                      (owner_id,
+                       file_id,
+                       title,
                        description,
                        code,
                        gpu_model,
                        min_gpu_count,
+                       min_vram_mb,
                        cpu_model,
                        min_cpu_cores,
                        min_ram_mb,
-                       min_vram_mb,
                        ssd_required,
                        container_type,
                        // container_version,
@@ -144,28 +150,35 @@ BOOST_DESCRIBE_STRUCT(JanusTask,
                        multiple_check,
                        files))
 
-struct JanusData {
+struct JanusBid {
     std::string   id;
     std::uint64_t timestamp = 0;
     ActorId       actor;
-    ActorId       owner;
-    std::string   file_id;
-    int           state;
+    std::string   amount;
+    std::uint32_t expected_time;
+    std::string   letter;
 };
-BOOST_DESCRIBE_STRUCT(JanusData, (), (id, timestamp, actor, owner, file_id, state))
+BOOST_DESCRIBE_STRUCT(JanusBid, (), (id, timestamp, actor, amount, expected_time, letter))
 
 class JanusManager {
 public:
-    JanusManager(ExtraChainNode* node);
+    JanusManager(ExtraChainNode *node);
     ~JanusManager() = default;
 
-    bool create_task(JanusTask task);
+    // bool create_task(JanusTask task);
+    bool create_argentum_vector();
 
-    bool create_janus_template();
-    bool create_janus_vector();
+    bool                                      create_janus_template();
+    std::expected<Dfs::DirRow, DfsFileStatus> create_janus_vector(const std::string &task_name);
 
-    bool add_janus_task(const ActorId& owner_id, const std::string& file_id);
+    std::optional<std::string> bid(const ActorId        &vector_owner_id,
+                                   const std::string    &vector_file_id,
+                                   const ActorId        &actor_id,
+                                   const std::string    &file_id,
+                                   const BigNumberFloat &amount,
+                                   std::uint32_t         expected_time,
+                                   const std::string    &letter);
 
 private:
-    ExtraChainNode* node;
+    ExtraChainNode *node;
 };
