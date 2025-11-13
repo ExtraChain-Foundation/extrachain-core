@@ -110,6 +110,7 @@ struct JanusTask {
     ContainerType            container_type;
     std::vector<std::string> software_frameworks;
     std::vector<std::string> extra_conditions;
+    std::vector<std::string> categories;
 
     // Execution parameters
     uint64_t created_at;
@@ -142,6 +143,7 @@ BOOST_DESCRIBE_STRUCT(JanusTask,
                        // container_version,
                        software_frameworks,
                        extra_conditions,
+                       categories,
                        created_at,
                        max_execution_time,
                        budget_agp,
