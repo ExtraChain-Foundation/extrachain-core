@@ -102,10 +102,10 @@ std::expected<Dfs::DirRow, DfsFileStatus> JanusManager::create_janus_vector(cons
     return store_chat_res.value();
 }
 
-std::optional<std::string> JanusManager::bid(const ActorId        &vector_owner_id,
-                                             const std::string    &vector_file_id,
-                                             const ActorId        &actor_id,
-                                             const std::string    &file_id,
+std::optional<std::string> JanusManager::bid(const ActorId     &vector_owner_id,
+                                             const std::string &vector_file_id,
+                                             // const ActorId        &actor_id,
+                                             // const std::string    &file_id,
                                              const BigNumberFloat &amount,
                                              std::uint32_t         expected_time,
                                              const std::string    &letter) {
@@ -125,17 +125,18 @@ std::optional<std::string> JanusManager::bid(const ActorId        &vector_owner_
 
     auto main_id = node->account_controller()->current_profile().main_id();
 
-    auto janus_bid = JanusBid { .id            = Utils::generate_random_hex(6),
+    auto janus_bid = JanusBid { // .id            = Utils::generate_random_hex(6),
                                 .timestamp     = 0,
                                 .actor         = main_id,
                                 .amount        = amount.to_string(NumeralBase::Dec),
                                 .expected_time = expected_time,
-                                .letter        = letter };
+                                .letter        = letter
+    };
 
     auto res = node->dfs()->add_vector_row(vector_owner_id, vector_file_id, janus_bid, main_id);
     if (!res) {
         return std::nullopt;
     }
 
-    return janus_bid.id;
+    return "";
 }

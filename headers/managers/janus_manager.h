@@ -153,14 +153,13 @@ BOOST_DESCRIBE_STRUCT(JanusTask,
                        files))
 
 struct JanusBid {
-    std::string   id;
     std::uint64_t timestamp = 0;
     ActorId       actor;
     std::string   amount;
     std::uint32_t expected_time;
     std::string   letter;
 };
-BOOST_DESCRIBE_STRUCT(JanusBid, (), (id, timestamp, actor, amount, expected_time, letter))
+BOOST_DESCRIBE_STRUCT(JanusBid, (), (timestamp, actor, amount, expected_time, letter))
 
 class JanusManager {
 public:
@@ -175,8 +174,6 @@ public:
 
     std::optional<std::string> bid(const ActorId        &vector_owner_id,
                                    const std::string    &vector_file_id,
-                                   const ActorId        &actor_id,
-                                   const std::string    &file_id,
                                    const BigNumberFloat &amount,
                                    std::uint32_t         expected_time,
                                    const std::string    &letter);
