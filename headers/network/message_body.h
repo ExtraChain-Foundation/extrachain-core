@@ -220,6 +220,7 @@ inline MessageBody make_init_message(const std::string& data,
 
 struct VPNMessage {
     bool                     is_wireguard = false;
+    bool                     is_client_ios = false;
     std::string              initialSender;
     std::set<std::string>    allSenders;
     std::string              initialSenderNetworkIdentifier;
@@ -243,6 +244,7 @@ struct VPNMessage {
     std::vector<std::string> short_ids;
 
     MSGPACK_DEFINE(is_wireguard,
+                   is_client_ios,
                    initialSender,
                    allSenders,
                    initialSenderNetworkIdentifier,

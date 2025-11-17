@@ -67,6 +67,8 @@ struct VPNConfigStorage {
         qint64 lastWGTimestampNext      = -1;
         qint64 lastSingUploadedBytes    = -1;
         qint64 lastSingDownloadedBytes  = -1;
+
+        bool isClientIOS = false;
     };
 
     SafePtr<QList<VPNHandhakeCache>> vpnHandhakeCacheInProccess;
