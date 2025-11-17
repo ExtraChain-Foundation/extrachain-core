@@ -177,6 +177,9 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         return;
     }
 
+    // Lock mutex to protect transaction block from concurrent access
+    std::unique_lock<std::mutex> lock(mutex_);
+
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
 
@@ -481,6 +484,15 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         return { true, BigNumber(-1) };
     }
 
+    // Initialize DB
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
+        return { false, BigNumber(-1) };
+    }
+
+    // Lock mutex to protect transaction block from concurrent access
+    std::unique_lock<std::mutex> lock(mutex_);
+
     bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
     if (show) {
         eLog("[DagCache] Updating cache to genesis section: {}", genesis_section);
@@ -531,12 +543,6 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     }
 
     // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
-
-    // Initialize DB
-    if (!init_db()) {
-        eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
-        return { false, BigNumber(-1) };
-    }
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
