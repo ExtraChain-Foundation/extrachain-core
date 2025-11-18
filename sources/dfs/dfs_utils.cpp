@@ -279,6 +279,10 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
     auto current_ms   = Utils::current_date_ms();
     auto prev_file_id = read_last_file_id(db, owner_id);
 
+    // if (prev_file_id.empty()) {
+    //     return false;
+    // }
+
     if (dir_row.created == 0) {
         dir_row.created = current_ms;
     }
