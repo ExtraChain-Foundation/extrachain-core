@@ -940,8 +940,11 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const Ac
 
     for (const auto &row : rows.value()) {
         auto bytes = ByteArray::fromBase64(row.name).toBytes();
-        auto res   = actor->get().key().decrypt_self(bytes);
+        if (bytes.empty()) {
+            continue;
+        }
 
+        auto res = actor->get().key().decrypt_self(bytes);
         if (!res.has_value()) {
             continue;
         }
@@ -1732,9 +1735,10 @@ void DfsController::increaseSizeTaken(uintmax_t value) {
     m_sizeTaken += value;
 }
 
-std::expected<void, ExportFileError> DfsController::export_file(const ActorId     &owner_id,
-                                                                const std::string &file_id,
-                                                                const FsPath      &output_folder) {
+std::expected<void, ExportFileError> DfsController::export_file(const ActorId                &owner_id,
+                                                                const std::string            &file_id,
+                                                                const FsPath                 &output_folder,
+                                                                const std::optional<KeyPass> &key) {
     if (!output_folder.exists()) {
         return std::unexpected(ExportFileError::OutupDirNotExits);
     }
@@ -1784,29 +1788,52 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
     auto output_path = output_folder;
 
     if (dir_row_result->encryption) {
-        auto actor = node->account_controller()->current_profile().get_actor(owner_id);
-        if (!actor.has_value()) {
-            return std::unexpected(ExportFileError::Unknown);
-        }
-
+        // -----
         auto encrypted_name = Utils::from_base64(dir_row_result->name);
-        if (actor.has_value() && encrypted_name.has_value()) {
-            auto res = actor->get().key().decrypt_self(ByteArray(encrypted_name.value()).toBytes());
-            if (res.has_value()) {
-                auto name = ByteArray(res.value()).toString();
-                output_path.append(name);
 
-                if (output_path.exists()) {
-                    return std::unexpected(ExportFileError::OutputFileExists);
+        if (key.has_value()) {
+            if (encrypted_name.has_value()) {
+                auto res =
+                    Cryptography::symmetric_decrypt(ByteArray(encrypted_name.value()).toBytes(), key.value());
+                if (res.has_value()) {
+                    auto name = ByteArray(res.value()).toString();
+                    output_path.append(name);
+
+                    if (output_path.exists()) {
+                        return std::unexpected(ExportFileError::OutputFileExists);
+                    }
+                }
+
+                auto decrypt_result = Cryptography::symmetric_decrypt_file(dfs_path, output_path, key.value());
+                if (!decrypt_result.has_value()) {
+                    return std::unexpected(ExportFileError::Unknown);
+                }
+                return {};
+            }
+        } else {
+            auto actor = node->account_controller()->current_profile().get_actor(owner_id);
+            if (!actor.has_value()) {
+                return std::unexpected(ExportFileError::Unknown);
+            }
+
+            if (actor.has_value() && encrypted_name.has_value()) {
+                auto res = actor->get().key().decrypt_self(ByteArray(encrypted_name.value()).toBytes());
+                if (res.has_value()) {
+                    auto name = ByteArray(res.value()).toString();
+                    output_path.append(name);
+
+                    if (output_path.exists()) {
+                        return std::unexpected(ExportFileError::OutputFileExists);
+                    }
                 }
             }
-        }
 
-        auto decrypt_result = actor->get().key().decrypt_self_file(dfs_path, output_path);
-        if (!decrypt_result.has_value()) {
-            return std::unexpected(ExportFileError::Unknown);
+            auto decrypt_result = actor->get().key().decrypt_self_file(dfs_path, output_path);
+            if (!decrypt_result.has_value()) {
+                return std::unexpected(ExportFileError::Unknown);
+            }
+            return {};
         }
-        return {};
     }
 
     output_path.append(dir_row_result->name);

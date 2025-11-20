@@ -72,10 +72,10 @@ std::expected<Dfs::DirRow, DfsFileStatus> JanusManager::create_janus_vector(cons
         return std::unexpected(DfsFileStatus::CantCreate);
     }
 
-    auto row = node->dfs()->read_file_status_self("Renames");
-    if (row.has_value()) {
-        return std::unexpected(DfsFileStatus::Existed);
-    }
+    // auto row = node->dfs()->read_file_status_self(task_name);
+    // if (row.has_value()) {
+    //     return std::unexpected(DfsFileStatus::Existed);
+    // }
 
     const auto main_actor_id = node->account_controller()->current_profile().main_id();
     auto       network_id    = node->network_id();

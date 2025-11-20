@@ -422,9 +422,10 @@ public:
     std::uint64_t                        sizeTaken() const;
     std::uint64_t                        totalDfsSize() const;
     void                                 increaseSizeTaken(uintmax_t value);
-    std::expected<void, ExportFileError> export_file(const ActorId     &owner_id,
-                                                     const std::string &file_id,
-                                                     const FsPath      &output_folder);
+    std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
+                                                     const std::string            &file_id,
+                                                     const FsPath                 &output_folder,
+                                                     const std::optional<KeyPass> &key);
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::DFS_FOLDER) const;
 
     DirsManager &dirs_manager();
