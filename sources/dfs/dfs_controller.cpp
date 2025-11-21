@@ -60,7 +60,7 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
-    set_mode(DfsMode::Light);
+    // set_mode(DfsMode::Light);
 #endif
 
     // #ifdef IS_RC
@@ -108,14 +108,14 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
-                                                                          owner_id,
-                                                                          visual_folder,
-                                                                          visual_name);
-    if (search_result.has_value()) {
-        return std::unexpected(Dfs::DfsError::DirDuplicate);
-    }
+    // auto search_result =
+    //     Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
+    //                                                                       owner_id,
+    //                                                                       visual_folder,
+    //                                                                       visual_name);
+    // if (search_result.has_value()) {
+    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
+    // }
 
     auto fpath_result = FsPath::create(file_path);
     if (!fpath_result.has_value()) {
@@ -143,9 +143,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     constexpr uintmax_t MB_700 = 700ULL * 1024 * 1024; // 734'003'200
     // constexpr uintmax_t GB_10 = 10ULL * 1024 * 1024 * 1024; // 10'737'418'240
-    if (file_size_.value() > MB_700) {
-        return std::unexpected(Dfs::DfsError::MaxFileSize);
-    }
+    // if (file_size_.value() > MB_700) {
+    //     return std::unexpected(Dfs::DfsError::MaxFileSize);
+    // }
 
     // TODO: check path, check :***
     auto name_res = NameValidator::validate(visual_name);
@@ -965,6 +965,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const Ac
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status(const ActorId     &owner_id,
                                                                           const std::string &dfs_name,
                                                                           const std::string &folder) {
+    // eLog("read_file_status {} {} {}", owner_id, dfs_name, folder);
     return Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
                                                                              owner_id,
                                                                              folder,
@@ -1459,6 +1460,7 @@ void DfsController::network_file_exist_notification(const Dfs::Packets::FileStat
 }
 
 std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {
+    return std::unexpected(false);
     auto db_instance = dirs_manager_.get_db_instance();
     auto dir_row     = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, owner_id, file_id);
     if (!dir_row.has_value()) {
@@ -1546,6 +1548,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
 }
 
 std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_id, const std::string &file_id) {
+    return std::unexpected(false);
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(dirs_manager_.get_db_instance(),
                                                          owner_id,
                                                          file_id,

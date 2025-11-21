@@ -25,6 +25,21 @@
 #include "utils/thread_pool_boost.h"
 
 ActorId ActorIndex::network_id() {
+    if (network_id_.is_zero()) {
+        QFile nid(".network_id");
+        if (!nid.exists()) {
+            return network_id_;
+        }
+
+        nid.open(QFile::ReadOnly);
+        auto bytes = nid.readAll().toStdString();
+        auto actor_id = ActorId::create(bytes);
+        if (!actor_id.has_value()) {
+            return network_id_;
+        }
+        return actor_id.value();
+    }
+
     return network_id_;
 }
 
