@@ -425,7 +425,7 @@ public:
     std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
                                                      const std::string            &file_id,
                                                      const FsPath                 &output_folder,
-                                                     const std::optional<KeyPass> &key);
+                                                     const std::optional<KeyPass> &key = std::nullopt);
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::DFS_FOLDER) const;
 
     DirsManager &dirs_manager();
