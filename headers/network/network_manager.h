@@ -281,7 +281,8 @@ private:
         };
 #else
         {
-            "57.128.191.73"
+            "51.68.181.52", // release node 1
+             // "149.33.19.250" // release node 2
         };
 #endif
     std::string first_node_;
@@ -298,8 +299,8 @@ public:
     void        setNetworkVPNHash() noexcept;
 
     // protected:
-    // quint16 tcpPort = 17593;
-    const quint16 wsPort = 17593;
+    // std::uint16_t tcp_port = 17593;
+    std::uint16_t ws_port = 17593;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
@@ -436,6 +437,7 @@ public:
 
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);
+    void        set_custom_ws_port(std::uint16_t port);
 
 signals:
     void newSocketActivated();

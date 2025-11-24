@@ -180,7 +180,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
     // Lock mutex to protect transaction block from concurrent access
     // eLog("MUTEX! Start");
     std::unique_lock<std::mutex> lock(mutex_);
-    eLog("MUTEX! Continue");
+    // eLog("MUTEX! Continue");
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");

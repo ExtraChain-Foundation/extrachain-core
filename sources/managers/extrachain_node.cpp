@@ -76,8 +76,9 @@ void ExtraChainNodeWrapper::init(bool makeAsync) {
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
         connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
         m_thread->start();
-    } else
+    } else {
         node->process();
+    }
 }
 
 ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app)

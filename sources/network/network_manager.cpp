@@ -116,6 +116,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     }
 }
 
+void NetworkManager::set_custom_ws_port(std::uint16_t port) {
+    this->ws_port = port;
+}
+
 NetworkManager::NetworkManager(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -411,7 +415,7 @@ void NetworkManager::check_port(const QString     ip,
     //     timer->deleteLater();
     // });
 
-    socket->connectToHost(QHostAddress(ip), wsPort);
+    socket->connectToHost(QHostAddress(ip), ws_port);
     // timer->start(timeoutMs);
 }
 
@@ -421,12 +425,12 @@ bool NetworkManager::check_port_sync(const QString    &ip,
                                      const bool        isConstant) {
     QTcpSocket socket;
 
-    socket.connectToHost(QHostAddress(ip), wsPort);
+    socket.connectToHost(QHostAddress(ip), ws_port);
 
     if (!socket.waitForConnected(1600)) {
         eLog("[Network] Failed to connect to {}:{} - {}",
              ip.toStdString(),
-             wsPort,
+             ws_port,
              socket.errorString().toStdString());
         return false;
     }
@@ -475,7 +479,7 @@ void NetworkManager::check_connections_status() {
 }
 
 void NetworkManager::start_network() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 17593 ? "Network" : "Else"));
+    eLog("[NetworkManager] Start servers... {}", (ws_port == 17593 ? "Network" : "Else"));
 
     if (!local_) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -487,8 +491,8 @@ void NetworkManager::start_network() {
 
     ws_server_ = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
-    if (!ws_server_->listen(QHostAddress::Any, wsPort)) {
-        eLog("[NetworkManager] Can't listen port {}", wsPort);
+    if (!ws_server_->listen(QHostAddress::Any, ws_port)) {
+        eLog("[NetworkManager] Can't listen port {}", ws_port);
         return;
     }
 
@@ -535,7 +539,7 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
         return;
     }
 
-    const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
+    const quint16 port = (protocol == Network::Protocol::WebSocket ? ws_port : 0);
     eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
     // m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
