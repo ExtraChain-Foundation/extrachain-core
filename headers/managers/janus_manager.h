@@ -22,7 +22,9 @@
 #include <boost/describe.hpp>
 
 #include "chain/actor_id.h"
+#include "dfs/dfs_controller.h"
 #include "dfs/dfs_utils.h"
+#include "utils/exc_utils.h"
 
 class ExtraChainNode;
 class DbConnector;
@@ -31,153 +33,146 @@ class BigNumberFloat;
 
 namespace Dfs {
     struct FileLink;
+    class CollectionTemplate;
 }
 
-enum class ContainerType {
-    CppCompiler,
-    PythonRuntime,
-    JavaJdk,
-    NodeJs,
-    GoCompiler,
-    RustCompiler,
-    DockerCustom
-};
-
-enum class SoftwareFramework {
-    TensorFlow,
-    PyTorch,
-    Keras,
-    ScikitLearn,
-    MXNet,
-    Caffe,
-    Caffe2,
-    Theano,
-    Torch,
-    ONNXRuntime,
-    OpenCV,
-    FastAI,
-    PaddlePaddle,
-    MindSpore,
-    JAX,
-    HuggingFaceTransformers,
-    DeepSpeed,
-    Ray,
-    OpenVINO,
-    TVM
-};
-
-enum class ExtraCondition {
-    Windows11Pro,
-    MacOSSequoia,
-    Ubuntu2404LTS,
-    IOS18SDK,
-    Android15,
-    NVIDIAGeForceGTX1660Super,
-    AMDRadeonRX6800,
-    IntelArcA770,
-    NVIDIACUDAToolkit124,
-    AMDAdrenalin245,
-    Qt68,
-    Boost186,
-    OpenSSL33,
-    FFmpeg70,
-    OpenCV50,
-    Xcode16,
-    AndroidStudioKoala,
-    VisualStudio2022,
-    CMake330,
-    VcpkgPackageManager,
-    DockerDesktop
-};
-
-struct JanusTask {
-    ActorId     owner_id;
-    std::string file_id;
-    std::string title;
-    std::string description;
-    std::string code;
-
-    // Hardware requirements
-    std::optional<std::string> gpu_model;
-    std::optional<uint32_t>    min_gpu_count;
-    std::optional<uint64_t>    min_vram_mb;
-    std::optional<std::string> cpu_model;
-    uint32_t                   min_cpu_cores;
-    uint64_t                   min_ram_mb;
-    bool                       ssd_required = false;
-
-    // Software requirements
-    ContainerType            container_type;
-    std::vector<std::string> software_frameworks;
-    std::vector<std::string> extra_conditions;
-    std::vector<std::string> categories;
-
-    // Execution parameters
-    uint64_t created_at;
-    uint32_t max_execution_time; // in hours
-    uint64_t budget_agp;
-
-    // Security & validation
-    bool encrypt_data_and_code = false;
-    bool auto_accept           = false;
-    bool multiple_check        = false;
-
-    // Files
-    std::vector<Dfs::FileLink> files;
-};
-BOOST_DESCRIBE_STRUCT(JanusTask,
-                      (),
-                      (owner_id,
-                       file_id,
-                       title,
-                       description,
-                       code,
-                       gpu_model,
-                       min_gpu_count,
-                       min_vram_mb,
-                       cpu_model,
-                       min_cpu_cores,
-                       min_ram_mb,
-                       ssd_required,
-                       container_type,
-                       // container_version,
-                       software_frameworks,
-                       extra_conditions,
-                       categories,
-                       created_at,
-                       max_execution_time,
-                       budget_agp,
-                       encrypt_data_and_code,
-                       auto_accept,
-                       multiple_check,
-                       files))
-
-struct JanusBid {
+/**
+ * @struct JanusBidBase
+ * @brief Base structure for any bid in Janus system
+ *
+ * Inherit from this to create application-specific bid types.
+ * All derived types must use BOOST_DESCRIBE_STRUCT with JanusBidBase as base.
+ */
+struct JanusBidBase {
     std::uint64_t timestamp = 0;
     ActorId       actor;
     std::string   amount;
-    std::uint32_t expected_time;
-    std::string   letter;
+    std::string   message;
 };
-BOOST_DESCRIBE_STRUCT(JanusBid, (), (timestamp, actor, amount, expected_time, letter))
+BOOST_DESCRIBE_STRUCT(JanusBidBase, (), (timestamp, actor, amount, message))
 
+/**
+ * @struct JanusItemBase
+ * @brief Base structure for any item/task in Janus system
+ *
+ * Inherit from this to create application-specific item types.
+ * All derived types must use BOOST_DESCRIBE_STRUCT with JanusItemBase as base.
+ */
+struct JanusItemBase {
+    ActorId       owner_id;
+    std::string   file_id;
+    std::string   title;
+    std::string   description;
+    std::uint64_t created_at = 0;
+};
+BOOST_DESCRIBE_STRUCT(JanusItemBase, (), (owner_id, file_id, title, description, created_at))
+
+/**
+ * @class JanusManager
+ * @brief Universal two-sided market/auction platform
+ *
+ * Provides infrastructure for building any two-sided marketplace:
+ * - Freelance exchanges
+ * - Auction platforms
+ * - Computing marketplaces (Argentum)
+ * - Service marketplaces
+ *
+ * Applications extend base structures (JanusBidBase, JanusItemBase) and use
+ * template methods to work with their custom types.
+ *
+ * @see JanusBidBase
+ * @see JanusItemBase
+ */
 class JanusManager {
 public:
     JanusManager(ExtraChainNode *node);
     ~JanusManager() = default;
 
-    // bool create_task(JanusTask task);
-    bool create_argentum_vector();
+    /**
+     * @brief Create a bid template with custom fields
+     * @param template_name Unique name for the template
+     * @param tmpl CollectionTemplate defining bid structure
+     * @return true if template created successfully
+     */
+    bool create_bid_template(const std::string &template_name, const Dfs::CollectionTemplate &tmpl);
 
-    bool                                      create_janus_template();
-    std::expected<Dfs::DirRow, DfsFileStatus> create_janus_vector(const std::string &task_name);
+    /**
+     * @brief Get existing bid template by name
+     * @param template_name Name of the template to find
+     * @return DirRow if found, nullopt otherwise
+     */
+    std::optional<Dfs::DirRow> get_bid_template(const std::string &template_name);
 
-    std::optional<std::string> bid(const ActorId        &vector_owner_id,
-                                   const std::string    &vector_file_id,
-                                   const BigNumberFloat &amount,
-                                   std::uint32_t         expected_time,
-                                   const std::string    &letter);
+    /**
+     * @brief Create a vector for items that accepts bids with specified template
+     * @param vector_name Name for the new item vector
+     * @param bid_template_name Name of the bid template to associate
+     * @return DirRow on success, DfsFileStatus error otherwise
+     */
+    std::expected<Dfs::DirRow, DfsFileStatus> create_item_vector(const std::string &vector_name,
+                                                                  const std::string &bid_template_name);
+
+    /**
+     * @brief Place a bid on an item (universal template method)
+     * @tparam BidT Bid type - must be BOOST_DESCRIBE-enabled, should inherit from JanusBidBase
+     * @param item_owner_id Owner of the item
+     * @param item_file_id File ID of the item
+     * @param bid Bid data (timestamp and actor will be set automatically)
+     * @return Empty string on success, nullopt on failure
+     */
+    template<typename BidT>
+    std::optional<std::string> place_bid(const ActorId     &item_owner_id,
+                                         const std::string &item_file_id,
+                                         BidT               bid);
+
+    /**
+     * @brief Create default Janus bid template (amount, message fields)
+     * @param template_name Name for the template (default: "JanusBids")
+     * @return true if template created successfully
+     */
+    bool create_default_bid_template(const std::string &template_name = "JanusBids");
+
+    /**
+     * @brief Get the ExtraChainNode instance
+     * @return Pointer to the node
+     */
+    ExtraChainNode *get_node() const { return node; }
 
 private:
     ExtraChainNode *node;
 };
+
+// ============================================================================
+// Template implementations
+// ============================================================================
+
+template<typename BidT>
+std::optional<std::string> JanusManager::place_bid(const ActorId     &item_owner_id,
+                                                   const std::string &item_file_id,
+                                                   BidT               bid) {
+    auto file_row =
+        Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), item_owner_id, item_file_id);
+
+    if (!file_row.has_value()) {
+        return std::nullopt;
+    }
+
+    if (file_row->state != Dfs::FileState::Ready) {
+        return std::nullopt;
+    }
+
+    auto main_id = node->account_controller()->current_profile().main_id();
+
+    // Set common fields
+    bid.timestamp = static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count());
+    bid.actor = main_id;
+
+    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, bid, main_id);
+    if (!res) {
+        return std::nullopt;
+    }
+
+    return "";
+}
