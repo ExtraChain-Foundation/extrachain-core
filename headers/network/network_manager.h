@@ -276,8 +276,9 @@ private:
     std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
         {
-            "57.128.191.73", // test node 1
-            "57.128.191.74"  // test node 2
+        "51.68.181.52"
+            // "57.128.191.73", // test node 1
+            // "57.128.191.74"  // test node 2
         };
 #else
         {
