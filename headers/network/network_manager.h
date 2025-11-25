@@ -282,7 +282,7 @@ private:
 #else
         {
             "51.68.181.52", // release node 1
-             // "149.33.19.250" // release node 2
+                            // "149.33.19.250" // release node 2
         };
 #endif
     std::string first_node_;
@@ -300,7 +300,7 @@ public:
 
     // protected:
     // std::uint16_t tcp_port = 17593;
-    std::uint16_t ws_port = 17593;
+    std::uint16_t ws_port = 17594;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
