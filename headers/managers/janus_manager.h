@@ -74,7 +74,7 @@ BOOST_DESCRIBE_STRUCT(JanusItemBase, (), (owner_id, file_id, title, description,
  * Provides infrastructure for building any two-sided marketplace:
  * - Freelance exchanges
  * - Auction platforms
- * - Computing marketplaces (Argentum)
+ * - Computing marketplaces
  * - Service marketplaces
  *
  * Applications extend base structures (JanusBidBase, JanusItemBase) and use
@@ -142,10 +142,6 @@ private:
     ExtraChainNode *node;
 };
 
-// ============================================================================
-// Template implementations
-// ============================================================================
-
 template<typename BidT>
 std::optional<std::string> JanusManager::place_bid(const ActorId     &item_owner_id,
                                                    const std::string &item_file_id,
@@ -163,13 +159,16 @@ std::optional<std::string> JanusManager::place_bid(const ActorId     &item_owner
 
     auto main_id = node->account_controller()->current_profile().main_id();
 
-    // Set common fields
-    bid.timestamp = static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count());
+    bid.timestamp = Utils::current_date_ms();
     bid.actor = main_id;
 
-    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, bid, main_id);
+    // legacy
+    auto map = Utils::to_dbrow(bid);
+    auto new_mess = map["message"];
+    map.erase("message");
+    map["letter"] = new_mess;
+
+    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, /*bid*/ map, main_id);
     if (!res) {
         return std::nullopt;
     }
