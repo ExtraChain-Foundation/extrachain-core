@@ -101,7 +101,7 @@ public:
      * @param template_name Name of the template to find
      * @return DirRow if found, nullopt otherwise
      */
-    std::optional<Dfs::DirRow> get_bid_template(const std::string &template_name);
+    std::optional<Dfs::DirRow> get_bid_template(const ActorId &owner_id, const std::string &template_name);
 
     /**
      * @brief Create a vector for items that accepts bids with specified template
@@ -110,7 +110,8 @@ public:
      * @return DirRow on success, DfsFileStatus error otherwise
      */
     std::expected<Dfs::DirRow, DfsFileStatus> create_item_vector(const std::string &vector_name,
-                                                                  const std::string &bid_template_name);
+                                                                 const ActorId &template_owner_id,
+                                                                 const std::string &bid_template_name);
 
     /**
      * @brief Place a bid on an item (universal template method)
@@ -162,13 +163,7 @@ std::optional<std::string> JanusManager::place_bid(const ActorId     &item_owner
     bid.timestamp = Utils::current_date_ms();
     bid.actor = main_id;
 
-    // legacy
-    auto map = Utils::to_dbrow(bid);
-    auto new_mess = map["message"];
-    map.erase("message");
-    map["letter"] = new_mess;
-
-    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, /*bid*/ map, main_id);
+    auto res = node->dfs()->add_vector_row(item_owner_id, item_file_id, bid, main_id);
     if (!res) {
         return std::nullopt;
     }

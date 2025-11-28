@@ -1140,10 +1140,6 @@ void NetworkManager::message_received(const std::string &message,
 
     calculate_traffic_->add_bytes_received(ip, message.size());
 
-    if (type == MessageType::DagLightData) {
-        eLog("DagLight {}", status);
-    }
-
     // QElapsedTimer timer;
     // timer.start();
 

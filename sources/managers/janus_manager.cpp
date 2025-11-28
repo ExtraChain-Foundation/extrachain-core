@@ -39,41 +39,33 @@ bool JanusManager::create_bid_template(const std::string &template_name, const D
     return true;
 }
 
-std::optional<Dfs::DirRow> JanusManager::get_bid_template(const std::string &template_name) {
-    auto network_id = node->network_id();
-    if (network_id.is_zero()) {
-        return std::nullopt;
-    }
-
+std::optional<Dfs::DirRow> JanusManager::get_bid_template(const ActorId &owner_id, const std::string &template_name) {
     auto result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE, template_name);
+        node->dfs()->get_db_instance(), owner_id, Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE, template_name);
 
     if (result.has_value()) {
         return result.value();
     }
+
     return std::nullopt;
 }
 
 std::expected<Dfs::DirRow, DfsFileStatus> JanusManager::create_item_vector(const std::string &vector_name,
-                                                                            const std::string &bid_template_name) {
+                                                                           const ActorId &template_owner_id,
+                                                                           const std::string &bid_template_name) {
     if (vector_name.empty()) {
         return std::unexpected(DfsFileStatus::CantCreate);
     }
 
     const auto main_actor_id = node->account_controller()->current_profile().main_id();
-    auto       network_id    = node->network_id();
-    if (network_id.is_zero()) {
-        return std::unexpected(DfsFileStatus::CantCreate);
-    }
-
-    auto template_row = get_bid_template(bid_template_name);
+    auto template_row = this->get_bid_template(template_owner_id, bid_template_name);
     if (!template_row.has_value()) {
         eCritical("Bid template '{}' not found", bid_template_name);
         return std::unexpected(DfsFileStatus::CantCreate);
     }
 
     auto store_res =
-        node->dfs()->store_vector(main_actor_id, main_actor_id, vector_name, network_id, template_row->file_id);
+        node->dfs()->store_vector(main_actor_id, main_actor_id, vector_name, template_owner_id, template_row->file_id);
 
     if (!store_res.has_value()) {
         return std::unexpected(DfsFileStatus::CantCreate);
@@ -88,5 +80,5 @@ bool JanusManager::create_default_bid_template(const std::string &template_name)
                                 .add_fields({ Dfs::Field::Integer("amount").not_null(),
                                               Dfs::Field::String("message").not_null() });
 
-    return create_bid_template(template_name, default_template);
+    return this->create_bid_template(template_name, default_template);
 }

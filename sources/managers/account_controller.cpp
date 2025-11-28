@@ -276,8 +276,9 @@ PrivateProfile &AccountController::profile(const ActorId &actorId) {
 }
 
 const PrivateProfile &AccountController::current_profile() const {
-    if (current_profile_.is_zero())
+    if (current_profile_.is_zero()) {
         eFatal("Incorrect current profile");
+    }
 
     for (auto &profile : profiles_) {
         if (current_profile_ == profile.system().id()) {
