@@ -115,7 +115,7 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false);
+    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false, std::uint16_t ws_port = 17593);
 
     ~ExtraChainNodeWrapper();
 
@@ -161,6 +161,8 @@ private:
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
     std::string                              node_identifier_;
+
+    uint16_t ws_port;
 
 public: // TODO
     std::vector<Actor<KeyPublic>>                 actors_broadcast_;
@@ -268,7 +270,7 @@ public:
                           const TokenId&     token_id);
 
 private:
-    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false);
+    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false, std::uint16_t port = 17593);
 
     /**
      * @brief Connect signals between NetworkManager and

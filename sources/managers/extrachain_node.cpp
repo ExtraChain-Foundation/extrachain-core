@@ -48,9 +48,9 @@
 
 std::atomic<bool> node_enabled { true };
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
     : QObject(parent)
-    , node(new ExtraChainNode(is_client_application, is_custom_app)) {
+    , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port)) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -81,9 +81,10 @@ void ExtraChainNodeWrapper::init(bool makeAsync) {
     }
 }
 
-ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app)
+ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app, std::uint16_t port)
     : is_client_application_(is_client_application)
-    , is_custom_app_(is_custom_app) {
+    , is_custom_app_(is_custom_app)
+    , ws_port(port) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -107,7 +108,7 @@ void ExtraChainNode::process() {
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
     luminance_manager_  = new LuminanceManager(this);
-    network_manager_    = new NetworkManager(this);
+    network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
     dmm_                = new DataMiningManager(this);

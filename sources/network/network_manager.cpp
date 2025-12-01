@@ -116,13 +116,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     }
 }
 
-void NetworkManager::set_custom_ws_port(std::uint16_t port) {
-    this->ws_port = port;
-}
-
-NetworkManager::NetworkManager(ExtraChainNode *node)
+NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     : QObject(node)
-    , node(node) {
+    , node(node)
+    , ws_port(port) {
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }

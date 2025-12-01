@@ -288,7 +288,7 @@ private:
     std::string first_node_;
 
 public:
-    explicit NetworkManager(ExtraChainNode* node);
+    explicit NetworkManager(ExtraChainNode* node, std::uint16_t port);
     ~NetworkManager();
     void                        local_inizialization();
     std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
@@ -437,7 +437,6 @@ public:
 
     std::string public_ip() const;
     void        set_public_ip(const std::string& newPublic_ip);
-    void        set_custom_ws_port(std::uint16_t port);
 
 signals:
     void newSocketActivated();
