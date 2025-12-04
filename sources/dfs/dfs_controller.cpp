@@ -108,14 +108,21 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     //     }
     // }
 
-    // auto search_result =
-    //     Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
-    //                                                                       owner_id,
-    //                                                                       visual_folder,
-    //                                                                       visual_name);
-    // if (search_result.has_value()) {
-    //     return std::unexpected(Dfs::DfsError::DirDuplicate);
-    // }
+    if (data_security == Dfs::DataSecurity::Self) {
+        auto search_result = find_file_self(owner_id, visual_name);
+        if (search_result.has_value() && search_result->folder == visual_folder) {
+            return std::unexpected(Dfs::DfsError::DirDuplicate);
+        }
+    } else {
+        auto search_result =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dirs_manager_.get_db_instance(),
+                                                                              owner_id,
+                                                                              visual_folder,
+                                                                              visual_name);
+        if (search_result.has_value()) {
+            return std::unexpected(Dfs::DfsError::DirDuplicate);
+        }
+    }
 
     auto fpath_result = FsPath::create(file_path);
     if (!fpath_result.has_value()) {
@@ -541,13 +548,21 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(
     Dfs::DataSecurity              data_security,
     const Dfs::DataSecurityData   &security_data) {
     auto db_instance = dirs_manager_.get_db_instance();
-    auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
-                                                                          owner_id,
-                                                                          Dfs::Basic::TEMPLATE_VECTOR,
-                                                                          visual_name);
-    if (search_result.has_value()) {
-        return std::unexpected(Dfs::DfsError::DirDuplicate);
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        auto search_result = find_file_self(owner_id, visual_name);
+        if (search_result.has_value() && search_result->folder == Dfs::Basic::TEMPLATE_VECTOR) {
+            return std::unexpected(Dfs::DfsError::DirDuplicate);
+        }
+    } else {
+        auto search_result =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                              owner_id,
+                                                                              Dfs::Basic::TEMPLATE_VECTOR,
+                                                                              visual_name);
+        if (search_result.has_value()) {
+            return std::unexpected(Dfs::DfsError::DirDuplicate);
+        }
     }
 
     std::string file_id  = create_file_id_from("db");
@@ -642,12 +657,14 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
                                    bool                         thothed) {
     auto res = this->make_vector(owner_id, file_id, false, signer_id, security_data);
     if (!res.has_value()) {
+        eWarning("[Dfs] Can't find vector {} / {}", owner_id, file_id);
         return false;
     }
 
     auto &[dir_row, dfs_vector] = res.value();
     auto operation_res          = dfs_vector.store_add(row);
     if (!operation_res) {
+        eWarning("[Dfs] Can't stoere to vector {} / {}", owner_id, file_id);
         return false;
     }
     // get and exists check id?
