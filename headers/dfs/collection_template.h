@@ -287,4 +287,11 @@ namespace Dfs {
 
     std::optional<std::pair<Dfs::CollectionTemplate, bool>> read_template_from_variant(
         const DfsTemplateVariant& var);
+
+    inline CollectionTemplate dictionary_template() {
+        return CollectionTemplate::create("Dictionary")
+            .value()
+            .use_id()
+            .add_fields({ Field::Blob("value").not_null() });
+    }
 } // namespace Dfs

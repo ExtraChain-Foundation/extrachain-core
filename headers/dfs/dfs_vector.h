@@ -45,6 +45,7 @@ private:
     Dfs::DataSecurity       data_security_;
     Dfs::DataSecurityData   security_data_;
     Dfs::CollectionTemplate collection_template_;
+    Dfs::FileType           file_type_;
     bool                    is_encrypted_;
 
     DfsVector() = default;
@@ -53,7 +54,8 @@ private:
               const ActorId&               file_actor_id,
               const std::string&           file_id,
               Dfs::DataSecurity            data_security,
-              const Dfs::DataSecurityData& security_data);
+              const Dfs::DataSecurityData& security_data,
+              Dfs::FileType                file_type = Dfs::FileType::Vector);
 
 public:
     // static std::expected<DfsVector, DfsVectorError> create(
@@ -72,7 +74,8 @@ public:
         const std::string&             file_id,
         const Dfs::DfsTemplateVariant& variant_template,
         Dfs::DataSecurity              data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData&   security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                  file_type     = Dfs::FileType::Vector);
 
     static std::expected<DfsVector, DfsVectorError> load(
         ExtraChainNode*              node,
@@ -80,7 +83,8 @@ public:
         const ActorId&               file_actor_id,
         const std::string&           file_id,
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                file_type     = Dfs::FileType::Vector);
 
     static std::expected<DfsVector, DfsVectorError> load_network(
         ExtraChainNode*              node,
@@ -88,7 +92,8 @@ public:
         const ActorId&               file_actor_id,
         const std::string&           file_id,
         Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData& security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                file_type     = Dfs::FileType::Vector);
 
     std::expected<DbRow, DfsVectorError> read_row(const std::string& primary_data);
 

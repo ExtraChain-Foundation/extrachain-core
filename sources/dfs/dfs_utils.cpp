@@ -48,7 +48,7 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
 
     blake3_hasher_update(&hasher, this->name.data(), this->name.size());
 
-    if (this->type != Dfs::FileType::Vector) {
+    if (this->type != Dfs::FileType::Vector && this->type != Dfs::FileType::Dictionary) {
         auto size_str = std::to_string(this->size);
         blake3_hasher_update(&hasher, size_str.data(), size_str.size());
     }
@@ -56,7 +56,7 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
     auto created_str = std::to_string(this->created);
     blake3_hasher_update(&hasher, created_str.data(), created_str.size());
 
-    if (this->type != Dfs::FileType::Vector) {
+    if (this->type != Dfs::FileType::Vector && this->type != Dfs::FileType::Dictionary) {
         auto last_modified_str = std::to_string(this->last_modified);
         blake3_hasher_update(&hasher, last_modified_str.data(), last_modified_str.size());
     }
