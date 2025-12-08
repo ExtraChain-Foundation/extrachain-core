@@ -237,7 +237,7 @@ void NetworkManager::reconnection() {
             }
 
             if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
-                // to_close.insert(el);
+                to_close.insert(el);
             }
         }
     }
