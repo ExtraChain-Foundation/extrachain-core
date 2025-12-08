@@ -27,17 +27,16 @@
     #include "preconfig.h"
 #endif
 
-SocketService::SocketService(ExtraChainNode *node, QObject *parent)
-    : node(node)
-    , QObject(parent) {
+SocketService::SocketService(ExtraChainNode *node)
+    : node_(node) {
     priv_.generate_random();
 }
 
-const QString &SocketService::identifier() const {
+const std::string &SocketService::identifier() const {
     return identifier_;
 }
 
-QString SocketService::protocol_string() const {
+std::string SocketService::protocol_string() const {
     return "Undefined";
 }
 
@@ -45,7 +44,7 @@ Network::Protocol SocketService::protocol() const {
     return Network::Protocol::Undefined;
 }
 
-const QString &SocketService::ip() const {
+const std::string &SocketService::ip() const {
     return ip_;
 }
 
@@ -90,20 +89,14 @@ bool SocketService::is_closed() {
 }
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
-    // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] Current network id: {}", node->actor_index()->network_id());
+    eLog("[Socket] Current network id: {}", node_->actor_index()->network_id());
     eLog("[Socket] IP: {}", ip_);
 
-    // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
-    //      handshake,
-    //      node->actorIndex()->network_id(),
-    //      ip_);
-
-    identifier_      = QString::fromStdString(handshake.identifier);
+    identifier_      = handshake.identifier;
     dfs_mode_socket_ = handshake.dfs_mode;
 
     // 0. Check mode
-    if (handshake.socket_mode == SocketMode::Light) { // if full -> nothing change, because we can replace light
+    if (handshake.socket_mode == SocketMode::Light) {
         mode_ = SocketMode::Light;
     }
 
@@ -114,48 +107,36 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                               ? Network::SocketServiceError::VersionTooNew
                               : Network::SocketServiceError::VersionTooOld;
 
-        // TODO: for user
         eInfo("Please, update client");
-
         eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
-        emit error(error_type,
-                   QString::fromStdString(handshake.version),
-                   ip_.toStdString(),
-                   identifier_.toStdString());
+        if (on_error) on_error(shared_from_this(), error_type, handshake.version, identifier_);
         return false;
     }
 
     // 2. Network id check
-    auto json_network_id_creation         = ActorId::create(handshake.network_id);
+    auto json_network_id_creation = ActorId::create(handshake.network_id);
     if (!json_network_id_creation.has_value()) {
-        // error
         return false;
     }
 
     ActorId json_network_id         = json_network_id_creation.value();
-    ActorId our_network_id          = node->actor_index()->network_id();
+    ActorId our_network_id          = node_->actor_index()->network_id();
     bool    is_network_ids_contains = our_network_id == json_network_id;
     bool    something_empty         = json_network_id.is_zero() || our_network_id.is_zero();
 
     if (our_network_id.is_zero() && !json_network_id.is_zero()) {
-        node->actor_index()->set_network_id(json_network_id); // TODO: request block 0?
+        node_->actor_index()->set_network_id(json_network_id);
     }
 
     if (!(something_empty || is_network_ids_contains)) {
         eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
-        emit error(Network::SocketServiceError::IncompatibleNetwork,
-                   QString::fromStdString(handshake.network_id),
-                   ip_.toStdString(),
-                   identifier_.toStdString());
+        if (on_error) on_error(shared_from_this(), Network::SocketServiceError::IncompatibleNetwork, handshake.network_id, identifier_);
         return false;
     }
 
     // 3. Identifier check
-    if (handshake.identifier == node->node_identifier()) {
-        emit error(Network::SocketServiceError::IncompatibleIdentifier,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString());
+    if (handshake.identifier == node_->node_identifier()) {
+        if (on_error) on_error(shared_from_this(), Network::SocketServiceError::IncompatibleIdentifier, "", identifier_);
         return false;
     }
 
@@ -163,10 +144,9 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     bool duplicate = false;
 
     {
-        auto connections_locked = *node->network()->connections();
+        auto connections_locked = *node_->network()->connections();
         for (auto el : *connections_locked) {
-            // pointers
-            if (this == el) {
+            if (el.get() == this) {
                 continue;
             }
 
@@ -174,22 +154,13 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                 continue;
             }
 
-            // if (el->is_active()) {
-            // duplicate = true;
-            // }
-
-            // if (!el->is_active()) {
-            el->closeSocket();
+            el->close_connection();
             break;
-            // }
         }
     }
 
     if (duplicate) {
-        emit error(Network::SocketServiceError::DuplicateIdentifier,
-                   "",
-                   ip_.toStdString(),
-                   identifier_.toStdString());
+        if (on_error) on_error(shared_from_this(), Network::SocketServiceError::DuplicateIdentifier, "", identifier_);
         eLog("[Socket] Closing: duplicate identifier");
         return false;
     }
@@ -204,8 +175,8 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 6.
-    if (node->network()->active_connections_count() >= Network::maxConnections) {
-        emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
+    if (node_->network()->active_connections_count() >= Network::maxConnections) {
+        if (on_error) on_error(shared_from_this(), Network::SocketServiceError::MaxConnections, "", identifier_);
         eLog("[Socket] Closing: maximum connections reached");
         return false;
     }
@@ -213,86 +184,87 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // 7. Checking slots availability
     if (!handshake.is_available) {
         eLog("[Socket] Closing: peer unavailable");
-        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString());
-        emit shareConnections(handshake.connections);
+        if (on_error) on_error(shared_from_this(), Network::SocketServiceError::PeerUnavailable, "", identifier_);
+        if (on_share_connections) on_share_connections(shared_from_this(), handshake.connections);
         return false;
     }
 
     // 8. If all checks are passed - activate the connection
     eLog("[Socket] Activated: {} with IP: {}", fmt::ptr(this), ip());
     activated_ = true;
-    Responder responder(node->network());
-    responder.add_identifier(identifier_.toStdString());
-    node->actor_index()->send_system_actor(responder);
-    emit activated();
-    emit shareConnections(handshake.connections);
+    Responder responder(node_->network());
+    responder.add_identifier(identifier_);
+    node_->actor_index()->send_system_actor(responder);
+    if (on_activated) on_activated(shared_from_this());
+    if (on_share_connections) on_share_connections(shared_from_this(), handshake.connections);
 
-    node->network()->set_public_ip(handshake.your_ip);
+    node_->network()->set_public_ip(handshake.your_ip);
 
     return true;
 }
 
-void SocketService::closeSocket() {
+void SocketService::close_connection() {
     activated_ = false;
+    if (on_disconnected) on_disconnected(shared_from_this());
 }
 
-QByteArray SocketService::generate_first_message() {
-    HandshakeMessage msg { .network_id   = node->actor_index()->network_id().to_string(),
+std::vector<uint8_t> SocketService::generate_first_message() {
+    HandshakeMessage msg { .network_id   = node_->actor_index()->network_id().to_string(),
                            .version      = extrachain_version,
-                           .identifier   = node->node_identifier(),
-                           .your_ip      = ip_.toStdString(),
+                           .identifier   = node_->node_identifier(),
+                           .your_ip      = ip_,
                            .connections  = {},
                            .is_available = true,
                            .is_constant  = is_constant_.load(),
                            .socket_mode  = mode_,
-                           .dfs_mode     = node->dfs()->mode() };
+                           .dfs_mode     = node_->dfs()->mode() };
 
     {
-        auto connections_locked = *node->network()->connections();
+        auto connections_locked = *node_->network()->connections();
         for (auto &it : *connections_locked) {
-            auto ip = it->ip().toStdString();
-            if (ip.empty() || ip == ip_) {
+            auto conn_ip = it->ip();
+            if (conn_ip.empty() || conn_ip == ip_) {
                 continue;
             }
             if (!it->is_active()) {
                 continue;
             }
 
-            msg.connections.insert(SocketPair { .ip = ip, .identifier = it->identifier_.toStdString() });
+            msg.connections.insert(SocketPair { .ip = conn_ip, .identifier = it->identifier_ });
         }
     }
 
-    msg.is_available = node->network()->active_connections_count() < Network::maxConnections;
+    msg.is_available = node_->network()->active_connections_count() < Network::maxConnections;
 
     auto handshake = Json::serialize(msg);
-    return QByteArray::fromStdString(handshake);
+    return std::vector<uint8_t>(handshake.begin(), handshake.end());
 }
 
-QByteArray SocketService::prepareSendMessage(const QByteArray &message) {
+std::vector<uint8_t> SocketService::prepare_send_message(const std::vector<uint8_t> &message) {
     if (pub_.empty()) {
-        return "";
+        return {};
     }
 
-    auto encrypt_result = priv_.encrypt(ByteArray(message).toBytes(), pub_.public_key());
+    auto encrypt_result = priv_.encrypt(message, pub_.public_key());
     if (!encrypt_result.has_value()) {
-        return "";
+        return {};
     }
-    auto result = ByteArray(encrypt_result.value()).toQByteArray();
-    bytes_outgoing_ += result.length();
-    return result;
+    bytes_outgoing_ += encrypt_result.value().size();
+    return encrypt_result.value();
 }
 
-QByteArray SocketService::prepareReceiveMessage(const QByteArray &message) {
-    if (pub_.empty())
+std::vector<uint8_t> SocketService::prepare_receive_message(const std::vector<uint8_t> &message) {
+    if (pub_.empty()) {
         eFatal("Socket decrypt error");
-
-    auto decrypt_result = priv_.decrypt(ByteArray(message).toBytes(), pub_.public_key());
-    if (!decrypt_result.has_value()) {
-        return "";
     }
-    auto result = ByteArray(decrypt_result.value()).toQByteArray();
-    if (result.isEmpty())
-        return "";
-    bytes_incoming_ += message.length();
-    return result;
+
+    auto decrypt_result = priv_.decrypt(message, pub_.public_key());
+    if (!decrypt_result.has_value()) {
+        return {};
+    }
+    if (decrypt_result.value().empty()) {
+        return {};
+    }
+    bytes_incoming_ += message.size();
+    return decrypt_result.value();
 }

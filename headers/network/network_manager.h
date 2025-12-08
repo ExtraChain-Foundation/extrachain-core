@@ -25,21 +25,37 @@
 #include <QtNetwork/QNetworkAddressEntry>
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QNetworkProxy>
-#include <QtWebSockets/QWebSocketServer>
 #include <string>
 #include <shared_mutex>
+#include <thread>
+#include <memory>
+#include <vector>
+
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "network/isocket_service.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 
-class SocketService;
+namespace asio = boost::asio;
+using tcp = asio::ip::tcp;
+
 class WebSocketService;
 class UPNPConnection;
 class UPnPConnector;
+
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 class CalculateTraffic {
 private:
@@ -254,9 +270,14 @@ private:
 
     ExtraChainNode*                       node;
     std::shared_ptr<QNetworkAddressEntry> local_;
-    QWebSocketServer*                     ws_server_ = nullptr;
 
-    SafePtr<std::set<SocketService*>>            connections_;
+    // Boost.Asio networking
+    std::unique_ptr<asio::io_context>  ioc_;
+    std::unique_ptr<tcp::acceptor>     acceptor_;
+    std::vector<std::thread>           io_threads_;
+    std::atomic<bool>                  io_running_{false};
+
+    SafePtr<std::set<SocketService::Ptr>>        connections_;
     SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
     NetworkStatus                                network_status_;
 
@@ -303,7 +324,11 @@ public:
     std::uint16_t ws_port = 17593;
 
 private:
-    void connectWsService(WebSocketService* ws, bool requestListNodes = false);
+    void setup_service_callbacks(SocketService::Ptr service, bool requestListNodes = false);
+
+    // Asio coroutines
+    VoidTask accept_loop();
+    VoidTask do_connect_websocket(const std::string& ip, uint16_t port, bool requestListNodes, bool isConstant, bool is_light);
 
     void send_message_connections(const std::string& serialized_message,
                                   const MessageBody& non_serialized_message,
@@ -318,7 +343,8 @@ private:
     bool is_first_node(const std::string& identifier); // detect for safety
 
 public:
-    SafePtr<std::set<SocketService*>> connections() const;
+    SafePtr<std::set<SocketService::Ptr>> connections() const;
+    asio::io_context& io_context() { return *ioc_; }
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
 
@@ -350,7 +376,7 @@ protected:
     bool check_message_count(const std::string& msg);
 
 private slots:
-    void onNewWsConnection();
+    // onNewWsConnection replaced by accept_loop coroutine
 
 protected slots:
     virtual void check_connections_status();
@@ -371,12 +397,12 @@ public slots:
                      const QString&           user,
                      const QString&           password);
 
-private slots:
-    void remove_socket_connection();
-    void socket_error(Network::SocketServiceError error,
-                      QString                     errorData,
-                      std::string                 ip,
-                      std::string                 identifier);
+private:
+    void remove_socket_connection(SocketService::Ptr service);
+    void socket_error(SocketService::Ptr          service,
+                      Network::SocketServiceError error,
+                      const std::string&          errorData,
+                      const std::string&          identifier);
 
 public:
     QString local_ip(); // TODO: remove

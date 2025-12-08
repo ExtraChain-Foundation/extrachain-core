@@ -25,7 +25,9 @@
 #include "utils/exc_utils.h"
 
 #include <queue>
-#include <QMutex>
+#include <mutex>
+#include <functional>
+#include <memory>
 
 class ExtraChainNode;
 
@@ -34,10 +36,9 @@ enum class SocketMode {
     Light
 };
 
-class EXTRACHAIN_EXPORT SocketService : public QObject {
-    Q_OBJECT
-
+class EXTRACHAIN_EXPORT SocketService : public std::enable_shared_from_this<SocketService> {
 public:
+    using Ptr = std::shared_ptr<SocketService>;
     struct SocketPair {
         std::string ip;
         std::string identifier;
@@ -70,14 +71,16 @@ public:
         High
     };
 
-    explicit SocketService(ExtraChainNode *node, QObject *parent = nullptr);
-    const QString            &identifier() const;
-    virtual QString           protocol_string() const = 0;
+    explicit SocketService(ExtraChainNode *node);
+    virtual ~SocketService() = default;
+
+    const std::string        &identifier() const;
+    virtual std::string       protocol_string() const = 0;
     virtual Network::Protocol protocol() const        = 0;
     virtual bool              is_active() const       = 0;
-    virtual quint16           port() const            = 0;
-    virtual quint16           server_port() const     = 0;
-    const QString            &ip() const;
+    virtual uint16_t          port() const            = 0;
+    virtual uint16_t          server_port() const     = 0;
+    const std::string        &ip() const;
     DfsMode                   dfs_mode_socket() const;
     int                       bytes_compressed() const;
     int                       bytes_outgoing() const;
@@ -93,51 +96,46 @@ public:
     std::uint64_t timestamp() const;
 
 public:
-    virtual void flush()                                                                  = 0;
-    virtual void send_message(const QByteArray &data, Priority priority = Priority::High) = 0;
+    virtual void flush()                                                                              = 0;
+    virtual void send_message(const std::vector<uint8_t> &data, Priority priority = Priority::High) = 0;
 
     bool is_closed();
+    virtual void close_connection();
 
-protected slots:
-    virtual void closeSocket();
-
-signals:
-    void send(const QByteArray &data);
-    void disconnected();
-    void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier);
-    void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
-    void activated();
-    void finished(); // if threads
-    void shareConnections(const std::set<SocketService::SocketPair> &);
+    // Callbacks замість Qt signals
+    std::function<void(Ptr)> on_disconnected;
+    std::function<void(Ptr, Network::SocketServiceError, const std::string&, const std::string&)> on_error;
+    std::function<void(Ptr)> on_activated;
+    std::function<void(Ptr, const std::set<SocketPair>&)> on_share_connections;
 
 protected:
-    bool       check_first_message(const HandshakeMessage &msg);
-    QByteArray generate_first_message();
-    QByteArray prepareSendMessage(const QByteArray &message);
-    QByteArray prepareReceiveMessage(const QByteArray &message);
+    bool                  check_first_message(const HandshakeMessage &msg);
+    std::vector<uint8_t>  generate_first_message();
+    std::vector<uint8_t>  prepare_send_message(const std::vector<uint8_t> &message);
+    std::vector<uint8_t>  prepare_receive_message(const std::vector<uint8_t> &message);
 
-    ExtraChainNode  *node;
-    QString          identifier_;
-    QString          ip_;
-    quint16          port_             = 0;
+    ExtraChainNode  *node_;
+    std::string      identifier_;
+    std::string      ip_;
+    uint16_t         port_             = 0;
     bool             activated_        = false;
     bool             is_disconnected_  = false;
-    int              bytes_incoming_   = 0;
-    int              bytes_outgoing_   = 0;
-    int              bytes_compressed_ = 0;
+    int64_t          bytes_incoming_   = 0;
+    int64_t          bytes_outgoing_   = 0;
+    int64_t          bytes_compressed_ = 0;
     std::atomic_bool is_constant_      = false;
     std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
     SocketMode       mode_             = SocketMode::Full;
     DfsMode          dfs_mode_socket_;
 
-    QMutex                 queue_mutex_;
-    std::queue<QByteArray> high_queue_;
-    std::queue<QByteArray> normal_queue_;
-    std::queue<QByteArray> low_queue_;
+    std::mutex                       queue_mutex_;
+    std::queue<std::vector<uint8_t>> high_queue_;
+    std::queue<std::vector<uint8_t>> normal_queue_;
+    std::queue<std::vector<uint8_t>> low_queue_;
 
-    static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
-    bool                    waiting_buffer_space_ = false;
+    static constexpr int64_t MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
+    bool                     waiting_buffer_space_ = false;
 
     KeyPrivate priv_   = KeyPrivate();
     KeyPublic  pub_    = KeyPublic();
@@ -148,7 +146,7 @@ protected:
 BOOST_DESCRIBE_STRUCT(
     SocketService::HandshakeMessage,
     (),
-    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode))
+    (network_id, version, identifier, socket_type, your_ip, connections, is_available, is_constant, socket_mode, dfs_mode))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 
