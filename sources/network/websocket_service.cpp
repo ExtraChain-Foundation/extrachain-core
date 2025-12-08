@@ -253,8 +253,12 @@ VoidTask WebSocketService::do_handshake() {
     // Check for error message
     std::string decrypted_str(decrypted.begin(), decrypted.end());
     if (decrypted_str.starts_with("Error ")) {
-        auto error_code = Network::SocketServiceError(std::stoi(decrypted_str.substr(6)));
-        eLog("[WS] Error received: {}", error_code);
+        try {
+            auto error_code = Network::SocketServiceError(std::stoi(decrypted_str.substr(6)));
+            eLog("[WS] Error received: {}", error_code);
+        } catch (const std::exception&) {
+            eLog("[WS] Invalid error format received");
+        }
         close_connection();
         co_return;
     }

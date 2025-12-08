@@ -255,7 +255,8 @@ std::vector<uint8_t> SocketService::prepare_send_message(const std::vector<uint8
 
 std::vector<uint8_t> SocketService::prepare_receive_message(const std::vector<uint8_t> &message) {
     if (pub_.empty()) {
-        eFatal("Socket decrypt error");
+        eCritical("[Socket] Decrypt error: public key not set");
+        return {};
     }
 
     auto decrypt_result = priv_.decrypt(message, pub_.public_key());
