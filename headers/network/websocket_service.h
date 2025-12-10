@@ -103,7 +103,9 @@ private:
     std::deque<std::vector<uint8_t>> high_queue_;
     std::deque<std::vector<uint8_t>> normal_queue_;
     std::deque<std::vector<uint8_t>> low_queue_;
-    bool writing_ = false;
+
+    // Write notification
+    std::unique_ptr<asio::steady_timer> write_timer_;
 
     // Message cache before activation
     std::vector<std::vector<uint8_t>> message_cache_;
@@ -113,4 +115,5 @@ private:
     int failed_pongs_ = 0;
 
     std::atomic<bool> running_{false};
+    std::atomic<bool> closed_{false};
 };

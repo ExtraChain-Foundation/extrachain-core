@@ -23,7 +23,8 @@
 WebSocketService::WebSocketService(asio::io_context& ioc, ExtraChainNode* node)
     : SocketService(node)
     , ioc_(ioc)
-    , strand_(asio::make_strand(ioc)) {
+    , strand_(asio::make_strand(ioc))
+    , write_timer_(std::make_unique<asio::steady_timer>(strand_)) {
 }
 
 WebSocketService::~WebSocketService() {
@@ -315,18 +316,15 @@ VoidTask WebSocketService::write_loop() {
     while (running_ && ws_ && ws_->is_open()) {
         std::vector<uint8_t> data;
 
-        {
-            std::lock_guard lock(queue_mutex_);
-            if (!high_queue_.empty()) {
-                data = std::move(high_queue_.front());
-                high_queue_.pop_front();
-            } else if (!normal_queue_.empty()) {
-                data = std::move(normal_queue_.front());
-                normal_queue_.pop_front();
-            } else if (!low_queue_.empty()) {
-                data = std::move(low_queue_.front());
-                low_queue_.pop_front();
-            }
+        if (!high_queue_.empty()) {
+            data = std::move(high_queue_.front());
+            high_queue_.pop_front();
+        } else if (!normal_queue_.empty()) {
+            data = std::move(normal_queue_.front());
+            normal_queue_.pop_front();
+        } else if (!low_queue_.empty()) {
+            data = std::move(low_queue_.front());
+            low_queue_.pop_front();
         }
 
         if (!data.empty()) {
@@ -344,10 +342,10 @@ VoidTask WebSocketService::write_loop() {
                 break;
             }
         } else {
-            // Wait a bit before checking again
-            asio::steady_timer timer(strand_);
-            timer.expires_after(std::chrono::milliseconds(10));
-            co_await timer.async_wait(asio::use_awaitable);
+            // Wait for notify from send_message
+            write_timer_->expires_at(asio::steady_timer::time_point::max());
+            auto [ec] = co_await write_timer_->async_wait(asio::as_tuple(asio::use_awaitable));
+            // ec will be operation_aborted when cancelled by send_message — that's ok
         }
     }
 }
@@ -363,7 +361,6 @@ VoidTask WebSocketService::process_text_message(const std::string& message) {
 
 VoidTask WebSocketService::process_binary_message(const std::vector<uint8_t>& data) {
     if (!activated_) {
-        std::lock_guard lock(queue_mutex_);
         message_cache_.push_back(data);
         eLog("[WS] Message cached until activation. Cache size: {}", message_cache_.size());
         co_return;
@@ -381,25 +378,58 @@ VoidTask WebSocketService::process_binary_message(const std::vector<uint8_t>& da
 }
 
 void WebSocketService::close_async() {
-    running_ = false;
-    asio::post(strand_, [self = std::dynamic_pointer_cast<WebSocketService>(shared_from_this())]() {
-        self->close_connection();
-    });
-}
-
-void WebSocketService::close_connection() {
-    if (closed_) return;
+    if (closed_.exchange(true)) return;
 
     running_ = false;
     activated_ = false;
-    closed_ = true;
 
-    {
-        std::lock_guard lock(queue_mutex_);
-        high_queue_.clear();
-        normal_queue_.clear();
-        low_queue_.clear();
-        message_cache_.clear();
+    asio::co_spawn(strand_, [self = std::dynamic_pointer_cast<WebSocketService>(shared_from_this())]() -> VoidTask {
+        // Clear queues on strand
+        self->high_queue_.clear();
+        self->normal_queue_.clear();
+        self->low_queue_.clear();
+        self->message_cache_.clear();
+
+        // Cancel write timer to unblock write_loop
+        if (self->write_timer_) {
+            self->write_timer_->cancel();
+        }
+
+        if (self->ws_ && self->ws_->is_open()) {
+            auto [ec] = co_await self->ws_->async_close(
+                websocket::close_code::normal,
+                asio::as_tuple(asio::use_awaitable)
+            );
+            if (ec) {
+                eLog("[WS] Async close error: {}", ec.message());
+            }
+        }
+
+        if (!self->is_disconnected_) {
+            self->is_disconnected_ = true;
+            if (self->on_disconnected) self->on_disconnected(self);
+        }
+
+        eLog("[WS] Closed async: {}", self->ip_);
+        co_return;
+    }, asio::detached);
+}
+
+void WebSocketService::close_connection() {
+    if (closed_.exchange(true)) return;
+
+    running_ = false;
+    activated_ = false;
+
+    // Clear queues (called from strand or destructor)
+    high_queue_.clear();
+    normal_queue_.clear();
+    low_queue_.clear();
+    message_cache_.clear();
+
+    // Cancel write timer
+    if (write_timer_) {
+        write_timer_->cancel();
     }
 
     if (ws_ && ws_->is_open()) {
@@ -453,20 +483,21 @@ void WebSocketService::send_message(const std::vector<uint8_t>& data, Priority p
         return;
     }
 
-    {
-        std::lock_guard lock(queue_mutex_);
+    asio::post(strand_, [self = std::dynamic_pointer_cast<WebSocketService>(shared_from_this()), data, priority]() {
         switch (priority) {
         case Priority::High:
-            high_queue_.push_back(data);
+            self->high_queue_.push_back(data);
             break;
         case Priority::Normal:
-            normal_queue_.push_back(data);
+            self->normal_queue_.push_back(data);
             break;
         case Priority::Low:
-            low_queue_.push_back(data);
+            self->low_queue_.push_back(data);
             break;
         }
-    }
+        // Wake up write_loop
+        self->write_timer_->cancel();
+    });
 }
 
 void WebSocketService::flush() {
