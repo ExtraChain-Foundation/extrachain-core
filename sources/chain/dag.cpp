@@ -1395,8 +1395,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
     std::mutex              results_mutex;
 
     constexpr size_t NUM_THREADS = 2;
-    const size_t total = static_cast<size_t>((to - from).value()) + 1;
-    const size_t chunk_size = (total + NUM_THREADS - 1) / NUM_THREADS;
+    const size_t chunk_size = ((to - from).to_int().value() + NUM_THREADS) / NUM_THREADS;
 
     std::atomic<size_t> completed{0};
     std::condition_variable cv;
