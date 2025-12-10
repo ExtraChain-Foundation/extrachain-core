@@ -1395,7 +1395,9 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
     std::mutex              results_mutex;
 
     constexpr size_t NUM_THREADS = 2;
-    const size_t chunk_size = ((to - from).to_int().value() + NUM_THREADS) / NUM_THREADS;
+    const size_t total = (to - from).to_int().value() + 1;
+    const size_t chunk_size = (total + NUM_THREADS - 1) / NUM_THREADS;
+    const size_t actual_threads = std::min(NUM_THREADS, total);
 
     std::atomic<size_t> completed{0};
     std::condition_variable cv;
@@ -1403,13 +1405,11 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
 
     auto pool = ThreadPoolBoost::instance_dag_sync();
 
-    for (size_t t = 0; t < NUM_THREADS; ++t) {
+    for (size_t t = 0; t < actual_threads; ++t) {
         SectionId chunk_from = from + SectionId(t * chunk_size);
         SectionId chunk_to = std::min(from + SectionId((t + 1) * chunk_size - 1), to);
 
-        if (chunk_from > to) break;
-
-        pool->post([this, chunk_from, chunk_to, &txs, &controls, &results_mutex, &completed, &cv, NUM_THREADS]() {
+        pool->post([this, chunk_from, chunk_to, &txs, &controls, &results_mutex, &completed, &cv, actual_threads]() {
             std::set<Transaction> local_txs;
             std::vector<DagControl> local_controls;
 
@@ -1432,7 +1432,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
                 controls.insert(controls.end(), local_controls.begin(), local_controls.end());
             }
 
-            if (completed.fetch_add(1) + 1 == NUM_THREADS) {
+            if (completed.fetch_add(1) + 1 == actual_threads) {
                 cv.notify_one();
             }
         });
@@ -1440,7 +1440,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
 
     {
         std::unique_lock<std::mutex> lock(cv_mutex);
-        cv.wait(lock, [&completed]() { return completed.load() == NUM_THREADS; });
+        cv.wait(lock, [&completed, actual_threads]() { return completed.load() == actual_threads; });
     }
 
     // if (txs.empty()) {
@@ -2767,7 +2767,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_ = false;
         emit node->dagSearchControlEnded();
         this->request_sections(correct_from,
-                               std::min(sync_from + 100, sync_last_index_),
+                               std::min(sync_from + 8450, sync_last_index_),
                                responder.with_new_message_id());
     }
 }
