@@ -1386,30 +1386,62 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
         return;
     }
 
-    if (to - from >= 150) {
+    if (to - from >= 1500) {
         // return;
     }
 
     std::set<Transaction>   txs;
     std::vector<DagControl> controls;
+    std::mutex              results_mutex;
 
-    for (SectionId i = from; i <= to; i++) {
-        auto section = this->read_section(i);
-        if (!section.has_value()) {
-            continue;
-        }
+    constexpr size_t NUM_THREADS = 2;
+    const size_t total = static_cast<size_t>((to - from).value()) + 1;
+    const size_t chunk_size = (total + NUM_THREADS - 1) / NUM_THREADS;
 
-        if (section->control.has_value()) {
-            controls.push_back(DagControl { .section_id = section->id, .control = section->control.value() });
-        }
+    std::atomic<size_t> completed{0};
+    std::condition_variable cv;
+    std::mutex cv_mutex;
 
-        if (section->transactions.empty()) {
-            continue;
-        }
+    auto pool = ThreadPoolBoost::instance_dag_sync();
 
-        for (const auto &tx : section->transactions) {
-            txs.insert(tx);
-        }
+    for (size_t t = 0; t < NUM_THREADS; ++t) {
+        SectionId chunk_from = from + SectionId(t * chunk_size);
+        SectionId chunk_to = std::min(from + SectionId((t + 1) * chunk_size - 1), to);
+
+        if (chunk_from > to) break;
+
+        pool->post([this, chunk_from, chunk_to, &txs, &controls, &results_mutex, &completed, &cv, NUM_THREADS]() {
+            std::set<Transaction> local_txs;
+            std::vector<DagControl> local_controls;
+
+            for (SectionId i = chunk_from; i <= chunk_to; ++i) {
+                auto section = this->read_section(i);
+                if (!section.has_value()) continue;
+
+                if (section->control.has_value()) {
+                    local_controls.push_back(DagControl{.section_id = section->id, .control = section->control.value()});
+                }
+
+                for (const auto &tx : section->transactions) {
+                    local_txs.insert(tx);
+                }
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(results_mutex);
+                txs.insert(local_txs.begin(), local_txs.end());
+                controls.insert(controls.end(), local_controls.begin(), local_controls.end());
+            }
+
+            if (completed.fetch_add(1) + 1 == NUM_THREADS) {
+                cv.notify_one();
+            }
+        });
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(cv_mutex);
+        cv.wait(lock, [&completed]() { return completed.load() == NUM_THREADS; });
     }
 
     // if (txs.empty()) {
@@ -1521,7 +1553,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
+        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 1000), responder);
     });
 }
 
@@ -1901,7 +1933,7 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
+        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 1000), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
