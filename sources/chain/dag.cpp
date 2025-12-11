@@ -1386,7 +1386,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
         return;
     }
 
-    if (to - from >= 10000) {
+    if (to - from >= 2500) {
         // return;
     }
 
@@ -1552,7 +1552,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 8450), responder);
+        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 2100), responder);
     });
 }
 
@@ -1932,7 +1932,7 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 8450), responder);
+        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 2100), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -2767,7 +2767,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_ = false;
         emit node->dagSearchControlEnded();
         this->request_sections(correct_from,
-                               std::min(sync_from + 8450, sync_last_index_),
+                               std::min(sync_from + 2100, sync_last_index_),
                                responder.with_new_message_id());
     }
 }
