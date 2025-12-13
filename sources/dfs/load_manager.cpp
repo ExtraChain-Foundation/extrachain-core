@@ -27,6 +27,11 @@
 
 #include "utils/thread_pool_boost.h"
 
+#include <boost/asio.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+namespace asio = boost::asio;
+
 #include <QTimer>
 
 LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
@@ -370,16 +375,20 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
 
     if (dir_row->type != Dfs::FileType::File) {
         if (dir_row->type == Dfs::FileType::Collection) {
-            node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id,
-                                                    file_link_fragment.file_link.file_id,
-                                                    responder);
+            asio::co_spawn(node->network()->io_context(),
+                node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id,
+                                                        file_link_fragment.file_link.file_id,
+                                                        responder),
+                asio::detached);
             // eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}",
             // file_link_fragment.file_link.file_id);
         }
         if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
-            node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id,
-                                                file_link_fragment.file_link.file_id,
-                                                responder);
+            asio::co_spawn(node->network()->io_context(),
+                node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id,
+                                                    file_link_fragment.file_link.file_id,
+                                                    responder),
+                asio::detached);
             // eCritical("LoadManager::share_stored_file, its a vector. Another thlow. file_id: {}",
             // file_link_fragment.file_link.file_id);
         }
@@ -469,10 +478,14 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
 
     if (dir_row->type != Dfs::FileType::File) {
         if (dir_row->type == Dfs::FileType::Collection) {
-            node->dfs()->network_request_collection(owner_id, file_id, {});
+            asio::co_spawn(node->network()->io_context(),
+                node->dfs()->network_request_collection(owner_id, file_id, {}),
+                asio::detached);
         }
         if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
-            node->dfs()->network_request_vector(owner_id, file_id, {});
+            asio::co_spawn(node->network()->io_context(),
+                node->dfs()->network_request_vector(owner_id, file_id, {}),
+                asio::detached);
         }
         return;
     }

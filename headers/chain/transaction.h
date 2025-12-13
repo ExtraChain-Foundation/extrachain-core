@@ -93,7 +93,9 @@ enum class TransactionProveError {
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
     TooSectionDiff,               ///< Section difference too large
     BigReward,
-    TooOften
+    TooOften,
+    Ignored,   ///< Transaction was ignored (rate limiting)
+    NotReady   ///< DAG not ready to process transactions
 };
 
 /**

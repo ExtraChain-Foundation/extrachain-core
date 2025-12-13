@@ -237,8 +237,7 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     return tx;
 }
 
-std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
-                                                                    const Responder   &responder) {
+Task<std::expected<bool, TransactionProveError>> Dag::network_transaction(Transaction transaction, Responder responder) {
     if (transaction.type() == TransactionType::Regular) {
         auto sender  = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
         auto last_it = last_txs_.find(sender);
@@ -249,7 +248,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
 
             if (time_diff_ms < 4500) {
                 eLog("[Dag] Ignore transaction from {}, diff: {} ms", sender, time_diff_ms);
-                return std::unexpected(TransactionProveError::TooOften);
+                co_return std::unexpected(TransactionProveError::Ignored);
             }
         }
 
@@ -271,7 +270,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
 
         if (status_ != DagStatus::Ready) {
-            return {};
+            co_return std::unexpected(TransactionProveError::NotReady);
         }
 
         /*
@@ -290,8 +289,6 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         */
     }
 
-    auto tx   = transaction;
-    auto resp = responder;
     // ThreadPoolBoost::instance()->post([this, transaction = tx, responder = resp]() {
     auto                  section = read_section(transaction.section());
     TransactionProveError res =
@@ -327,8 +324,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         auto save_result = this->save_transaction(transaction);
         if (!save_result) {
             transaction_result.result = TransactionProveError::NoSectionAdded;
-            // send response
-            return std::unexpected(transaction_result.result);
+            co_return std::unexpected(TransactionProveError::NoSectionAdded);
         }
 
         this->set_current_section(transaction.section());
@@ -341,20 +337,19 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
                                     MessageStatus::NoStatus);
 
     if (res != TransactionProveError::NoError) {
-        return std::unexpected(res);
+        co_return std::unexpected(res);
     }
 
     this->check_self(transaction);
-    return {};
+    co_return true;
 }
 
-void Dag::network_transaction_result(const TransactionResult &tx_result, const Responder &responder) {
+VoidTask Dag::network_transaction_result(TransactionResult tx_result, Responder responder) {
     if (sended_transactions_.find(tx_result.hash) == sended_transactions_.end()) {
         // eLog("[Dag] Ignore transaction result: {} / {}", hash, result);
-        return;
-    }
 
-    // map of
+        co_return;
+    }
 
     auto transaction = this->sended_transactions_[tx_result.hash];
     // this->sended_transactions.erase(hash);
@@ -370,7 +365,7 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         this->sended_transactions_.erase(tx_result.hash);
         this->failed_transactions_.insert({ tx_result.hash, transaction });
         emit node->dagTxNotApproved(transaction.section(), tx_result.hash);
-        return;
+        co_return;
     } else {
         eLog("[Dag] Our transaction approved: {} / {}", transaction.section(), transaction.hash());
         this->sended_transactions_.erase(tx_result.hash);
@@ -382,10 +377,11 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         eLog("[Dag] Can't save our approved transaction {} in section {}",
              transaction.hash(),
              transaction.section());
-        return;
+        co_return;
     }
 
     this->check_self(transaction);
+    co_return;
 }
 
 void Dag::check_self(const Transaction &transaction) {
@@ -426,8 +422,8 @@ void Dag::check_self(const Transaction &transaction) {
     }
 }
 
-void Dag::network_section(const Section &section) {
-    //
+VoidTask Dag::network_section(Section section) {
+    co_return;
 }
 
 Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
@@ -439,10 +435,13 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
 void Dag::process_cached_transactions(bool not_ready) {
     // TODO: check controls
 
+    std::set<Transaction> txs_to_process;
     {
         try {
-            auto guard = cached_txs_.lock();
-            eLog("[Dag] Processing {} cached transactions after sync", guard->size());
+            auto guard_mut = cached_txs_.lock_mut();
+            eLog("[Dag] Processing {} cached transactions after sync", guard_mut->size());
+            txs_to_process = std::move(*guard_mut);
+            guard_mut->clear();
         } catch (const std::system_error &e) {
             std::cerr << "[Dag] Caught system_error in process cached: " << e.what() << std::endl;
         }
@@ -453,25 +452,31 @@ void Dag::process_cached_transactions(bool not_ready) {
 
     timestamp_bigger_sync_start_ = 0;
 
-    while (true) {
-        std::set<Transaction> txs_to_process;
-        {
-            try {
-                auto guard_mut = cached_txs_.lock_mut();
-                if (guard_mut->empty()) {
-                    break;
-                }
+    for (const auto &tx : txs_to_process) {
+        Responder responder(node->network());
+        asio::co_spawn(node->network()->io_context(),
+                       network_transaction(tx, responder),
+                       asio::detached);
+    }
 
-                txs_to_process = std::move(*guard_mut);
-                guard_mut->clear();
-            } catch (const std::system_error &e) {
-                std::cerr << "[Dag] Caught system_error in process cached 2: " << e.what() << std::endl;
+    // Process any new transactions that arrived during processing
+    while (true) {
+        std::set<Transaction> new_txs;
+        {
+            auto guard_opt = cached_txs_.try_lock_mut();
+            if (!guard_opt.has_value() || (*guard_opt)->empty()) {
+                break;
             }
+            new_txs = std::move(**guard_opt);
+            (*guard_opt)->clear();
         }
 
-        for (const auto &tx : txs_to_process) {
+        eLog("[Dag] Processing {} additional cached transactions", new_txs.size());
+        for (const auto &tx : new_txs) {
             Responder responder(node->network());
-            network_transaction(tx, responder);
+            asio::co_spawn(node->network()->io_context(),
+                           network_transaction(tx, responder),
+                           asio::detached);
         }
     }
 
@@ -1274,13 +1279,13 @@ void Dag::start_check() {
     eLog("BC 9 start_check");
 }
 
-void Dag::network_status_sync_request(const Responder &responder) {
+VoidTask Dag::network_status_sync_request(Responder responder) {
 #ifdef IS_APP_UI_CLIENT
-    return;
+    co_return;
 #endif
 
     if (mode_ == DagMode::Light) {
-        return;
+        co_return;
     }
 
     // if (status_ != DagStatus::Ready) {
@@ -1296,12 +1301,12 @@ void Dag::network_status_sync_request(const Responder &responder) {
     if (!last_control.has_value()) {
         this->start_control(Force::Active);
         last_control = this->find_last_control();
-        // return;
+        // co_return;
     }
 
     if (!last_control.has_value()) {
         eCritical("[Dag] Sync response problem: no last control");
-        return;
+        co_return;
     }
 
     std::uint64_t zero_timestamp =
@@ -1312,24 +1317,23 @@ void Dag::network_status_sync_request(const Responder &responder) {
                                    .last_control_hash       = last_control->control,
                                    .zero_date               = zero_section.has_value() ? zero_timestamp : 0,
                                    .status                  = status_ };
-    // eLog("network_status_sync_request, send: {}", last_info);,
     responder.send_response(last_info, MessageType::DagSyncLastInfo, SendMode::Focused, MessageStatus::Response);
+    co_return;
 }
 
-void Dag::network_status_sync_response(const DagLastInfo &last_info, const Responder &responder) {
+VoidTask Dag::network_status_sync_response(DagLastInfo last_info, Responder responder) {
     if (responder.luminance() < 2) {
-        return;
+        co_return;
     }
 
     if (sync_status_ != DagSyncStatus::LastInfo && check_status_ != DagSyncStatus::LastInfo) {
         eWarning("[Dag] Sync responce: not last info status");
-        return;
+        co_return;
     }
-    // min(connections size, 5)
 
     if (last_info.status != DagStatus::Ready) {
         eWarning("[Dag] Sync responce: last info not ready");
-        return;
+        co_return;
     }
 
     auto zero_section = this->read_section(SectionId(0));
@@ -1339,7 +1343,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         // this->clear_dag();
     }
 
-    int count = 1; // std::min(requests_count_, min_req_count_);
+    int count = 1;
 
     last_info_.insert({ *responder.identifiers().begin(), last_info });
 
@@ -1348,7 +1352,7 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         check_status_ = DagSyncStatus::None;
         eLog("BC 6 sync status");
         this->handle_sync_request();
-        return;
+        co_return;
     }
 
     if (check_status_ == DagSyncStatus::LastInfo && last_info_.size() >= count) {
@@ -1356,6 +1360,8 @@ void Dag::network_status_sync_response(const DagLastInfo &last_info, const Respo
         eLog("BC 7 check status");
         this->handle_sync_request();
     }
+
+    co_return;
 }
 
 void Dag::request_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
@@ -1370,24 +1376,23 @@ void Dag::request_sections(const SectionId &from, const SectionId &to, const Res
     // }
 }
 
-void Dag::network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
-    if (current_section_ < from) { // to
+VoidTask Dag::network_request_sections(SectionId from, SectionId to, Responder responder) {
+    if (current_section_ < from) {
         eLog("[Dag] Send sections error: {} < {}", current_section_, from);
-        return;
+        co_return;
     }
 
     if (from < first_saved_section_) {
-        // eLog("sysync 1 {} {}", from, first_saved_section_);
-        return;
+        co_return;
     }
 
     if (to < from) {
         eLog("[Dag] Send sections error: {} < {}", to, from);
-        return;
+        co_return;
     }
 
     if (to - from >= 2500) {
-        // return;
+        // co_return;
     }
 
     std::set<Transaction>   txs;
@@ -1458,37 +1463,38 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
                             MessageType::DagSections,
                             SendMode::Focused,
                             MessageStatus::Response);
+    co_return;
 }
 
-void Dag::network_request_sections_response(const std::string &compressed, const Responder &responder) {
+VoidTask Dag::network_request_sections_response(std::string compressed, Responder responder) {
     emit node->dagTimerStop();
     // eLog("Timer stop");
 
-    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
-        const auto section_sync = MessagePack::deserialize<SectionSync>(
-            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
-        if (!section_sync.has_value()) {
+    const auto section_sync = MessagePack::deserialize<SectionSync>(
+        qUncompress(QByteArray::fromStdString(compressed)).toStdString());
+
+    if (!section_sync.has_value()) {
             // eLog("network_request_sections_response 1");
             // eLog("sysync 2");
-            return;
-        }
+        co_return;
+    }
 
-        if (!section_sync->txs.empty()) {
-            auto res = this->save_transactions(section_sync->txs);
-            if (!res.has_value()) {
+    if (!section_sync->txs.empty()) {
+        auto res = this->save_transactions(section_sync->txs);
+        if (!res.has_value()) {
                 // eLog("network_request_sections_response 2");
                 // eLog("sysync 3");
-                return;
-            }
-
-            const auto &[min, max] = res.value();
+            co_return;
         }
 
-        if (section_sync->last_section > sync_last_index_) {
-            sync_last_index_ = section_sync->last_section;
-            emit node->dagSyncStart(current_section_, sync_last_index_);
-        }
+        const auto &[min, max] = res.value();
+    }
+
+    if (section_sync->last_section > sync_last_index_) {
+        sync_last_index_ = section_sync->last_section;
+        emit node->dagSyncStart(current_section_, sync_last_index_);
+    }
 
         // for (const auto &[section_id, control] : section_sync->controls) {
         //     if (section_id % 20 == 0) {
@@ -1516,123 +1522,122 @@ void Dag::network_request_sections_response(const std::string &compressed, const
         //     // this->write_control(section_id, control);
         // }
 
-        if (section_sync->to >= sync_last_index_ - 1) {
-            eLog("[Dag] Sync completed, processing cached transactions");
+    if (section_sync->to >= sync_last_index_ - 1) {
+        eLog("[Dag] Sync completed, processing cached transactions");
 
-            if (this->status_ != DagStatus::Ready) {
-                this->start_control();
+        if (this->status_ != DagStatus::Ready) {
+            this->start_control();
 
-                if (mode_ == DagMode::Light) {
-                    this->process_cached_transactions();
-                    return;
-                }
-
-#ifdef IS_APP_CLIENT // only for clients for first correction and integration
-                     // emit node->dagSyncFinish();
-                this->process_cached_transactions(true);
-                cache_.reset_db();
-                auto responder_new = responder.with_new_message_id();
-                node->network()->send_message(true,
-                                              MessageType::DagLightData,
-                                              SendMode::Focused,
-                                              MessageStatus::Request,
-                                              responder_new);
-                light_requested_ = true;
-#else
+            if (mode_ == DagMode::Light) {
                 this->process_cached_transactions();
-#endif
+                co_return;
             }
-            return;
-        }
 
-        emit node->dagSyncProgress(section_sync->to);
-        this->set_current_section(section_sync->to);
+#ifdef IS_APP_CLIENT
+                     // emit node->dagSyncFinish();
+            this->process_cached_transactions(true);
+            cache_.reset_db();
+            auto responder_new = responder.with_new_message_id();
+            node->network()->send_message(true,
+                                          MessageType::DagLightData,
+                                          SendMode::Focused,
+                                          MessageStatus::Request,
+                                          responder_new);
+            light_requested_ = true;
+#else
+            this->process_cached_transactions();
+#endif
+        }
+        co_return;
+    }
+
+    emit node->dagSyncProgress(section_sync->to);
+    this->set_current_section(section_sync->to);
         // eLog("curr: {}, sync last: {}, curr + 100 {}", current_section_, sync_last_index, current_section_ +
         // 100);
 
         // timer_sync->start();
-        emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 2100), responder);
-    });
+
+    emit node->dagTimerStart(15002);
+    this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 2100), responder);
+    co_return;
 }
 
-void Dag::network_request_light(const Responder &responder) {
-    ThreadPoolBoost::instance()->post([this, responder]() {
-        QElapsedTimer timer;
-        timer.start();
-        std::set<Transaction>                          txs;
-        std::vector<std::pair<SectionId, std::string>> controls;
+VoidTask Dag::network_request_light(Responder responder) {
+    QElapsedTimer timer;
+    timer.start();
+    std::set<Transaction>                          txs;
+    std::vector<std::pair<SectionId, std::string>> controls;
 
-        if (cache().section() == SectionId(-1) && current_section_ > 100) {
-            return;
-        }
+    if (cache().section() == SectionId(-1) && current_section_ > 100) {
+        co_return;
+    }
 
-        auto [cache_section, cache] = this->cache().read_cached_balances();
+    auto [cache_section, cache] = this->cache().read_cached_balances();
         // txs.reserve(20);
 
-        auto section = this->read_section(SectionId(0));
-        if (section.has_value()) {
-            if (section->control.has_value()) {
-                controls.push_back({ SectionId(0), section->control.value() });
-            }
-
-            for (const auto &tx : section->transactions) {
-                txs.insert(tx);
-            }
+    auto section = this->read_section(SectionId(0));
+    if (section.has_value()) {
+        if (section->control.has_value()) {
+            controls.push_back({ SectionId(0), section->control.value() });
         }
 
-        for (SectionId i = cache_section; i <= current_section_; i++) {
-            auto section = this->read_section(i);
-            if (!section.has_value()) {
-                continue;
-            }
+        for (const auto &tx : section->transactions) {
+            txs.insert(tx);
+        }
+    }
 
-            if (section->control.has_value()) {
-                controls.push_back({ i, section->control.value() });
-            }
-
-            for (const auto &tx : section->transactions) {
-                txs.insert(tx);
-            }
+    for (SectionId i = cache_section; i <= current_section_; i++) {
+        auto section = this->read_section(i);
+        if (!section.has_value()) {
+            continue;
         }
 
-        auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
-        if (section_before.has_value()) {
-            if (section_before->control.has_value()) {
-                controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
-            }
+        if (section->control.has_value()) {
+            controls.push_back({ i, section->control.value() });
         }
 
-        if (txs.empty()) {
-            eLog("[Dag] No transactions to send in light mode");
-            return;
+        for (const auto &tx : section->transactions) {
+            txs.insert(tx);
         }
+    }
 
-        auto dag_light =
-            DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs, .controls = controls };
+    auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
+    if (section_before.has_value()) {
+        if (section_before->control.has_value()) {
+            controls.push_back({ cache_section - CONTROL_INTERVAL, section_before->control.value() });
+        }
+    }
 
-        node->network()->send_message(dag_light,
-                                      MessageType::DagLightData,
-                                      SendMode::Focused,
-                                      MessageStatus::Response,
-                                      responder);
+    if (txs.empty()) {
+        eLog("[Dag] No transactions to send in light mode");
+        co_return;
+    }
 
-        eLog("[Dag] Sent light data: cache section {}, transactions count: {}, time: {}",
-             cache_section,
-             txs.size(),
-             timer.elapsed());
-    });
+    auto dag_light =
+        DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs, .controls = controls };
+
+    node->network()->send_message(dag_light,
+                                  MessageType::DagLightData,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
+
+    eLog("[Dag] Sent light data: cache section {}, transactions count: {}, time: {}",
+         cache_section,
+         txs.size(),
+         timer.elapsed());
+    co_return;
 }
 
-void Dag::network_response_light(const DagLightPackage &dag_light, const Responder &responder) {
+VoidTask Dag::network_response_light(DagLightPackage dag_light, Responder responder) {
     // eLog("network_response_light {}", dag_light);
 
-    ThreadPoolBoost::instance()->post([this, responder, dag_light]() {
         // TIMER_START(network_response_light)
-        cache_.reset_db();
-        cache_.init_db();
+    cache_.reset_db();
+    cache_.init_db();
 
-        cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
+    cache_.write_cached_balances(dag_light.cache, dag_light.cache_section);
 
         // auto min = SectionId(-1), max = SectionId(-1);
         // for (const auto &tx : std::as_const(dag_light.txs)) {
@@ -1640,65 +1645,67 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         //     max = std::max(tx.section(), max);
         //     save_transaction(tx);
         // }
-        this->save_transactions(dag_light.txs);
+
+    this->save_transactions(dag_light.txs);
 
         // if (first_saved_section_ == SectionId(-1) && min >= SectionId(0)) {
         //     first_saved_section_ = min;
         //     eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         // }
 
-        if (dag_light.cache_section == -1 || dag_light.cache_section == 0) {
-            this->first_saved_section_ = 0;
+    if (dag_light.cache_section == -1 || dag_light.cache_section == 0) {
+        this->first_saved_section_ = 0;
+    }
+
+    if (mode_ == DagMode::Light) {
+        for (const auto &[section_id, control] : dag_light.controls) {
+            this->write_control(section_id, control);
         }
+    }
 
-        if (mode_ == DagMode::Light) {
-            for (const auto &[section_id, control] : dag_light.controls) {
-                this->write_control(section_id, control);
-            }
-        }
+    this->update_range();
 
-        this->update_range();
+    if (mode_ == DagMode::Light) {
+        eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
+             dag_light.cache_section,
+             this->first_saved_section_,
+             this->current_section_);
+    } else {
+        eLog("[Dag] Balances updated");
+    }
 
-        if (mode_ == DagMode::Light) {
-            eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
-                 dag_light.cache_section,
-                 this->first_saved_section_,
-                 this->current_section_);
-        } else {
-            eLog("[Dag] Balances updated");
-        }
+    if (mode_ == DagMode::Full) {
+        this->start_control(Force::Active);
+    }
 
-        if (mode_ == DagMode::Full) {
-            this->start_control(Force::Active);
-        }
-
-        light_requested_ = false;
-        this->process_cached_transactions();
+    light_requested_ = false;
+    this->process_cached_transactions();
         // start check hash
         // TIMER_END(network_response_light)
-    });
+
+    co_return;
 }
 
-void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
+VoidTask Dag::network_hash_interval(HashInterval hash_interval, Responder responder) {
     if (status_ != DagStatus::Ready) {
         eLog("[Dag] Hash interval check: ignore", hash_interval);
-        return;
+        co_return;
     }
 
     if (responder.luminance() < 2) {
-        return;
+        co_return;
     }
 
     // eLog("Hash interval: {}", hash_interval);
     auto last_control = this->find_last_control(hash_interval.to - 1);
     if (!last_control.has_value()) {
         eWarning("[Dag] Hash interval check: no last control");
-        // return;
+        // co_return;
         this->start_control(Force::Active);
 
         last_control = this->find_last_control(hash_interval.to - 1);
         if (!last_control.has_value()) {
-            return;
+            co_return;
         }
     }
 
@@ -1706,17 +1713,17 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
     if (hash_interval.to > current_section_) {
         eLog("[Dag] Hash interval check: ignore #2");
-        return;
+        co_return;
     }
 
     if (hash_interval.to + 100 < current_section_) {
         eLog("[Dag] Hash interval check: ignore #3");
-        return;
+        co_return;
     }
 
     if (last_control->section_id != hash_interval.to) {
         eLog("[Dag] Hash interval check: ignore #4");
-        return;
+        co_return;
     }
 
     if (last_control->control != hash_interval.hash) {
@@ -1724,14 +1731,13 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
              hash_interval,
              last_control);
 
-        // this->start_sync();
-        return;
+        co_return;
         if (current_section_ < hash_interval.to) {
             if (status_ != DagStatus::Ready) {
                 status_ = DagStatus::Maybe;
             }
 
-            this->start_check(); // TODO: warning: check or sync?
+            this->start_check();
         } else {
             this->request_sections(hash_interval.from, hash_interval.to, responder);
             // TODO: need add full network check
@@ -1740,6 +1746,8 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
     }
+
+    co_return;
 }
 
 void Dag::set_sync_status(DagSyncStatus status) {
@@ -2616,10 +2624,9 @@ void Dag::request_control_section(const SectionId &from_top, const Responder &re
                                   responder.with_new_message_id());
 }
 
-void Dag::network_request_control_section(const DagControlRangeRequest &control_request,
-                                          const Responder              &responder) {
+VoidTask Dag::network_request_control_section(DagControlRangeRequest control_request, Responder responder) {
     if (mode_ == DagMode::Light) {
-        return;
+        co_return;
     }
 
     // TODO: to thread? with status generated controls
@@ -2628,7 +2635,7 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
         eLog("[Dag] network_request_control_section Can't send control from {} to {}",
              control_request.to,
              control_request.from);
-        return;
+        co_return;
     }
 
     DagControlRangeResponse control_response { .from = control_request.from, .to = control_request.to };
@@ -2652,19 +2659,20 @@ void Dag::network_request_control_section(const DagControlRangeRequest &control_
     if (from != -1) {
         this->clear_controls(from);
         this->start_control(Force::Active);
-        this->network_request_control_section(control_request, responder);
-        return;
+        co_await this->network_request_control_section(control_request, responder);
+        co_return;
     }
 
     // eTemp("[Dag] Sended control response: {}, {}", control_response.from, control_response.to);
+
     responder.send_response(control_response,
                             MessageType::DagControlRangeResponse,
                             SendMode::Focused,
                             MessageStatus::Response);
+    co_return;
 }
 
-void Dag::network_control_range_response(const DagControlRangeResponse &control_response,
-                                         const Responder               &responder) {
+VoidTask Dag::network_control_range_response(DagControlRangeResponse control_response, Responder responder) {
     if (!is_aligned20(control_response.from) || !is_aligned20(control_response.to)
         || control_response.to < control_response.from) {
         eLog("[Dag] network_request_control_section Can't read control from {} to {}",
@@ -2672,11 +2680,11 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
              control_response.from);
         search_control_ = false;
         emit node->dagSearchControlEnded();
-        return;
+        co_return;
     }
 
     if (responder.luminance() < 2) {
-        return;
+        co_return;
     }
 
     SectionId sync_from  = SectionId(-1);
@@ -2725,7 +2733,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
             search_control_ = false;
             emit node->dagSearchControlEnded();
             this->process_cached_transactions();
-            return;
+            co_return;
         } else {
             sync_from = current_section_;
         }
@@ -2751,7 +2759,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
                                           responder.with_new_message_id());
         }
 
-        return;
+        co_return;
     }
 
     if (sync_from != SectionId(-1)) {
@@ -2770,6 +2778,8 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
                                std::min(sync_from + 2100, sync_last_index_),
                                responder.with_new_message_id());
     }
+
+    co_return;
 }
 
 std::set<std::string> Section::prev_hashs() const {

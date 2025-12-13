@@ -374,7 +374,13 @@ VoidTask WebSocketService::process_binary_message(const std::vector<uint8_t>& da
     }
 
     std::string message(decrypted.begin(), decrypted.end());
-    node_->network()->message_received(message, ip_, identifier_);
+    std::string ip = ip_;
+    std::string identifier = identifier_;
+
+    // Fire and forget - not blocking read_loop
+    asio::co_spawn(node_->network()->io_context(),
+        node_->network()->message_received(std::move(message), std::move(ip), std::move(identifier)),
+        asio::detached);
 }
 
 void WebSocketService::close_async() {

@@ -212,8 +212,8 @@ BigNumberFloat DataMiningManager::calculate_reward_amount(const Dfs::Reward::Req
     return res;
 }
 
-bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward,
-                                                    const Responder                  &responder) {
+Task<bool> DataMiningManager::network_request_coin_reward(Dfs::Reward::RequestReward request_reward,
+                                                          Responder                  responder) {
     auto calc   = calculate_reward_amount(request_reward);
     auto amount = request_reward.transaction.amount();
 
@@ -222,12 +222,12 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
             eLog("Ignore reward, because tx sender != tx receiver, {} {}",
                  request_reward.transaction.sender(),
                  request_reward.transaction.receiver());
-            return false;
+            co_return false;
         }
 
         if (request_reward.transaction.sender() != responder.node_id().actor_id) {
             eLog("Ignore reward, because tx sender != message sender");
-            return false;
+            co_return false;
         }
         auto  sender      = NodeId { .actor_id        = request_reward.transaction.sender(),
                                      .node_identifier = responder.node_id().node_identifier };
@@ -241,7 +241,7 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 #ifndef IS_APP_CLIENT
                 eLog("[Reward] Ignore from {}, diff: {} ms", sender, time_diff_ms);
 #endif
-                return false;
+                co_return false;
             }
         } else if (network_map.size() >= 5) {
             auto current_time = Utils::current_date_ms();
@@ -253,22 +253,22 @@ bool DataMiningManager::network_request_coin_reward(const Dfs::Reward::RequestRe
 #ifndef IS_APP_CLIENT
                 eLog("[Reward] Reject new node identifier, limit reached: {}", sender);
 #endif
-                return false;
+                co_return false;
             }
         }
 
-        auto res1 = node->dag()->network_transaction(request_reward.transaction, responder);
+        auto res1 = co_await node->dag()->network_transaction(request_reward.transaction, responder);
         if (!res1.has_value()) {
             if (res1.error() != TransactionProveError::TooSectionDiff) {
-                return false;
+                co_return false;
             }
         }
 
         network_map[sender.node_identifier] = Utils::current_date_ms();
 
-        return true;
+        co_return true;
     } else {
-        return false;
+        co_return false;
         // eLog("[Reward] Can't add request: {}, calc: {}, amount: {}", requestReward, calc, amount);
     }
 }

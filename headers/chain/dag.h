@@ -21,6 +21,8 @@
 
 #include <shared_mutex>
 
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/describe.hpp>
 #include <QTimer>
 
@@ -30,6 +32,11 @@
 #include "chain/dag_cache.h"
 
 #include "3rdparty/rustex.h"
+
+namespace asio = boost::asio;
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 class ExtraChainNode;
 class Responder;
@@ -357,10 +364,8 @@ public:
      *
      * @param transaction The transaction to process
      * @param responder The responder to send the result to
-     * @return std::expected<void, bool> Success or failure
      */
-    std::expected<void, TransactionProveError> network_transaction(const Transaction &transaction,
-                                                                   const Responder   &responder);
+    Task<std::expected<bool, TransactionProveError>> network_transaction(Transaction transaction, Responder responder);
 
     /**
      * @brief Process a transaction validation result from the network
@@ -370,14 +375,14 @@ public:
      * @param tx_result The tx_result of the transaction
      * @param result The validation result
      */
-    void network_transaction_result(const TransactionResult &tx_result, const Responder &responder);
+    VoidTask network_transaction_result(TransactionResult tx_result, Responder responder);
 
     /**
      * @brief Process a section received from the network
      *
      * @param section The section to process
      */
-    void network_section(const Section &section);
+    VoidTask network_section(Section section);
 
     /**
      * @brief Calculate balances for a set of actors
@@ -453,7 +458,7 @@ public:
      *
      * @param responder The responder to send the status to
      */
-    void network_status_sync_request(const Responder &responder);
+    VoidTask network_status_sync_request(Responder responder);
 
     /**
      * @brief Process a sync status response from the network
@@ -461,7 +466,7 @@ public:
      * @param last_info The chain info received
      * @param responder The responder that sent the info
      */
-    void network_status_sync_response(const DagLastInfo &last_info, const Responder &responder);
+    VoidTask network_status_sync_response(DagLastInfo last_info, Responder responder);
 
     /**
      * @brief Request specific sections from the network
@@ -470,7 +475,7 @@ public:
      * @param to The ending section ID
      * @param responder The responder to send the request to
      */
-    void network_request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+    VoidTask network_request_sections(SectionId from, SectionId to, Responder responder);
 
     /**
      * @brief Process a sections response from the network
@@ -478,7 +483,7 @@ public:
      * @param compressed The compressed sections data
      * @param responder The responder that sent the data
      */
-    void network_request_sections_response(const std::string &compressed, const Responder &responder);
+    VoidTask network_request_sections_response(std::string compressed, Responder responder);
 
     /**
      * @brief Request light mode data from the network
@@ -487,7 +492,7 @@ public:
      *
      * @param responder The responder to send the request to
      */
-    void network_request_light(const Responder &responder);
+    VoidTask network_request_light(Responder responder);
 
     /**
      * @brief Process light mode data received from the network
@@ -497,14 +502,14 @@ public:
      * @param dag_light The light mode data package
      * @param responder The responder that sent the data
      */
-    void network_response_light(const DagLightPackage &dag_light, const Responder &responder);
+    VoidTask network_response_light(DagLightPackage dag_light, Responder responder);
 
     /**
      * @brief network_hash_interval
      * @param hash_interval
      * @param responder
      */
-    void network_hash_interval(const HashInterval &hash_interval, const Responder &responder);
+    VoidTask network_hash_interval(HashInterval hash_interval, Responder responder);
 
     /**
      * @brief Set the chain synchronization status
@@ -770,12 +775,9 @@ public:
      * @param dag_control
      * @param responder
      */
-    // void network_request_control_section(const DagControl &dag_control, const Responder &responder);
-    void network_request_control_section(const DagControlRangeRequest &control_request,
-                                         const Responder              &responder);
+    VoidTask network_request_control_section(DagControlRangeRequest control_request, Responder responder);
 
-    void network_control_range_response(const DagControlRangeResponse &control_response,
-                                        const Responder               &responder);
+    VoidTask network_control_range_response(DagControlRangeResponse control_response, Responder responder);
 
     friend class ExtraChainNode;
     friend class DagCache;

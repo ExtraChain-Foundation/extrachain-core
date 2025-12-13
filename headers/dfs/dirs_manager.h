@@ -22,10 +22,18 @@
 #include <string>
 #include <expected>
 
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+
 #include <QObject>
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 #include "network/network_manager.h"
+
+namespace asio = boost::asio;
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 class ExtraChainNode;
 class LoadManager;
@@ -44,23 +52,21 @@ public:
 
     void update_dirs(const ActorId& actor_id, std::uint64_t last_modified);
 
-    void sync(const std::string& identifier);
-    void network_request_sync(const Responder& responder);
-    void network_response_sync(std::uint64_t max_last_modified, const Responder& responder);
+    void     sync(const std::string& identifier);
+    VoidTask network_request_sync(Responder responder);
+    VoidTask network_response_sync(std::uint64_t max_last_modified, Responder responder);
 
-    void send_from_last_modified(std::uint64_t last_modified, const Responder& responder);
-    void network_response_from_last_modified(
-        const std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow>& dirs_rows,
-        const Responder&                                              responder);
+    void     send_from_last_modified(std::uint64_t last_modified, const Responder& responder);
+    VoidTask network_response_from_last_modified(std::vector<Dfs::Tables::DirsFile::DirsSpace::DirsRow> dirs_rows,
+                                                 Responder                                              responder);
 
-    void network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpace::DirsRow& dirs_row,
-                                  const Responder&                                 responder);
-    void network_response_dir_rows(const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
-                                   const Responder&                                                responder);
+    VoidTask network_request_dir_rows(Dfs::Tables::DirsFile::DirsSpace::DirsRow dirs_row, Responder responder);
+    VoidTask network_response_dir_rows(std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+                                       Responder                                                 responder);
 
     // temp
-    void temp_sync_all(const std::string& identifier);
-    void network_request_all(const Responder& responder);
+    void     temp_sync_all(const std::string& identifier);
+    VoidTask network_request_all(Responder responder);
 
     std::shared_ptr<DbConnector> get_db_instance();
 

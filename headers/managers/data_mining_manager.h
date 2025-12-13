@@ -22,10 +22,18 @@
 #include <string>
 #include <QObject>
 
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+
 #include "dfs/dfs_controller.h"
 #include "utils/bignumber_float.h"
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_utils.h"
+
+namespace asio = boost::asio;
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 static const int MINING_TIMER_TICK = 60000;
 
@@ -65,7 +73,7 @@ public:
     /**
      * @brief Send reward amount
      */
-    bool network_request_coin_reward(const Dfs::Reward::RequestReward &request_reward, const Responder &responder);
+    Task<bool> network_request_coin_reward(Dfs::Reward::RequestReward request_reward, Responder responder);
 
     /**
      * @brief set_koef_to_koef

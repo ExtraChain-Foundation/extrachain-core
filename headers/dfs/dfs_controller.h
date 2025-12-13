@@ -28,11 +28,18 @@
 #include <QFileInfo>
 #include <QObject>
 
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/generator_iterator.hpp>
 #include <boost/random.hpp>
 #include <boost/algorithm/string.hpp>
 #include <filesystem>
 #include <QThread>
+
+namespace asio = boost::asio;
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
@@ -397,22 +404,16 @@ public:
                                                    const std::string &file_id,
                                                    uint32_t           id);
 
-    void network_request_collection(const ActorId     &owner_id,
-                                    const std::string &file_id,
-                                    const Responder   &responder);
-    void network_response_historical_collection(const ActorId                              &owner_id,
-                                                const std::string                          &file_id,
-                                                const std::vector<HistoricalCollectionRow> &historical_rows);
-    void network_response_content_collection(const ActorId            &owner_id,
-                                             const std::string        &file_id,
-                                             const std::vector<DbRow> &db_rows);
-    void network_change_collection(const ActorId                 &owner_id,
-                                   const std::string             &file_id,
-                                   const HistoricalCollectionRow &row,
-                                   const Responder               &responder);
-    void network_remove_collection(const ActorId                 &owner_id,
-                                   const std::string             &file_id,
-                                   const HistoricalCollectionRow &row);
+    VoidTask network_request_collection(ActorId owner_id, std::string file_id, Responder responder);
+    VoidTask network_response_historical_collection(ActorId                              owner_id,
+                                                    std::string                          file_id,
+                                                    std::vector<HistoricalCollectionRow> historical_rows);
+    VoidTask network_response_content_collection(ActorId owner_id, std::string file_id, std::vector<DbRow> db_rows);
+    VoidTask network_change_collection(ActorId                 owner_id,
+                                       std::string             file_id,
+                                       HistoricalCollectionRow row,
+                                       Responder               responder);
+    VoidTask network_remove_collection(ActorId owner_id, std::string file_id, HistoricalCollectionRow row);
 
     std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> make_vector(
         const ActorId               &owner_id,
@@ -421,23 +422,18 @@ public:
         const ActorId               &signer_id     = ActorId(),
         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
-    void network_request_vector(const ActorId &owner_id, const std::string &file_id, const Responder &responder);
-    void network_response_content_vector(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content);
-    void network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row);
+    VoidTask network_request_vector(ActorId owner_id, std::string file_id, Responder responder);
+    VoidTask network_response_content_vector(Dfs::Packets::DfsVectorContentPackage dfs_vector_content);
+    VoidTask network_vector_add(ActorId owner_id, std::string file_id, DbRow row);
 
-    void network_request_file_state(const ActorId     &owner_id,
-                                    const std::string &file_id,
-                                    const Responder   &responder);
-    void network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder);
-    void network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder);
-    void network_file_exist_notification(const Dfs::Packets::FileState &data, const Responder &responder);
+    VoidTask network_request_file_state(ActorId owner_id, std::string file_id, Responder responder);
+    VoidTask network_request_file_existance(Dfs::FileLink file_link, Responder responder);
+    VoidTask network_response_file_state(Dfs::Packets::FileState data, Responder responder);
+    VoidTask network_file_exist_notification(Dfs::Packets::FileState data, Responder responder);
 
     // full file remove
     std::expected<void, bool> remove_stored_file(const ActorId &owner_id, const std::string &file_id);
-    void                      network_remove_stored_file(const ActorId     &owner_id,
-                                                         const std::string &file_id,
-                                                         const Signature   &sign,
-                                                         uint64_t           last_modified);
+    VoidTask                  network_remove_stored_file(ActorId owner_id, std::string file_id, Signature sign, uint64_t last_modified);
 
     // remove only local copy
     std::expected<void, bool> remove_local_file(const ActorId &owner_id, const std::string &file_id);
@@ -451,9 +447,9 @@ public:
     void sync_stored(const Dfs::FileData &file_data, const Responder &responder);
 
     // External interfaces
-    std::string network_store_file(const ActorId        &owner_id,
-                                   const Dfs::DirRow    &dir_row,
-                                   Dfs::NetworkStoreFile network_stote);
+    Task<std::string> network_store_file(ActorId               owner_id,
+                                         Dfs::DirRow           dir_row,
+                                         Dfs::NetworkStoreFile network_stote);
     std::string getFileFromStorage(const ActorId &owner_id, const std::string &file_name);
 
     // Unique file ID: hash+msec+salt

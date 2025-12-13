@@ -421,7 +421,7 @@ public:
     bool is_active_connection_exists();
     int  active_connections_count();
 
-    void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
+    VoidTask message_received(std::string message, std::string ip, std::string identifier);
 
     QString found_current_identifier(QString ip, quint16 port);
 

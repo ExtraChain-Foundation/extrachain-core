@@ -100,7 +100,7 @@ std::expected<Actor<KeyPublic>, ActorIndexError> ActorIndex::read_actor(const Ac
     }
 }
 
-void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &responder) {
+VoidTask ActorIndex::network_actor_request(ActorId actorId, Responder responder) {
     // receive id
     // create response message
     if (actorId.is_zero())
@@ -108,7 +108,7 @@ void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &
 
     auto actor_result = this->read_actor(actorId, ActorGetType::NoRequest);
     if (!actor_result.has_value()) {
-        return;
+        co_return;
     }
 
     auto actor = actor_result.value();
@@ -117,9 +117,10 @@ void ActorIndex::network_actor_request(const ActorId &actorId, const Responder &
     } else {
         this->send_get_actor_message(actorId);
     }
+    co_return;
 }
 
-void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const Responder &responder) {
+VoidTask ActorIndex::network_actors_request(std::set<ActorId> actors, Responder responder) {
     std::vector<Actor<KeyPublic>> req_actors;
 
     for (const auto &actor_id : actors) {
@@ -132,13 +133,14 @@ void ActorIndex::network_actors_request(const std::set<ActorId> &actors, const R
     }
 
     if (req_actors.empty()) {
-        return;
+        co_return;
     }
 
     responder.send_response(req_actors, MessageType::Actors, SendMode::Neighbours, MessageStatus::Response);
+    co_return;
 }
 
-void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &actors) {
+VoidTask ActorIndex::network_actors_response(std::vector<Actor<KeyPublic>> actors) {
     if (!sync_first_done_) {
         for (const auto &actor : actors) {
             auto id              = actor.id().to_string();
@@ -158,10 +160,11 @@ void ActorIndex::network_actors_response(const std::vector<Actor<KeyPublic>> &ac
             this->save_actor(actor);
 
             if (!node_enabled.load()) {
-                return;
+                co_return;
             }
         }
     }
+    co_return;
 }
 
 void ActorIndex::send_system_actor(const Responder &responder) {
@@ -191,9 +194,9 @@ void ActorIndex::request_actors_hash(const Responder &responder) {
                                                   MessageStatus::Request);
 }
 
-void ActorIndex::network_actors_hash_request(std::uint64_t               count,
-                                             const std::vector<uint8_t> &bits,
-                                             const Responder            &responder) {
+VoidTask ActorIndex::network_actors_hash_request(std::uint64_t        count,
+                                                  std::vector<uint8_t> bits,
+                                                  Responder            responder) {
     // TIMER_START(network_actors_hash_request)
     synch_count_                   = std::max(synch_count_, count);
     std::vector<ActorId> actor_ids = synch_.process_sync_request(bits);
@@ -210,41 +213,39 @@ void ActorIndex::network_actors_hash_request(std::uint64_t               count,
         node->account_controller()->dogenerate();
     }
 
-    auto r = responder;
-    ThreadPoolBoost::instance()->post([this, responder = r, actor_ids] {
-        std::vector<Actor<KeyPublic>> actors;
-        auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
-        actors.reserve(min_size);
+    std::vector<Actor<KeyPublic>> actors;
+    auto                          min_size = actor_ids.size() > 100 ? 100 : actor_ids.size();
+    actors.reserve(min_size);
 
-        for (const auto &actor_id : actor_ids) {
-            auto actor = read_actor(actor_id);
-            if (!actor.has_value()) {
-                continue;
-            }
-
-            actors.push_back(actor.value());
-
-            if (actors.size() > 99) {
-                // eLog("[ActorIndex] Send {} actors", actors.size());
-                responder.with_new_message_id().send_response(actors,
-                                                              MessageType::Actors,
-                                                              SendMode::Focused,
-                                                              MessageStatus::Response);
-                actors.clear();
-                QThread::msleep(2);
-            }
+    for (const auto &actor_id : actor_ids) {
+        auto actor = read_actor(actor_id);
+        if (!actor.has_value()) {
+            continue;
         }
 
-        if (actors.empty()) {
-            return;
-        }
+        actors.push_back(actor.value());
 
-        // eLog("[ActorIndex] Send {} actors", actors.size());
-        responder.with_new_message_id().send_response(actors,
-                                                      MessageType::Actors,
-                                                      SendMode::Focused,
-                                                      MessageStatus::Response);
-    });
+        if (actors.size() > 99) {
+            // eLog("[ActorIndex] Send {} actors", actors.size());
+            responder.with_new_message_id().send_response(actors,
+                                                          MessageType::Actors,
+                                                          SendMode::Focused,
+                                                          MessageStatus::Response);
+            actors.clear();
+            QThread::msleep(2);
+        }
+    }
+
+    if (actors.empty()) {
+        co_return;
+    }
+
+    // eLog("[ActorIndex] Send {} actors", actors.size());
+    responder.with_new_message_id().send_response(actors,
+                                                  MessageType::Actors,
+                                                  SendMode::Focused,
+                                                  MessageStatus::Response);
+    co_return;
 }
 
 bool ActorIndex::exists(const ActorId &actor_id) {
@@ -355,14 +356,14 @@ std::expected<void, ActorSaveError> ActorIndex::store_new_actor(const Actor<KeyP
     return result;
 }
 
-std::expected<void, ActorSaveError> ActorIndex::network_store_new_actor(const Actor<KeyPublic> &actor) {
+Task<std::expected<void, ActorSaveError>> ActorIndex::network_store_new_actor(Actor<KeyPublic> actor) {
     auto result = this->save_actor(actor);
     if (!result.has_value()) {
-        return std::unexpected(result.error());
+        co_return std::unexpected(result.error());
     }
 
     emit newActorSaved(actor.id());
-    return result;
+    co_return result;
 }
 
 std::expected<void, ActorSaveError> ActorIndex::save_actor(const Actor<KeyPublic> &actor) {

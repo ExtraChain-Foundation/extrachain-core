@@ -19,11 +19,19 @@
 
 #pragma once
 
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+
 #include "extrachain_global.h"
 
 #include "chain/actor.h"
 #include "managers/extrachain_node.h"
 #include "chain/actor_filter.h"
+
+namespace asio = boost::asio;
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
 
 class ExtraChainNode;
 class Responder;
@@ -133,23 +141,21 @@ public:
      */
     std::expected<void, ActorSaveError> store_new_actor(const Actor<KeyPublic> &actor);
 
-    std::expected<void, ActorSaveError> network_store_new_actor(const Actor<KeyPublic> &actor);
+    Task<std::expected<void, ActorSaveError>> network_store_new_actor(Actor<KeyPublic> actor);
     std::expected<void, ActorSaveError> save_actor(const Actor<KeyPublic> &actor);
     std::expected<void, ActorSaveError> save_actors();
     std::vector<ActorId>                read_all_actors_ids();
     bool                                is_prepare();
 
-    void network_actors_request(const std::set<ActorId> &actors, const Responder &responder);
-    void network_actors_response(const std::vector<Actor<KeyPublic>> &actors);
+    VoidTask network_actors_request(std::set<ActorId> actors, Responder responder);
+    VoidTask network_actors_response(std::vector<Actor<KeyPublic>> actors);
 
     void send_system_actor(const Responder &responder);
 
-    void network_actor_request(const ActorId &actorId, const Responder &responder);
+    VoidTask network_actor_request(ActorId actorId, Responder responder);
 
-    void request_actors_hash(const Responder &responder);
-    void network_actors_hash_request(std::uint64_t               count,
-                                     const std::vector<uint8_t> &bits,
-                                     const Responder            &responder);
+    void     request_actors_hash(const Responder &responder);
+    VoidTask network_actors_hash_request(std::uint64_t count, std::vector<uint8_t> bits, Responder responder);
 
 signals:
     void newActorSaved(ActorId actor_id);

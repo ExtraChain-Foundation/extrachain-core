@@ -1180,13 +1180,13 @@ ExpectedDirHistoricalRow DfsController::remove_collection_row(const ActorId     
     return res;
 }
 
-void DfsController::network_request_collection(const ActorId     &owner_id,
-                                               const std::string &file_id,
-                                               const Responder   &responder) {
+// TODO: checks
+VoidTask DfsController::network_request_collection(ActorId owner_id, std::string file_id, Responder responder) {
+    // TODO: check state
     auto dirRowExp =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dirRowExp.has_value()) {
-        return;
+        co_return;
     }
     auto dirRow = dirRowExp.value();
 
@@ -1194,18 +1194,18 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
     auto chain      = HistoricalCollection::load(node, main_actor, owner_id, file_id);
 
     if (!chain.has_value()) {
-        return;
+        co_return;
     }
 
     auto historical_rows = chain->get_historical_rows();
     if (!historical_rows.has_value()) {
         eCritical("[DfsCollection] Can't find historical for {} and {}", owner_id, file_id);
-        return;
+        co_return;
     }
     auto rows = chain->get_collection_rows();
     if (!rows.has_value() && rows.error() != CollectionError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
-        return;
+        co_return;
     }
 
     eLog("[Dfs] Response for request collection: {} / {}", owner_id, file_id);
@@ -1223,91 +1223,89 @@ void DfsController::network_request_collection(const ActorId     &owner_id,
                             MessageType::DfsCollectionContent,
                             SendMode::Focused,
                             MessageStatus::Response);
+    co_return;
 }
 
-// TODO: checks
-void DfsController::network_response_historical_collection(
-    const ActorId                              &owner_id,
-    const std::string                          &file_id,
-    const std::vector<HistoricalCollectionRow> &historical_rows) {
+VoidTask DfsController::network_response_historical_collection(
+    ActorId                              owner_id,
+    std::string                          file_id,
+    std::vector<HistoricalCollectionRow> historical_rows) {
+    // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
+    // collection
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value()) {
-        return;
+        co_return;
     }
-    // TODO: check state
 
     auto main_actor = node->account_controller()->system_actor();
-    // auto template_link = Json::deserialize<CollectionTemplateLink>(historical_rows.begin()->data).value();
-    // collection
-    auto first_row = historical_rows.begin(); // where id = 0
+    auto first_row  = historical_rows.begin(); // where id = 0
 
     Dfs::CollectionTemplate collection_template;
     if (first_row->operation == CollectionOperation::StructuralTemplated) {
         auto collection_template_result = Json::deserialize<Dfs::CollectionTemplate>(first_row->data);
         if (!collection_template_result.has_value()) {
-            return;
+            co_return;
         }
         collection_template = collection_template_result.value();
     } else if (first_row->operation == CollectionOperation::Structural) {
         auto template_link = Json::deserialize<Dfs::CollectionTemplateLink>(first_row->data);
         if (!template_link.has_value()) {
-            return;
+            co_return;
         }
 
         auto collection_template_result =
             Dfs::Tables::DirsFile::ActorSpace::get_collection_template_file_id(template_link->owner_id,
                                                                                template_link->file_id);
         if (!collection_template_result.has_value()) {
-            return;
+            co_return;
         }
+        // TODO: verify
         collection_template = collection_template_result.value();
     }
 
     auto chain = HistoricalCollection::create(node, main_actor, owner_id, file_id, collection_template);
 
     if (!chain.has_value()) {
-        return;
+        co_return;
     }
 
     auto dfs_path = Dfs::Path::file_path(owner_id, file_id);
     if (!dfs_path->exists()) {
-        return;
+        co_return;
     }
 
     DbConnector db(chain->get_historical_path().native());
     db.open();
     for (const auto &historical_row : historical_rows) {
-        // TODO: verify
         auto db_row = Utils::to_dbrow(historical_row);
         db.replace(Dfs::Historical::HISTORICAL_TABLE, db_row);
     }
     db.close();
+    co_return;
 }
 
 // TODO: checks
-void DfsController::network_response_content_collection(const ActorId            &owner_id,
-                                                        const std::string        &file_id,
-                                                        const std::vector<DbRow> &db_rows) {
+VoidTask DfsController::network_response_content_collection(ActorId owner_id, std::string file_id, std::vector<DbRow> db_rows) {
+    // TODO: check state
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dir_row.has_value()) {
-        return;
+        // remove historical and file
+        co_return;
     }
-    // TODO: check state
-
+    // TODO: verify
     auto main_actor = node->account_controller()->system_actor();
 
     auto chain_opt = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain_opt.has_value()) {
-        return;
+        co_return;
     }
     auto chain = chain_opt.value();
 
     auto creation_result = chain.get_creation();
     if (!creation_result.has_value()) {
-        // remove historical and file
-        return;
+        co_return;
     }
 
     Dfs::CollectionTemplate collection_template;
@@ -1329,47 +1327,41 @@ void DfsController::network_response_content_collection(const ActorId           
 
     auto schema_opt = collection_template.to_db_schema();
     if (!schema_opt.has_value()) {
-        return;
+        co_return;
     }
 
     DbConnector db(chain.get_file_path().native());
     db.open();
     db.create_table(schema_opt.value());
     for (const auto &db_row : db_rows) {
-        // TODO: verify
         db.insert(schema_opt->table_name(), db_row);
     }
     db.close();
+    // check if history and file ok
+    // TODO: need verify
 
     Dfs::FileLinkFragment file_link_fragment;
     file_link_fragment.file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
     file_link_fragment.fragment_numbers.emplace(1);
     load_manager_.remove_active_download(file_link_fragment);
 
-    // check if history and file ok
     load_manager_.finish_him(owner_id, dir_row.value());
+    co_return;
 }
 
-void DfsController::network_change_collection(const ActorId                 &owner_id,
-                                              const std::string             &file_id,
-                                              const HistoricalCollectionRow &row,
-                                              const Responder               &responder) {
-    // TODO: need verify
+VoidTask DfsController::network_change_collection(ActorId owner_id, std::string file_id, HistoricalCollectionRow row, Responder responder) {
+    // return;
     auto main_actor = node->account_controller()->system_actor();
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
 
     if (!dir_row.has_value()) {
-        return;
-    }
-
-    if (dir_row->state != Dfs::FileState::Ready) {
-        // return;
+        co_return;
     }
 
     auto chain = HistoricalCollection::load(node, main_actor, owner_id, file_id);
     if (!chain.has_value()) {
-        return;
+        co_return;
     }
     chain->insert_row_to_database(row);
     auto res = chain->change_collection(row);
@@ -1385,15 +1377,14 @@ void DfsController::network_change_collection(const ActorId                 &own
                             MessageStatus::NoStatus);
 
     emit collectionChanged(owner_id, dir_row.value(), row);
+    co_return;
 }
 
-void DfsController::network_request_vector(const ActorId     &owner_id,
-                                           const std::string &file_id,
-                                           const Responder   &responder) {
+VoidTask DfsController::network_request_vector(ActorId owner_id, std::string file_id, Responder responder) {
     auto dirRowExp =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (!dirRowExp.has_value()) {
-        return;
+        co_return;
     }
     auto dirRow = dirRowExp.value();
 
@@ -1408,23 +1399,24 @@ void DfsController::network_request_vector(const ActorId     &owner_id,
                                       dirRow.type);
 
     if (!dfs_vector.has_value()) {
-        return;
+        co_return;
     }
 
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
         dfs_vector->generate_content_package();
     if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
         eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
-        return;
+        co_return;
     }
     if (!rows.has_value()) {
-        return;
+        co_return;
     }
 
     responder.send_response(rows.value(),
                             MessageType::DfsVectorContent,
                             SendMode::Focused,
                             MessageStatus::Response);
+    co_return;
 }
 
 std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::make_vector(
@@ -1473,43 +1465,43 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     return std::pair { dir_row.value(), dfs_vector.value() };
 }
 
-void DfsController::network_response_content_vector(
-    const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
-    ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
-        auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
-        if (!dfs_vector_result.has_value()) {
-            return;
-        }
+VoidTask DfsController::network_response_content_vector(
+    Dfs::Packets::DfsVectorContentPackage dfs_vector_content) { // check hash
+    auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
+    if (!dfs_vector_result.has_value()) {
+        co_return;
+    }
 
-        auto &[dir_row, dfs_vector] = dfs_vector_result.value();
+    auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
-        bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+    bool res_handle = dfs_vector.handle_package(dfs_vector_content);
 
-        Dfs::FileLinkFragment file_link_fragment;
-        file_link_fragment.file_link =
-            Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
-        file_link_fragment.fragment_numbers.emplace(1);
-        load_manager_.remove_active_download(file_link_fragment);
+    Dfs::FileLinkFragment file_link_fragment;
+    file_link_fragment.file_link =
+        Dfs::FileLink { .owner_id = dfs_vector_content.owner_id, .file_id = dfs_vector_content.file_id };
+    file_link_fragment.fragment_numbers.emplace(1);
+    load_manager_.remove_active_download(file_link_fragment);
+    // load_manager_.finish_him(owner_id, dir_row);
 
-        load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
-    });
+    load_manager_.finish_him(dfs_vector_content.owner_id, dir_row);
+    co_return;
 }
 
-void DfsController::network_vector_add(const ActorId &owner_id, const std::string &file_id, const DbRow &row) {
+VoidTask DfsController::network_vector_add(ActorId owner_id, std::string file_id, DbRow row) {
     auto res = make_vector(owner_id, file_id);
     if (!res.has_value()) {
-        return;
+        co_return;
     }
 
     auto &[dir_row, dfs_vector] = res.value();
     auto operation_res          = dfs_vector.local_add(row, true);
-    // load_manager_.finish_him(owner_id, dir_row);
 
     auto hash_size = dfs_vector.data_hash_size();
     if (hash_size.has_value()) {
         dir_row.hash          = hash_size.value().first;
         dir_row.size          = hash_size.value().second;
         dir_row.last_modified = std::stoull(row.at("timestamp")); // try catch
+        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         Dfs::Tables::DirsFile::ActorSpace::update_file_metadata(dirs_manager_.get_db_instance(),
                                                                 owner_id,
                                                                 dir_row,
@@ -1517,7 +1509,6 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
     }
 
     if (operation_res) {
-        // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         if (row.at("status") == "1") {
             emit vectorRowAdded(owner_id, dir_row, row);
             node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
@@ -1525,11 +1516,10 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
     }
+    co_return;
 }
 
-void DfsController::network_request_file_state(const ActorId     &owner_id,
-                                               const std::string &file_id,
-                                               const Responder   &responder) {
+VoidTask DfsController::network_request_file_state(ActorId owner_id, std::string file_id, Responder responder) {
     auto dir_row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
 
@@ -1537,7 +1527,7 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         auto file_state =
             Dfs::Packets::FileState { .owner_id = owner_id, .file_id = file_id, .state = Dfs::FileState::Unknown };
         responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
-        return;
+        co_return;
     }
 
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
@@ -1545,29 +1535,31 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
                                                 .state    = dir_row->state,
                                                 .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
+    co_return;
 }
 
-void DfsController::network_request_file_existance(const Dfs::FileLink &file_link, const Responder &responder) {
+VoidTask DfsController::network_request_file_existance(Dfs::FileLink file_link, Responder responder) {
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
                                                                   file_link.owner_id,
                                                                   file_link.file_id);
 
     if (!dir_row.has_value())
-        return;
+        co_return;
 
     responder.send_response(file_link,
                             MessageType::DfsFileRequestContinueUpload,
                             SendMode::Focused,
                             MessageStatus::Response);
+    co_return;
 }
 
-void DfsController::network_response_file_state(const Dfs::Packets::FileState &data, const Responder &responder) {
+VoidTask DfsController::network_response_file_state(Dfs::Packets::FileState data, Responder responder) {
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
                                                                   data.owner_id,
                                                                   data.file_id);
 
     if (!dir_row.has_value()) {
-        return;
+        co_return;
     }
 
     if (data.state == Dfs::FileState::Ready) {
@@ -1578,22 +1570,21 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState &d
                                    *responder.identifiers().begin(),
                                    data.notify_neighbours);
     }
+    co_return;
 }
 
-void DfsController::network_file_exist_notification(const Dfs::Packets::FileState &data,
-                                                    const Responder               &responder) {
+VoidTask DfsController::network_file_exist_notification(Dfs::Packets::FileState data, Responder responder) {
     // TODO: check light node or not and some logic do we want to download new file or not
     //  auto dir_row = Dfs::Tables::ActorDirFile::get_dir_row(data.owner_id, data.file_id);
-
     // if (!dir_row.has_value()) {
     //     return;
     // }
-
     // if (data.state == Dfs::FileState::Ready) {
     //     dir_row->state = data.state;
     //     dir_row->hash  = data.hash;
     //     load_manager_.add_to_queue(data.owner_id, dir_row.value(), *responder.identifiers().begin());
     // }
+    co_return;
 }
 
 std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {
@@ -1641,21 +1632,18 @@ std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner
     return {};
 }
 
-void DfsController::network_remove_stored_file(const ActorId     &owner_id,
-                                               const std::string &file_id,
-                                               const Signature   &sign,
-                                               std::uint64_t      last_modified) {
+VoidTask DfsController::network_remove_stored_file(ActorId owner_id, std::string file_id, Signature sign, std::uint64_t last_modified) {
     auto db_instance = dirs_manager_.get_db_instance();
     auto dir_row     = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, owner_id, file_id);
     if (!dir_row.has_value()) {
-        return;
+        co_return;
     }
     auto dir_row_new = dir_row.value();
 
     auto actor = node->actor_index()->read_actor(owner_id);
     if (!actor.has_value()) {
         eWarning("[Dfs] Can't remove file, because no owner {}", actor.error());
-        return;
+        co_return;
     }
 
     dir_row->hash          = "";
@@ -1668,7 +1656,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
     auto verify            = actor.value().key().verify(hash, sign);
     if (!verify) {
         eWarning("[Dfs] Can't verify file remove {} / {}", owner_id, file_id);
-        return;
+        co_return;
     }
 
     remove_local_file(owner_id, file_id);
@@ -1682,6 +1670,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
 
     // sizeTaken--, totalDfsSize--
     emit removed(owner_id, file_id);
+    co_return;
 }
 
 std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_id, const std::string &file_id) {
@@ -1714,16 +1703,16 @@ void DfsController::sync_stored(const Dfs::FileData &file_data, const Responder 
     responder.send_response(file_data, MessageType::DfsStoreFile, SendMode::Focused, MessageStatus::Response);
 }
 
-std::string DfsController::network_store_file(const ActorId        &owner_id,
-                                              const Dfs::DirRow    &dir_row,
-                                              Dfs::NetworkStoreFile network_stote) {
+Task<std::string> DfsController::network_store_file(ActorId               owner_id,
+                                                    Dfs::DirRow           dir_row,
+                                                    Dfs::NetworkStoreFile network_stote) {
     std::string actorFolderPath =
         DfsB::DFS_FOLDER + Utils::platformDelimeter() + owner_id.to_string() + Utils::platformDelimeter();
     // std::string actrDirFilePath = actorFolderPath + DfsB::fsMapName;
 
     if (is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         eSuccess("[Dfs] Ignoring file download: file already exists 👌😎👍");
-        return "";
+        co_return "";
     }
 
     if (!writeAvailable(dir_row.size) && !std::filesystem::is_empty(actorFolderPath)) {
@@ -1765,7 +1754,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
                                     DfsT::DirsFile::TableNameActorsFiles.c_str());
         eLog("{}", errorStr);
         eFatal("Error 2: {}", errorStr);
-        return "";
+        co_return "";
     }
 
     dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
@@ -1818,7 +1807,7 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     std::string stored_added = network_stote == Dfs::NetworkStoreFile::Broadcast ? "stored" : "added";
     eLog("[Dfs] File {}/{} was {}", owner_id, dir_row.file_id, stored_added);
 
-    return dir_row.file_id;
+    co_return dir_row.file_id;
 }
 
 // TODO: remove?
