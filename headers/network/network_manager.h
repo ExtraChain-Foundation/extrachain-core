@@ -37,6 +37,7 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/steady_timer.hpp>
+#include <semaphore>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -277,6 +278,11 @@ private:
     std::vector<std::thread>           io_threads_;
     std::atomic<bool>                  io_running_{false};
 
+    // Concurrency control for message handlers
+    static constexpr std::ptrdiff_t    max_concurrent_handlers_ = 128;
+    std::counting_semaphore<>          handler_semaphore_{max_concurrent_handlers_};
+    std::atomic<std::ptrdiff_t>        active_handlers_{0};
+
     SafePtr<std::set<SocketService::Ptr>>        connections_;
     SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
     NetworkStatus                                network_status_;
@@ -347,6 +353,10 @@ public:
     asio::io_context& io_context() { return *ioc_; }
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
+
+    // Concurrency control for message handlers
+    void acquire_handler_slot();
+    void release_handler_slot();
 
 public slots:
     void remove_connection(const QString& identifier);

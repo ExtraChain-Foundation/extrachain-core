@@ -378,8 +378,17 @@ VoidTask WebSocketService::process_binary_message(const std::vector<uint8_t>& da
     std::string identifier = identifier_;
 
     // Fire and forget - not blocking read_loop
+    // Semaphore limits concurrent handlers to prevent queue overflow under high load
     asio::co_spawn(node_->network()->io_context(),
-        node_->network()->message_received(std::move(message), std::move(ip), std::move(identifier)),
+        [this, message = std::move(message), ip = std::move(ip), identifier = std::move(identifier)]() mutable -> VoidTask {
+            node_->network()->acquire_handler_slot();
+            try {
+                co_await node_->network()->message_received(std::move(message), std::move(ip), std::move(identifier));
+            } catch (...) {
+                // Ensure semaphore is released even on exception
+            }
+            node_->network()->release_handler_slot();
+        }(),
         asio::detached);
 }
 

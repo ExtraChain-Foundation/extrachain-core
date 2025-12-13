@@ -43,6 +43,22 @@ SafePtr<std::set<SocketService::Ptr>> NetworkManager::connections() const {
     return connections_;
 }
 
+void NetworkManager::acquire_handler_slot() {
+    auto current = active_handlers_.fetch_add(1) + 1;
+    if (current >= max_concurrent_handlers_) {
+        eWarning("[Network] Handler queue full: {}/{}", current, max_concurrent_handlers_);
+    }
+    handler_semaphore_.acquire();
+}
+
+void NetworkManager::release_handler_slot() {
+    handler_semaphore_.release();
+    auto current = active_handlers_.fetch_sub(1) - 1;
+    if (current == max_concurrent_handlers_ - 1) {
+        eLog("[Network] Handler queue freed: {}/{}", current, max_concurrent_handlers_);
+    }
+}
+
 bool NetworkManager::server_status(Network::Protocol protocol) const {
     switch (protocol) {
     case Network::Protocol::Udp:
