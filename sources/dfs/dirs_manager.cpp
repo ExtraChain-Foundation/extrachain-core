@@ -289,14 +289,14 @@ void DirsManager::network_response_dir_rows(
                     continue;
                 }
 
-                if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Removed) {
-                    if (file_path->exists()) {
+                if (row.state == Dfs::FileState::Removed) {
+                    if (row.type == Dfs::FileType::File && file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
-                        Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
-                                                                             owner_id,
-                                                                             row.file_id,
-                                                                             Dfs::FileState::Removed);
                     }
+                    Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_,
+                                                                         owner_id,
+                                                                         row.file_id,
+                                                                         Dfs::FileState::Removed);
                 }
 
                 if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {

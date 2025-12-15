@@ -399,10 +399,175 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_data_as_file(
     return result;
 }
 
-std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(const ActorId     &owner_id,
-                                                                      const std::string &visual_folder) {
-    eUnimplemented;
-    return {};
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder(
+    const ActorId                    &owner_id,
+    const std::string                &folder_name,
+    const std::optional<std::string> &parent_folder_id,
+    Dfs::DataSecurity                 data_security,
+    const Dfs::DataSecurityData      &security_data) {
+    if (folder_name.empty() || folder_name.contains("'")) {
+        return std::unexpected(Dfs::DfsError::InvalidFolderName);
+    }
+
+    auto name_res = NameValidator::validate(folder_name);
+    if (!name_res.has_value()) {
+        eLog("[Dfs] Can't create folder: invalid name");
+        return std::unexpected(Dfs::DfsError::InvalidName);
+    }
+
+    auto db_instance = dirs_manager_.get_db_instance();
+
+    if (parent_folder_id.has_value() && !parent_folder_id->empty()) {
+        auto is_folder_res = DfsT::DirsFile::ActorSpace::is_folder(db_instance, owner_id, parent_folder_id.value());
+        if (!is_folder_res.has_value()) {
+            return std::unexpected(Dfs::DfsError::FolderNotFound);
+        }
+        if (!is_folder_res.value()) {
+            return std::unexpected(Dfs::DfsError::ParentNotFolder);
+        }
+    }
+
+    auto search_result = DfsT::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db_instance, owner_id, parent_folder_id.value_or(""), folder_name);
+    if (search_result.has_value()) {
+        return std::unexpected(Dfs::DfsError::DirDuplicate);
+    }
+
+    std::string file_id = create_file_id_from("folder:" + folder_name);
+
+    auto author_actor = node->account_controller()->current_profile().get_actor(owner_id);
+    if (!author_actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoOwnerActor);
+    }
+
+    std::string stored_name = folder_name;
+    bool        encrypted   = false;
+
+    if (data_security == Dfs::DataSecurity::Self) {
+        if (auto *security_self = std::get_if<Dfs::DataSecuritySelf>(&security_data)) {
+            auto actor = node->account_controller()->current_profile().get_actor(security_self->my_actor);
+            if (!actor.has_value()) {
+                return std::unexpected(Dfs::DfsError::NoOwnerActor);
+            }
+            auto encrypted_name = actor->get().key().encrypt_self(ByteArray(folder_name).toBytes());
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(Dfs::DfsError::IncorrectEncryption);
+            }
+            stored_name = Utils::to_base64(encrypted_name.value());
+            encrypted   = true;
+        } else {
+            return std::unexpected(Dfs::DfsError::IncorrectSecurityData);
+        }
+    }
+
+    std::string folder_hash = Utils::calculate_hash(
+        fmt::format("folder:{}:{}:{}", owner_id.to_string(), folder_name, parent_folder_id.value_or("")));
+
+    Dfs::DirRow dir_row = {
+        .actor_id      = owner_id,
+        .owner_id      = owner_id,
+        .file_id       = file_id,
+        .prev_file_id  = std::nullopt,
+        .hash          = folder_hash,
+        .folder        = parent_folder_id,
+        .name          = stored_name,
+        .size          = 0,
+        .created       = 0,
+        .last_modified = 0,
+        .type          = Dfs::FileType::Folder,
+        .encryption    = encrypted,
+        .state         = Dfs::FileState::Ready
+    };
+
+    auto res = DfsT::DirsFile::ActorSpace::add_dir_row(db_instance, owner_id, dir_row, author_actor->get());
+    if (!res) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
+
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+
+    emit stored(owner_id, dir_row);
+    emit added(owner_id, dir_row);
+
+    broadcast_stored(owner_id, dir_row);
+
+    eLog("[Dfs] Folder '{}' created with file_id {}", folder_name, file_id);
+    return dir_row;
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folders(const ActorId &owner_id) {
+    return DfsT::DirsFile::ActorSpace::get_folders(dirs_manager_.get_db_instance(), owner_id);
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folder_contents(
+    const ActorId     &owner_id,
+    const std::string &folder_file_id) {
+    return DfsT::DirsFile::ActorSpace::get_folder_contents(dirs_manager_.get_db_instance(), owner_id, folder_file_id);
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> DfsController::get_folder_path(
+    const ActorId     &owner_id,
+    const std::string &folder_file_id) {
+    return DfsT::DirsFile::ActorSpace::get_folder_path(dirs_manager_.get_db_instance(), owner_id, folder_file_id);
+}
+
+std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::move_to_folder(
+    const ActorId                    &owner_id,
+    const std::string                &file_id,
+    const std::optional<std::string> &new_folder_id) {
+    auto db_instance = dirs_manager_.get_db_instance();
+
+    auto dir_row_res = DfsT::DirsFile::ActorSpace::get_dir_row(db_instance, owner_id, file_id, "file_id");
+    if (!dir_row_res.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotExists);
+    }
+    auto dir_row = dir_row_res.value();
+
+    if (new_folder_id.has_value() && !new_folder_id->empty()) {
+        auto is_folder = DfsT::DirsFile::ActorSpace::is_folder(db_instance, owner_id, new_folder_id.value());
+        if (!is_folder.has_value()) {
+            return std::unexpected(Dfs::DfsError::FolderNotFound);
+        }
+        if (!is_folder.value()) {
+            return std::unexpected(Dfs::DfsError::ParentNotFolder);
+        }
+
+        if (dir_row.is_folder()) {
+            auto valid =
+                DfsT::DirsFile::ActorSpace::validate_folder_hierarchy(db_instance, owner_id, file_id, new_folder_id.value());
+            if (!valid.has_value() || !valid.value()) {
+                return std::unexpected(Dfs::DfsError::FolderCycle);
+            }
+        }
+    }
+
+    auto author_actor = node->account_controller()->current_profile().get_actor(owner_id);
+    if (!author_actor.has_value()) {
+        return std::unexpected(Dfs::DfsError::NoOwnerActor);
+    }
+
+    dir_row.folder        = new_folder_id;
+    dir_row.last_modified = Utils::current_date_ms();
+
+    auto sign = author_actor->get().key().sign(dir_row.calculate_hash(owner_id));
+    if (!sign.has_value()) {
+        return std::unexpected(Dfs::DfsError::Unknown);
+    }
+    dir_row.sign = sign.value();
+
+    auto updated = DfsT::DirsFile::ActorSpace::update_file_metadata(db_instance, owner_id, dir_row, true);
+    if (!updated) {
+        return std::unexpected(Dfs::DfsError::DirError);
+    }
+
+    dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+
+    emit stored(owner_id, dir_row);
+
+    broadcast_stored(owner_id, dir_row);
+
+    eLog("[Dfs] File {} moved to folder {}", file_id, new_folder_id.value_or("root"));
+    return dir_row;
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_folder_dapp(const ActorId &owner_id,
@@ -886,6 +1051,10 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
     }
     if (dir_row->hash == hash && dir_row->state != Dfs::FileState::Ready) {
         // return true; // TODO: that's all
+    }
+
+    if (dir_row->type == Dfs::FileType::Folder) {
+        return dir_row->hash == hash && dir_row->state == Dfs::FileState::Ready;
     }
 
     bool exists = path->exists();
@@ -1581,6 +1750,25 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         return "";
     }
 
+    if (dir_row.type == Dfs::FileType::Folder) {
+        auto db_instance  = dirs_manager_.get_db_instance();
+        auto dir_row2     = dir_row;
+        dir_row2.state    = Dfs::FileState::Ready;
+        DbRow dirRowDb    = Utils::to_dbrow(dir_row2);
+        bool  insertRes   = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
+
+        if (!insertRes) {
+            eLog("[Dfs] addFolder: insert failed");
+            return "";
+        }
+
+        dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
+        emit added(owner_id, dir_row2);
+
+        eLog("[Dfs] Folder {}/{} was synced from network", owner_id, dir_row.file_id);
+        return dir_row.file_id;
+    }
+
     if (!writeAvailable(dir_row.size) && !std::filesystem::is_empty(actorFolderPath)) {
         // TODO: control space size, use file priority and time
 
@@ -1871,7 +2059,10 @@ std::expected<std::pair<std::string, std::optional<std::string>>, Dfs::DfsError>
             }
             visual_name_new = Utils::to_base64(encrypted_name.value());
 
-            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':') {
+            // Don't encrypt folder if it's a file_id (hex string) - folder name is encrypted in its own DirRow
+            // Only encrypt if it's a visual path (legacy behavior)
+            if (visual_folder_new.has_value() && visual_folder_new.value().front() != ':'
+                && !Utils::is_hex_string(visual_folder_new.value())) {
                 auto encrypted_folder =
                     actor->get().key().encrypt_self(ByteArray(visual_folder_new.value()).toBytes());
                 if (!encrypted_folder.has_value()) {

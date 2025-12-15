@@ -319,7 +319,7 @@ std::pair<bool, std::vector<Dfs::DirRow>> Dfs::Tables::DirsFile::ActorSpace::add
 
         auto dir_row_db = Utils::to_dbrow(dir_row);
         // TODO: temp, because this function used only for loads
-        if (dir_row.state != Dfs::FileState::Removed) {
+        if (dir_row.state != Dfs::FileState::Removed && dir_row.type != Dfs::FileType::Folder) {
             dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));
         }
 
@@ -333,6 +333,127 @@ std::pair<bool, std::vector<Dfs::DirRow>> Dfs::Tables::DirsFile::ActorSpace::add
     }
 
     return { true, result_dir_row };
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_folders(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id) {
+    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND type = '{}' AND state != '{}';",
+                                    TableNameActorsFiles,
+                                    owner_id.to_string(),
+                                    std::to_underlying(Dfs::FileType::Folder),
+                                    std::to_underlying(Dfs::FileState::Removed));
+
+    auto                     db_rows = db->select(query);
+    std::vector<Dfs::DirRow> folders;
+    folders.reserve(db_rows.size());
+
+    for (auto &row : db_rows) {
+        auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dir_row.has_value()) {
+            folders.push_back(dir_row.value());
+        }
+    }
+
+    return folders;
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_folder_contents(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id,
+    const std::string                 &folder_file_id) {
+    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND folder = '{}' AND state != '{}';",
+                                    TableNameActorsFiles,
+                                    owner_id.to_string(),
+                                    folder_file_id,
+                                    std::to_underlying(Dfs::FileState::Removed));
+
+    auto                     db_rows = db->select(query);
+    std::vector<Dfs::DirRow> contents;
+    contents.reserve(db_rows.size());
+
+    for (auto &row : db_rows) {
+        auto dir_row = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dir_row.has_value()) {
+            contents.push_back(dir_row.value());
+        }
+    }
+
+    return contents;
+}
+
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::get_folder_path(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id,
+    const std::string                 &folder_file_id) {
+    std::vector<Dfs::DirRow> path;
+    std::string              current_id = folder_file_id;
+    std::set<std::string>    visited;
+
+    while (!current_id.empty()) {
+        if (visited.contains(current_id)) {
+            return std::unexpected(Dfs::DfsError::FolderCycle);
+        }
+        visited.insert(current_id);
+
+        auto dir_row = get_dir_row(db, owner_id, current_id, "file_id");
+        if (!dir_row.has_value()) {
+            break;
+        }
+
+        path.push_back(dir_row.value());
+
+        if (!dir_row->folder.has_value() || dir_row->folder->empty() || dir_row->folder->front() == ':') {
+            break;
+        }
+        current_id = dir_row->folder.value();
+    }
+
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+std::expected<bool, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::is_folder(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id,
+    const std::string                 &file_id) {
+    auto dir_row = get_dir_row(db, owner_id, file_id, "file_id");
+    if (!dir_row.has_value()) {
+        return std::unexpected(Dfs::DfsError::NotExists);
+    }
+
+    return dir_row->type == Dfs::FileType::Folder;
+}
+
+std::expected<bool, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::validate_folder_hierarchy(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id,
+    const std::string                 &folder_file_id,
+    const std::string                 &new_parent_id) {
+    std::string           current_id = new_parent_id;
+    std::set<std::string> visited;
+
+    while (!current_id.empty()) {
+        if (current_id == folder_file_id) {
+            return false;
+        }
+        if (visited.contains(current_id)) {
+            return std::unexpected(Dfs::DfsError::FolderCycle);
+        }
+        visited.insert(current_id);
+
+        auto dir_row = get_dir_row(db, owner_id, current_id, "file_id");
+        if (!dir_row.has_value()) {
+            break;
+        }
+
+        if (!dir_row->folder.has_value() || dir_row->folder->empty() || dir_row->folder->front() == ':') {
+            break;
+        }
+        current_id = dir_row->folder.value();
+    }
+
+    return true;
 }
 
 std::filesystem::path Dfs::Path::filePath(const ActorId &actor_id, const std::string &file_id) {

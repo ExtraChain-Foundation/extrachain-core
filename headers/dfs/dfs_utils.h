@@ -186,7 +186,11 @@ namespace Dfs {
         IncorrectEncryption,
         NoOwnerActor,
         NoAuthorActor,
-        MaxFileSize
+        MaxFileSize,
+        FolderNotFound,
+        FolderCycle,
+        ParentNotFolder,
+        InvalidFolderName
     };
 
     enum class FileType {
@@ -270,6 +274,25 @@ namespace Dfs {
 
         bool empty() const {
             return file_id.empty() || name.empty();
+        }
+
+        bool is_folder() const {
+            return type == Dfs::FileType::Folder;
+        }
+
+        bool has_system_folder() const {
+            return folder.has_value() && !folder->empty() && folder->front() == ':';
+        }
+
+        bool is_at_root() const {
+            return !folder.has_value() || folder->empty() || has_system_folder();
+        }
+
+        std::optional<std::string> parent_folder_id() const {
+            if (is_at_root()) {
+                return std::nullopt;
+            }
+            return folder;
         }
 
         std::string calculate_hash(const ActorId& owner_id);
@@ -638,6 +661,31 @@ namespace Dfs {
                                           const ActorId&                     owner_id,
                                           DirRow&                            dir_row,
                                           bool                               with_sign = true);
+
+                // Folder operations
+                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folders(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id);
+
+                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_contents(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 folder_file_id);
+
+                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_path(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 folder_file_id);
+
+                std::expected<bool, Dfs::DfsError> is_folder(const std::shared_ptr<DbConnector> db,
+                                                             const ActorId&                     owner_id,
+                                                             const std::string&                 file_id);
+
+                std::expected<bool, Dfs::DfsError> validate_folder_hierarchy(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 folder_file_id,
+                    const std::string&                 new_parent_id);
             } // namespace ActorSpace
         } // namespace DirsFile
 

@@ -237,9 +237,25 @@ public:
         Dfs::DataSecurity               data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData    &security_data = Dfs::DataSecurityData());
 
-    // TODO
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(const ActorId     &owner_id,
-                                                           const std::string &visual_folder);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(
+        const ActorId                    &owner_id,
+        const std::string                &folder_name,
+        const std::optional<std::string> &parent_folder_id = std::nullopt,
+        Dfs::DataSecurity                 data_security    = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData      &security_data    = Dfs::DataSecurityData());
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folders(const ActorId &owner_id);
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_contents(const ActorId     &owner_id,
+                                                                                const std::string &folder_file_id);
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_path(const ActorId     &owner_id,
+                                                                           const std::string &folder_file_id);
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> move_to_folder(
+        const ActorId                    &owner_id,
+        const std::string                &file_id,
+        const std::optional<std::string> &new_folder_id);
 
     // TODO
     std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &owner_id,
