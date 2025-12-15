@@ -40,6 +40,13 @@ find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(msgpack-cxx CONFIG REQUIRED)
 find_package(blake3 CONFIG REQUIRED)
 
+# Optional SSL support for HTTPS
+option(EXTRACHAIN_SSL "Enable SSL/TLS support for HTTPS" OFF)
+if(EXTRACHAIN_SSL)
+    find_package(OpenSSL REQUIRED)
+    message(STATUS "SSL support enabled (OpenSSL ${OPENSSL_VERSION})")
+endif()
+
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/headers
@@ -145,6 +152,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/thoth_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/managers/janus_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/discovery_service.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/network/http_client.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/network_status.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/network/isocket_service.cpp
@@ -218,7 +226,12 @@ target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extr
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x)
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x
+    $<$<BOOL:${EXTRACHAIN_SSL}>:OpenSSL::SSL OpenSSL::Crypto>)
+
+if(EXTRACHAIN_SSL)
+    target_compile_definitions(extrachain PUBLIC EXTRACHAIN_SSL_ENABLED)
+endif()
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)

@@ -28,7 +28,6 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStorageInfo>
-#include <QTcpSocket>
 
 #include <string>
 #include <string_view>
@@ -37,10 +36,22 @@
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <boost/asio.hpp>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <iphlpapi.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+#endif
 
 #include <sodium.h>
 
-// #include "boost/asio.hpp" // need qmake fix
 #include "boost/version.hpp"
 
 #include "cpp-base64/base64.cpp"
@@ -495,6 +506,25 @@ QString Utils::detect_compiler() {
 #endif
 }
 
+namespace {
+    bool check_connectivity_asio(const std::string& local_ip) {
+        namespace asio = boost::asio;
+        using tcp = asio::ip::tcp;
+
+        try {
+            asio::io_context ioc;
+            tcp::socket socket(ioc);
+            socket.open(tcp::v4());
+            socket.bind(tcp::endpoint(asio::ip::make_address(local_ip), 0));
+            socket.connect(tcp::endpoint(asio::ip::make_address("8.8.8.8"), 53));
+            socket.close();
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+}
+
 QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
     const auto                allInterfaces = QNetworkInterface::allInterfaces();
     const QHostAddress       &localhost     = QHostAddress(QHostAddress::LocalHost);
@@ -526,13 +556,10 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
             if (!isRunning || !networkInterface.isValid() || isLoopBack || isPointToPoint)
                 continue;
 
-            auto socket = std::make_unique<QTcpSocket>();
-            socket->bind(entry.ip());
-            socket->connectToHost("8.8.8.8", 53);
-            if (!socket->waitForConnected(1000)) {
-                socket->connectToHost("1.1.1.1", 53);
-                if (!socket->waitForConnected(1000))
-                    continue;
+            // Test connectivity using asio
+            auto local_ip_str = entry.ip().toString().toStdString();
+            if (!check_connectivity_asio(local_ip_str)) {
+                continue;
             }
 
             if (Utils::vector_contains(localIpNotConnect, entry.ip())) {
@@ -542,6 +569,12 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
                     continue;
                 if (name.left(2) == "wl" || name.left(3) == "eth" || name.left(2) == "en"
                     || name.left(8) == "wireless") {
+                    // Compare with asio version
+                    auto asio_ip = findLocalIpAsio(debug);
+                    auto qt_ip   = entry.ip().toString().toStdString();
+                    if (qt_ip != asio_ip) {
+                        eLog("[FindLocalIp] Mismatch! Qt={} Asio={}", qt_ip, asio_ip);
+                    }
                     return entry;
                 }
             }
@@ -552,6 +585,78 @@ QNetworkAddressEntry Utils::findLocalIp(PrintDebug debug) {
     QNetworkAddressEntry entry;
     entry.setIp(QHostAddress::AnyIPv4);
     return entry;
+}
+
+std::string Utils::findLocalIpAsio(PrintDebug debug) {
+    std::vector<std::pair<std::string, std::string>> candidates; // {ip, interface_name}
+
+#ifdef _WIN32
+    ULONG size = 15000;
+    std::vector<uint8_t> buffer(size);
+    auto addresses = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.data());
+
+    if (GetAdaptersAddresses(AF_INET, 0, nullptr, addresses, &size) == NO_ERROR) {
+        for (auto adapter = addresses; adapter; adapter = adapter->Next) {
+            if (adapter->OperStatus != IfOperStatusUp) continue;
+            if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+
+            for (auto ua = adapter->FirstUnicastAddress; ua; ua = ua->Next) {
+                auto sa = reinterpret_cast<sockaddr_in*>(ua->Address.lpSockaddr);
+                if (sa->sin_family == AF_INET) {
+                    char ip[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &sa->sin_addr, ip, sizeof(ip));
+
+                    // Convert adapter name from wide string
+                    std::string name;
+                    if (adapter->FriendlyName) {
+                        std::wstring wname(adapter->FriendlyName);
+                        name = std::string(wname.begin(), wname.end());
+                    }
+                    candidates.emplace_back(ip, name);
+                }
+            }
+        }
+    }
+#else
+    ifaddrs* ifaddr;
+    if (getifaddrs(&ifaddr) == 0) {
+        for (auto ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+            if (ifa->ifa_flags & IFF_LOOPBACK) continue;
+            if (!(ifa->ifa_flags & IFF_UP)) continue;
+
+            auto sa = reinterpret_cast<sockaddr_in*>(ifa->ifa_addr);
+            char ip[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &sa->sin_addr, ip, sizeof(ip));
+            candidates.emplace_back(ip, ifa->ifa_name ? ifa->ifa_name : "");
+        }
+        freeifaddrs(ifaddr);
+    }
+#endif
+
+    // Filter and test connectivity
+    for (const auto& [ip, name] : candidates) {
+        // Skip VM interfaces
+        if (name.size() >= 2 && name.substr(0, 2) == "vm") continue;
+
+        // Prefer physical interfaces
+        bool is_physical = name.size() >= 2 && (
+            name.substr(0, 2) == "wl" ||
+            name.substr(0, 2) == "en" ||
+            (name.size() >= 3 && name.substr(0, 3) == "eth") ||
+            (name.size() >= 8 && name.substr(0, 8) == "wireless")
+        );
+
+        if (check_connectivity_asio(ip)) {
+            if (debug == PrintDebug::On) {
+                eLog("[FindLocalIpAsio] Selected: {} ({}) physical={}", ip, name, is_physical);
+            }
+            return ip;
+        }
+    }
+
+    eCritical("[FindLocalIpAsio] Can't find local ip, set 0.0.0.0");
+    return "0.0.0.0";
 }
 
 QString Utils::fix_file_name(const QString &fileName, const QString &replaceSymbol) {

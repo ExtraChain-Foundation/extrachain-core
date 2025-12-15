@@ -23,6 +23,7 @@
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/luminance_manager.h"
+#include "network/http_client.h"
 #include "network/upnpconnection.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
@@ -278,20 +279,6 @@ void NetworkManager::reconnection() {
     }
 }
 
-void NetworkManager::setup_proxy(QNetworkProxy::ProxyType type,
-                                 const QString           &hostName,
-                                 quint16                  port,
-                                 const QString           &user,
-                                 const QString           &password) {
-    QNetworkProxy proxy;
-    proxy.setType(type);
-    proxy.setHostName(hostName);
-    proxy.setPort(port);
-    proxy.setUser(user);
-    proxy.setPassword(password);
-    QNetworkProxy::setApplicationProxy(proxy);
-}
-
 void NetworkManager::setup_service_callbacks(SocketService::Ptr service, bool requestListNodes) {
     // Error callback
     service->on_error = [this](SocketService::Ptr svc, Network::SocketServiceError error,
@@ -398,58 +385,51 @@ void NetworkManager::check_port(const QString     ip,
     //     return;
     // }
 
-    // int         timeoutMs = 1000;
-    QTcpSocket *socket = new QTcpSocket(this);
+    auto ip_str = ip.toStdString();
+    asio::co_spawn(*ioc_, [this, ip_str, protocol, request, isConstant]() -> VoidTask {
+        tcp::resolver resolver(*ioc_);
+        auto [ec_resolve, results] = co_await resolver.async_resolve(
+            ip_str, std::to_string(ws_port), asio::as_tuple(asio::use_awaitable));
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
-        socket->disconnectFromHost();
-        socket->deleteLater();
-        // emit portCheckResult(ip, port, true);
-        connect_to_node_slot(ip, protocol, request, isConstant);
-    });
+        if (ec_resolve) {
+            eLog("[Network] Failed to resolve {}:{} - {}", ip_str, ws_port, ec_resolve.message());
+            co_return;
+        }
 
-    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
-        socket->deleteLater();
-    });
+        tcp::socket socket(*ioc_);
+        auto [ec_connect, endpoint] = co_await asio::async_connect(
+            socket, results, asio::as_tuple(asio::use_awaitable));
 
-    // QTimer* timer = new QTimer(this);
-    // timer->setSingleShot(true);
-    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
-    //     if (socket->state() == QAbstractSocket::ConnectingState) {
-    //         socket->abort();
-    //         // emit portCheckResult(ip, wsPort, false);
-    //         socket->deleteLater();
-    //     }
-    //     timer->deleteLater();
-    // });
+        if (ec_connect) {
+            eLog("[Network] Failed to connect to {}:{} - {}", ip_str, ws_port, ec_connect.message());
+            co_return;
+        }
 
-    socket->connectToHost(QHostAddress(ip), ws_port);
-    // timer->start(timeoutMs);
+        socket.close();
+        QMetaObject::invokeMethod(this, [this, ip_str, protocol, request, isConstant]() {
+            connect_to_node_slot(QString::fromStdString(ip_str), protocol, request, isConstant);
+        }, Qt::QueuedConnection);
+        co_return;
+    }, asio::detached);
 }
 
 bool NetworkManager::check_port_sync(const QString    &ip,
                                      Network::Protocol protocol,
                                      const bool        request,
                                      const bool        isConstant) {
-    QTcpSocket socket;
+    try {
+        asio::io_context ioc;
+        tcp::resolver resolver(ioc);
+        auto results = resolver.resolve(ip.toStdString(), std::to_string(ws_port));
 
-    socket.connectToHost(QHostAddress(ip), ws_port);
-
-    if (!socket.waitForConnected(1600)) {
-        eLog("[Network] Failed to connect to {}:{} - {}",
-             ip.toStdString(),
-             ws_port,
-             socket.errorString().toStdString());
+        tcp::socket socket(ioc);
+        asio::connect(socket, results);
+        socket.close();
+        return true;
+    } catch (const std::exception& e) {
+        eLog("[Network] Failed to connect to {}:{} - {}", ip.toStdString(), ws_port, e.what());
         return false;
     }
-
-    socket.disconnectFromHost();
-
-    if (socket.state() != QAbstractSocket::UnconnectedState) {
-        socket.waitForDisconnected(1000);
-    }
-
-    return true;
 }
 
 NetworkManager::~NetworkManager() {
@@ -1069,6 +1049,81 @@ int NetworkManager::active_connections_count() {
     }
 
     return count;
+}
+
+void NetworkManager::request_my_ip(int num_nodes, std::function<void(const std::string&)> callback) {
+    std::lock_guard lock(my_ip_mutex_);
+    my_ip_callback_ = std::move(callback);
+    my_ip_responses_.clear();
+
+    std::vector<std::string> identifiers;
+    {
+        auto locked_connections = *connections_;
+        for (const auto &connection : *locked_connections) {
+            if (connection->is_active()) {
+                identifiers.push_back(connection->identifier());
+                if (static_cast<int>(identifiers.size()) >= num_nodes) {
+                    break;
+                }
+            }
+        }
+    }
+
+    if (identifiers.empty()) {
+        eWarning("[MyIp] No active connections available");
+        if (my_ip_callback_) {
+            my_ip_callback_("");
+        }
+        return;
+    }
+
+    eLog("[MyIp] Requesting IP from {} nodes", identifiers.size());
+
+    for (const auto &id : identifiers) {
+        Responder responder(this);
+        responder.add_identifier(id);
+        send_message(std::string{}, MessageType::MyIp, SendMode::Focused, MessageStatus::Request, responder);
+    }
+}
+
+void NetworkManager::handle_my_ip_response(const std::string& identifier, const std::string& ip) {
+    std::lock_guard lock(my_ip_mutex_);
+
+    my_ip_responses_[identifier].push_back(ip);
+
+    // Count occurrences of each IP
+    std::map<std::string, int> ip_counts;
+    for (const auto& [id, ips] : my_ip_responses_) {
+        for (const auto& response_ip : ips) {
+            ip_counts[response_ip]++;
+        }
+    }
+
+    // Find IP with most votes
+    std::string best_ip;
+    int max_count = 0;
+    for (const auto& [counted_ip, count] : ip_counts) {
+        if (count > max_count) {
+            max_count = count;
+            best_ip = counted_ip;
+        }
+    }
+
+    int total_responses = 0;
+    for (const auto& [id, ips] : my_ip_responses_) {
+        total_responses += ips.size();
+    }
+
+    eLog("[MyIp] Response from {}: {} (total: {}, best: {} with {} votes)",
+         identifier, ip, total_responses, best_ip, max_count);
+
+    // Check if we have enough consensus (at least 2 matching responses or all responses received)
+    if (max_count >= 2 && my_ip_callback_) {
+        auto callback = std::move(my_ip_callback_);
+        my_ip_callback_ = nullptr;
+        my_ip_responses_.clear();
+        callback(best_ip);
+    }
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {
@@ -1937,6 +1992,39 @@ VoidTask NetworkManager::message_received(std::string message,
         break;
     }
 
+    case MessageType::MyIp: {
+        if (status == MessageStatus::Request) {
+            // Find sender's IP by identifier
+            std::string sender_ip;
+            {
+                auto locked_connections = *connections_;
+                for (const auto &connection : *locked_connections) {
+                    if (connection->identifier() == identifier) {
+                        sender_ip = connection->ip();
+                        break;
+                    }
+                }
+            }
+
+            if (!sender_ip.empty()) {
+                node->network()->send_message(MessagePack::serialize(sender_ip),
+                                              MessageType::MyIp,
+                                              SendMode::Focused,
+                                              MessageStatus::Response,
+                                              responder);
+            }
+        } else if (status == MessageStatus::Response) {
+            auto ip_result = MessagePack::deserialize<std::string>(serialized);
+            if (!ip_result.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for MyIp response", type);
+                co_return;
+            }
+
+            handle_my_ip_response(identifier, ip_result.value());
+        }
+        break;
+    }
+
     default: {
         eCritical("[NetworkManager/messageReceived] Not supported message type: {} ({})",
                   type,
@@ -2245,41 +2333,41 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
     }
 
     try {
-        QString query = alt ? "https://freeipapi.com/api/json" : "http://ip-api.com/json";
-        if (!ip.isEmpty()) {
-            query += "/" + ip;
+        // Primary: ip-api.com (HTTP), Fallback: freeipapi.com (HTTPS if SSL enabled)
+        std::string host, target, ip_field, country_field;
+        uint16_t port;
+        bool use_ssl = false;
+
+        if (!alt) {
+            host = "ip-api.com";
+            target = "/json";
+            port = 80;
+            ip_field = "query";
+            country_field = "country";
+        } else {
+#ifdef EXTRACHAIN_SSL_ENABLED
+            host = "freeipapi.com";
+            target = "/api/json";
+            port = 443;
+            use_ssl = true;
+            ip_field = "ipAddress";
+            country_field = "countryName";
+#else
+            throw std::runtime_error("SSL not enabled, no fallback available");
+#endif
         }
 
-        QUrl                  url(query);
-        QNetworkAccessManager manager;
-        QNetworkRequest       request(url);
-#ifdef IS_APP_UI_CLIENT
-        request.setTransferTimeout(4000);
-#else
-        request.setTransferTimeout(5000);
-#endif
-        QNetworkReply *reply = manager.get(request);
+        if (!ip.isEmpty()) {
+            target += "/" + ip.toStdString();
+        }
 
-        QString    ip, country, output;
-        QEventLoop loop;
-        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-
-        QString errorText;
-        QObject::connect(reply, &QNetworkReply::finished, [&]() {
-            if (reply->error() != QNetworkReply::NoError) {
-                errorText = reply->errorString();
-                return;
-            }
-            output = reply->readAll();
-        });
-        loop.exec();
-        reply->deleteLater();
-
-        if (!errorText.isEmpty())
-            throw std::runtime_error(errorText.toStdString());
+        auto result = HttpClient(*ioc_).get_sync(host, port, target, use_ssl);
+        if (!result.has_value()) {
+            throw std::runtime_error(result.error());
+        }
 
         QJsonParseError parseError;
-        QJsonDocument   jsonDoc = QJsonDocument::fromJson(output.toUtf8(), &parseError);
+        QJsonDocument jsonDoc = QJsonDocument::fromJson(QByteArray::fromStdString(result.value()), &parseError);
 
         if (parseError.error != QJsonParseError::NoError)
             throw std::runtime_error("Failed to parse JSON:" + parseError.errorString().toStdString());
@@ -2288,42 +2376,24 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
 
         QJsonObject jsonObj = jsonDoc.object();
 
-        ip      = jsonObj.value(alt ? "ipAddress" : "query").toString();
-        country = jsonObj.value(alt ? "countryName" : "country").toString();
+        QString result_ip = jsonObj.value(QString::fromStdString(ip_field)).toString();
+        QString country = jsonObj.value(QString::fromStdString(country_field)).toString();
 
         if (country.contains("United Kingdom")) {
             country = "United Kingdom";
-        }
-
-        if (country == "United States of America") {
+        } else if (country == "United States of America") {
             country = "United States";
-        }
-
-        if (country == "The Netherlands") {
+        } else if (country == "The Netherlands") {
             country = "Netherlands";
-        }
-
-        if (country == "Türkiye") {
+        } else if (country == "Türkiye") {
             country = "Turkey";
         }
 
         eLog("Country: {}", country);
-        cache.insert(ip, country);
-        return { ip, country };
+        cache.insert(result_ip, country);
+        return { result_ip, country };
     } catch (const std::exception &error) {
         eCritical("Get public ip error: {}", error.what());
-
-        if (!alt) {
-            return search_public_ip_and_country_(ip, true);
-        }
-
-#ifdef Q_OS_LINUX
-        return {};
-#endif
-
-        return { ip.isEmpty() ? public_ip_.c_str() : ip, "Security" };
-    } catch (...) {
-        eCritical("Get public ip error unknown");
 
         if (!alt) {
             return search_public_ip_and_country_(ip, true);

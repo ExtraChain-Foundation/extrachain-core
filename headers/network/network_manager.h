@@ -24,7 +24,6 @@
 #include <QtCore/QRandomGenerator>
 #include <QtNetwork/QNetworkAddressEntry>
 #include <QtNetwork/QNetworkInterface>
-#include <QtNetwork/QNetworkProxy>
 #include <string>
 #include <shared_mutex>
 #include <thread>
@@ -292,6 +291,11 @@ private:
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
     std::map<std::string, MessageIdDataReceived>                                messages_received_;
+
+    // MyIp consensus
+    std::mutex                                    my_ip_mutex_;
+    std::map<std::string, std::vector<std::string>> my_ip_responses_; // message_id -> list of IPs
+    std::function<void(const std::string&)>       my_ip_callback_;
     QTimer*                                                                     reconnect_timer_;
     QTimer*                                                                     clear_network_caches_timer_;
     CalculateTraffic*                                                           calculate_traffic_;
@@ -401,11 +405,6 @@ public slots:
                               const bool        is_light   = false);
     void process();
     void reconnection();
-    void setup_proxy(QNetworkProxy::ProxyType type,
-                     const QString&           hostName,
-                     quint16                  port,
-                     const QString&           user,
-                     const QString&           password);
 
 private:
     void remove_socket_connection(SocketService::Ptr service);
@@ -430,6 +429,10 @@ public:
     bool is_connection_exists(const std::string& identifier);
     bool is_active_connection_exists();
     int  active_connections_count();
+
+    // Request own IP from N neighbors with consensus
+    void request_my_ip(int num_nodes, std::function<void(const std::string&)> callback);
+    void handle_my_ip_response(const std::string& identifier, const std::string& ip);
 
     VoidTask message_received(std::string message, std::string ip, std::string identifier);
 

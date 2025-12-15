@@ -19,16 +19,15 @@
 
 #include "managers/thoth_manager.h"
 
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
+#include "network/http_client.h"
+#include "network/network_manager.h"
 
 ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
     : node(node)
     , QObject(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
+    , http_client_(std::make_unique<HttpClient>(node->network()->io_context())) {
     QObject::connect(node->dfs(),
                      &DfsController::waitDownloaded,
                      [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
@@ -254,29 +253,22 @@ void ThothManager::network_thoth_record(const ActorId& owner_id, const std::stri
 }
 
 bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
-    QUrl            url("http://localhost:5425/send");
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-
     auto service_message =
         ThothServiceMessage { .device_token = info.token,
                               .title        = "Messenger",
                               .body         = username.empty() ? "Raccoon brings word from the shadows"
                                                                : fmt::format("Message from @{}", username) };
 
-    QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
-    QNetworkReply* reply = m_networkManager->post(request, data);
+    auto body = Json::serialize(service_message);
 
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        if (reply->error() == QNetworkReply::NoError) {
-            QByteArray response = reply->readAll();
-
-            emit sendSuccess(QString::fromUtf8(response));
-        } else {
-            emit sendFailed(reply->errorString());
-        }
-        reply->deleteLater();
-    });
+    http_client_->post_async("localhost", port_, "/send", body, "application/json",
+        [this](bool success, std::string response) {
+            if (success) {
+                emit sendSuccess(QString::fromStdString(response));
+            } else {
+                emit sendFailed(QString::fromStdString(response));
+            }
+        });
 
     return true;
 }

@@ -22,7 +22,7 @@
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 
-class QNetworkAccessManager;
+class HttpClient;
 
 struct ThothData {
     std::string   id;
@@ -110,5 +110,5 @@ signals:
     void sendFailed(const QString& error);
 
 private:
-    QNetworkAccessManager* m_networkManager;
+    std::unique_ptr<HttpClient> http_client_;
 };

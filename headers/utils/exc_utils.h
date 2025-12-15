@@ -817,6 +817,7 @@ namespace Utils {
 
     EXTRACHAIN_EXPORT QString              detect_compiler();
     EXTRACHAIN_EXPORT QNetworkAddressEntry findLocalIp(PrintDebug debug = PrintDebug::Off);
+    EXTRACHAIN_EXPORT std::string          findLocalIpAsio(PrintDebug debug = PrintDebug::Off);
     EXTRACHAIN_EXPORT QString fix_file_name(const QString &fileName, const QString &replaceSymbol = "_");
     EXTRACHAIN_EXPORT bool    isValidIp(const QString &ip);
 
