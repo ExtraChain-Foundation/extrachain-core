@@ -23,8 +23,6 @@
 #include <blake3.h>
 
 #include <QDir>
-#include <QJsonArray>
-#include <QJsonObject>
 #include <QRegularExpression>
 
 #include "utils/exc_logs.h"
@@ -528,36 +526,35 @@ bool DbConnector::query(std::string query) {
     return res == SQLITE_DONE;
 }
 
-QJsonObject DbConnector::toJsonObject() {
+boost::json::object DbConnector::toJsonObject() {
     if (!is_open()) {
         eFatal("[DbConnector] Database not open");
     }
 
-    QJsonObject json;
+    boost::json::object json;
 
     const auto tables = table_names();
     for (const auto &table : tables) {
         auto result = select_all(table);
 
-        QJsonArray array;
+        boost::json::array array;
         for (const auto &row : result) {
-            QJsonObject obj;
+            boost::json::object obj;
             for (const auto &[key, value] : row) {
-                obj[key.c_str()] = value.c_str();
+                obj[key] = value;
             }
-            array << obj;
+            array.push_back(obj);
         }
 
-        json[table.c_str()] = array;
+        json[table] = array;
     }
 
     return json;
 }
 
-QJsonDocument DbConnector::toJsonDocument() {
+std::string DbConnector::toJsonString() {
     auto object = toJsonObject();
-    auto json   = QJsonDocument(std::move(object));
-    return json;
+    return boost::json::serialize(object);
 }
 
 sqlite3 *DbConnector::getDb() const {

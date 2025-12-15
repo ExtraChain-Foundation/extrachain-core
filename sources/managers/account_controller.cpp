@@ -22,6 +22,9 @@
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
 
+#include <boost/json.hpp>
+#include <fstream>
+
 AccountController::AccountController(ExtraChainNode *node)
     : QObject(node)
     , node(node) {
@@ -329,18 +332,21 @@ void AccountController::clear() {
 }
 
 std::set<ActorId> AccountController::profiles_list() {
-    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
-    if (!file.exists())
+    auto path = Profiles::folder + Utils::platformDelimeter() + Profiles::profiles;
+    std::ifstream file(path);
+    if (!file.is_open())
         return {};
 
-    file.open(QFile::ReadOnly);
-    auto json_bytes    = file.readAll();
-    auto profiles_json = QJsonDocument::fromJson(json_bytes).array();
+    std::string json_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+    boost::json::error_code ec;
+    auto json_value = boost::json::parse(json_str, ec);
+    if (ec || !json_value.is_array())
+        return {};
 
     std::set<ActorId> profiles;
-
-    for (auto actor_id : profiles_json) {
-        profiles.insert(ActorId(actor_id.toString().toStdString()));
+    for (const auto& actor_id : json_value.as_array()) {
+        profiles.insert(ActorId(std::string(actor_id.as_string())));
     }
 
     return profiles;
@@ -349,16 +355,16 @@ std::set<ActorId> AccountController::profiles_list() {
 void AccountController::insert_to_profile_set(const ActorId &actorId) {
     auto profiles = profiles_list();
     profiles.insert(actorId);
-    QJsonArray array;
-    for (auto &actorId : profiles) {
-        array.push_back(actorId.toQString());
-    }
-    auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
 
-    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
-    file.open(QFile::WriteOnly);
-    file.write(json);
-    file.close();
+    boost::json::array array;
+    for (const auto &id : profiles) {
+        array.push_back(id.to_string());
+    }
+    auto json = boost::json::serialize(array);
+
+    auto path = Profiles::folder + Utils::platformDelimeter() + Profiles::profiles;
+    std::ofstream file(path);
+    file << json;
 }
 
 std::vector<std::string> AccountController::seed_mnemonic() {

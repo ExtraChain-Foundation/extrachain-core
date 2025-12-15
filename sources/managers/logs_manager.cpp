@@ -26,7 +26,7 @@
 #include <fmt/core.h>
 #include "utils/exc_logs.h"
 
-#include <QJsonObject>
+#include <boost/json.hpp>
 #include <QMutex>
 #include <QThread>
 
@@ -77,15 +77,16 @@ void LogsManager::messageHandler(QtMsgType type, const QMessageLogContext& conte
 
         QFile file("logs/extrachain-fatal.log");
         if (file.open(QFile::Append)) {
-            QJsonObject json;
-            json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap");
+            boost::json::object json;
+            json["time"] = QDateTime::currentDateTime().toString("yyyy.MM.dd hh:mm:ss ap").toStdString();
 #ifdef LOG_FILENAME
-            json["file"]     = normalizeFileName(context.file);
-            json["line"]     = QString::number(context.line);
-            json["function"] = QString(context.function);
+            json["file"]     = normalizeFileName(context.file).toStdString();
+            json["line"]     = context.line;
+            json["function"] = std::string(context.function ? context.function : "");
 #endif
-            json["message"] = msg;
-            file.write(QJsonDocument(json).toJson(QJsonDocument::Compact) + "\n");
+            json["message"] = msg.toStdString();
+            auto json_str = boost::json::serialize(json) + "\n";
+            file.write(json_str.c_str(), json_str.size());
             file.close();
         }
         break;

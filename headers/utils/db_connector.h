@@ -25,8 +25,9 @@
 #include <vector>
 
 #include <QByteArray>
-#include <QJsonDocument>
 #include <QMutex>
+
+#include <boost/json.hpp>
 
 #include <boost/describe.hpp>
 #include <boost/mp11.hpp>
@@ -195,9 +196,9 @@ public:
     std::pair<std::string, uint64_t> hash_size(const std::string &order_by = "rowid");
 
 public:
-    bool          query(std::string query);
-    QJsonObject   toJsonObject();
-    QJsonDocument toJsonDocument();
+    bool               query(std::string query);
+    boost::json::object toJsonObject();
+    std::string         toJsonString();
 
 public:
     sqlite3 *getDb() const;

@@ -36,7 +36,7 @@
 #include <fstream>
 #include <vector>
 
-#include <QJsonObject>
+#include <boost/json.hpp>
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
@@ -2366,18 +2366,19 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
             throw std::runtime_error(result.error());
         }
 
-        QJsonParseError parseError;
-        QJsonDocument jsonDoc = QJsonDocument::fromJson(QByteArray::fromStdString(result.value()), &parseError);
-
-        if (parseError.error != QJsonParseError::NoError)
-            throw std::runtime_error("Failed to parse JSON:" + parseError.errorString().toStdString());
-        if (!jsonDoc.isObject())
+        boost::json::error_code ec;
+        auto json_value = boost::json::parse(result.value(), ec);
+        if (ec) {
+            throw std::runtime_error("Failed to parse JSON: " + ec.message());
+        }
+        if (!json_value.is_object()) {
             throw std::runtime_error("JSON is not an object");
+        }
 
-        QJsonObject jsonObj = jsonDoc.object();
+        auto& json_obj = json_value.as_object();
 
-        QString result_ip = jsonObj.value(QString::fromStdString(ip_field)).toString();
-        QString country = jsonObj.value(QString::fromStdString(country_field)).toString();
+        QString result_ip = QString::fromStdString(std::string(json_obj.at(ip_field).as_string()));
+        QString country = QString::fromStdString(std::string(json_obj.at(country_field).as_string()));
 
         if (country.contains("United Kingdom")) {
             country = "United Kingdom";
