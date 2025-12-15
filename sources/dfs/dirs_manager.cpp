@@ -315,6 +315,12 @@ void DirsManager::network_response_dir_rows(
             if (!dir_rows_res.empty()) {
                 auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
                 this->update_dirs(owner_id, max_value);
+
+                for (const auto &row : dir_rows_res) {
+                    if (row.type == Dfs::FileType::Folder) {
+                        emit node->dfs()->added(owner_id, row);
+                    }
+                }
             }
 
             if (!node_enabled.load()) {
@@ -342,11 +348,6 @@ void DirsManager::network_response_dir_rows(
                                                          *responder.identifiers().begin());
         }
     });
-
-    if (!node->dfs()->is_dirs_loaded_) {
-        node->dfs()->is_dirs_loaded_ = true;
-        emit node->dfs()->dirsLoaded();
-    }
 }
 
 void DirsManager::temp_sync_all(const std::string& identifier) {

@@ -204,10 +204,6 @@ public:
         Utils::write_settings(settings);
     }
 
-    bool is_dirs_loaded() {
-        return is_dirs_loaded_;
-    }
-
     std::set<Dfs::FileLink> forces_files_;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
@@ -464,7 +460,6 @@ public:
 private:
     DirsManager dirs_manager_;
     LoadManager load_manager_;
-    bool        is_dirs_loaded_ = false;
 
     std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
@@ -517,7 +512,6 @@ signals:
     void downloaded(ActorId owner_id, Dfs::DirRow dir_row);
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
     void waitDownloaded(ActorId owner_id, Dfs::DirRow dir_row);
-    void dirsLoaded();
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);
