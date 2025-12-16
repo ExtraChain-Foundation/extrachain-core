@@ -334,6 +334,10 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 }
 
                 for (const auto &[ip, identifier] : connections) {
+                    if (this->failed_ips_.contains(ip)) {
+                        continue;
+                    }
+
                     bool can_connect = true;
 
                     {
@@ -561,6 +565,7 @@ void NetworkManager::connect_to_websocket(const QString &ip,
     }
 
     auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
+    service->set_direction(SocketDirection::Outgoing);
     connectWsService(service, requestListNodes);
     service->open(ip, port);
     reconnections_to_identifier_
@@ -1878,13 +1883,14 @@ void NetworkManager::remove_socket_connection() {
 void NetworkManager::socket_error(Network::SocketServiceError error,
                                   QString                     errorData,
                                   std::string                 ip,
-                                  std::string                 identifier) {
+                                  std::string                 identifier,
+                                  SocketDirection             direction) {
     // if (QObject::sender() == nullptr) {
     //     return;
     // }
 
     // auto service = qobject_cast<SocketService *>(QObject::sender());
-    eLog("[NetworkManager] Error socket: {} {} {}", error, ip, identifier);
+    eLog("[NetworkManager] Error socket: {} {} {} {}", direction, error, ip, identifier);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
@@ -2115,6 +2121,7 @@ void NetworkManager::onNewWsConnection() {
     }
 
     auto service = new WebSocketService(ws, node, this, false);
+    service->set_direction(SocketDirection::Incoming);
     connectWsService(service);
     if (!needToDelete)
         reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),

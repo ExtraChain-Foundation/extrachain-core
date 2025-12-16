@@ -612,6 +612,12 @@ namespace Dfs {
                     const std::string&                 folder,
                     const std::string&                 name);
 
+                std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> search_files_by_folder_and_name(
+                    const std::shared_ptr<DbConnector> db,
+                    const ActorId&                     owner_id,
+                    const std::string&                 folder,
+                    const std::string&                 name);
+
                 std::expected<Dfs::DirRow, Dfs::DfsError> search_file_by_hash(
                     const std::shared_ptr<DbConnector> db,
                     const ActorId&                     owner_id,

@@ -247,6 +247,41 @@ std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::sea
     return dirRow.value();
 }
 
+std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::search_files_by_folder_and_name(
+    const std::shared_ptr<DbConnector> db,
+    const ActorId                     &owner_id,
+    const std::string                 &folder,
+    const std::string                 &name) {
+    std::string query_folder = folder.empty() ? "" : fmt::format("folder = '{}' AND", folder);
+    std::string query = fmt::format("SELECT * FROM {} WHERE owner_id = '{}' AND {} name = '{}' AND state != '{}';",
+                                    TableNameActorsFiles,
+                                    owner_id.to_string(),
+                                    query_folder,
+                                    name,
+                                    std::to_underlying(FileState::Removed));
+
+    auto rows = db->select(query);
+    if (rows.empty()) {
+        return std::unexpected(Dfs::DfsError::NotExists);
+    }
+
+    std::vector<Dfs::DirRow> result;
+    result.reserve(rows.size());
+
+    for (const auto &row : rows) {
+        auto dirRow = Utils::from_dbrow<Dfs::DirRow>(row);
+        if (dirRow.has_value()) {
+            result.push_back(dirRow.value());
+        }
+    }
+
+    if (result.empty()) {
+        return std::unexpected(Dfs::DfsError::DirValueNotExists);
+    }
+
+    return result;
+}
+
 std::expected<Dfs::DirRow, Dfs::DfsError> Dfs::Tables::DirsFile::ActorSpace::search_file_by_hash(
     const std::shared_ptr<DbConnector> db,
     const ActorId                     &owner_id,

@@ -31,6 +31,7 @@
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/isocket_service.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
 #include "dfs/dfs_utils.h"
@@ -376,7 +377,8 @@ private slots:
     void socket_error(Network::SocketServiceError error,
                       QString                     errorData,
                       std::string                 ip,
-                      std::string                 identifier);
+                      std::string                 identifier,
+                      SocketDirection             direction);
 
 public:
     QString local_ip(); // TODO: remove
