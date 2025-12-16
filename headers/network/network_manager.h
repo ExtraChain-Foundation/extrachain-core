@@ -316,9 +316,9 @@ private:
     void clear_network_caches();
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
-    bool is_first_node(const std::string& identifier); // detect for safety
 
 public:
+    bool is_first_node(const std::string& identifier); // detect for safety
     SafePtr<std::set<SocketService*>> connections() const;
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();

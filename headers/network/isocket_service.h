@@ -109,7 +109,8 @@ public:
 
     bool is_closed();
 
-protected slots:
+// protected slots:
+public slots:
     virtual void closeSocket();
 
 signals:

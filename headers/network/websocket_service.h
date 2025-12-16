@@ -66,7 +66,9 @@ private slots:
 
     void onConnected();
     void onSocketError(QAbstractSocket::SocketError error);
+public slots:
     void closeSocket() override;
+private slots:
     void sendMessageInternalSlot(const QByteArray &data);
     void tryDequeueMessage();
 
