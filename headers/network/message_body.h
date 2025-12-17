@@ -236,6 +236,7 @@ struct VPNMessage {
     std::string              publicIP;
     std::string              publicKey;
     std::string              uuid;
+    std::string              uuidTempForServer;
     std::vector<std::string> allIPsToSet;
     std::string              senderID;
     std::set<std::string>    blockedSenders;
@@ -260,6 +261,7 @@ struct VPNMessage {
                    publicIP,
                    publicKey,
                    uuid,
+                   uuidTempForServer,
                    allIPsToSet,
                    senderID,
                    blockedSenders,
