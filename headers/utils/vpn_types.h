@@ -31,6 +31,7 @@ struct VPNConfigStorage {
     struct VPNHandhakeCache {
         bool        is_sended = false;
         std::string uuid;
+        std::string uuidTempForServer;
         // std::string              requesterIP;
         std::string              requesterNetworkIdentifier;
         std::string              requesterMessageID;
