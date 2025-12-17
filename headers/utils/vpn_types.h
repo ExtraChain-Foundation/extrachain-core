@@ -36,6 +36,7 @@ struct VPNConfigStorage {
         std::string              requesterMessageID;
         std::string              requesterNodeID;
         std::string              requesterNodeIP;
+        std::string              requesterNodeRestID;
         std::string              nextNodeIP;
         std::string              nextNodeNetworkIdentifier;
         std::string              nextNodeID;
