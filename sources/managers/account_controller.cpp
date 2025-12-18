@@ -339,7 +339,7 @@ std::set<ActorId> AccountController::profiles_list() {
 
     std::string json_str((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
-    boost::json::error_code ec;
+    boost::system::error_code ec;
     auto json_value = boost::json::parse(json_str, ec);
     if (ec || !json_value.is_array())
         return {};
@@ -358,7 +358,7 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
 
     boost::json::array array;
     for (const auto &id : profiles) {
-        array.push_back(id.to_string());
+        array.push_back(boost::json::value(id.to_string()));
     }
     auto json = boost::json::serialize(array);
 

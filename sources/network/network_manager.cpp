@@ -2351,7 +2351,7 @@ std::pair<QString, QString> NetworkManager::search_public_ip_and_country_(const 
             throw std::runtime_error(result.error());
         }
 
-        boost::json::error_code ec;
+        boost::system::error_code ec;
         auto json_value = boost::json::parse(result.value(), ec);
         if (ec) {
             throw std::runtime_error("Failed to parse JSON: " + ec.message());

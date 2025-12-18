@@ -47,6 +47,8 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
     });
 }
 
+ThothManager::~ThothManager() = default;
+
 void ThothManager::start() {
     enabled_ = true;
     // TODO: add downloaded file

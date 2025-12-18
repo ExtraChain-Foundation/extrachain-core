@@ -1893,14 +1893,14 @@ Task<std::string> DfsController::network_store_file(ActorId               owner_
 
         if (!insertRes) {
             eLog("[Dfs] addFolder: insert failed");
-            return "";
+            co_return "";
         }
 
         dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         emit added(owner_id, dir_row2);
 
         eLog("[Dfs] Folder {}/{} was synced from network", owner_id, dir_row.file_id);
-        return dir_row.file_id;
+        co_return dir_row.file_id;
     }
 
     if (!writeAvailable(dir_row.size) && !std::filesystem::is_empty(actorFolderPath)) {

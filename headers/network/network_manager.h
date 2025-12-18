@@ -408,8 +408,7 @@ private:
     void socket_error(SocketService::Ptr          service,
                       Network::SocketServiceError error,
                       const std::string&          errorData,
-                      const std::string&          identifier,
-                      SocketDirection             direction));
+                      const std::string&          identifier);
 
 public:
     QString local_ip(); // TODO: remove

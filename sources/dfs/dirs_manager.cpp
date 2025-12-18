@@ -294,10 +294,6 @@ VoidTask DirsManager::network_response_dir_rows(
                                                      *responder.identifiers().begin());
     }
 
-    if (!node->dfs()->is_dirs_loaded_) {
-        node->dfs()->is_dirs_loaded_ = true;
-        emit node->dfs()->dirsLoaded();
-    }
     co_return;
 }
 

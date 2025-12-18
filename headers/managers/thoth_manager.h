@@ -68,6 +68,7 @@ class ThothManager : public QObject {
 
 public:
     ThothManager(ExtraChainNode* node, QObject* parent = nullptr);
+    ~ThothManager();
 
     // for network
     bool create_thoth_template();
