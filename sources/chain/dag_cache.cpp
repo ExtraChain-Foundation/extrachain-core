@@ -471,7 +471,6 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
             auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
             eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
             // eLog("[Dag] Send {}", hash_interval);
-            node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             // });
         }
     }

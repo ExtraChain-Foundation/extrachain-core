@@ -229,9 +229,6 @@ VoidTask DirsManager::network_request_dir_rows(Dfs::Tables::DirsFile::DirsSpace:
 VoidTask DirsManager::network_response_dir_rows(
     std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
     Responder                                                 responder) {
-    // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
-    // TODO: add merge for sync dir file
-    // for removed
     for (auto& [owner_id, dir_rows] : response_data) {
         Dfs::initialize_actor_folder(owner_id);
         std::vector<Dfs::DirRow> dir_rows_todo;
@@ -253,20 +250,23 @@ VoidTask DirsManager::network_response_dir_rows(
             }
 
             if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
-                if (!file_path->exists()) { // TODO: size
-                    // eLog("Not exists: {} {}", owner_id, row.file_id);
+                if (!file_path->exists()) {
                     dir_rows_todo.push_back(row);
                 }
             }
         }
 
-        // Need to change adding
         auto [res, dir_rows_res] = Dfs::Tables::DirsFile::ActorSpace::add_dir_rows(db_, owner_id, dir_rows);
-        // eTemp("~~~~~~~~~~~~~~~~b {}", res);
 
         if (!dir_rows_res.empty()) {
             auto max_value = std::ranges::max(dir_rows_res, {}, &Dfs::DirRow::last_modified).last_modified;
             this->update_dirs(owner_id, max_value);
+
+            for (const auto& row : dir_rows_res) {
+                if (row.type == Dfs::FileType::Folder) {
+                    emit node->dfs()->added(owner_id, row);
+                }
+            }
         }
 
         if (!node_enabled.load()) {
@@ -285,7 +285,6 @@ VoidTask DirsManager::network_response_dir_rows(
             }
 
             node->dfs()->download_manager().add_to_queue(owner_id, rows, *responder.identifiers().begin());
-            // QThread::msleep(3);
             continue;
         }
 

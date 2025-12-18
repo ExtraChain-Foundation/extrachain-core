@@ -40,11 +40,13 @@
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/isocket_service.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
 #include "network/isocket_service.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include "utils/safeptr.h"
 
 namespace asio = boost::asio;
 using tcp = asio::ip::tcp;
@@ -301,8 +303,6 @@ private:
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
 
-    std::string network_hash_for_vpn_;
-
     std::string              public_ip_;
     std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
@@ -326,9 +326,6 @@ public:
 
     bool remove_one_connection();
 
-    std::string getNetworkVPNHash() noexcept;
-    void        setNetworkVPNHash() noexcept;
-
     // protected:
     // std::uint16_t tcp_port = 17593;
     std::uint16_t ws_port = 17593;
@@ -350,7 +347,7 @@ private:
     void clear_network_caches();
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
-    bool is_first_node(const std::string& identifier); // detect for safety
+    bool is_first_node(const std::string& identifier);
 
 public:
     SafePtr<std::set<SocketService::Ptr>> connections() const;
@@ -411,7 +408,8 @@ private:
     void socket_error(SocketService::Ptr          service,
                       Network::SocketServiceError error,
                       const std::string&          errorData,
-                      const std::string&          identifier);
+                      const std::string&          identifier,
+                      SocketDirection             direction));
 
 public:
     QString local_ip(); // TODO: remove

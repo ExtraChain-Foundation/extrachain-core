@@ -539,6 +539,7 @@ VoidTask NetworkManager::accept_loop() {
         }
 
         auto service = WebSocketService::from_accepted(std::move(socket), *ioc_, node);
+        service->set_direction(SocketDirection::Incoming);
         setup_service_callbacks(service);
 
         // Add to reconnections
@@ -561,6 +562,7 @@ VoidTask NetworkManager::accept_loop() {
 VoidTask NetworkManager::do_connect_websocket(const std::string& ip, uint16_t port, bool requestListNodes, bool isConstant, bool is_light) {
     try {
         auto service = co_await WebSocketService::connect(*ioc_, ip, port, node, isConstant, is_light);
+        service->set_direction(SocketDirection::Outgoing);
         setup_service_callbacks(service, requestListNodes);
 
         QMetaObject::invokeMethod(this, [this, service, ip, port]() {
@@ -671,7 +673,7 @@ bool NetworkManager::send_message_checker(MessageType      type,
                                           SendMode         send_mode,
                                           MessageStatus    status,
                                           const Responder &responder) {
-    if (status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
+    if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
         eCritical("[Network] Send message error: empty message id or receiver identifiers for response message");
         return false;
     }
@@ -687,7 +689,7 @@ bool NetworkManager::send_message_checker(MessageType      type,
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
-    if (status == MessageStatus::Response && send_mode != SendMode::Focused) {
+    if (/*send_mode != SendMode::Broadcast && */status == MessageStatus::Response && send_mode != SendMode::Focused) {
         eWarning(
             "[Network] Send message warning: incorrect type send for response message, set to focused, "
             "type: "
@@ -2052,7 +2054,8 @@ void NetworkManager::socket_error(SocketService::Ptr          service,
                                   const std::string&          errorData,
                                   const std::string&          identifier) {
     std::string ip = service ? service->ip() : "";
-    eLog("[NetworkManager] Error socket: {} {} {}", error, ip, identifier);
+    auto direction = service ? service->direction() : SocketDirection::Outgoing;
+    eLog("[NetworkManager] Error socket: {} {} {} | {}", error, ip, identifier, direction);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
         || error == Network::SocketServiceError::VersionTooOld
@@ -2164,24 +2167,6 @@ void NetworkManager::local_inizialization() {
 
     // Uncomment to start UPnP connection
     // upnpConnector->discoverDevices();
-}
-
-std::string NetworkManager::getNetworkVPNHash() noexcept {
-    return network_hash_for_vpn_;
-}
-
-void NetworkManager::setNetworkVPNHash() noexcept {
-    boost::mt11213b                           rng(std::chrono::system_clock::now().time_since_epoch().count());
-    boost::random::uniform_int_distribution<> dist(0, INT_MAX);
-    std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
-
-    KeyPrivate key;
-    key.generate_random();
-    network_hash_for_vpn_ =
-        Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->account_controller()->system_actor().id().to_string() + salt,
-                              Utils::HashAlgorithm::Blake3)
-            .substr(0, 64);
 }
 
 QString NetworkManager::local_ip() {

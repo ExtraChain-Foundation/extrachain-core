@@ -36,6 +36,11 @@ enum class SocketMode {
     Light
 };
 
+enum class SocketDirection {
+    Outgoing, // I connected to peer
+    Incoming  // Peer connected to me
+};
+
 class EXTRACHAIN_EXPORT SocketService : public std::enable_shared_from_this<SocketService> {
 public:
     using Ptr = std::shared_ptr<SocketService>;
@@ -87,10 +92,14 @@ public:
     int                       bytes_incoming() const;
     bool                      is_constant() const;
     void                      set_constant(bool isConstant);
-    bool                      is_vpn() const;
-    void                      set_vpn(bool isVPN);
     SocketMode                mode() {
         return mode_;
+    }
+    SocketDirection           direction() const {
+        return direction_;
+    }
+    void                      set_direction(SocketDirection dir) {
+        direction_ = dir;
     }
 
     std::uint64_t timestamp() const;
@@ -124,9 +133,9 @@ protected:
     int64_t          bytes_outgoing_   = 0;
     int64_t          bytes_compressed_ = 0;
     std::atomic_bool is_constant_      = false;
-    std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
     SocketMode       mode_             = SocketMode::Full;
+    SocketDirection  direction_        = SocketDirection::Outgoing;
     DfsMode          dfs_mode_socket_;
 
     std::mutex                       queue_mutex_;

@@ -200,6 +200,10 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
+    if (dir_row.type == Dfs::FileType::Folder) {
+        return;
+    }
+
     bool is_full = node->dfs()->mode() == DfsMode::Full;
 
     if (is_forced)
@@ -374,6 +378,9 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     const uint64_t total_size = size.value();
 
     if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Folder) {
+            return;
+        }
         if (dir_row->type == Dfs::FileType::Collection) {
             asio::co_spawn(node->network()->io_context(),
                 node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id,
@@ -477,6 +484,9 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
     // const uint64_t total_size = size.value();
 
     if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Folder) {
+            return;
+        }
         if (dir_row->type == Dfs::FileType::Collection) {
             asio::co_spawn(node->network()->io_context(),
                 node->dfs()->network_request_collection(owner_id, file_id, {}),

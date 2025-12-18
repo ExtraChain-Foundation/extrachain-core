@@ -72,14 +72,6 @@ void SocketService::set_constant(bool isConstant) {
     is_constant_ = isConstant;
 }
 
-bool SocketService::is_vpn() const {
-    return is_constant_.load();
-}
-
-void SocketService::set_vpn(bool isVPN) {
-    is_vpn_ = isVPN;
-}
-
 std::uint64_t SocketService::timestamp() const {
     return timestamp_;
 }
@@ -89,8 +81,7 @@ bool SocketService::is_closed() {
 }
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
-    eLog("[Socket] Current network id: {}", node_->actor_index()->network_id());
-    eLog("[Socket] IP: {}", ip_);
+    eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, node_->actor_index()->network_id());
 
     identifier_      = handshake.identifier;
     dfs_mode_socket_ = handshake.dfs_mode;
@@ -108,7 +99,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                               : Network::SocketServiceError::VersionTooOld;
 
         eInfo("Please, update client");
-        eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
+        eLog("[Socket] Closing: version {} incompatible with {} | {}", handshake.version, extrachain_version, direction_);
         if (on_error) on_error(shared_from_this(), error_type, handshake.version, identifier_);
         return false;
     }
@@ -129,7 +120,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     if (!(something_empty || is_network_ids_contains)) {
-        eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
+        eLog("[Socket] Closing: network id mismatch (local: {}, remote: {}) | {}", our_network_id, json_network_id, direction_);
         if (on_error) on_error(shared_from_this(), Network::SocketServiceError::IncompatibleNetwork, handshake.network_id, identifier_);
         return false;
     }
@@ -161,7 +152,7 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     if (duplicate) {
         if (on_error) on_error(shared_from_this(), Network::SocketServiceError::DuplicateIdentifier, "", identifier_);
-        eLog("[Socket] Closing: duplicate identifier");
+        eLog("[Socket] Closing: duplicate identifier | {}", direction_);
         return false;
     }
 
@@ -177,20 +168,20 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // 6.
     if (node_->network()->active_connections_count() >= Network::maxConnections) {
         if (on_error) on_error(shared_from_this(), Network::SocketServiceError::MaxConnections, "", identifier_);
-        eLog("[Socket] Closing: maximum connections reached");
+        eLog("[Socket] Closing: maximum connections reached | {}", direction_);
         return false;
     }
 
     // 7. Checking slots availability
     if (!handshake.is_available) {
-        eLog("[Socket] Closing: peer unavailable");
+        eLog("[Socket] Closing: peer unavailable | {}", direction_);
         if (on_error) on_error(shared_from_this(), Network::SocketServiceError::PeerUnavailable, "", identifier_);
         if (on_share_connections) on_share_connections(shared_from_this(), handshake.connections);
         return false;
     }
 
     // 8. If all checks are passed - activate the connection
-    eLog("[Socket] Activated: {} with IP: {}", fmt::ptr(this), ip());
+    eLog("[Socket] {} Activated: {} with IP: {}", direction_, fmt::ptr(this), ip());
     activated_ = true;
     Responder responder(node_->network());
     responder.add_identifier(identifier_);
