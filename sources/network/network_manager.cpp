@@ -602,7 +602,7 @@ bool NetworkManager::send_message_checker(MessageType      type,
                                           SendMode         send_mode,
                                           MessageStatus    status,
                                           const Responder &responder) {
-    if (status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
+    if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
         eCritical("[Network] Send message error: empty message id or receiver identifiers for response message");
         return false;
     }
@@ -618,7 +618,7 @@ bool NetworkManager::send_message_checker(MessageType      type,
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
-    if (status == MessageStatus::Response && send_mode != SendMode::Focused) {
+    if (/*send_mode != SendMode::Broadcast && */status == MessageStatus::Response && send_mode != SendMode::Focused) {
         eWarning(
             "[Network] Send message warning: incorrect type send for response message, set to focused, "
             "type: "
@@ -2020,24 +2020,6 @@ void NetworkManager::local_inizialization() {
 
     // Uncomment to start UPnP connection
     // upnpConnector->discoverDevices();
-}
-
-std::string NetworkManager::getNetworkVPNHash() noexcept {
-    return network_hash_for_vpn_;
-}
-
-void NetworkManager::setNetworkVPNHash() noexcept {
-    boost::mt11213b                           rng(std::chrono::system_clock::now().time_since_epoch().count());
-    boost::random::uniform_int_distribution<> dist(0, INT_MAX);
-    std::string                               salt = Tools::typeToStdStringBytes<int>(dist(rng));
-
-    KeyPrivate key;
-    key.generate_random();
-    network_hash_for_vpn_ =
-        Utils::calculate_hash(ByteArray(key.public_key()).toString()
-                                  + node->account_controller()->system_actor().id().to_string() + salt,
-                              Utils::HashAlgorithm::Blake3)
-            .substr(0, 64);
 }
 
 QString NetworkManager::local_ip() {

@@ -36,6 +36,7 @@
 #include "network/network_status.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include "utils/safeptr.h"
 
 class SocketService;
 class WebSocketService;
@@ -271,8 +272,6 @@ private:
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
 
-    std::string network_hash_for_vpn_;
-
     std::string              public_ip_;
     std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
@@ -295,9 +294,6 @@ public:
     std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
 
     bool remove_one_connection();
-
-    std::string getNetworkVPNHash() noexcept;
-    void        setNetworkVPNHash() noexcept;
 
     // protected:
     // quint16 tcpPort = 17593;

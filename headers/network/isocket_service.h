@@ -89,8 +89,6 @@ public:
     int                       bytes_incoming() const;
     bool                      is_constant() const;
     void                      set_constant(bool isConstant);
-    bool                      is_vpn() const;
-    void                      set_vpn(bool isVPN);
     SocketMode                mode() {
         return mode_;
     }
@@ -138,7 +136,6 @@ protected:
     int              bytes_outgoing_   = 0;
     int              bytes_compressed_ = 0;
     std::atomic_bool is_constant_      = false;
-    std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
     SocketMode       mode_             = SocketMode::Full;
     SocketDirection  direction_        = SocketDirection::Outgoing;

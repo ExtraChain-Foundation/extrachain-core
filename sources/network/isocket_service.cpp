@@ -73,14 +73,6 @@ void SocketService::set_constant(bool isConstant) {
     is_constant_ = isConstant;
 }
 
-bool SocketService::is_vpn() const {
-    return is_constant_.load();
-}
-
-void SocketService::set_vpn(bool isVPN) {
-    is_vpn_ = isVPN;
-}
-
 std::uint64_t SocketService::timestamp() const {
     return timestamp_;
 }
