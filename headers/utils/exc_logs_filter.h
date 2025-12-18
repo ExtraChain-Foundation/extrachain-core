@@ -92,8 +92,7 @@ public:
                                "exc_logs_extra",
                                "exc_msgpack_describe",
                                "variant_model",
-                               "safeptr",
-                               "vpn_types" };
+                               "safeptr" };
 
         m_modules["Global"] = { "metatypes", "extrachain_global" };
     }

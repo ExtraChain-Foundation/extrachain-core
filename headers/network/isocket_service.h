@@ -34,6 +34,11 @@ enum class SocketMode {
     Light
 };
 
+enum class SocketDirection {
+    Outgoing, // I connected to peer
+    Incoming  // Peer connected to me
+};
+
 class EXTRACHAIN_EXPORT SocketService : public QObject {
     Q_OBJECT
 
@@ -84,10 +89,14 @@ public:
     int                       bytes_incoming() const;
     bool                      is_constant() const;
     void                      set_constant(bool isConstant);
-    bool                      is_vpn() const;
-    void                      set_vpn(bool isVPN);
     SocketMode                mode() {
         return mode_;
+    }
+    SocketDirection           direction() const {
+        return direction_;
+    }
+    void                      set_direction(SocketDirection dir) {
+        direction_ = dir;
     }
 
     std::uint64_t timestamp() const;
@@ -98,13 +107,14 @@ public:
 
     bool is_closed();
 
-protected slots:
+// protected slots:
+public slots:
     virtual void closeSocket();
 
 signals:
     void send(const QByteArray &data);
     void disconnected();
-    void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier);
+    void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier, SocketDirection direction);
     void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
     void activated();
     void finished(); // if threads
@@ -126,9 +136,9 @@ protected:
     int              bytes_outgoing_   = 0;
     int              bytes_compressed_ = 0;
     std::atomic_bool is_constant_      = false;
-    std::atomic_bool is_vpn_           = false;
     std::uint64_t    timestamp_        = 0;
     SocketMode       mode_             = SocketMode::Full;
+    SocketDirection  direction_        = SocketDirection::Outgoing;
     DfsMode          dfs_mode_socket_;
 
     QMutex                 queue_mutex_;

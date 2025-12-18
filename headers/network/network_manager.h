@@ -31,10 +31,12 @@
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
+#include "network/isocket_service.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
+#include "utils/safeptr.h"
 
 class SocketService;
 class WebSocketService;
@@ -270,8 +272,6 @@ private:
     CalculateTraffic*                                                           calculate_traffic_;
     SafePtr<std::unordered_map<std::string, std::pair<std::string, QDateTime>>> forwarded_messages_;
 
-    std::string network_hash_for_vpn_;
-
     std::string              public_ip_;
     std::vector<std::string> first_nodes_ =
 #ifdef QT_DEBUG
@@ -295,9 +295,6 @@ public:
 
     bool remove_one_connection();
 
-    std::string getNetworkVPNHash() noexcept;
-    void        setNetworkVPNHash() noexcept;
-
     // protected:
     // std::uint16_t tcp_port = 17593;
     std::uint16_t ws_port = 17593;
@@ -315,9 +312,9 @@ private:
     void clear_network_caches();
 
     void add_all_services_identifiers_to_message(MessageBody& msg);
-    bool is_first_node(const std::string& identifier); // detect for safety
 
 public:
+    bool is_first_node(const std::string& identifier); // detect for safety
     SafePtr<std::set<SocketService*>> connections() const;
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
@@ -376,7 +373,8 @@ private slots:
     void socket_error(Network::SocketServiceError error,
                       QString                     errorData,
                       std::string                 ip,
-                      std::string                 identifier);
+                      std::string                 identifier,
+                      SocketDirection             direction);
 
 public:
     QString local_ip(); // TODO: remove

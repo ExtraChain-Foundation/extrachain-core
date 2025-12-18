@@ -146,10 +146,9 @@ void ExtraChainNode::process() {
 ExtraChainNode::~ExtraChainNode() {
     node_enabled.store(false);
     eLog("ExtraChainNode::~ExtraChainNode");
-    if (vpn_clear_func_) {
-        vpn_clear_func_();
+    if (cleanup_callback_) {
+        cleanup_callback_();
     }
-
     // ThreadPoolBoost::terminate();
 }
 
@@ -1278,12 +1277,12 @@ void ExtraChainNode::logout() {
     QCoreApplication::exit(0);
 }
 
-void ExtraChainNode::init_vpn(VpnFunctionClearType vpnClearFunc) {
-    vpn_clear_func_ = vpnClearFunc;
-}
-
 std::pair<QString, QString> ExtraChainNode::init_public_ip_and_country() const {
     return init_public_ip_and_country_;
+}
+
+void ExtraChainNode::set_cleanup_callback(std::function<void()> callback) {
+    cleanup_callback_ = callback;
 }
 
 void ExtraChainNode::dagTimerStarting(int ms) {
