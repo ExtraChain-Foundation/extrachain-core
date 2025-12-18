@@ -177,6 +177,8 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         return;
     }
 
+    std::unique_lock<std::mutex> lock(mutex_);
+
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
 
@@ -450,7 +452,7 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 return;
             }
 
-            ThreadPoolBoost::instance()->post([this, res] {
+            // ThreadPoolBoost::instance()->post([this, res] {
                 auto last_hash    = node->dag()->generate_hash_from_section(res.from);
                 auto control_hash = node->dag()->read_control(res.to);
                 if (!control_hash.has_value()) {
@@ -466,7 +468,7 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
                 eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
                 // eLog("[Dag] Send {}", hash_interval);
                 node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
-            });
+            // });
         }
     }
 }
@@ -480,6 +482,14 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     if (cached_section_ == genesis_section) {
         return { true, BigNumber(-1) };
     }
+
+    // Initialize DB
+    if (!init_db()) {
+        eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
+        return { false, BigNumber(-1) };
+    }
+
+    std::unique_lock<std::mutex> lock(mutex_);
 
     bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
     if (show) {
@@ -531,12 +541,6 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     }
 
     // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
-
-    // Initialize DB
-    if (!init_db()) {
-        eLog("[DagCache] Failed to initialize DB for update_to_genesis_section");
-        return { false, BigNumber(-1) };
-    }
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
@@ -646,7 +650,6 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
 }
 
 bool DagCache::init_db() {
-    std::unique_lock<std::mutex> lock(mutex_);
     if (db_initialized_) {
         return true;
     }
@@ -655,6 +658,8 @@ bool DagCache::init_db() {
         db_initialized_ = true;
         return true;
     }
+
+    std::unique_lock<std::mutex> lock(mutex_);
 
     // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
 

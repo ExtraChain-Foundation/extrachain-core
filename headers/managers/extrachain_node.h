@@ -37,7 +37,6 @@
 #include "chain/transaction.h"
 #include "chain/private_profile.h"
 #include "extrachain_global.h"
-#include "utils/vpn_types.h"
 #include "chain/dag.h"
 
 class DfsController;
@@ -55,9 +54,7 @@ class Actor;
 class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
-class VPNConnectorManager;
 class TokenManager;
-struct VPNMessage;
 class ExtraChainNode;
 enum class MessageType;
 enum class MessageStatus;
@@ -114,9 +111,6 @@ private:
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
-public:
-    typedef std::function<void()> VpnFunctionClearType;
-
 private:
     // common object for
     DfsController*     dfs_                = nullptr;
@@ -136,8 +130,8 @@ private:
     bool                        started_               = false;
     bool                        is_client_application_ = false;
     std::vector<BigNumber>      resive_counts_;
-    VpnFunctionClearType        vpn_clear_func_ = nullptr;
     std::pair<QString, QString> init_public_ip_and_country_;
+    std::function<void()>       cleanup_callback_      = nullptr;
 
     std::optional<SubscriptionRow> subscription_row_;
 
@@ -225,14 +219,12 @@ public:
     std::string generate_node_identifier();
     std::string node_identifier();
 
-    void          init_vpn(VpnFunctionClearType vpnClearFun);
     TokenManager* token_manager() const;
+    void          set_cleanup_callback(std::function<void()> callback);
     bool          is_custom_app_;
 
     ChatManager*  chat_manager();
     ThothManager* thoth_manager();
-
-    VPNConfigStorage vpnConfigStorage;
 
     bool add_subscription(const ActorId&     owner_id,
                           const std::string& file_id,
@@ -262,8 +254,6 @@ signals:
     void nodeInitialised();
     void ready();
     void pushNotification(QString actorId, Notification notification);
-    void vpnConnected(std::pair<QString, QString> publicIPAndCountry, bool proxy);
-    void vpnDisconnect();
 
     void subscriptionAdded(ActorId owner_id, std::string file_id);
     void selfTxAdded(const Transaction& tx, StatusTrx::StatusTrxType);

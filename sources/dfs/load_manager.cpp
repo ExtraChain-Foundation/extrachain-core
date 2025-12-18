@@ -96,30 +96,37 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                         Dfs::FileLinkFragment output;
                         output.file_link = it.first;
 
+                        bool is_setted = false;
+
                         if (it.second.amount_fragments > 0) {
                             for (auto number : it.second.fragments_left) {
                                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
-                                    return false;
+                                    break;
                                 output.fragment_numbers.emplace(number);
                                 m_amount_file_fragments_requests->emplace(output,
                                                                           std::chrono::system_clock::now());
+                                is_setted = true;
                             }
                         } else {
                             output.fragment_numbers.emplace(1);
                             m_amount_file_fragments_requests->emplace(output, std::chrono::system_clock::now());
+                            is_setted = true;
                         }
 
-                        this->node->network()->send_message(output,
-                                                            MessageType::DfsFileRequest,
-                                                            SendMode::Focused,
-                                                            MessageStatus::NoStatus,
-                                                            responder);
+                        if (is_setted)
+                        {
+                            this->node->network()->send_message(output,
+                                                                MessageType::DfsFileRequest,
+                                                                SendMode::Focused,
+                                                                MessageStatus::NoStatus,
+                                                                responder.with_new_message_id());
 
-                        // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}),
-                        // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
-                        // identifier.second.counter, it.first, output.fragment_numbers);
-                        is_requested = true;
-                        break;
+                           // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}),
+                           // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
+                           // identifier.second.counter, it.first, output.fragment_numbers);
+                            is_requested = true;
+                            break;
+                        }
                     } else {
                         is_requested = true;
                         break;
@@ -185,6 +192,10 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     bool is_priority = node->dfs()->is_priority(file_link);
 
     if (!node_enabled.load()) {
+        return;
+    }
+
+    if (dir_row.type == Dfs::FileType::Folder) {
         return;
     }
 
@@ -361,6 +372,9 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     const uint64_t total_size = size.value();
 
     if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Folder) {
+            return;
+        }
         if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(file_link_fragment.file_link.owner_id,
                                                     file_link_fragment.file_link.file_id,
@@ -460,6 +474,9 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
     // const uint64_t total_size = size.value();
 
     if (dir_row->type != Dfs::FileType::File) {
+        if (dir_row->type == Dfs::FileType::Folder) {
+            return;
+        }
         if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(owner_id, file_id, {});
         }

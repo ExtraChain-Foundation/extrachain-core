@@ -73,14 +73,6 @@ void SocketService::set_constant(bool isConstant) {
     is_constant_ = isConstant;
 }
 
-bool SocketService::is_vpn() const {
-    return is_constant_.load();
-}
-
-void SocketService::set_vpn(bool isVPN) {
-    is_vpn_ = isVPN;
-}
-
 std::uint64_t SocketService::timestamp() const {
     return timestamp_;
 }
@@ -91,8 +83,7 @@ bool SocketService::is_closed() {
 
 bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     // eLog("[Socket] First message: {}", handshake);
-    eLog("[Socket] Current network id: {}", node->actor_index()->network_id());
-    eLog("[Socket] IP: {}", ip_);
+    eLog("[Socket] First message: {} | IP: {} | network id: {}", direction_, ip_, node->actor_index()->network_id());
 
     // eLog("[Socket] First message: {} | Current network id: {} | IP: {}",
     //      handshake,
@@ -117,11 +108,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         // TODO: for user
         eInfo("Please, update client");
 
-        eLog("[Socket] Closing: version {} incompatible with {}", handshake.version, extrachain_version);
+        eLog("[Socket] {} Closing: version {} incompatible with {}", direction_, handshake.version, extrachain_version);
         emit error(error_type,
                    QString::fromStdString(handshake.version),
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return false;
     }
 
@@ -136,11 +128,12 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     if (!(something_empty || is_network_ids_contains)) {
-        eLog("[Socket] Closing: network id mismatch (local: {}, remote: {})", our_network_id, json_network_id);
+        eLog("[Socket] {} Closing: network id mismatch (local: {}, remote: {})", direction_, our_network_id, json_network_id);
         emit error(Network::SocketServiceError::IncompatibleNetwork,
                    QString::fromStdString(handshake.network_id),
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return false;
     }
 
@@ -149,7 +142,8 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         emit error(Network::SocketServiceError::IncompatibleIdentifier,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return false;
     }
 
@@ -183,8 +177,9 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
         emit error(Network::SocketServiceError::DuplicateIdentifier,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
-        eLog("[Socket] Closing: duplicate identifier");
+                   identifier_.toStdString(),
+                   direction_);
+        eLog("[Socket] {} Closing: duplicate identifier", direction_);
         return false;
     }
 
@@ -199,21 +194,21 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
 
     // 6.
     if (node->network()->active_connections_count() >= Network::maxConnections) {
-        emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString());
-        eLog("[Socket] Closing: maximum connections reached");
+        emit error(Network::SocketServiceError::MaxConnections, "", ip_.toStdString(), identifier_.toStdString(), direction_);
+        eLog("[Socket] {} Closing: maximum connections reached", direction_);
         return false;
     }
 
     // 7. Checking slots availability
     if (!handshake.is_available) {
-        eLog("[Socket] Closing: peer unavailable");
-        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString());
+        eLog("[Socket] {} Closing: peer unavailable", direction_);
+        emit error(Network::SocketServiceError::PeerUnavailable, "", ip_.toStdString(), identifier_.toStdString(), direction_);
         emit shareConnections(handshake.connections);
         return false;
     }
 
     // 8. If all checks are passed - activate the connection
-    eLog("[Socket] Activated: {} with IP: {}", fmt::ptr(this), ip());
+    eLog("[Socket] {} Activated: {} with IP: {}", direction_, fmt::ptr(this), ip());
     activated_ = true;
     Responder responder(node->network());
     responder.add_identifier(identifier_.toStdString());

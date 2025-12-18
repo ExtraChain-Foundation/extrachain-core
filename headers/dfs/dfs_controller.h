@@ -204,10 +204,6 @@ public:
         Utils::write_settings(settings);
     }
 
-    bool is_dirs_loaded() {
-        return is_dirs_loaded_;
-    }
-
     std::set<Dfs::FileLink> forces_files_;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
@@ -237,9 +233,25 @@ public:
         Dfs::DataSecurity               data_security = Dfs::DataSecurity::Public,
         const Dfs::DataSecurityData    &security_data = Dfs::DataSecurityData());
 
-    // TODO
-    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(const ActorId     &owner_id,
-                                                           const std::string &visual_folder);
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_folder(
+        const ActorId                    &owner_id,
+        const std::string                &folder_name,
+        const std::optional<std::string> &parent_folder_id = std::nullopt,
+        Dfs::DataSecurity                 data_security    = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData      &security_data    = Dfs::DataSecurityData());
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folders(const ActorId &owner_id);
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_contents(const ActorId     &owner_id,
+                                                                                const std::string &folder_file_id);
+
+    std::expected<std::vector<Dfs::DirRow>, Dfs::DfsError> get_folder_path(const ActorId     &owner_id,
+                                                                           const std::string &folder_file_id);
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> move_to_folder(
+        const ActorId                    &owner_id,
+        const std::string                &file_id,
+        const std::optional<std::string> &new_folder_id);
 
     // TODO
     std::expected<Dfs::DirRow, Dfs::DfsError> store_folder_dapp(const ActorId &owner_id,
@@ -448,7 +460,6 @@ public:
 private:
     DirsManager dirs_manager_;
     LoadManager load_manager_;
-    bool        is_dirs_loaded_ = false;
 
     std::unordered_map<std::string, Dfs::DirRow> files_ready_status_;
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
@@ -501,7 +512,6 @@ signals:
     void downloaded(ActorId owner_id, Dfs::DirRow dir_row);
     void downloadProgress(ActorId owner_id, std::string file_id, int progress);
     void waitDownloaded(ActorId owner_id, Dfs::DirRow dir_row);
-    void dirsLoaded();
 
     void collectionDownloaded(); // temp signal for beginFetchNextFile
     void collectionChanged(ActorId owner_id, Dfs::DirRow dir_row, HistoricalCollectionRow historical_row);

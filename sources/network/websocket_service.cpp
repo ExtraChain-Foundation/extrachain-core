@@ -74,7 +74,7 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
                 auto code_string = QByteArray::number(std::to_underlying(code));
                 auto encrypted   = prepareSendMessage("Error " + code_string);
                 if (encrypted.isEmpty()) {
-                    eLog("[WS] Error not sended (to ip: {}, id: {}): {}", ip_, identifier_, code);
+                    eLog("[WS] {} Error not sended (to ip: {}, id: {}): {}", direction_, ip_, identifier_, code);
                     emit closeSocketSig();
                     return;
                 }
@@ -99,11 +99,12 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
                 m_failedPongs++;
 
                 if (m_failedPongs > 3) {
-                    eLog("[WS] Connection lost (no pong) from {}", ip_);
+                    eLog("[WS] {} Connection lost (no pong) from {}", direction_, ip_);
                     emit error(Network::SocketServiceError::PongLost,
                                "No pong response",
                                ip_.toStdString(),
-                               identifier_.toStdString());
+                               identifier_.toStdString(),
+                               direction_);
                 }
             }
         });
@@ -113,7 +114,7 @@ WebSocketService::WebSocketService(QWebSocket     *ws,
 
 WebSocketService::~WebSocketService() {
     closeSocket();
-    eLog("[WS] I'm socket, i'm death: {}", ip_);
+    eLog("[WS] {} I'm socket, i'm death: {}", direction_, ip_);
 }
 
 QWebSocket *WebSocketService::socket() const {
@@ -179,12 +180,13 @@ void WebSocketService::closeSocket() {
     }
 
     if (m_ws && m_ws->state() == QAbstractSocket::ConnectedState) {
-        eLog("[WS] Close socket");
+        eLog("[WS] {} Close socket", direction_);
         m_ws->close();
     }
 
     if (m_ws != nullptr) {
         // eLog("[WS] Delete socket pointer");
+        m_ws->disconnect();
         m_ws->deleteLater();
         m_ws = nullptr;
     }
@@ -220,7 +222,8 @@ void WebSocketService::onTextMessage(const QString &message) {
             emit error(Network::SocketServiceError::IncorrectPublicKey,
                        "",
                        ip_.toStdString(),
-                       identifier_.toStdString());
+                       identifier_.toStdString(),
+                       direction_);
             return;
         }
 
@@ -236,34 +239,37 @@ void WebSocketService::onTextMessage(const QString &message) {
         emit error(Network::SocketServiceError::IncorrectFirstMessage,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 
     auto decoded = prepareReceiveMessage(QByteArray::fromStdString(encoded_result.value()));
     if (decoded.isEmpty()) {
-        eLog("[WS] Failed to decode message");
+        eLog("[WS] {} Failed to decode message", direction_);
         emit error(Network::SocketServiceError::IncorrectPublicKey,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 
     if (decoded.contains("Error ")) {
         auto error = Network::SocketServiceError(decoded.mid(6).toInt());
-        eLog("[WS] Error received (from ip: {}, id: {}): {}", ip_, identifier_, error);
+        eLog("[WS] {} Error received (from ip: {}, id: {}): {}", direction_, ip_, identifier_, error);
         closeSocket();
         return;
     }
 
     auto handshake_result = Json::deserialize<HandshakeMessage>(decoded.toStdString());
     if (!handshake_result.has_value()) {
-        eLog("[WS] Failed to parse handshake message: {}", handshake_result.error());
+        eLog("[WS] {} Failed to parse handshake message: {}", direction_, handshake_result.error());
         emit error(Network::SocketServiceError::IncorrectFirstMessage,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 
@@ -301,13 +307,13 @@ void WebSocketService::processMessage(const QByteArray &message) {
         node->network()->message_received(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
         eCritical("[WS] Message is empty after prepare");
-        emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString());
+        emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString(), direction_);
     }
 }
 
 void WebSocketService::send_message(const QByteArray &data, Priority priority) {
     if (!is_active() || closed_) {
-        eLog("[WS] Try to send without activation {}", data.left(35));
+        eLog("[WS] {} Try to send without activation {}", direction_, data.left(35));
         return;
     }
 
@@ -316,7 +322,8 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
         emit error(Network::SocketServiceError::IncorrectMessage,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 
@@ -409,7 +416,7 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     qint64 written = m_ws->sendBinaryMessage(prepared);
     if (written < 0) {
         eCritical("[WS] Failed to send message");
-        emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString());
+        emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString(), direction_);
     }
 }
 
@@ -425,15 +432,19 @@ void WebSocketService::flush() {
 }
 
 void WebSocketService::onConnected() {
+    if (!m_ws) {
+        eLog("[WS] onConnected called but m_ws is null");
+        return;
+    }
     // from local connect
     this->ip_   = m_ws->peerAddress().toString().replace("::ffff:", "");
     this->port_ = m_ws->peerPort();
     send_public_key();
-    eLog("[WS] New service: {} {}", ip_, port());
+    eLog("[WS] {} New service: {} {}", direction_, ip_, port());
 }
 
 void WebSocketService::onSocketError(QAbstractSocket::SocketError error) {
-    eLog("[WS] Socket error: {}, {}", Utils::enum_value_name(error), ip_);
+    eLog("[WS] {} Socket error: {}, {}", direction_, Utils::enum_value_name(error), ip_);
     closeSocket();
 }
 
@@ -449,7 +460,7 @@ void WebSocketService::connections() {
             Qt::QueuedConnection);
     // connect(this, &WebSocketService::send, this, &WebSocketService::sendMessage);
     connect(this, &WebSocketService::close, [this](Network::SocketServiceError code) {
-        emit error(code, "", ip_.toStdString(), identifier_.toStdString());
+        emit error(code, "", ip_.toStdString(), identifier_.toStdString(), direction_);
     }); // slot
     connect(m_ws, &QWebSocket::errorOccurred, this, &WebSocketService::onSocketError);
     connect(m_ws, &QWebSocket::bytesWritten, this, [this](qint64) {
@@ -481,7 +492,8 @@ void WebSocketService::send_public_key() {
         emit error(Network::SocketServiceError::IncorrectHandshake,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 }
@@ -493,7 +505,8 @@ void WebSocketService::handshake() {
         emit error(Network::SocketServiceError::IncorrectHandshake,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
     auto encoded_json = Utils::to_base64(encrypted.toStdString());
@@ -513,7 +526,8 @@ void WebSocketService::handshake() {
         emit error(Network::SocketServiceError::IncorrectHandshake,
                    "",
                    ip_.toStdString(),
-                   identifier_.toStdString());
+                   identifier_.toStdString(),
+                   direction_);
         return;
     }
 }
