@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "boost/describe.hpp"
+
 #include "chain/actor_id.h"
 #include "utils/exc_utils.h"
 #include "dfs/dfs_utils.h"

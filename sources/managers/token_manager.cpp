@@ -162,17 +162,24 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
 }
 
 bool TokenManager::is_token_cache_exists() {
-    return Dfs::Tables::ActorDirFile::is_file_ready(node->network_id(),
-                                                    Dfs::Basic::TEMPLATE_VECTOR,
-                                                    "TokensCache");
+    auto db = Dfs::Tables::DirsFile::DirsSpace::database();
+    if (!db.has_value()) {
+        return false;
+    }
+    auto result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), node->network_id(), Dfs::Basic::TEMPLATE_VECTOR, "TokensCache");
+    return result.has_value() && result->loaded();
 }
 
 bool TokenManager::add_to_token_cache(const TokenData &token_data) {
-    auto dir_row = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(node->network_id(),
-                                                                             Dfs::Basic::TEMPLATE_VECTOR,
-                                                                             "TokensCache");
+    auto db = Dfs::Tables::DirsFile::DirsSpace::database();
+    if (!db.has_value()) {
+        return false;
+    }
+    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), node->network_id(), Dfs::Basic::TEMPLATE_VECTOR, "TokensCache");
 
-    auto network_id = node->actorIndex()->network_id();
+    auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
     }

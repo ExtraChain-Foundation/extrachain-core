@@ -626,36 +626,6 @@ ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
 }
 
-void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {
-    if (!subscription_row_.has_value()) {
-        return;
-    }
-
-    ActorId system_id = account_controller_->system_actor().id();
-    if (transaction.sender() != system_id) {
-        return;
-    }
-
-    auto row = subscription_row_.value();
-
-    row.section_id       = transaction.section();
-    row.date_start       = transaction.timestamp();
-    row.transaction_hash = transaction.hash();
-
-    auto row_map = Utils::to_dbrow(row);
-
-    // temp for old vector
-    auto section = row_map["section_id"];
-    row_map.erase("section_id");
-    row_map.insert({ "block_id", section });
-
-    auto res = dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
-
-    if (res) {
-        emit subscriptionAdded(row.owner_id, row.file_id);
-    }
-}
-
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(ActorId        receiver,
                                                                                 BigNumberFloat amount,
                                                                                 ActorId        token) {
@@ -910,8 +880,6 @@ void ExtraChainNode::timer_info_print() {
     }
 }
 
-}
-
 std::string ExtraChainNode::generate_node_identifier() {
     std::string node_identifier =
         Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
@@ -1036,8 +1004,6 @@ void ExtraChainNode::connect_signals() {
             dfs_->sync(identifier);
         }
     });
-
-    // connect(m_blockchain, &Blockchain::selfTxRepeatableAdded, this, &ExtraChainNode::selfTxRepeatableAdded);
 
     connect(this, &ExtraChainNode::dagTimerStart, this, &ExtraChainNode::dagTimerStarting, Qt::QueuedConnection);
     connect(this, &ExtraChainNode::dagTimerStop, this, &ExtraChainNode::dagTimerStoping, Qt::QueuedConnection);

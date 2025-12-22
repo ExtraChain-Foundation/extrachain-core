@@ -34,6 +34,7 @@
 #include "chat/message.h"
 #include "dfs/dfs_utils.h"
 #include "managers/account_controller.h"
+#include "managers/subscription_manager.h"
 #include "chain/transaction.h"
 #include "chain/private_profile.h"
 #include "extrachain_global.h"
@@ -55,13 +56,19 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 class TokenManager;
-class SubscriptionManager;
 class ExtraChainNode;
 enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 class ThothManager;
+
+enum class ImportProfileError {
+    DataEmpty,
+    LoginPasswordEmpty,
+    DecryptError,
+    IncorrectJson
+};
 
 enum class ImportProfileFileError {
     LoginPasswordEmpty,
@@ -116,8 +123,6 @@ private:
     std::vector<BigNumber>      resive_counts_;
     std::pair<QString, QString> init_public_ip_and_country_;
     std::function<void()>       cleanup_callback_      = nullptr;
-
-    std::optional<SubscriptionRow> subscription_row_;
 
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;

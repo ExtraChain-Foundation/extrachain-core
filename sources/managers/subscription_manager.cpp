@@ -28,20 +28,23 @@ SubscriptionManager::SubscriptionManager(ExtraChainNode* node)
 bool SubscriptionManager::create_subscription_vector(const ActorId&     plan_owner_id,
                                                      std::string&       plan_file_id,
                                                      const std::string& subscription_name) {
-    auto network_id = node->actorIndex()->network_id();
+    auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
     }
 
-    auto search_result =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(network_id,
-                                                                  Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                  "SubscriptionTemplate");
+    auto db = Dfs::Tables::DirsFile::DirsSpace::database();
+    if (!db.has_value()) {
+        return false;
+    }
+
+    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), network_id, Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE, "SubscriptionTemplate");
     if (!search_result.has_value()) {
         return false;
     }
 
-    auto system_actor_id = node->accountController()->system_actor().id();
+    auto system_actor_id = node->account_controller()->system_actor().id();
     auto sub_res         = node->dfs()->store_vector(system_actor_id,
                                              system_actor_id,
                                              subscription_name,
@@ -69,9 +72,13 @@ std::optional<std::pair<std::string, std::string>> SubscriptionManager::is_subsc
     const ActorId&     owner_id,
     const std::string& subscription_name) {
 
-    auto search_result = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
-                                                                                   Dfs::Basic::TEMPLATE_VECTOR,
-                                                                                   subscription_name);
+    auto db = Dfs::Tables::DirsFile::DirsSpace::database();
+    if (!db.has_value()) {
+        return std::nullopt;
+    }
+
+    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), owner_id, Dfs::Basic::TEMPLATE_VECTOR, subscription_name);
     if (!search_result.has_value()) {
         return std::nullopt;
     }
@@ -79,10 +86,8 @@ std::optional<std::pair<std::string, std::string>> SubscriptionManager::is_subsc
         return std::nullopt;
     }
 
-    auto search_result_info =
-        Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
-                                                                  Dfs::Basic::TEMPLATE_SUBSCRIPTION,
-                                                                  subscription_name);
+    auto search_result_info = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), owner_id, Dfs::Basic::TEMPLATE_SUBSCRIPTION, subscription_name);
 
     if (!search_result_info.has_value()) {
         return std::nullopt;
@@ -129,7 +134,7 @@ bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
 
     auto plan = plans->at(plan_id);
 
-    ActorId system_id = node->accountController()->system_actor().id();
+    ActorId system_id = node->account_controller()->system_actor().id();
 
     Transaction transaction;
     transaction.set_type(TransactionType::Repeatable);
@@ -143,7 +148,7 @@ bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
     transaction.set_meta(
         Json::serialize(Dfs::FileLink { .owner_id = owner_id, .file_id = subscription_row->file_id }));
 
-    node->send_transaction(transaction, node->accountController()->system_actor());
+    node->send_transaction(transaction, node->account_controller()->system_actor());
 
     auto row = SubscriptionRow { .owner_id = owner_id, .file_id = subscription_row->file_id, .plan_id = plan_id };
     subscription_row = row;
@@ -156,7 +161,7 @@ void SubscriptionManager::self_tx_repeatable_added(const Transaction& transactio
         return;
     }
 
-    ActorId system_id = node->accountController()->system_actor().id();
+    ActorId system_id = node->account_controller()->system_actor().id();
     if (transaction.sender() != system_id) {
         return;
     }
@@ -189,7 +194,7 @@ bool SubscriptionManager::create_subscription_template() {
                                                    Dfs::Field::String("section_id").not_null(),
                                                    Dfs::Field::String("transaction_hash").not_null() });
 
-    auto system_actor_id = node->accountController()->system_actor().id();
+    auto system_actor_id = node->account_controller()->system_actor().id();
     auto template_res    = node->dfs()->store_template(system_actor_id, subscription_template);
     if (!template_res.has_value()) {
         eCritical("Can't create subscription template, because {}", template_res.error());
@@ -209,7 +214,7 @@ std::expected<Dfs::DirRow, Dfs::DfsError> SubscriptionManager::create_plans(
     }
 
     auto json            = Json::serialize(plans_map);
-    auto system_actor_id = node->accountController()->system_actor().id();
+    auto system_actor_id = node->account_controller()->system_actor().id();
     auto res             = node->dfs()->store_data_as_file(system_actor_id,
                                                system_actor_id,
                                                ByteArray(json).toBytes(),
