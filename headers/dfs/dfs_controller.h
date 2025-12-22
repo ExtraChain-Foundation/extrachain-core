@@ -311,6 +311,15 @@ public:
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
                         bool                         thothed       = false);
 
+    template <typename T>
+    bool update_vector_row(const ActorId               &owner_id,
+                           const std::string           &file_id,
+                           T                            row,
+                           const ActorId               &signer_id     = ActorId(),
+                           const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+        return add_vector_row(owner_id, file_id, row, signer_id, security_data, false);
+    }
+
     bool remove_vector_row(const ActorId     &owner_id,
                            const std::string &file_id,
                            const std::string &primary_data,
@@ -320,13 +329,44 @@ public:
         const ActorId               &owner_id,
         const std::string           &file_id,
         const std::string           &primary_data,
-        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
+        Dfs::FileType                file_type     = Dfs::FileType::Vector);
 
     std::expected<std::vector<DbRow>, DfsVectorError> read_vector_rows(
         const ActorId               &owner_id,
         const std::string           &file_id,
         const std::string           &where_statement = "",
-        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData());
+        const Dfs::DataSecurityData &security_data   = Dfs::DataSecurityData(),
+        Dfs::FileType                file_type       = Dfs::FileType::Vector);
+
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_dictionary(
+        const ActorId               &owner_id,
+        const ActorId               &author_id,
+        const std::string           &visual_name,
+        Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    bool dictionary_set_value(const ActorId               &owner_id,
+                   const std::string           &file_id,
+                   const std::string           &key,
+                   const std::string           &value,
+                   const ActorId               &author_id,
+                   const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    std::optional<std::string> read_dictionary(const ActorId               &owner_id,
+                                                const std::string           &file_id,
+                                                const std::string           &key,
+                                                const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
+
+    bool dictionary_remove_value(const ActorId     &owner_id,
+                      const std::string &file_id,
+                      const std::string &key,
+                      const ActorId     &author_id);
+
+    std::optional<std::map<std::string, std::string>> read_dictionary_rows(
+        const ActorId               &owner_id,
+        const std::string           &file_id,
+        const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData());
 
     // TODO: function: get collection size
 
@@ -434,9 +474,10 @@ public:
     std::uint64_t                        sizeTaken() const;
     std::uint64_t                        totalDfsSize() const;
     void                                 increaseSizeTaken(uintmax_t value);
-    std::expected<void, ExportFileError> export_file(const ActorId     &owner_id,
-                                                     const std::string &file_id,
-                                                     const FsPath      &output_folder);
+    std::expected<void, ExportFileError> export_file(const ActorId                &owner_id,
+                                                     const std::string            &file_id,
+                                                     const FsPath                 &output_folder,
+                                                     const std::optional<KeyPass> &key = std::nullopt);
     std::uint64_t calculateDataAmountStored(const std::string &folder = DfsB::DFS_FOLDER) const;
 
     DirsManager &dirs_manager();
@@ -450,8 +491,10 @@ public:
     std::expected<Dfs::DirRow, Dfs::DfsError> find_file_self(const ActorId &owner_id, const std::string &dfs_name);
     std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status_self(const std::string &dfs_name);
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(const ActorId     &owner_id,
-                                                               const std::string &dfs_name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> read_file_status(
+        const ActorId     &owner_id,
+        const std::string &dfs_name,
+        const std::string &folder = Dfs::Basic::TEMPLATE_VECTOR);
 
     void add_to_waiting_file(const ActorId &owner_id, const std::string &file_id);
     void download_waiting_files();
@@ -465,6 +508,16 @@ private:
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
 
     void check_all_files(std::string identifier);
+
+    // for store_vector and store_dictionary
+    std::expected<Dfs::DirRow, Dfs::DfsError> store_vector_impl(
+        const ActorId                 &owner_id,
+        const ActorId                 &author_id,
+        const std::string             &visual_name,
+        const Dfs::CollectionTemplate &collection_template,
+        Dfs::DataSecurity              data_security,
+        const Dfs::DataSecurityData   &security_data,
+        Dfs::FileType                  file_type);
 
     ExpectedDirHistoricalRow universal_collection_row(const ActorId               &owner_id,
                                                       const std::string           &file_id,

@@ -254,7 +254,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 // return; // TODO: vectorupdate
             }
 
-            if (row->type == Dfs::FileType::Vector && file_path->exists() && row->hash == dir_row.hash) {
+            if ((row->type == Dfs::FileType::Vector || row->type == Dfs::FileType::Dictionary)
+                && file_path->exists() && row->hash == dir_row.hash) {
                 auto res = node->dfs()->make_vector(owner_id,
                                                     dir_row.file_id,
                                                     false,
@@ -382,7 +383,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             // eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}",
             // file_link_fragment.file_link.file_id);
         }
-        if (dir_row->type == Dfs::FileType::Vector) {
+        if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
             node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id,
                                                 file_link_fragment.file_link.file_id,
                                                 responder);
@@ -480,7 +481,7 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
         if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(owner_id, file_id, {});
         }
-        if (dir_row->type == Dfs::FileType::Vector) {
+        if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
             node->dfs()->network_request_vector(owner_id, file_id, {});
         }
         return;

@@ -99,6 +99,7 @@ namespace Dfs {
         static const std::string TEMPLATE_CONTRACT            = ":Contract";
         static const std::string TEMPLATE_SUBSCRIPTION        = ":Subscription";
         static const std::string TEMPLATE_CHAT                = ":Chat";
+        static const std::string TEMPLATE_JANUS               = ":Janus";
     } // namespace Basic
 
     enum class FileIdError {

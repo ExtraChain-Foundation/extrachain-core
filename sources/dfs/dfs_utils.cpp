@@ -48,7 +48,7 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
 
     blake3_hasher_update(&hasher, this->name.data(), this->name.size());
 
-    if (this->type != Dfs::FileType::Vector) {
+    if (this->type != Dfs::FileType::Vector && this->type != Dfs::FileType::Dictionary) {
         auto size_str = std::to_string(this->size);
         blake3_hasher_update(&hasher, size_str.data(), size_str.size());
     }
@@ -56,7 +56,7 @@ std::string Dfs::DirRow::calculate_hash(const ActorId &owner_id) {
     auto created_str = std::to_string(this->created);
     blake3_hasher_update(&hasher, created_str.data(), created_str.size());
 
-    if (this->type != Dfs::FileType::Vector) {
+    if (this->type != Dfs::FileType::Vector && this->type != Dfs::FileType::Dictionary) {
         auto last_modified_str = std::to_string(this->last_modified);
         blake3_hasher_update(&hasher, last_modified_str.data(), last_modified_str.size());
     }
@@ -93,20 +93,41 @@ std::string Dfs::Tables::DirsFile::ActorSpace::read_last_file_id(const std::shar
         eFatal("Database {} not opened", db->file());
     }
 
-    auto        result       = db->select(Dfs::Tables::last_file_id_query(owner_id));
-    auto        prevRowOpt   = result.empty() ? std::optional<DbRow> {} : result[0];
-    std::string lastFileName = prevRowOpt ? prevRowOpt->at("file_id") : "";
+    auto        result            = db->select(Dfs::Tables::last_file_id_query(owner_id));
+    auto        prev_row_optional = result.empty() ? std::optional<DbRow> {} : result[0];
+    std::string last_file_id      = prev_row_optional ? prev_row_optional->at("file_id") : "";
 
-    if (lastFileName.empty()) {
+    if (last_file_id.empty()) {
+        auto count_result = db->select(fmt::format(
+            "WITH end_files AS ("
+            "SELECT f1.file_id, COUNT(*) OVER() as cnt "
+            "FROM {} f1 LEFT JOIN {} f2 ON f1.file_id = f2.prev_file_id "
+            "WHERE f1.owner_id = '{}' AND f2.prev_file_id IS NULL"
+            ") SELECT cnt FROM end_files LIMIT 1",
+            TableNameActorsFiles,
+            TableNameActorsFiles,
+            owner_id));
+
+        if (!count_result.empty()) {
+            auto cnt = std::stoi(count_result[0].at("cnt"));
+            if (cnt > 1) {
+                eWarning("[DFS] read_last_file_id: owner {} has {} chain ends (expected 1)", owner_id, cnt);
+            }
+        }
+
         auto result =
             db->select(fmt::format("SELECT file_id FROM {} WHERE owner_id = '{}' ORDER by created DESC LIMIT 1",
                                    TableNameActorsFiles,
                                    owner_id));
         auto prevRowOpt = result.empty() ? std::optional<DbRow> {} : result[0];
-        lastFileName    = prevRowOpt ? prevRowOpt->at("file_id") : "";
+        last_file_id    = prevRowOpt ? prevRowOpt->at("file_id") : "";
+
+        if (!last_file_id.empty()) {
+            eWarning("[DFS] read_last_file_id: owner {} - used fallback, got {}", owner_id, last_file_id);
+        }
     }
 
-    return lastFileName;
+    return last_file_id;
 }
 
 std::filesystem::path Dfs::Tables::DirsFile::ActorSpace::storjDbPath(const ActorId     &actorId,

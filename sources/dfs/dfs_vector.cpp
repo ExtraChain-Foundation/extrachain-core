@@ -26,11 +26,17 @@ DfsVector::DfsVector(ExtraChainNode              *node,
                      const Actor<KeyPrivate>     &actor,
                      const ActorId               &file_actor_id,
                      const std::string           &file_id,
-                     Dfs::DataSecurity            data_security = Dfs::DataSecurity::Public,
-                     const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData()) {
+                     Dfs::DataSecurity            data_security,
+                     const Dfs::DataSecurityData &security_data,
+                     Dfs::FileType                file_type) {
     this->node           = node;
     this->file_path_     = Dfs::Path::file_path(file_actor_id, file_id).value();
-    this->vector_path_   = FsPath::create(this->file_path_.native().string() + Dfs::Basic::VECTOR_FILE).value();
+    this->file_type_     = file_type;
+
+    const std::string &extension = (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE
+                                                                            : Dfs::Basic::VECTOR_FILE;
+    this->vector_path_ = FsPath::create(this->file_path_.native().string() + extension).value();
+
     this->actor_         = actor;
     this->file_actor_id_ = file_actor_id;
     this->file_id_       = file_id;
@@ -85,8 +91,9 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
                                                            const std::string             &file_id,
                                                            const Dfs::DfsTemplateVariant &variant_template,
                                                            Dfs::DataSecurity              data_security,
-                                                           const Dfs::DataSecurityData   &security_data) {
-    DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data);
+                                                           const Dfs::DataSecurityData   &security_data,
+                                                           Dfs::FileType                  file_type) {
+    DfsVector dfs_vector(node, main_actor, file_actor_id, file_id, data_security, security_data, file_type);
 
     // TODO: if vector template has actor, status, timestamp or sign -> error
 
@@ -101,6 +108,9 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     if (dfs_vector.is_encrypted_) {
         vector_template.set_to_blob();
     }
+
+    // Save original template for file before adding service fields
+    auto original_template = vector_template;
 
     if (vector_template.primary.has_value()) {
         const auto &primary = vector_template.primary.value();
@@ -124,7 +134,8 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     schema->set_table_name("Vector");
 
     if (!is_link) {
-        auto json     = Json::serialize(vector_template);
+        // Write original template without service fields to file
+        auto json     = Json::serialize(original_template);
         auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
         if (!res_json.has_value()) {
             return std::unexpected(DfsVectorError::Unknown);
@@ -159,12 +170,13 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
                                                          const ActorId               &file_actor_id,
                                                          const std::string           &file_id,
                                                          Dfs::DataSecurity            data_security,
-                                                         const Dfs::DataSecurityData &security_data) {
+                                                         const Dfs::DataSecurityData &security_data,
+                                                         Dfs::FileType                file_type) {
     if (file_actor_id.is_zero() || file_id.empty()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
 
-    DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data);
+    DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
 
     auto vector_template = dfs_vector.read_template();
     if (!vector_template.has_value()) {
@@ -182,8 +194,9 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load_network(ExtraChainNode 
                                                                  const ActorId               &file_actor_id,
                                                                  const std::string           &file_id,
                                                                  Dfs::DataSecurity            data_security,
-                                                                 const Dfs::DataSecurityData &security_data) {
-    DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data);
+                                                                 const Dfs::DataSecurityData &security_data,
+                                                                 Dfs::FileType                file_type) {
+    DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
     return dfs_vector;
 }
 

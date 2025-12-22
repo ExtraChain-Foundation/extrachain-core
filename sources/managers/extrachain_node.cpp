@@ -39,6 +39,7 @@
 #include "managers/token_manager.h"
 #include "managers/thoth_manager.h"
 #include "managers/subscription_manager.h"
+#include "managers/janus_manager.h"
 #include "managers/thread_pool.h"
 #include "dfs/collection_template.h"
 #include "network/network_manager.h"
@@ -47,9 +48,9 @@
 
 std::atomic<bool> node_enabled { true };
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
     : QObject(parent)
-    , node(new ExtraChainNode(is_client_application, is_custom_app)) {
+    , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port)) {
 }
 
 ExtraChainNodeWrapper::~ExtraChainNodeWrapper() {
@@ -75,13 +76,15 @@ void ExtraChainNodeWrapper::init(bool makeAsync) {
         connect(m_thread, &QThread::finished, node, &ExtraChainNode::cleanUp);
         connect(m_thread, &QThread::finished, m_thread, &QObject::deleteLater);
         m_thread->start();
-    } else
+    } else {
         node->process();
+    }
 }
 
-ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app)
+ExtraChainNode::ExtraChainNode(bool is_client_application, bool is_custom_app, std::uint16_t port)
     : is_client_application_(is_client_application)
-    , is_custom_app_(is_custom_app) {
+    , is_custom_app_(is_custom_app)
+    , ws_port(port) {
     QNetworkInformation::loadBackendByFeatures(QNetworkInformation::Feature::Reachability);
 }
 
@@ -105,7 +108,7 @@ void ExtraChainNode::process() {
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
     luminance_manager_  = new LuminanceManager(this);
-    network_manager_    = new NetworkManager(this);
+    network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
     dmm_                = new DataMiningManager(this);
@@ -113,6 +116,7 @@ void ExtraChainNode::process() {
     subscription_manager_ = new SubscriptionManager(this);
     chat_manager_       = new ChatManager(this);
     thoth_manager_      = new ThothManager(this);
+    janus_manager_      = new JanusManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
@@ -378,6 +382,91 @@ DfsFileStatus ExtraChainNode::create_renames_vector() {
     return DfsFileStatus::Created;
 }
 
+bool ExtraChainNode::create_file_id_template(FileIdState with_state) {
+    auto        system_actor_id = account_controller_->system_actor().id();
+    std::string template_name   = with_state == FileIdState::With ? "FilesListState" : "FilesList";
+    auto        template_obj    = Dfs::CollectionTemplate::create(template_name).value().use_id();
+    template_obj.add_fields({ Dfs::Field::Blob("owner").not_null(), Dfs::Field::Blob("file_id").not_null() });
+
+    if (with_state == FileIdState::With) {
+        template_obj.add_fields({ Dfs::Field::Integer("state") });
+    }
+
+    auto template_res = dfs_->store_template(system_actor_id, template_obj);
+    if (!template_res.has_value()) {
+        eCritical("Can't create file id template, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, FileIdState with_state) {
+    auto network_id = actor_index_->network_id();
+    auto system_id  = account_controller_->system_actor().id();
+
+    if (network_id.is_zero() || system_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          with_state == FileIdState::With
+                                                                              ? "FilesListState"
+                                                                              : "FilesList");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto store_res = dfs_->store_vector(system_id, system_id, vector_name, network_id, search_result->file_id);
+
+    if (!store_res.has_value()) {
+        eCritical("Can't create file id '{}' vector, because {}", vector_name, store_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+std::optional<std::string> ExtraChainNode::add_file_id(const ActorId&     vector_owner_id,
+                                                       const std::string& vector_file_id,
+                                                       const ActorId&     owner_id,
+                                                       const std::string& file_id,
+                                                       int                state,
+                                                       FileIdState        with_state) {
+    auto file_row = dfs_->read_file_status(this->network_id(),
+                                           with_state == FileIdState::With ? "FilesListState" : "FilesList",
+                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
+    if (!file_row.has_value()) {
+        // TODO: wait for exists
+        return std::nullopt;
+    }
+
+    if (file_row->state != Dfs::FileState::Ready) {
+        dfs_->add_to_waiting_file(this->network_id(), file_row->file_id);
+        dfs_->request_file(this->network_id(), file_row->file_id);
+        return std::nullopt;
+    }
+
+    auto system_id = account_controller_->system_actor().id();
+
+    auto files_id_data = FileIdData { .id        = Utils::generate_random_hex(6),
+                                      .timestamp = 0,
+                                      .actor     = system_id,
+                                      .owner     = owner_id,
+                                      .file_id   = file_id,
+                                      .state     = state };
+
+    auto res = dfs_->add_vector_row(vector_owner_id, vector_file_id, files_id_data, system_id);
+    if (!res) {
+        return std::nullopt;
+    }
+
+    return files_id_data.id;
+}
+
 bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {
     if (this->account_controller()->profile_type() != ProfileType::New) {
         bool res = this->account_controller()->rename_wallet(this->account_controller()->system_actor().id(),
@@ -509,6 +598,7 @@ void ExtraChainNode::start() {
 
     // Version compatibility: 0.19.2 (temp)
 #ifdef IS_APP_UI_CLIENT
+    /*
     QThreadPool::globalInstance()->start([this]() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -545,6 +635,7 @@ void ExtraChainNode::start() {
             }
         }
     });
+    */
 #endif
 
     // Version compatibility: 0.20.0
@@ -624,6 +715,10 @@ ThothManager* ExtraChainNode::thoth_manager() {
 
 ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
+}
+
+JanusManager* ExtraChainNode::janus_manager() {
+    return janus_manager_;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(ActorId        receiver,
