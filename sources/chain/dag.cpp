@@ -335,10 +335,12 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         this->update_range();
     }
 
-    // send broadcast to network with tx result
-    node->network()->send_broadcast(transaction_result,
-                                    MessageType::DagTransactionResult,
-                                    MessageStatus::NoStatus);
+    // send broadcast to network with tx result (skip if timestamp too old to prevent spam)
+    if (res != TransactionProveError::TimestampTooOld) {
+        node->network()->send_broadcast(transaction_result,
+                                        MessageType::DagTransactionResult,
+                                        MessageStatus::NoStatus);
+    }
 
     if (res != TransactionProveError::NoError) {
         return std::unexpected(res);
@@ -916,6 +918,17 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     if ((current_section_ - tx.section()).abs() > 15) {
         return TransactionProveError::TooSectionDiff;
     }
+
+    // Validate transaction timestamp (must be within 10 minutes of current UTC time)
+#ifndef IS_APP_UI_CLIENT // temp
+    constexpr std::uint64_t MAX_TIMESTAMP_DIFF_MS = 10 * 60 * 1000; // 10 minutes in ms
+    std::uint64_t           current_time_ms       = Utils::current_date_ms();
+    std::uint64_t           timestamp_diff =
+        current_time_ms > tx.timestamp() ? current_time_ms - tx.timestamp() : tx.timestamp() - current_time_ms;
+    if (timestamp_diff > MAX_TIMESTAMP_DIFF_MS) {
+        return TransactionProveError::TimestampTooOld;
+    }
+#endif
 
     // Validate transaction amount
     if (tx.amount() == BigNumberFloat(0)) {

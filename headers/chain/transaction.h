@@ -93,7 +93,8 @@ enum class TransactionProveError {
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
     TooSectionDiff,               ///< Section difference too large
     BigReward,
-    TooOften
+    TooOften,
+    TimestampTooOld                ///< Transaction timestamp differs from current time by more than 10 minutes
 };
 
 /**
