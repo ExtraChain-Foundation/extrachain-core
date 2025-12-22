@@ -55,19 +55,13 @@ class KeyPrivate;
 class KeyPublic;
 class ConnectionsManager;
 class TokenManager;
+class SubscriptionManager;
 class ExtraChainNode;
 enum class MessageType;
 enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 class ThothManager;
-
-enum class ImportProfileError {
-    DataEmpty,
-    LoginPasswordEmpty,
-    DecryptError,
-    IncorrectJson
-};
 
 enum class ImportProfileFileError {
     LoginPasswordEmpty,
@@ -77,18 +71,6 @@ enum class ImportProfileFileError {
     Base64DecodeError,
     ImportError
 };
-
-struct SubscriptionRow {
-    ActorId     owner_id;
-    std::string file_id;
-
-    int           type       = 0;
-    std::uint64_t date_start = 0; // block date
-    bool          auto_renew = false;
-    SectionId     section_id;
-    std::string   transaction_hash;
-};
-BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
 extern std::atomic<bool> node_enabled;
 
@@ -108,6 +90,7 @@ private:
     QThread* m_thread = nullptr;
 };
 
+//
 class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
     Q_OBJECT
 
@@ -121,6 +104,7 @@ private:
     AccountController* account_controller_ = nullptr;
     DataMiningManager* dmm_                = nullptr;
     TokenManager*      token_manager_      = nullptr;
+    SubscriptionManager* subscription_manager_ = nullptr;
     ChatManager*       chat_manager_       = nullptr;
     ThothManager*      thoth_manager_      = nullptr;
     QTimer*            timer_reward_       = nullptr;
@@ -150,7 +134,6 @@ public:
     bool create_new_dag();
     bool create_usernames_vector();
     bool create_chat_templates();
-    bool create_subscription_template();
     bool create_token_template();
     bool create_token_vector();
     bool create_renames_template();
@@ -160,8 +143,7 @@ public:
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
 
-    // not only for the one
-    bool create_subscription_vector(const std::string& file_name);
+
     void start();
     bool is_client_application() const;
 
@@ -220,17 +202,13 @@ public:
     std::string node_identifier();
 
     TokenManager* token_manager() const;
+    SubscriptionManager* subscription_manager() const;
+
     void          set_cleanup_callback(std::function<void()> callback);
     bool          is_custom_app_;
 
     ChatManager*  chat_manager();
     ThothManager* thoth_manager();
-
-    bool add_subscription(const ActorId&     owner_id,
-                          const std::string& file_id,
-                          int                type,
-                          bool               auto_renew,
-                          const TokenId&     token_id);
 
 private:
     ExtraChainNode(bool is_client_application = false, bool is_custom_app = false);
@@ -288,10 +266,6 @@ private slots:
     void timer_reward_request();
     void timer_luminance_autoremove();
     void timer_info_print();
-
-public:
-    void selfTxInitContractAdded(const Transaction& transaction);
-    void selfTxRepeatableAdded(const Transaction& transaction);
 
 public slots:
     void notificationToken(QString os, QString actorId, QString token);

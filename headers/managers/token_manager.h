@@ -90,6 +90,9 @@ public:
 
     void final_token_creation(const Transaction &transaction);
 
+    bool is_token_cache_exists();
+    bool add_to_token_cache(const TokenData &token_data);
+
     static bool is_valid_token_name(const std::string &name);
     static bool id_valid_token_ticker(const std::string &ticker);
 
