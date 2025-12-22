@@ -27,6 +27,16 @@
 
 class ExtraChainNode;
 class Transaction;
+struct Section;
+
+namespace SubscriptionConst {
+    constexpr std::uint32_t GRACE_PERIOD_DAYS = 3;
+    constexpr std::uint64_t MS_PER_DAY        = 86400000ULL;
+    constexpr std::uint64_t BOUNDARY_TIME_MS  = 23ULL * 60 * 60 * 1000 + 50 * 60 * 1000; // 23:50 UTC
+}
+
+enum class SubscriptionStatus { Active, GracePeriod, Expired, NotFound };
+enum class RenewalResult { Success, InsufficientBalance, PlanNotFound, TransactionFailed, SubscriptionNotFound };
 
 struct SubscriptionRow {
     ActorId     owner_id;
@@ -91,8 +101,35 @@ public:
         const ActorId&     owner_id,
         const std::string& subscription_name);
 
+    // Repeat system
+    void on_section_finalized(const BigNumber& section_id, std::uint64_t section_avg_time);
+    void process_section_renewals(Section& section);
+    SubscriptionStatus check_status(const ActorId& owner_id, const std::string& file_id) const;
+    bool               is_active(const ActorId& owner_id, const std::string& file_id) const;
+
+    bool verify_renewal_authorization(const ActorId&        owner_id,
+                                      const std::string&    file_id,
+                                      const TokenId&        token,
+                                      const BigNumberFloat& amount) const;
+
 private:
+    std::uint64_t calc_end_date(std::uint64_t date_start, SubscriptionInterval interval) const;
+    std::uint64_t time_of_day_ms(std::uint64_t timestamp_ms) const;
+    std::optional<Transaction> get_renewal_transaction(const SubscriptionRow& sub, const SubscriptionPlan& plan);
+
+    // Find boundary sections in recent history (for late join)
+    void find_boundaries_in_history(const BigNumber& current_section);
+
     ExtraChainNode* node;
 
     std::optional<SubscriptionRow> subscription_row;
+    std::uint64_t                  last_boundary_day_ms_ = 0;
+    BigNumber                      section_2350_         = BigNumber(-1); // first section after 23:50
+    BigNumber                      section_midnight_     = BigNumber(-1); // first section after 00:00
+
+    // Pending renewals: target_section -> day_start_ms
+    std::map<BigNumber, std::uint64_t> pending_renewals_;
+
+    // Tracked subscriptions: subscription_name -> set of (owner_id, file_id)
+    std::unordered_map<std::string, std::set<std::pair<ActorId, std::string>>> tracked_subscriptions_;
 };

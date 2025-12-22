@@ -706,6 +706,9 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Create new section
         Section section { .id = transaction.section(), .transactions = { transaction } };
 
+        // Add pending renewal transactions to this section
+        node->subscription_manager()->process_section_renewals(section);
+
         set_current_section(section.id);
 
         // Check if cache needs updating
@@ -1028,7 +1031,32 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     bool verify = tx.verify(senderActor);
     if (!verify) {
-        return TransactionProveError::InvalidSignature;
+        // For Repeatable (renewal), allow system_actor signature
+        if (tx.type() == TransactionType::Repeatable) {
+            auto system_id = node->account_controller()->system_actor().id();
+            Actor<KeyPublic> systemActor = node->actor_index()->read_actor_old(system_id);
+            bool verify_system = tx.verify(systemActor);
+
+            if (verify_system) {
+                // Verify renewal authorization via subscription in DFS
+                auto file_link = Json::deserialize<Dfs::FileLink>(tx.meta().value_or(""));
+                if (!file_link.has_value()) {
+                    return TransactionProveError::InvalidSignature;
+                }
+
+                bool authorized = node->subscription_manager()->verify_renewal_authorization(
+                    tx.sender(), file_link->file_id, tx.token(), tx.amount());
+
+                if (!authorized) {
+                    return TransactionProveError::InvalidSignature;
+                }
+                // Signature valid via system_actor + subscription authorization
+            } else {
+                return TransactionProveError::InvalidSignature;
+            }
+        } else {
+            return TransactionProveError::InvalidSignature;
+        }
     }
 
     // Special transaction types that don't require balance check
@@ -2346,6 +2374,12 @@ std::optional<std::string> Dag::generate_hash_for_interval(const SectionId &star
         return std::nullopt;
     }
 
+    // Notify subscription manager about finalized section
+    auto section = this->read_section(interval_end);
+    if (section.has_value() && !section->transactions.empty()) {
+        node->subscription_manager()->on_section_finalized(interval_end, section->middle());
+    }
+
     return last_hash;
 }
 
@@ -2782,13 +2816,23 @@ std::uint64_t Section::middle() const {
         return 0;
     }
 
-    std::uint64_t sum = 0;
+    std::uint64_t sum   = 0;
+    std::uint64_t count = 0;
 
-    for (const auto &tx : transactions) {
+    for (const auto& tx : transactions) {
+        // Skip Repeatable transactions that are duplicates (section mismatch)
+        if (tx.type() == TransactionType::Repeatable && tx.section() != id) {
+            continue;
+        }
         sum += tx.timestamp();
+        count++;
     }
 
-    return sum / transactions.size();
+    if (count == 0) {
+        return 0;
+    }
+
+    return sum / count;
 }
 
 std::string Section::calculate_hash() const {
