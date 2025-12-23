@@ -183,8 +183,8 @@ void SubscriptionManager::self_tx_repeatable_added(const Transaction& transactio
     auto res = node->dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
     if (res) {
-        // Track subscription for renewal processing
-        tracked_subscriptions_["default"].insert({row.owner_id, row.file_id});
+        // Add to global subscriptions list
+        add_to_list(row.owner_id, row.file_id);
 
         emit node->subscriptionAdded(row.owner_id, row.file_id);
     }
@@ -393,6 +393,21 @@ bool SubscriptionManager::is_active(const ActorId& owner_id, const std::string& 
     return status == SubscriptionStatus::Active || status == SubscriptionStatus::GracePeriod;
 }
 
+bool SubscriptionManager::add_to_list(const ActorId& owner_id, const std::string& file_id) {
+    auto network_id = node->actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto row = node->dfs()->read_file_status(network_id, "Subscriptions", Dfs::Basic::TEMPLATE_VECTOR);
+    if (!row.has_value()) {
+        return false;
+    }
+
+    auto result = node->add_file_id(network_id, row->file_id, owner_id, file_id, 0, FileIdState::None);
+    return result.has_value();
+}
+
 bool SubscriptionManager::verify_renewal_authorization(const ActorId&        owner_id,
                                                         const std::string&    file_id,
                                                         const TokenId&        token,
@@ -457,56 +472,81 @@ void SubscriptionManager::process_section_renewals(Section& section) {
     eLog("[SubscriptionManager] Processing renewals for section {}, day {}",
          section.id, day_start_ms);
 
-    for (const auto& [sub_name, subscriptions] : tracked_subscriptions_) {
-        for (const auto& [owner_id, file_id] : subscriptions) {
-            // Read subscription data from DFS
-            auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, network_id);
-            if (!sub_data.has_value()) {
-                continue;
-            }
+    // Read subscriptions list from DFS vector
+    auto subs_row = node->dfs()->read_file_status(network_id, "Subscriptions", Dfs::Basic::TEMPLATE_VECTOR);
+    if (!subs_row.has_value()) {
+        pending_renewals_.erase(it);
+        return;
+    }
 
-            SubscriptionRow sub_row;
-            sub_row.owner_id = owner_id;
-            sub_row.file_id  = file_id;
+    auto subs_list = node->dfs()->read_vector_rows(network_id, subs_row->file_id, "");
+    if (!subs_list.has_value()) {
+        pending_renewals_.erase(it);
+        return;
+    }
 
-            // Parse fields from DbRow
-            if (sub_data->contains("plan_id")) {
-                sub_row.plan_id = sub_data->at("plan_id");
-            }
-            if (sub_data->contains("date_start")) {
-                sub_row.date_start = std::stoull(sub_data->at("date_start"));
-            }
-            if (sub_data->contains("section_id")) {
-                sub_row.section_id = BigNumber(sub_data->at("section_id"), NumeralBase::Dec);
-            } else if (sub_data->contains("block_id")) { // legacy
-                sub_row.section_id = BigNumber(sub_data->at("block_id"), NumeralBase::Dec);
-            }
-            if (sub_data->contains("transaction_hash")) {
-                sub_row.transaction_hash = sub_data->at("transaction_hash");
-            }
+    for (const auto& sub_entry : subs_list.value()) {
+        ActorId owner_id;
+        std::string file_id;
 
-            // Read plan to get interval
-            auto plans = read_plans(network_id, file_id);
-            if (!plans.has_value()) {
-                continue;
-            }
+        if (sub_entry.contains("owner")) {
+            owner_id = ActorId(sub_entry.at("owner"));
+        }
+        if (sub_entry.contains("file_id")) {
+            file_id = sub_entry.at("file_id");
+        }
 
-            auto plan_it = plans->find(sub_row.plan_id);
-            if (plan_it == plans->end()) {
-                continue;
-            }
+        if (owner_id.is_zero() || file_id.empty()) {
+            continue;
+        }
 
-            auto& plan = plan_it->second;
+        // Read subscription data from DFS
+        auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, network_id);
+        if (!sub_data.has_value()) {
+            continue;
+        }
 
-            // Check if subscription needs renewal
-            auto end_date = calc_end_date(sub_row.date_start, plan.interval);
-            if (day_start_ms >= end_date) {
-                auto tx = get_renewal_transaction(sub_row, plan);
-                if (tx.has_value()) {
-                    section.transactions.insert(tx.value());
-                    eLog("[SubscriptionManager] Added renewal tx {} to section {}",
-                         sub_row.transaction_hash, section.id);
-                }
+        SubscriptionRow sub_row;
+        sub_row.owner_id = owner_id;
+        sub_row.file_id  = file_id;
+
+        // Parse fields from DbRow
+        if (sub_data->contains("plan_id")) {
+            sub_row.plan_id = sub_data->at("plan_id");
+        }
+        if (sub_data->contains("date_start")) {
+            sub_row.date_start = std::stoull(sub_data->at("date_start"));
+        }
+        if (sub_data->contains("section_id")) {
+            sub_row.section_id = BigNumber(sub_data->at("section_id"), NumeralBase::Dec);
+        } else if (sub_data->contains("block_id")) { // legacy
+            sub_row.section_id = BigNumber(sub_data->at("block_id"), NumeralBase::Dec);
+        }
+        if (sub_data->contains("transaction_hash")) {
+            sub_row.transaction_hash = sub_data->at("transaction_hash");
+        }
+
+        // Read plan to get interval
+        auto plans = read_plans(network_id, file_id);
+        if (!plans.has_value()) {
+            continue;
+        }
+
+        auto plan_it = plans->find(sub_row.plan_id);
+        if (plan_it == plans->end()) {
+            continue;
+        }
+
+        auto& plan = plan_it->second;
+
+        // Check if subscription needs renewal
+        auto end_date = calc_end_date(sub_row.date_start, plan.interval);
+        if (day_start_ms >= end_date) {
+            auto tx = get_renewal_transaction(sub_row, plan);
+            if (tx.has_value()) {
+                section.transactions.insert(tx.value());
+                eLog("[SubscriptionManager] Added renewal tx {} to section {}",
+                     sub_row.transaction_hash, section.id);
             }
         }
     }

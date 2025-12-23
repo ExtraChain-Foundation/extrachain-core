@@ -173,6 +173,9 @@ public:
                                            int                state      = 0,
                                            FileIdState        with_state = FileIdState::None);
 
+    // Subscriptions vector
+    bool create_subscriptions_vector();
+
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
 

@@ -104,6 +104,7 @@ public:
     // Repeat system
     void on_section_finalized(const BigNumber& section_id, std::uint64_t section_avg_time);
     void process_section_renewals(Section& section);
+    bool add_to_list(const ActorId& owner_id, const std::string& file_id);
     SubscriptionStatus check_status(const ActorId& owner_id, const std::string& file_id) const;
     bool               is_active(const ActorId& owner_id, const std::string& file_id) const;
 
@@ -129,7 +130,4 @@ private:
 
     // Pending renewals: target_section -> day_start_ms
     std::map<BigNumber, std::uint64_t> pending_renewals_;
-
-    // Tracked subscriptions: subscription_name -> set of (owner_id, file_id)
-    std::unordered_map<std::string, std::set<std::pair<ActorId, std::string>>> tracked_subscriptions_;
 };

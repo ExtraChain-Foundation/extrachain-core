@@ -467,6 +467,10 @@ std::optional<std::string> ExtraChainNode::add_file_id(const ActorId&     vector
     return files_id_data.id;
 }
 
+bool ExtraChainNode::create_subscriptions_vector() {
+    return create_file_id_vector("Subscriptions", FileIdState::None);
+}
+
 bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {
     if (this->account_controller()->profile_type() != ProfileType::New) {
         bool res = this->account_controller()->rename_wallet(this->account_controller()->system_actor().id(),
