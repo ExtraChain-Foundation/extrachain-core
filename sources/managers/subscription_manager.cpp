@@ -26,9 +26,8 @@ SubscriptionManager::SubscriptionManager(ExtraChainNode* node)
     : node(node) {
 }
 
-bool SubscriptionManager::create_subscription_vector(const ActorId&     plan_owner_id,
-                                                     std::string&       plan_file_id,
-                                                     const std::string& subscription_name) {
+bool SubscriptionManager::create_subscription_vector(const std::string&                   subscription_name,
+                                                     const std::vector<SubscriptionPlan>& plans) {
     auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
@@ -40,13 +39,15 @@ bool SubscriptionManager::create_subscription_vector(const ActorId&     plan_own
     }
 
     auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        db.value(), network_id, Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE, "SubscriptionTemplate");
+        db.value(), network_id, Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE, "Subscription");
     if (!search_result.has_value()) {
         return false;
     }
 
     auto system_actor_id = node->account_controller()->system_actor().id();
-    auto sub_res         = node->dfs()->store_vector(system_actor_id,
+
+    // 1. Create vector for subscriptions
+    auto sub_res = node->dfs()->store_vector(system_actor_id,
                                              system_actor_id,
                                              subscription_name,
                                              network_id,
@@ -55,21 +56,24 @@ bool SubscriptionManager::create_subscription_vector(const ActorId&     plan_own
         return false;
     }
 
-    // save plans file link json
-    auto file_link = Dfs::FileLink { .owner_id = plan_owner_id, .file_id = plan_file_id };
-    auto json      = Json::serialize(file_link);
+    // 2. Create plans file in :Subscription folder
+    std::unordered_map<std::string, SubscriptionPlan> plans_map;
+    for (const auto& plan : plans) {
+        plans_map.insert({ Utils::generate_random_hex(6), plan });
+    }
 
-    auto res = node->dfs()->store_data_as_file(system_actor_id,
-                                               system_actor_id,
-                                               ByteArray(json).toBytes(),
-                                               Dfs::Basic::TEMPLATE_SUBSCRIPTION,
-                                               subscription_name,
-                                               Dfs::DataSecurity::Public);
+    auto json = Json::serialize(plans_map);
+    auto res  = node->dfs()->store_data_as_file(system_actor_id,
+                                                system_actor_id,
+                                                ByteArray(json).toBytes(),
+                                                Dfs::Basic::TEMPLATE_SUBSCRIPTION,
+                                                subscription_name,
+                                                Dfs::DataSecurity::Public);
 
-    return true;
+    return res.has_value();
 }
 
-std::optional<std::pair<std::string, std::string>> SubscriptionManager::is_subscription_prepared(
+std::optional<std::string> SubscriptionManager::is_subscription_prepared(
     const ActorId&     owner_id,
     const std::string& subscription_name) {
 
@@ -78,32 +82,38 @@ std::optional<std::pair<std::string, std::string>> SubscriptionManager::is_subsc
         return std::nullopt;
     }
 
+    // Check vector exists
     auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
         db.value(), owner_id, Dfs::Basic::TEMPLATE_VECTOR, subscription_name);
-    if (!search_result.has_value()) {
-        return std::nullopt;
-    }
-    if (search_result->state != Dfs::FileState::Ready) {
+    if (!search_result.has_value() || search_result->state != Dfs::FileState::Ready) {
         return std::nullopt;
     }
 
-    auto search_result_info = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+    // Check plans file exists
+    auto search_plans = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
         db.value(), owner_id, Dfs::Basic::TEMPLATE_SUBSCRIPTION, subscription_name);
-
-    if (!search_result_info.has_value()) {
-        return std::nullopt;
-    }
-    if (search_result_info->state != Dfs::FileState::Ready) {
+    if (!search_plans.has_value() || search_plans->state != Dfs::FileState::Ready) {
         return std::nullopt;
     }
 
-    return std::pair { search_result->file_id, search_result_info->file_id };
+    return search_result->file_id;
 }
 
 std::optional<std::unordered_map<std::string, SubscriptionPlan>> SubscriptionManager::read_plans(
     const ActorId&     owner_id,
-    const std::string& subscription_name) {
-    auto file_path = Dfs::Path::file_path(owner_id, "");
+    const std::string& subscription_name) const {
+    auto db = Dfs::Tables::DirsFile::DirsSpace::database();
+    if (!db.has_value()) {
+        return std::nullopt;
+    }
+
+    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        db.value(), owner_id, Dfs::Basic::TEMPLATE_SUBSCRIPTION, subscription_name);
+    if (!search_result.has_value()) {
+        return std::nullopt;
+    }
+
+    auto file_path = Dfs::Path::file_path(owner_id, search_result->file_id);
     if (!file_path.has_value()) {
         return std::nullopt;
     }
@@ -128,8 +138,13 @@ bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
         return false;                   // TODO: expected
     }
 
+    auto vector_file_id = is_subscription_prepared(owner_id, subscription_name);
+    if (!vector_file_id.has_value()) {
+        return false;
+    }
+
     auto plans = read_plans(owner_id, subscription_name);
-    if (plans->find(plan_id) == plans->end()) {
+    if (!plans.has_value() || plans->find(plan_id) == plans->end()) {
         return false;
     }
 
@@ -141,17 +156,17 @@ bool SubscriptionManager::add_subscription(const ActorId&     owner_id,
     transaction.set_type(TransactionType::Repeatable);
     transaction.set_sender(system_id);
     transaction.set_receiver(owner_id);
-    transaction.set_amount(BigNumberFloat(plan.price, NumeralBase::Dec)); // TODO: get from plan
-#ifdef QT_DEBUG
-    transaction.set_amount(BigNumberFloat("1.123", NumeralBase::Dec));
-#endif
-    transaction.set_token(plan.token_id); // TODO: get token_id from json
+    transaction.set_amount(BigNumberFloat(plan.price, NumeralBase::Dec));
+// #ifdef QT_DEBUG
+//     transaction.set_amount(BigNumberFloat("1.123", NumeralBase::Dec));
+// #endif
+    transaction.set_token(plan.token_id);
     transaction.set_meta(
-        Json::serialize(Dfs::FileLink { .owner_id = owner_id, .file_id = subscription_row->file_id }));
+        Json::serialize(Dfs::FileLink { .owner_id = owner_id, .file_id = vector_file_id.value() }));
 
     node->send_transaction(transaction, node->account_controller()->system_actor());
 
-    auto row = SubscriptionRow { .owner_id = owner_id, .file_id = subscription_row->file_id, .plan_id = plan_id };
+    auto row = SubscriptionRow { .owner_id = owner_id, .file_id = vector_file_id.value(), .plan_id = plan_id };
     subscription_row = row;
 
     return true;
@@ -174,11 +189,6 @@ void SubscriptionManager::self_tx_repeatable_added(const Transaction& transactio
     row.transaction_hash = transaction.hash();
 
     auto row_map = Utils::to_dbrow(row);
-
-    // temp for old vector
-    auto section = row_map["section_id"];
-    row_map.erase("section_id");
-    row_map.insert({ "block_id", section });
 
     auto res = node->dfs()->add_vector_row(row.owner_id, row.file_id, row_map, system_id);
 
@@ -208,26 +218,6 @@ bool SubscriptionManager::create_subscription_template() {
     }
 
     return true;
-}
-
-std::expected<Dfs::DirRow, Dfs::DfsError> SubscriptionManager::create_plans(
-    const std::string&                  file_name,
-    const std::vector<SubscriptionPlan> plans) {
-
-    std::unordered_map<std::string, SubscriptionPlan> plans_map;
-    for (const auto& plan : plans) {
-        plans_map.insert({ Utils::generate_random_hex(6), plan });
-    }
-
-    auto json            = Json::serialize(plans_map);
-    auto system_actor_id = node->account_controller()->system_actor().id();
-    auto res             = node->dfs()->store_data_as_file(system_actor_id,
-                                               system_actor_id,
-                                               ByteArray(json).toBytes(),
-                                               Dfs::Basic::TEMPLATE_SUBSCRIPTION,
-                                               file_name,
-                                               Dfs::DataSecurity::Public);
-    return res;
 }
 
 // Repeat system implementation
@@ -413,7 +403,7 @@ bool SubscriptionManager::verify_renewal_authorization(const ActorId&        own
                                                         const TokenId&        token,
                                                         const BigNumberFloat& amount) const {
     // Read subscription row from DFS vector
-    auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, node->network_id());
+    auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, node->network_id().to_string());
     if (!sub_data.has_value()) {
         return false;
     }
@@ -501,7 +491,7 @@ void SubscriptionManager::process_section_renewals(Section& section) {
         }
 
         // Read subscription data from DFS
-        auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, network_id);
+        auto sub_data = node->dfs()->read_vector_row(owner_id, file_id, network_id.to_string());
         if (!sub_data.has_value()) {
             continue;
         }

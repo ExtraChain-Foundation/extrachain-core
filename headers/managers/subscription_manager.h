@@ -86,20 +86,15 @@ public:
 
     bool create_subscription_template();
 
-    std::expected<Dfs::DirRow, Dfs::DfsError> create_plans(const std::string&                  file_name,
-                                                           const std::vector<SubscriptionPlan> plans);
+    bool create_subscription_vector(const std::string&                 subscription_name,
+                                    const std::vector<SubscriptionPlan>& plans);
 
-    bool create_subscription_vector(const ActorId&     plan_owner_id,
-                                    std::string&       plan_file_id,
-                                    const std::string& subscription_name);
-
-    std::optional<std::pair<std::string, std::string>> is_subscription_prepared(
-        const ActorId&     owner_id,
-        const std::string& subscription_name);
+    std::optional<std::string> is_subscription_prepared(const ActorId&     owner_id,
+                                                        const std::string& subscription_name);
 
     std::optional<std::unordered_map<std::string, SubscriptionPlan>> read_plans(
         const ActorId&     owner_id,
-        const std::string& subscription_name);
+        const std::string& subscription_name) const;
 
     // Repeat system
     void on_section_finalized(const BigNumber& section_id, std::uint64_t section_avg_time);
