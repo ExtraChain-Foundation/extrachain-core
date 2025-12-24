@@ -926,12 +926,15 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Validate transaction timestamp (must be within 10 minutes of current UTC time)
 #ifndef IS_APP_UI_CLIENT // temp
-    constexpr std::uint64_t MAX_TIMESTAMP_DIFF_MS = 10 * 60 * 1000; // 10 minutes in ms
-    std::uint64_t           current_time_ms       = Utils::current_date_ms();
-    std::uint64_t           timestamp_diff =
-        current_time_ms > tx.timestamp() ? current_time_ms - tx.timestamp() : tx.timestamp() - current_time_ms;
-    if (timestamp_diff > MAX_TIMESTAMP_DIFF_MS) {
-        return TransactionProveError::TimestampTooOld;
+    bool is_renewal = (tx.type() == TransactionType::Repeatable && tx.section() != current_section_);
+    if (!is_renewal) {
+        constexpr std::uint64_t MAX_TIMESTAMP_DIFF_MS = 10 * 60 * 1000; // 10 minutes in ms
+        std::uint64_t           current_time_ms       = Utils::current_date_ms();
+        std::uint64_t           timestamp_diff =
+            current_time_ms > tx.timestamp() ? current_time_ms - tx.timestamp() : tx.timestamp() - current_time_ms;
+        if (timestamp_diff > MAX_TIMESTAMP_DIFF_MS) {
+            return TransactionProveError::TimestampTooOld;
+        }
     }
 #endif
 
