@@ -735,6 +735,11 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Add transaction to existing section
     section->transactions.insert(transaction);
 
+    // Invalidate control if section had one - transactions changed
+    if (section->control.has_value()) {
+        section->control = std::nullopt;
+    }
+
     // Check if cache needs updating
     cache_.check_and_update_cache_thread(current_section_);
 
@@ -806,20 +811,9 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
             ++last;
 
         // create or load
-        bool    created = true; // !section_opt.has_value();
-        Section section = Section {
-            .id           = section_id,
-            .transactions = {}
-        }; // created ? Section { .id = section_id, .transactions = {} } : *section_opt;
-
-        if (mode_ == DagMode::Full && section_id == SectionId(0)) {
-            auto section_local = this->read_section(section_id);
-            if (section_local.has_value()) {
-                if (section_local->control.has_value()) {
-                    section.control = section_local->control;
-                }
-            }
-        }
+        auto    section_local = this->read_section(section_id);
+        bool    created       = !section_local.has_value();
+        Section section       = created ? Section { .id = section_id, .transactions = {} } : *section_local;
 
         const size_t old_size = section.transactions.size();
         section.transactions.insert(first, last);
@@ -828,8 +822,10 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         const bool changed = (new_size != old_size);
         if (changed)
             has_changes = true;
-        if (!created && changed && section_id % 20 == 0) {
-            eLog("[Dag] Control section {} changed: {} -> {} transactions", section_id, old_size, new_size);
+
+        // Invalidate control if section changed (new transactions added)
+        if (changed && section.control.has_value()) {
+            section.control = std::nullopt;
         }
 
         set_current_section(section_id);
