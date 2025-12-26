@@ -1521,6 +1521,127 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     });
 }
 
+void Dag::network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
+    if (current_section_ < from) {
+        eLog("[Dag] Send file sections error: {} < {}", current_section_, from);
+        return;
+    }
+
+    if (from < first_saved_section_) {
+        return;
+    }
+
+    if (to < from) {
+        eLog("[Dag] Send file sections error: {} < {}", to, from);
+        return;
+    }
+
+    ThreadPoolBoost::instance()->post([this, from, to, responder]() {
+        std::vector<SectionFileData> sections;
+
+        for (SectionId i = from; i <= to; i++) {
+            auto p    = this->file_path(i);
+            auto path = FsPath::create(p);
+            if (!path.has_value() || !path->exists()) {
+                continue;
+            }
+
+            auto content = Utils::read_file_content(path.value());
+            if (!content.has_value()) {
+                continue;
+            }
+
+            auto &bytes = content.value();
+            sections.push_back(SectionFileData {
+                .section_id = i,
+                .file_bytes = std::string(bytes.begin(), bytes.end())
+            });
+        }
+
+        auto file_sync = FileSectionsSync { .to = to, .sections = sections, .last_section = current_section_ };
+
+        auto ser      = MessagePack::serialize(file_sync);
+        auto compress = qCompress(QByteArray::fromStdString(ser));
+        responder.send_response(compress.toStdString(),
+                                MessageType::DagFileSections,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    });
+}
+
+void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
+    emit node->dagTimerStop();
+
+    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
+        const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
+            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
+
+        if (!file_sync.has_value()) {
+            eLog("[Dag] File sections sync: failed to deserialize");
+            return;
+        }
+
+        for (const auto &section_data : file_sync->sections) {
+            auto folder = this->file_folder(section_data.section_id);
+            if (!std::filesystem::exists(folder)) {
+                std::filesystem::create_directory(folder);
+            }
+
+            auto p    = this->file_path(section_data.section_id);
+            auto path = FsPath::create(p);
+            if (!path.has_value()) {
+                continue;
+            }
+
+            Utils::write_file_content(path.value(), section_data.file_bytes);
+
+            if (section_data.section_id > current_section_) {
+                this->set_current_section(section_data.section_id);
+            }
+        }
+
+        if (file_sync->last_section > sync_last_index_) {
+            sync_last_index_ = file_sync->last_section;
+            emit node->dagSyncStart(current_section_, sync_last_index_);
+        }
+
+        if (file_sync->to >= sync_last_index_ - 1) {
+            eLog("[Dag] File sync completed");
+
+            if (this->status_ != DagStatus::Ready) {
+                this->start_control();
+
+#ifdef IS_APP_CLIENT
+                this->process_cached_transactions(true);
+                cache_.reset_db();
+                auto responder_new = responder.with_new_message_id();
+                node->network()->send_message(true,
+                                              MessageType::DagLightData,
+                                              SendMode::Focused,
+                                              MessageStatus::Request,
+                                              responder_new);
+                light_requested_ = true;
+#else
+                this->process_cached_transactions();
+#endif
+            }
+            return;
+        }
+
+        emit node->dagSyncProgress(file_sync->to);
+        emit node->dagTimerStart(15002);
+        this->request_file_sections(file_sync->to + 1, std::min(sync_last_index_, file_sync->to + 100), responder);
+    });
+}
+
+void Dag::request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
+    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
+    auto responder_new = responder.with_new_message_id();
+    responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
+
+    eTemp("[Dag] Request file sections from {} to {}", range.first, range.last);
+}
+
 void Dag::network_request_light(const Responder &responder) {
     ThreadPoolBoost::instance()->post([this, responder]() {
         QElapsedTimer timer;
@@ -1897,7 +2018,7 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
+        request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,

@@ -46,6 +46,8 @@ enum class MessageType {
     DagControlRangeRequest  = 40,
     DagControlRangeResponse = 41,
 
+    DagFileSections = 42, // File-based sync for Full mode
+
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
     // DfsSyncSearchResult = 52, // true or false
