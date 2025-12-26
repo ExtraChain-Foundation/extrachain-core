@@ -73,11 +73,12 @@ Dag::Dag(ExtraChainNode *node)
                 }
             }
 
-            if (mode_ == DagMode::Full && cache_.section() == -1) { // TODO: and have all 0-current
-                cache_.reset_db();
-                cache_.init_db();
-                cache_.check_and_update_cache(current_section_);
-            }
+            // For Full mode, cache will be requested via DagLightData after sync
+            // if (mode_ == DagMode::Full && cache_.section() == -1) {
+            //     cache_.reset_db();
+            //     cache_.init_db();
+            //     cache_.check_and_update_cache(current_section_);
+            // }
 
             eLog("[Dag] Loaded: {}, first: {}, last cached: {}",
                  current_section_,
@@ -2048,6 +2049,37 @@ void Dag::handle_sync_request() {
     emit node->dagTimerStart(30000);
     // eLog("Timer start");
     eLog("syncStart, timer 30 secs");
+}
+
+void Dag::clear_dag_folder() {
+#ifdef IS_APP_CLIENT
+    auto dag_path    = QString::fromStdString(ChainConst::DAG_FOLDER);
+    auto remove_path = dag_path + "_to_remove";
+
+    QDir dag_dir(dag_path);
+    QDir remove_dir(remove_path);
+
+    if (dag_dir.exists()) {
+        if (remove_dir.exists()) {
+            remove_dir.removeRecursively();
+        }
+        QDir().rename(dag_path, remove_path);
+    }
+
+    if (QDir(remove_path).exists()) {
+#ifdef Q_OS_WIN
+        QProcess::startDetached("cmd", QStringList() << "/C" << "rmdir" << "/S" << "/Q" << QDir::toNativeSeparators(remove_path));
+#else
+        QProcess::startDetached("rm", QStringList() << "-rf" << remove_path);
+#endif
+    }
+
+    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
+    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+
+    current_section_     = SectionId(-1);
+    first_saved_section_ = SectionId(-1);
+#endif
 }
 
 void Dag::clear_dag() {
