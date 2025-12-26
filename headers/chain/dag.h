@@ -677,6 +677,7 @@ public:
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
 
     void clear_dag();
+    void clear_dag_folder();
 
     void remove_sections(const SectionId &from);
 

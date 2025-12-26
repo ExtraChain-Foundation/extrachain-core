@@ -30,6 +30,8 @@ Dag::Dag(ExtraChainNode *node)
     , cache_(node, this) {
     timer_sync_ = new QTimer();
 
+    clear_dag_folder();
+
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
         mode_ = settings.dag_mode.value();
@@ -2053,32 +2055,31 @@ void Dag::handle_sync_request() {
 
 void Dag::clear_dag_folder() {
 #ifdef IS_APP_CLIENT
-    auto dag_path    = QString::fromStdString(ChainConst::DAG_FOLDER);
-    auto remove_path = dag_path + "_to_remove";
+    auto dag_path      = QString::fromStdString(ChainConst::DAG_FOLDER);
+    auto remove_path   = dag_path + "_to_remove";
+    auto migrated_path = dag_path + "_migrated";
 
-    QDir dag_dir(dag_path);
-    QDir remove_dir(remove_path);
-
-    if (dag_dir.exists()) {
-        if (remove_dir.exists()) {
-            remove_dir.removeRecursively();
-        }
-        QDir().rename(dag_path, remove_path);
-    }
-
+    // Clean up leftover from previous interrupted deletion
     if (QDir(remove_path).exists()) {
-#ifdef Q_OS_WIN
-        QProcess::startDetached("cmd", QStringList() << "/C" << "rmdir" << "/S" << "/Q" << QDir::toNativeSeparators(remove_path));
-#else
-        QProcess::startDetached("rm", QStringList() << "-rf" << remove_path);
-#endif
+        std::thread([path = remove_path.toStdString()]() {
+            QDir(QString::fromStdString(path)).removeRecursively();
+        }).detach();
     }
 
-    QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
-    QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+    // One-time migration: if dag exists and not yet migrated
+    if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
+        QFile(migrated_path).open(QFile::WriteOnly);
+        QDir().rename(dag_path, remove_path);
+        std::thread([path = remove_path.toStdString()]() {
+            QDir(QString::fromStdString(path)).removeRecursively();
+        }).detach();
 
-    current_section_     = SectionId(-1);
-    first_saved_section_ = SectionId(-1);
+        QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).remove();
+        QFile(QString::fromStdString(ChainConst::DAG_RANGE_PATH)).remove();
+
+        current_section_     = SectionId(-1);
+        first_saved_section_ = SectionId(-1);
+    }
 #endif
 }
 
