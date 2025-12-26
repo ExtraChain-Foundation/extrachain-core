@@ -24,6 +24,9 @@
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
 
+static constexpr int SYNC_SECTIONS_BATCH   = 2100;
+static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
+
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
@@ -1385,7 +1388,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
         return;
     }
 
-    if (to - from >= 150) {
+    if (to - from >= SYNC_SECTIONS_MAX_REQ) {
         // return;
     }
 
@@ -1432,7 +1435,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     emit node->dagTimerStop();
     // eLog("Timer stop");
 
-    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -1520,11 +1523,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        if (mode_ == DagMode::Full) {
-            this->request_file_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
-        } else {
-            this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
-        }
+        this->request_file_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH), responder);
     });
 }
 
@@ -1544,7 +1543,7 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         return;
     }
 
-    ThreadPoolBoost::instance()->post([this, from, to, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder]() {
         std::vector<SectionFileData> sections;
 
         for (SectionId i = from; i <= to; i++) {
@@ -1580,7 +1579,7 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
     emit node->dagTimerStop();
 
-    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -1644,7 +1643,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         emit node->dagSyncProgress(file_sync->to);
         emit node->dagTimerStart(15002);
-        this->request_file_sections(file_sync->to + 1, std::min(sync_last_index_, file_sync->to + 100), responder);
+        this->request_file_sections(file_sync->to + 1, std::min(sync_last_index_, file_sync->to + SYNC_SECTIONS_BATCH), responder);
     });
 }
 
@@ -1657,7 +1656,7 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    ThreadPoolBoost::instance()->post([this, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
         std::set<Transaction>                          txs;
@@ -1833,11 +1832,7 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
             this->start_check(); // TODO: warning: check or sync?
         } else {
-            if (mode_ == DagMode::Full) {
-                this->request_file_sections(hash_interval.from, hash_interval.to, responder);
-            } else {
-                this->request_sections(hash_interval.from, hash_interval.to, responder);
-            }
+            this->request_file_sections(hash_interval.from, hash_interval.to, responder);
         }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
@@ -2034,7 +2029,7 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
+        request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -2360,13 +2355,6 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
-    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
-    //       from < 0 ? current_section_ : from,
-    //       current_section_);
-    // emit checking local?
-
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
         if (section.has_value()) {
@@ -2374,35 +2362,51 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
                 return std::nullopt;
             }
         }
+
+        // Optimized search: only check control sections (multiples of CONTROL_INTERVAL_MOD)
+        SectionId start_from = from < 0 ? current_section_ : from;
+        // Round down to nearest control section
+        SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
+
+        // Limit search to ~10000 control intervals back (~200k sections)
+        constexpr int MAX_CONTROL_SEARCH = 10000;
+        int           search_count       = 0;
+
+        for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
+            if (i < first_saved_section_) {
+                break;
+            }
+
+            auto ctrl = this->read_control(i);
+            if (ctrl.has_value()) {
+                return ctrl;
+            }
+
+            if (++search_count >= MAX_CONTROL_SEARCH) {
+                eLog("[Dag] find_last_control: reached search limit at section {}", i);
+                break;
+            }
+        }
+
+        return std::nullopt;
     }
 
-    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+    // Limited search: only check control sections, max 2 intervals back
+    SectionId start_from      = from < 0 ? current_section_ : from;
+    SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
+    int       search_count    = 0;
+
+    for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
         if (i < first_saved_section_) {
-            eCritical("[Dag] Try to find section < current first");
             break;
         }
 
-        auto section = this->read_section(i);
-        if (!section.has_value()) {
-            if (i % CONTROL_INTERVAL_MOD == 0) {
-                eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
-            }
-            continue;
+        auto ctrl = this->read_control(i);
+        if (ctrl.has_value()) {
+            return ctrl;
         }
 
-        if (section->control.has_value()) {
-            if (section->id % CONTROL_INTERVAL_MOD != 0) {
-                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
-                continue;
-            }
-
-            return DagControl { .section_id = i, .control = section->control.value() };
-        }
-
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        if (++search_count > 2) {  // max 2 control intervals back
             break;
         }
     }
@@ -2898,15 +2902,9 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         emit node->dagSyncStart(correct_from, sync_last_index_);
         search_control_ = false;
         emit node->dagSearchControlEnded();
-        if (mode_ == DagMode::Full) {
-            this->request_file_sections(correct_from,
-                                        std::min(sync_from + 100, sync_last_index_),
-                                        responder.with_new_message_id());
-        } else {
-            this->request_sections(correct_from,
-                                   std::min(sync_from + 100, sync_last_index_),
-                                   responder.with_new_message_id());
-        }
+        this->request_file_sections(correct_from,
+                                    std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
+                                    responder.with_new_message_id());
     }
 }
 
