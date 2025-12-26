@@ -33,6 +33,7 @@ public:
 
     static std::shared_ptr<ThreadPoolBoost> instance_dfs(size_t threads_count = 1);
     static std::shared_ptr<ThreadPoolBoost> instance_dag(size_t threads_count = 1);
+    static std::shared_ptr<ThreadPoolBoost> instance_dag_sync(size_t threads_count = 8);
     static std::shared_ptr<ThreadPoolBoost> instance(size_t threads_count = 1);
 
     static void terminate();

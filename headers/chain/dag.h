@@ -144,6 +144,19 @@ struct SectionSync {
 };
 BOOST_DESCRIBE_STRUCT(SectionSync, (), (to, txs, controls))
 
+struct SectionFileData {
+    SectionId   section_id;
+    std::string file_bytes;
+};
+BOOST_DESCRIBE_STRUCT(SectionFileData, (), (section_id, file_bytes))
+
+struct FileSectionsSync {
+    SectionId                    to;
+    std::vector<SectionFileData> sections;
+    SectionId                    last_section;
+};
+BOOST_DESCRIBE_STRUCT(FileSectionsSync, (), (to, sections, last_section))
+
 struct HashInterval {
     SectionId   from;
     SectionId   to;
@@ -480,6 +493,9 @@ public:
      */
     void network_request_sections_response(const std::string &compressed, const Responder &responder);
 
+    void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+    void network_file_sections_response(const std::string &compressed, const Responder &responder);
+
     /**
      * @brief Request light mode data from the network
      *
@@ -570,6 +586,8 @@ private:
      */
     void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
+    void request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+
     /**
      * @brief Send a sync request to the network
      *
@@ -659,6 +677,7 @@ public:
     TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
 
     void clear_dag();
+    void clear_dag_folder();
 
     void remove_sections(const SectionId &from);
 

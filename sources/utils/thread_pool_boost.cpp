@@ -24,6 +24,7 @@
 
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dfs;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_dag;
+static std::shared_ptr<ThreadPoolBoost> thread_pool_dag_sync;
 static std::shared_ptr<ThreadPoolBoost> thread_pool_prove;
 static boost::detail::spinlock          mutex;
 
@@ -77,6 +78,16 @@ std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag(size_t threads_co
     return thread_pool_prove;
 }
 
+std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance_dag_sync(size_t threads_count) {
+    boost::detail::spinlock::scoped_lock lock(mutex);
+
+    if (!thread_pool_dag_sync) {
+        thread_pool_dag_sync = std::shared_ptr<ThreadPoolBoost>(new ThreadPoolBoost(threads_count));
+    }
+
+    return thread_pool_dag_sync;
+}
+
 std::shared_ptr<ThreadPoolBoost> ThreadPoolBoost::instance(size_t threads_count) {
     boost::detail::spinlock::scoped_lock lock(mutex);
 
@@ -98,6 +109,11 @@ void ThreadPoolBoost::terminate() {
     if (thread_pool_dag) {
         thread_pool_dag->m_thread_pool->stop();
         thread_pool_dag.reset();
+    }
+
+    if (thread_pool_dag_sync) {
+        thread_pool_dag_sync->m_thread_pool->stop();
+        thread_pool_dag_sync.reset();
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
