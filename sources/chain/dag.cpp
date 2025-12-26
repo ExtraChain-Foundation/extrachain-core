@@ -24,6 +24,9 @@
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
 
+static constexpr int SYNC_SECTIONS_BATCH   = 2100;
+static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
+
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
@@ -283,7 +286,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
             timestamp_bigger_sync_start_ = Utils::current_date_ms();
             eLog("[Dag] Section bigger: {}", sync_last_index_);
             this->request_sections(current_section_,
-                                   std::min(sync_last_index_, current_section_ + 100),
+                                   std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
                                    responder);
             return {};
         }
@@ -1386,7 +1389,7 @@ void Dag::network_request_sections(const SectionId &from, const SectionId &to, c
         return;
     }
 
-    if (to - from >= 150) {
+    if (to - from >= SYNC_SECTIONS_MAX_REQ) {
         // return;
     }
 
@@ -1433,7 +1436,7 @@ void Dag::network_request_sections_response(const std::string &compressed, const
     emit node->dagTimerStop();
     // eLog("Timer stop");
 
-    ThreadPoolBoost::instance()->post([this, compressed, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         const auto section_sync = MessagePack::deserialize<SectionSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -1521,12 +1524,12 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
+        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH), responder);
     });
 }
 
 void Dag::network_request_light(const Responder &responder) {
-    ThreadPoolBoost::instance()->post([this, responder]() {
+    ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
         QElapsedTimer timer;
         timer.start();
         std::set<Transaction>                          txs;
@@ -1901,7 +1904,7 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_sections(current_section_, std::min(sync_last_index_, current_section_ + 100), responder);
+        request_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -2736,7 +2739,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_ = false;
         emit node->dagSearchControlEnded();
         this->request_sections(correct_from,
-                               std::min(sync_from + 100, sync_last_index_),
+                               std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
                                responder.with_new_message_id());
     }
 }
