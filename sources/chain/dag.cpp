@@ -33,7 +33,7 @@ Dag::Dag(ExtraChainNode *node)
     , cache_(node, this) {
     timer_sync_ = new QTimer();
 
-#ifndef IS_APP_CLIENT
+#ifdef IS_APP_CLIENT
     clear_dag_folder();
 #endif
 
