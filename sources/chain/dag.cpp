@@ -33,7 +33,9 @@ Dag::Dag(ExtraChainNode *node)
     , cache_(node, this) {
     timer_sync_ = new QTimer();
 
+#ifndef IS_APP_CLIENT
     clear_dag_folder();
+#endif
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
