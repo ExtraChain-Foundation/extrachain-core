@@ -2739,7 +2739,7 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         search_control_ = false;
         emit node->dagSearchControlEnded();
         this->request_sections(correct_from,
-                               std::min(sync_from + SYNC_SECTIONS_BATCH, sync_last_index_),
+                               std::min(correct_from + SYNC_SECTIONS_BATCH, sync_last_index_),
                                responder.with_new_message_id());
     }
 }
