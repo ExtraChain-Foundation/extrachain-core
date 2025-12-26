@@ -1517,7 +1517,11 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
+        if (mode_ == DagMode::Full) {
+            this->request_file_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
+        } else {
+            this->request_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + 100), responder);
+        }
     });
 }
 
@@ -1528,6 +1532,7 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
     }
 
     if (from < first_saved_section_) {
+        eLog("[Dag] File sections: from {} < first_saved {}", from, first_saved_section_);
         return;
     }
 
@@ -1595,10 +1600,16 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
             Utils::write_file_content(path.value(), section_data.file_bytes);
 
+            if (first_saved_section_ == SectionId(-1) || section_data.section_id < first_saved_section_) {
+                first_saved_section_ = section_data.section_id;
+            }
+
             if (section_data.section_id > current_section_) {
                 this->set_current_section(section_data.section_id);
             }
         }
+
+        update_range();
 
         if (file_sync->last_section > sync_last_index_) {
             sync_last_index_ = file_sync->last_section;
@@ -1819,9 +1830,11 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
 
             this->start_check(); // TODO: warning: check or sync?
         } else {
-            this->request_sections(hash_interval.from, hash_interval.to, responder);
-            // TODO: need add full network check
-            // this->request_control_section(hash_interval.from, responder.with_new_message_id());
+            if (mode_ == DagMode::Full) {
+                this->request_file_sections(hash_interval.from, hash_interval.to, responder);
+            } else {
+                this->request_sections(hash_interval.from, hash_interval.to, responder);
+            }
         }
     } else {
         eLog("[Dag] Hash interval check: true. {}", hash_interval);
@@ -2852,9 +2865,15 @@ void Dag::network_control_range_response(const DagControlRangeResponse &control_
         emit node->dagSyncStart(correct_from, sync_last_index_);
         search_control_ = false;
         emit node->dagSearchControlEnded();
-        this->request_sections(correct_from,
-                               std::min(sync_from + 100, sync_last_index_),
-                               responder.with_new_message_id());
+        if (mode_ == DagMode::Full) {
+            this->request_file_sections(correct_from,
+                                        std::min(sync_from + 100, sync_last_index_),
+                                        responder.with_new_message_id());
+        } else {
+            this->request_sections(correct_from,
+                                   std::min(sync_from + 100, sync_last_index_),
+                                   responder.with_new_message_id());
+        }
     }
 }
 
