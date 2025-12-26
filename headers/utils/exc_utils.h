@@ -445,6 +445,9 @@ namespace Json {
 
     template <typename T>
     std::expected<T, std::string> deserialize(std::string_view data) {
+        if (data.empty()) {
+            return std::unexpected("Empty data");
+        }
         try {
             auto parsed = boost::json::parse(data);
             return json_convert::from_json<T>(parsed);

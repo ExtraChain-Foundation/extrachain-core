@@ -2200,13 +2200,6 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
-    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
-    //       from < 0 ? current_section_ : from,
-    //       current_section_);
-    // emit checking local?
-
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
         if (section.has_value()) {
@@ -2214,35 +2207,51 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
                 return std::nullopt;
             }
         }
+
+        // Optimized search: only check control sections (multiples of CONTROL_INTERVAL_MOD)
+        SectionId start_from = from < 0 ? current_section_ : from;
+        // Round down to nearest control section
+        SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
+
+        // Limit search to ~10000 control intervals back (~200k sections)
+        constexpr int MAX_CONTROL_SEARCH = 10000;
+        int           search_count       = 0;
+
+        for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
+            if (i < first_saved_section_) {
+                break;
+            }
+
+            auto ctrl = this->read_control(i);
+            if (ctrl.has_value()) {
+                return ctrl;
+            }
+
+            if (++search_count >= MAX_CONTROL_SEARCH) {
+                eLog("[Dag] find_last_control: reached search limit at section {}", i);
+                break;
+            }
+        }
+
+        return std::nullopt;
     }
 
-    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+    // Limited search: only check control sections, max 2 intervals back
+    SectionId start_from      = from < 0 ? current_section_ : from;
+    SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
+    int       search_count    = 0;
+
+    for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
         if (i < first_saved_section_) {
-            eCritical("[Dag] Try to find section < current first");
             break;
         }
 
-        auto section = this->read_section(i);
-        if (!section.has_value()) {
-            if (i % CONTROL_INTERVAL_MOD == 0) {
-                eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
-            }
-            continue;
+        auto ctrl = this->read_control(i);
+        if (ctrl.has_value()) {
+            return ctrl;
         }
 
-        if (section->control.has_value()) {
-            if (section->id % CONTROL_INTERVAL_MOD != 0) {
-                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
-                continue;
-            }
-
-            return DagControl { .section_id = i, .control = section->control.value() };
-        }
-
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        if (++search_count > 2) {  // max 2 control intervals back
             break;
         }
     }
@@ -2354,8 +2363,59 @@ std::optional<std::string> Dag::generate_hash_from_section(const SectionId &star
         if (last_control.has_value()) {
             last_hash = last_control.value().control;
         } else {
-            generating = false;
-            return std::nullopt;
+            // No previous control found with limited search - try full search
+            last_control = this->find_last_control(start - SectionId(1), true);
+
+            if (last_control.has_value()) {
+                // Found control further back - generate from there
+                eLog("[Dag] Found control at {}, generating up to {}", last_control->section_id, start);
+                generating   = true;
+                last_hash    = last_control->control;
+                SectionId from_section = last_control->section_id + SectionId(1);
+
+                for (SectionId i = from_section; i < start && i <= cache_.section(); i += CONTROL_INTERVAL) {
+                    if (i + CONTROL_INTERVAL > current_section_) {
+                        break;
+                    }
+                    this->generate_hash_for_interval(i, last_hash);
+                }
+            } else {
+                // Check if section 0 has control
+                auto section0_control = this->read_control(SectionId(0));
+                if (section0_control.has_value()) {
+                    // Section 0 has control but search limit was hit - gap too large
+                    eCritical("[Dag] Control gap too large, cannot generate from section 0 to {}", start);
+                    generating = false;
+                    return std::nullopt;
+                }
+
+                // No control at all - need to generate from section 0
+                // Limit generation to avoid very long loops on corrupted state
+                SectionId MAX_GENERATE_FROM_ZERO = SectionId(200000);
+                if (start > MAX_GENERATE_FROM_ZERO) {
+                    eCritical("[Dag] Cannot generate controls from 0 to {} - too many sections", start);
+                    generating = false;
+                    return std::nullopt;
+                }
+
+                eLog("[Dag] No controls exist, generating from section 0 to {}", start);
+                generating = true;
+
+                std::string temp_hash = "";
+                auto section0_result  = this->generate_hash_for_interval(SectionId(0), temp_hash);
+                if (!section0_result.has_value()) {
+                    generating = false;
+                    return std::nullopt;
+                }
+
+                for (SectionId i = SectionId(1); i < start && i <= cache_.section(); i += CONTROL_INTERVAL) {
+                    if (i + CONTROL_INTERVAL > current_section_) {
+                        break;
+                    }
+                    this->generate_hash_for_interval(i, temp_hash);
+                }
+                last_hash = temp_hash;
+            }
         }
     }
 

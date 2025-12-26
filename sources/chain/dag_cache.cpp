@@ -402,31 +402,20 @@ CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
 }
 
 void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
-    if (dag == nullptr) {
+    if (dag == nullptr || !node_enabled.load()) {
         return;
     }
     if (dag->status() != DagStatus::Ready) {
-        // ThreadPoolBoost::instance()->post([this] { // remove
+        // During sync: update cache AND generate controls (controls must be generated during sync)
         auto res = this->check_and_update_cache(dag->current_section());
-
         if (res.result) {
             dag->update_range();
-            // return;
-            node->dag()->generate_hash_from_section(res.from);
-
-            auto control_hash = node->dag()->read_control(res.to);
-            if (!control_hash.has_value()) {
-                eTemp("[DagCache] Problem with control hash from {}", res.to);
-                dag->start_control(Force::Active, Force::None);
-                node->dag()->generate_hash_from_section(res.from);
-
-                auto control_hash = node->dag()->read_control(res.to);
-                if (!control_hash.has_value()) {
-                    eCritical("[DagCache] Problem with control hash from {}", res.to);
-                }
+            // Generate controls during sync (without sending to network)
+            auto last_hash = node->dag()->generate_hash_from_section(res.from);
+            if (!last_hash.has_value()) {
+                eLog("[DagCache] Sync: could not generate controls from {}", res.from);
             }
         }
-        // });
     } else {
         auto res = this->check_and_update_cache(dag->current_section());
 

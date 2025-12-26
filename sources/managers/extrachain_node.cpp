@@ -99,7 +99,7 @@ void ExtraChainNode::process() {
     }
 
     ThreadPoolBoost::instance_dfs(4);
-    ThreadPoolBoost::instance_dag_sync(4);
+    ThreadPoolBoost::instance_dag_sync(8);
     ThreadPoolBoost::instance(4);
 
     prepare_folders();
