@@ -2357,6 +2357,13 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
+    int j  = 0;
+    int jj = 0;
+    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
+    //       from < 0 ? current_section_ : from,
+    //       current_section_);
+    // emit checking local?
+
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
         if (section.has_value()) {
@@ -2364,51 +2371,35 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
                 return std::nullopt;
             }
         }
-
-        // Optimized search: only check control sections (multiples of CONTROL_INTERVAL_MOD)
-        SectionId start_from = from < 0 ? current_section_ : from;
-        // Round down to nearest control section
-        SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
-
-        // Limit search to ~10000 control intervals back (~200k sections)
-        constexpr int MAX_CONTROL_SEARCH = 10000;
-        int           search_count       = 0;
-
-        for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
-            if (i < first_saved_section_) {
-                break;
-            }
-
-            auto ctrl = this->read_control(i);
-            if (ctrl.has_value()) {
-                return ctrl;
-            }
-
-            if (++search_count >= MAX_CONTROL_SEARCH) {
-                eLog("[Dag] find_last_control: reached search limit at section {}", i);
-                break;
-            }
-        }
-
-        return std::nullopt;
     }
 
-    // Limited search: only check control sections, max 2 intervals back
-    SectionId start_from      = from < 0 ? current_section_ : from;
-    SectionId control_section = (start_from / CONTROL_INTERVAL_MOD) * CONTROL_INTERVAL_MOD;
-    int       search_count    = 0;
-
-    for (SectionId i = control_section; i >= SectionId(0); i -= CONTROL_INTERVAL_MOD) {
+    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
         if (i < first_saved_section_) {
+            eCritical("[Dag] Try to find section < current first");
             break;
         }
 
-        auto ctrl = this->read_control(i);
-        if (ctrl.has_value()) {
-            return ctrl;
+        auto section = this->read_section(i);
+        if (!section.has_value()) {
+            if (i % CONTROL_INTERVAL_MOD == 0) {
+                eLog("[Dag] No section: {}", i);
+                j = 0;
+                // jj++;
+            }
+            continue;
         }
 
-        if (++search_count > 2) {  // max 2 control intervals back
+        if (section->control.has_value()) {
+            if (section->id % CONTROL_INTERVAL_MOD != 0) {
+                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
+                continue;
+            }
+
+            return DagControl { .section_id = i, .control = section->control.value() };
+        }
+
+        j += 1;
+        if (!disable_break && (j > 37 || jj > 10)) {
             break;
         }
     }
