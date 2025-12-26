@@ -276,6 +276,12 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
 
         if (status_ != DagStatus::Ready) {
+            // Update sync target if transaction section is ahead but within reasonable range
+            if (transaction.section() > sync_last_index_
+                && transaction.section() <= sync_last_index_ + 15) {
+                sync_last_index_ = transaction.section();
+                emit node->dagSyncStart(current_section_, sync_last_index_);
+            }
             return {};
         }
 
