@@ -82,10 +82,12 @@ Dag::Dag(ExtraChainNode *node)
                 cache_.check_and_update_cache(current_section_);
             }
 
-            eLog("[Dag] Loaded: {}, first: {}, last cached: {}",
+            auto last_ctrl = this->find_last_control(current_section_, true);
+            eLog("[Dag] Loaded: {}, first: {}, last cached: {}, last control: {}",
                  current_section_,
                  first_saved_section_,
-                 cache_.section());
+                 cache_.section(),
+                 last_ctrl.has_value() ? last_ctrl->section_id : SectionId(-1));
             file.close();
         }
     } else {
@@ -1662,13 +1664,12 @@ void Dag::network_hash_interval(const HashInterval &hash_interval, const Respond
     }
 
     // eLog("Hash interval: {}", hash_interval);
-    auto last_control = this->find_last_control(hash_interval.to - 1);
+    auto last_control = this->read_control(hash_interval.to);
     if (!last_control.has_value()) {
         eWarning("[Dag] Hash interval check: no last control");
-        // return;
         this->start_control(Force::Active);
 
-        last_control = this->find_last_control(hash_interval.to - 1);
+        last_control = this->read_control(hash_interval.to);
         if (!last_control.has_value()) {
             return;
         }
