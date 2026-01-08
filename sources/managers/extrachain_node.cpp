@@ -964,14 +964,10 @@ void ExtraChainNode::timer_luminance_autoremove() {
 }
 
 void ExtraChainNode::timer_info_print() {
-    eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
-         dag_->current_section().to_string(),
-         dag_->current_section(),
+    eLog("[Dag] Current: {} section, status: {}, last cache: {}",
+         dag_->current_section().to_printable_string(),
          dag_->status(),
-         dag_->cache().section().to_string(),
-         dag_->cache().section()/*,
-         m_dfs->sizeTaken() / 1024.0,
-         m_dfs->totalDfsSize() / 1024.0*/);
+         dag_->cache().section().to_printable_string());
 
     if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
         && !dag_->read_section(dag_->current_section()).has_value()) {

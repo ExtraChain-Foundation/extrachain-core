@@ -548,13 +548,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         eLog("[Dag] Transaction not approved: {} {}", tx, res);
 
         if (res == TransactionProveError::TooSectionDiff) {
-            eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
-
-                 this->current_section().to_string(),
-                 this->current_section(),
+            eLog("[Dag] Current: {} section (status: {}), but TooSectionDiff!: {}",
+                 this->current_section().to_printable_string(),
                  this->status(),
-                 transaction.section().to_string(),
-                 transaction.section());
+                 transaction.section().to_printable_string());
 
             if (tx.section() < this->current_section()) {
                 // need sync?
@@ -601,9 +598,8 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
     // this->sended_transactions.erase(hash);
 
     if (tx_result.result != TransactionProveError::NoError) {
-        eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
-             transaction.section(),
-             transaction.section().to_string(),
+        eLog("[Dag] Our transaction not approved: {} / {}, {}",
+             transaction.section().to_printable_string(),
              transaction.hash(),
              tx_result.result);
 
@@ -1179,14 +1175,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // }
 
     // Verify transaction hash integrity
-    auto tx_copy = tx;
-    tx_copy.update_hash();
-    if (tx.hash() != tx_copy.hash()) {
+    if (tx.hash() != tx.calculate_hash() && tx.hash() != tx.calculate_hash_hex()) {
         return TransactionProveError::WrongHash;
     }
 
     // Check for duplicate transaction
-    auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
+    auto tx_result = this->search_duplicate_by_hash(tx.hash());
     if (tx_result.has_value()) {
         // TODO
         // if (tx == tx_result.value()) {
@@ -2253,9 +2247,7 @@ void Dag::handle_sync_request() {
         return;
     }
 
-    eLog("[Dag] sync_last_index: 0x{} / {} sections",
-         sync_last_index_,
-         sync_last_index_.to_string());
+    eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_printable_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
@@ -2569,7 +2561,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
 
         if (i % SectionId(1000) == 0) {
-            eLog("Processing section 0x{} / {} from {}", i, i.to_string(), current_section_);
+            eLog("Processing section {} from {}", i.to_printable_string(), current_section_.to_printable_string());
         }
 
         for (const auto &tx : section->transactions) {
@@ -2816,16 +2808,12 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     // TODO: if first < from or to
 
     if (status_ != DagStatus::Sync) {
-        eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-             from.to_string(),
-             to.to_string(),
-             from,
-             to);
+        eLog("[Dag] Hash interval from {} to {}", from.to_printable_string(), to.to_printable_string());
     }
 
     // current or to?
     if (to > current_section_) {
-        eCritical("[Dag] Section to (0x{}) > current (0x{})", to, current_section_);
+        eCritical("[Dag] Section to ({}) > current ({})", to.to_printable_string(), current_section_.to_printable_string());
         return std::nullopt;
     }
 
@@ -2872,7 +2860,7 @@ void Dag::start_control(Force force, Force qt_signals) {
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string());
+        // eTemp("[Dag] Find control in section {}", section_id.to_printable_string());
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);

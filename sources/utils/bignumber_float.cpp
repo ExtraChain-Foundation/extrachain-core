@@ -219,6 +219,26 @@ std::string BigNumberFloat::to_string() const {
     return str;
 }
 
+std::string BigNumberFloat::to_hex_string() const {
+    std::string str     = to_string();
+    size_t      dot_pos = str.find('.');
+
+    if (dot_pos == std::string::npos) {
+        return BigNumber(str).to_hex_string();
+    }
+
+    std::string integer_part    = str.substr(0, dot_pos);
+    std::string fractional_part = str.substr(dot_pos + 1);
+
+    size_t size_before = fractional_part.size();
+    fractional_part.erase(0, fractional_part.find_first_not_of('0'));
+    size_t zeros = size_before - fractional_part.size();
+
+    BigNumber int_bn(integer_part);
+    BigNumber frac_bn(fractional_part);
+    return int_bn.to_hex_string() + "." + std::string(zeros, '0') + frac_bn.to_hex_string();
+}
+
 BigNumberFloat BigNumberFloat::pow(unsigned long number) {
     auto res = boost::multiprecision::pow(m_data, number);
     return BigNumberFloat(res);

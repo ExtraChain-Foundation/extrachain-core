@@ -82,6 +82,7 @@ public:
 public:
     const cpp_dec_float_exc &data() const;
     std::string              to_string() const;
+    std::string              to_hex_string() const;
     BigNumberFloat           pow(unsigned long number);
     // BigNumberFloat sqrt(unsigned long number = 2) const;
     BigNumberFloat abs() const;

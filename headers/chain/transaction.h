@@ -221,6 +221,12 @@ public:
     std::string calculate_hash() const;
 
     /**
+     * @brief Calculate Blake3 hash using hex representation (for old chain compatibility)
+     * @return Calculated hash string
+     */
+    std::string calculate_hash_hex() const;
+
+    /**
      * @brief Update stored hash with calculated value
      */
     void update_hash();

@@ -230,6 +230,17 @@ std::string BigNumber::to_string() const {
     return m_data.str();
 }
 
+std::string BigNumber::to_hex_string() const {
+    std::stringstream ss;
+    if (m_data >= 0) {
+        ss << std::hex << m_data;
+        return ss.str();
+    } else {
+        ss << std::hex << boost::multiprecision::abs(m_data);
+        return "-" + ss.str();
+    }
+}
+
 std::string BigNumber::to_printable_string() const {
     auto res = this->to_string();
     if (res.length() < 6)
