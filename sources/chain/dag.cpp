@@ -32,6 +32,7 @@ Dag::Dag(ExtraChainNode *node)
     , transaction_cache_(node, node)
     , cache_(node, this) {
     timer_sync_ = new QTimer();
+    compressor_ = std::make_unique<Utils::Compressor>(3);
 
 #ifdef IS_APP_CLIENT
     clear_dag_folder();
@@ -140,6 +141,7 @@ SectionId Dag::current_section() const {
 void Dag::set_current_section(const SectionId &new_current_section) {
     if (current_section_ < new_current_section) {
         current_section_ = new_current_section;
+        try_pack_shard();
     }
 }
 
@@ -198,6 +200,231 @@ std::string Dag::file_folder(const SectionId &section) const {
 std::string Dag::file_path(const SectionId &section) const {
     auto path = fmt::format("{}/{}", this->file_folder(section), section.to_string());
     return path;
+}
+
+std::string Dag::shard_id(const SectionId &section) const {
+    return (section / Config::DataStorage::SECTION_SIZE).to_string();
+}
+
+std::string Dag::shard_path(const std::string &id) const {
+    return fmt::format("{}/shard_{}", ChainConst::DAG_FOLDER, id);
+}
+
+Utils::KvStorage* Dag::get_or_open_shard(const std::string &id) {
+    auto it = shards_.find(id);
+    if (it != shards_.end()) {
+        return it->second.get();
+    }
+
+    auto storage = std::make_unique<Utils::KvStorage>();
+    Utils::KvConfig config;
+    config.path     = shard_path(id);
+    config.map_size = 100 * 1024 * 1024;
+    config.create   = true;
+
+    if (!storage->open(config).has_value()) {
+        eWarning("[Dag] Failed to open shard {}", id);
+        return nullptr;
+    }
+
+    auto ptr = storage.get();
+    shards_[id] = std::move(storage);
+    return ptr;
+}
+
+bool Dag::is_in_current_range(const SectionId &id) const {
+    if (current_section_ < 0) return true;
+    return shard_id(id) >= shard_id(current_section_);
+}
+
+void Dag::try_pack_shard() {
+    if (current_section_ < 0) return;
+
+    auto current_shard = shard_id(current_section_);
+    if (current_shard == "0") return;
+
+    SectionId shard_start = SectionId(current_shard) * Config::DataStorage::SECTION_SIZE;
+    if (current_section_ - shard_start >= SectionId(SHARD_PACK_DELAY)) {
+        pack_all_old_shards();
+    }
+}
+
+void Dag::pack_all_old_shards() {
+    if (current_section_ < 0) return;
+
+    auto current_shard = shard_id(current_section_);
+    if (current_shard == "0") return;
+
+    SectionId current_shard_id = SectionId(current_shard);
+    for (SectionId i = SectionId(0); i < current_shard_id; i++) {
+        pack_shard(i.to_string());
+    }
+}
+
+void Dag::pack_shard(const std::string &id) {
+    SectionId shard_start = SectionId(id) * Config::DataStorage::SECTION_SIZE;
+    SectionId shard_end   = shard_start + Config::DataStorage::SECTION_SIZE - 1;
+
+    auto shard_dir = shard_path(id);
+    if (std::filesystem::exists(shard_dir)) {
+        return;
+    }
+
+    eLog("[Dag] Packing shard {} (sections {} - {})", id, shard_start, shard_end);
+
+    auto* storage = get_or_open_shard(id);
+    if (!storage) {
+        eWarning("[Dag] Failed to create shard {}", id);
+        return;
+    }
+
+    int packed = 0;
+    for (SectionId i = shard_start; i <= shard_end; i++) {
+        auto p    = this->file_path(i);
+        auto path = FsPath::create(p);
+        if (!path.has_value() || !path->exists()) {
+            continue;
+        }
+
+        auto content = Utils::read_file_content(path.value());
+        if (!content.has_value()) {
+            continue;
+        }
+
+        std::string key   = i.to_string();
+        std::string value(content->begin(), content->end());
+
+        if (compressor_) {
+            auto compressed = compressor_->compress(value);
+            if (compressed.has_value()) {
+                value = compressed.value();
+            }
+        }
+
+        if (storage->put(key, value).has_value()) {
+            packed++;
+            if (auto path_str = path->string(); path_str.has_value()) {
+                std::filesystem::remove(path_str.value());
+            }
+        }
+    }
+
+    auto folder = this->file_folder(shard_start);
+    std::error_code ec;
+    std::filesystem::remove(folder, ec);
+
+    eLog("[Dag] Packed {} sections to shard {}", packed, id);
+}
+
+std::optional<Section> Dag::read_section_from_shard(const SectionId &section_id) const {
+    auto id = shard_id(section_id);
+    auto it = shards_.find(id);
+    Utils::KvStorage* storage = nullptr;
+
+    if (it != shards_.end()) {
+        storage = it->second.get();
+    } else {
+        auto shard_dir = shard_path(id);
+        if (!std::filesystem::exists(shard_dir)) {
+            return std::nullopt;
+        }
+
+        auto new_storage = std::make_unique<Utils::KvStorage>();
+        Utils::KvConfig config;
+        config.path      = shard_dir;
+        config.map_size  = 100 * 1024 * 1024;
+        config.read_only = true;
+        config.create    = false;
+
+        if (!new_storage->open(config).has_value()) {
+            return std::nullopt;
+        }
+
+        storage = new_storage.get();
+        shards_[id] = std::move(new_storage);
+    }
+
+    if (!storage) return std::nullopt;
+
+    auto result = storage->get(section_id.to_string());
+    if (!result.has_value()) {
+        return std::nullopt;
+    }
+
+    std::string data = result.value();
+
+    if (compressor_) {
+        auto decompressed = compressor_->decompress(data);
+        if (!decompressed.has_value()) {
+            return std::nullopt;
+        }
+        data = decompressed.value();
+    }
+
+    auto section = Json::deserialize<Section>(data);
+    if (section.has_value()) {
+        section->id = section_id;
+        return section.value();
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string> Dag::read_section_content(const SectionId &section_id) const {
+    auto p    = this->file_path(section_id);
+    auto path = FsPath::create(p);
+    if (path.has_value() && path->exists()) {
+        auto content = Utils::read_file_content(path.value());
+        if (content.has_value()) {
+            return std::string(content->begin(), content->end());
+        }
+    }
+
+    auto id = shard_id(section_id);
+    auto it = shards_.find(id);
+    Utils::KvStorage* storage = nullptr;
+
+    if (it != shards_.end()) {
+        storage = it->second.get();
+    } else {
+        auto shard_dir = shard_path(id);
+        if (!std::filesystem::exists(shard_dir)) {
+            return std::nullopt;
+        }
+
+        auto new_storage = std::make_unique<Utils::KvStorage>();
+        Utils::KvConfig config;
+        config.path      = shard_dir;
+        config.map_size  = 100 * 1024 * 1024;
+        config.read_only = true;
+        config.create    = false;
+
+        if (!new_storage->open(config).has_value()) {
+            return std::nullopt;
+        }
+
+        storage = new_storage.get();
+        shards_[id] = std::move(new_storage);
+    }
+
+    if (!storage) return std::nullopt;
+
+    auto result = storage->get(section_id.to_string());
+    if (!result.has_value()) {
+        return std::nullopt;
+    }
+
+    std::string data = result.value();
+
+    if (compressor_) {
+        auto decompressed = compressor_->decompress(data);
+        if (decompressed.has_value()) {
+            return decompressed.value();
+        }
+        return std::nullopt;
+    }
+
+    return data;
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
@@ -323,10 +550,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         if (res == TransactionProveError::TooSectionDiff) {
             eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
 
-                 this->current_section().to_string(NumeralBase::Dec),
+                 this->current_section().to_string(),
                  this->current_section(),
                  this->status(),
-                 transaction.section().to_string(NumeralBase::Dec),
+                 transaction.section().to_string(),
                  transaction.section());
 
             if (tx.section() < this->current_section()) {
@@ -376,7 +603,7 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
     if (tx_result.result != TransactionProveError::NoError) {
         eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
              transaction.section(),
-             transaction.section().to_string(NumeralBase::Dec),
+             transaction.section().to_string(),
              transaction.hash(),
              tx_result.result);
 
@@ -530,7 +757,7 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
 
         auto p    = this->file_path(section_id);
         auto path = FsPath::create(p);
-        if (path.has_value()) {
+        if (path.has_value() && path->exists()) {
             auto content = Utils::read_file_content(path.value());
             if (content.has_value()) {
                 auto section = Json::deserialize<Section>(content.value());
@@ -541,7 +768,7 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
             }
         }
 
-        return std::nullopt;
+        return read_section_from_shard(section_id);
     } catch (const std::system_error &e) {
         return std::nullopt;
     }
@@ -1555,21 +1782,14 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         std::vector<SectionFileData> sections;
 
         for (SectionId i = from; i <= to; i++) {
-            auto p    = this->file_path(i);
-            auto path = FsPath::create(p);
-            if (!path.has_value() || !path->exists()) {
-                continue;
-            }
-
-            auto content = Utils::read_file_content(path.value());
+            auto content = this->read_section_content(i);
             if (!content.has_value()) {
                 continue;
             }
 
-            auto &bytes = content.value();
             sections.push_back(SectionFileData {
                 .section_id = i,
-                .file_bytes = std::string(bytes.begin(), bytes.end())
+                .file_bytes = content.value()
             });
         }
 
@@ -1628,6 +1848,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (file_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] File sync completed");
+            pack_all_old_shards();
 
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
@@ -1917,8 +2138,8 @@ void Dag::handle_sync_request() {
                  last_control->control,
                  info.last_control_hash);
             eLog("____ {} {} {} {}",
-                 last_control->section_id.to_string(NumeralBase::Dec),
-                 info.last_control_section_id.to_string(NumeralBase::Dec),
+                 last_control->section_id.to_string(),
+                 info.last_control_section_id.to_string(),
                  last_control->control,
                  info.last_control_hash);
 
@@ -2034,7 +2255,7 @@ void Dag::handle_sync_request() {
 
     eLog("[Dag] sync_last_index: 0x{} / {} sections",
          sync_last_index_,
-         sync_last_index_.to_string(NumeralBase::Dec));
+         sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
@@ -2227,9 +2448,9 @@ void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {
                                 tx.receiver(),
                                 tx.type(),
                                 tx.token(),
-                                tx.amount().to_string(NumeralBase::Dec),
+                                tx.amount().to_string(),
                                 tx.timestamp(),
-                                balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec)));
+                                balances[{ actor_id, tx.token() }].to_string()));
             }
         }
     }
@@ -2260,7 +2481,7 @@ void Dag::cache_log() {
         eLog("ActorId: {}, TokenId: {}, Balance: {} (hex: {})",
              actor_id,
              token_id,
-             balance.to_string(NumeralBase::Dec),
+             balance.to_string(),
              balance.to_string());
     }
 
@@ -2348,7 +2569,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
 
         if (i % SectionId(1000) == 0) {
-            eLog("Processing section 0x{} / {} from {}", i, i.to_string(NumeralBase::Dec), current_section_);
+            eLog("Processing section 0x{} / {} from {}", i, i.to_string(), current_section_);
         }
 
         for (const auto &tx : section->transactions) {
@@ -2358,7 +2579,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
     }
 
-    eLog("Total rewards sum: {}", total_rewards.to_string(NumeralBase::Dec));
+    eLog("Total rewards sum: {}", total_rewards.to_string());
     return total_rewards;
 }
 
@@ -2397,7 +2618,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
 
         if (section->control.has_value()) {
             if (section->id % CONTROL_INTERVAL_MOD != 0) {
-                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
+                eCritical("[Dag] Control for section {}", section->id.to_string());
                 continue;
             }
 
@@ -2596,8 +2817,8 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
 
     if (status_ != DagStatus::Sync) {
         eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-             from.to_string(NumeralBase::Dec),
-             to.to_string(NumeralBase::Dec),
+             from.to_string(),
+             to.to_string(),
              from,
              to);
     }
@@ -2620,15 +2841,15 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         }
 
         if (is_empty) {
-            auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            auto hash = Utils::calculate_hash(i.to_string());
             section_hashs += hash;
-            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(), hash);
             continue;
         }
 
-        auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        auto hash = Utils::calculate_hash(i.to_string() + section->calculate_hash());
         section_hashs += hash;
-        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(), hash);
     }
 
     return Utils::calculate_hash(section_hashs);
@@ -2651,7 +2872,7 @@ void Dag::start_control(Force force, Force qt_signals) {
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string());
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);

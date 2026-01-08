@@ -19,12 +19,16 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
 #include <shared_mutex>
 
 #include <boost/describe.hpp>
 #include <QTimer>
 
 #include "utils/bignumber.h"
+#include "utils/kv_storage.h"
+#include "utils/compression.h"
 #include "chain/transaction.h"
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
@@ -37,6 +41,7 @@ class Responder;
 static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
+static constexpr size_t SHARD_PACK_DELAY     = 100; // pack when 100 sections into next shard
 
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
@@ -572,9 +577,11 @@ private:
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
-    rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+    rustex::mutex<std::set<Transaction>> cached_txs_;
 
-    //
+    mutable std::map<std::string, std::unique_ptr<Utils::KvStorage>> shards_;
+    mutable std::unique_ptr<Utils::Compressor>                       compressor_;
+
     void add_to_cached_tx(const Transaction &transaction);
 
     /**
@@ -602,6 +609,17 @@ private:
      * @return std::optional<bool> Success or failure
      */
     std::optional<bool> write_section(const Section &section);
+
+    // Shard helpers
+    std::string            shard_id(const SectionId &section) const;
+    std::string            shard_path(const std::string &id) const;
+    Utils::KvStorage*      get_or_open_shard(const std::string &id);
+    bool                   is_in_current_range(const SectionId &id) const;
+    void                   try_pack_shard();
+    void                   pack_all_old_shards();
+    void                   pack_shard(const std::string &id);
+    std::optional<Section> read_section_from_shard(const SectionId &section_id) const;
+    std::optional<std::string> read_section_content(const SectionId &section_id) const;
 
     /**
      * @brief write_section_diff

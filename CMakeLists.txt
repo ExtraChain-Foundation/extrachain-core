@@ -39,6 +39,8 @@ find_package(magic_enum CONFIG REQUIRED)
 find_package(unofficial-hash-library CONFIG REQUIRED)
 find_package(msgpack-cxx CONFIG REQUIRED)
 find_package(blake3 CONFIG REQUIRED)
+find_package(unofficial-lmdb CONFIG REQUIRED)
+find_package(zstd CONFIG REQUIRED)
 
 set(EXTRACHAIN_CORE_INCLUDES
     ${CMAKE_CURRENT_LIST_DIR}
@@ -108,6 +110,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/variant_model.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/safeptr.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/thread_pool_boost.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/kv_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/utils/compression.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
@@ -159,6 +163,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/variant_model.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/thread_pool_boost.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/kv_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
@@ -215,7 +221,8 @@ target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extr
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x)
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x
+    unofficial::lmdb::lmdb $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)

@@ -29,17 +29,10 @@
 #include "extrachain_global.h"
 
 #ifdef QT_DEBUG
-    #define UPDATE_DEBUG()                                                                                        \
-        qdata    = to_string(NumeralBase::Hex);                                                                   \
-        qdataDec = to_string(NumeralBase::Dec);
+    #define UPDATE_DEBUG() qdata = to_string();
 #else
     #define UPDATE_DEBUG()
 #endif
-
-enum class NumeralBase {
-    Dec = 10,
-    Hex = 16
-};
 
 enum class BigNumberError {
     NoError,
@@ -48,13 +41,13 @@ enum class BigNumberError {
 };
 
 /**
- * Data type for big hex numbers for addresses
- * example: ab11405c92a05c91c48
+ * Data type for big numbers
+ * example: 12345678901234567890
  */
 class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
-    explicit BigNumber(const std::string &bigNumber, NumeralBase base = NumeralBase::Hex);
+    explicit BigNumber(const std::string &bigNumber);
     BigNumber(const BigNumber &other);
     BigNumber(BigNumber &&other) noexcept;
     explicit BigNumber(const boost::multiprecision::cpp_int &number);
@@ -72,7 +65,6 @@ private:
 
 #ifdef QT_DEBUG
     std::string qdata;
-    std::string qdataDec;
 #endif
 
 public:
@@ -111,7 +103,8 @@ public:
     const boost::multiprecision::cpp_int &data() const;
 
     bool               is_empty() const;
-    std::string        to_string(NumeralBase numSystem = NumeralBase::Hex) const;
+    std::string        to_string() const;
+    std::string        to_hex_string() const;
     std::string        to_printable_string() const;
     std::optional<int> to_int() const;
 
@@ -119,8 +112,7 @@ public:
     // BigNumber sqrt(unsigned long number = 2) const;
     BigNumber abs() const;
 
-    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber,
-                                                           NumeralBase        base = NumeralBase::Hex);
+    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber);
 
     std::strong_ordering operator<=>(const BigNumber &other) const;
     std::strong_ordering operator<=>(const int &other) const;

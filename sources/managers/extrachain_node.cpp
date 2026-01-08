@@ -648,7 +648,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
 
     // 3) sign transaction
     tx.sign(actor);
-    eLog("[Transaction] Send {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
+    eLog("[Transaction] Send {} to {}", tx.amount().to_string(), tx.receiver());
 
     return tx;
 }
@@ -679,9 +679,9 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     Transaction transaction;
     transaction.set_sender(system_id);
     transaction.set_receiver(owner_id);
-    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("500"));
 #ifdef QT_DEBUG
-    transaction.set_amount(BigNumberFloat("0.112", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("0.112"));
 #endif
     transaction.set_token(token_id); // TODO: get token_id from json
     transaction.set_meta(std::to_string(type));
@@ -902,7 +902,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_
             eLog("Attempting to create: {} from user {}", tx, actor->get().id());
 
             tx.sign(actor.value());
-            eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
+            eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(), tx.receiver());
             auto createdTx = this->create_transaction(tx);
             return createdTx;
         }
@@ -965,10 +965,10 @@ void ExtraChainNode::timer_luminance_autoremove() {
 
 void ExtraChainNode::timer_info_print() {
     eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
-         dag_->current_section().to_string(NumeralBase::Dec),
+         dag_->current_section().to_string(),
          dag_->current_section(),
          dag_->status(),
-         dag_->cache().section().to_string(NumeralBase::Dec),
+         dag_->cache().section().to_string(),
          dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);

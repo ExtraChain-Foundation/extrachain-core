@@ -931,7 +931,7 @@ namespace ChainConst {
         Universal,
     };
 
-    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000", NumeralBase::Dec);
+    static const auto MAX_TOKEN_COUNT = BigNumberFloat("1000000000000");
 } // namespace ChainConst
 MSGPACK_ADD_ENUM(ChainConst::DataRowType)
 
