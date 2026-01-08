@@ -621,6 +621,8 @@ private:
     std::optional<Section> read_section_from_shard(const SectionId &section_id) const;
     std::optional<std::string> read_section_content(const SectionId &section_id) const;
 
+    void migrate_hex_to_decimal();
+
     /**
      * @brief write_section_diff
      * @param section

@@ -113,6 +113,8 @@ public:
     BigNumber abs() const;
 
     static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber);
+    static bool      is_hex_string(const std::string &str);
+    static BigNumber from_hex(const std::string &hex);
 
     std::strong_ordering operator<=>(const BigNumber &other) const;
     std::strong_ordering operator<=>(const int &other) const;
@@ -129,9 +131,14 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this           = BigNumber(num);
+        if (is_hex_string(num)) {
+            *this = from_hex(num);
+        } else {
+            *this = BigNumber(num);
+        }
     }
 };
+
 
 MAKE_CUSTOM_MAGICAL(BigNumber)
 

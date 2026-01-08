@@ -280,20 +280,44 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
     }
 
     try {
-        BigNumber bn;
-        if (bigNumber.empty()) {
-            bn.m_data = cpp_int(0);
-        } else {
-            std::string trimmed = bigNumber;
-            trimmed.erase(0, trimmed.find_first_not_of('0'));
-            if (trimmed.empty()) trimmed = "0";
-            bn.m_data = cpp_int(trimmed);
-        }
-        return bn;
+        return BigNumber(bigNumber);
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
         return std::unexpected(BigNumberError::InvalidNumber);
     }
+}
+
+bool BigNumber::is_hex_string(const std::string &str) {
+    if (str.empty()) return false;
+
+    size_t start = 0;
+    if (str[0] == '-') start = 1;
+
+    for (size_t i = start; i < str.size(); i++) {
+        char c = str[i];
+        if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+BigNumber BigNumber::from_hex(const std::string &hex) {
+    if (hex.empty()) return BigNumber(0);
+
+    std::string trimmed = hex;
+    bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+    if (is_negative) trimmed = trimmed.substr(1);
+
+    trimmed.erase(0, trimmed.find_first_not_of('0'));
+    if (trimmed.empty()) trimmed = "0";
+
+    BigNumber result(boost::multiprecision::cpp_int("0x" + trimmed));
+    if (is_negative) {
+        result = BigNumber(-result.data());
+    }
+
+    return result;
 }
 
 std::strong_ordering BigNumber::operator<=>(const int &other) const {
@@ -326,6 +350,9 @@ namespace magic {
     }
 
     BigNumber custom_magic<BigNumber>::write(const std::string &value) {
+        if (BigNumber::is_hex_string(value)) {
+            return BigNumber::from_hex(value);
+        }
         return BigNumber(value);
     }
 } // namespace magic

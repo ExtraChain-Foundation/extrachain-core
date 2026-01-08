@@ -88,6 +88,7 @@ public:
     BigNumberFloat abs() const;
 
     static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat);
+    static BigNumberFloat from_hex(const std::string &hex);
 
     void truncate(int decimalPlaces = 3);
 
@@ -107,7 +108,11 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this           = BigNumberFloat(num);
+        if (BigNumber::is_hex_string(num)) {
+            *this = BigNumberFloat::from_hex(num);
+        } else {
+            *this = BigNumberFloat(num);
+        }
     }
 };
 

@@ -255,16 +255,32 @@ std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::
     }
 
     try {
-        BigNumberFloat bn;
-        if (bigNumberFloat.empty()) {
-            bn.m_data = cpp_dec_float_exc(0);
-        } else {
-            bn.m_data = cpp_dec_float_exc(bigNumberFloat);
-        }
-        return bn;
+        return BigNumberFloat(bigNumberFloat);
     } catch (std::exception &) {
         return std::unexpected(BigNumberError::InvalidNumber);
     }
+}
+
+BigNumberFloat BigNumberFloat::from_hex(const std::string &hex) {
+    if (hex.empty()) return BigNumberFloat(0);
+
+    size_t dot_pos = hex.find('.');
+    if (dot_pos == std::string::npos) {
+        return BigNumberFloat(BigNumber::from_hex(hex));
+    }
+
+    std::string integer_part    = hex.substr(0, dot_pos);
+    std::string fractional_part = hex.substr(dot_pos + 1);
+
+    size_t size_before = fractional_part.size();
+    fractional_part.erase(0, fractional_part.find_first_not_of('0'));
+    size_t zeros = size_before - fractional_part.size();
+
+    BigNumber int_bn  = BigNumber::from_hex(integer_part);
+    BigNumber frac_bn = BigNumber::from_hex(fractional_part.empty() ? "0" : fractional_part);
+
+    std::string dec_str = int_bn.to_string() + "." + std::string(zeros, '0') + frac_bn.to_string();
+    return BigNumberFloat(dec_str);
 }
 
 void BigNumberFloat::truncate(int decimalPlaces) {
@@ -318,6 +334,9 @@ namespace magic {
     }
 
     BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
+        if (BigNumber::is_hex_string(value)) {
+            return BigNumberFloat::from_hex(value);
+        }
         return BigNumberFloat(value);
     }
 } // namespace magic

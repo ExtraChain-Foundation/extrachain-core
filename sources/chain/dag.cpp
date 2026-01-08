@@ -38,6 +38,10 @@ Dag::Dag(ExtraChainNode *node)
     clear_dag_folder();
 #endif
 
+#ifndef IS_APP_CLIENT
+    migrate_hex_to_decimal();
+#endif
+
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
         mode_ = settings.dag_mode.value();
@@ -425,6 +429,173 @@ std::optional<std::string> Dag::read_section_content(const SectionId &section_id
     }
 
     return data;
+}
+
+void Dag::migrate_hex_to_decimal() {
+    auto dag_path    = QString::fromStdString(ChainConst::DAG_FOLDER);
+    auto backup_path = dag_path + "_before_convert";
+
+    if (QDir(backup_path).exists()) return;
+    if (!QDir(dag_path).exists()) return;
+    if (QFile::exists(dag_path + "_migrated_2")) return;
+
+    bool needs_migration = false;
+    QDir dag_dir(dag_path);
+    for (const auto &entry : dag_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        bool is_shard = false;
+        entry.toInt(&is_shard);
+        if (is_shard) {
+            QDir shard_dir(dag_path + "/" + entry);
+            for (const auto &file : shard_dir.entryList(QDir::Files)) {
+                if (file.contains(QRegularExpression("[a-fA-F]"))) {
+                    needs_migration = true;
+                    break;
+                }
+            }
+            if (needs_migration) break;
+        }
+    }
+
+    if (!needs_migration) return;
+
+    eLog("[Dag] Starting migration from hex to decimal format...");
+
+    SectionId first_dec(0);
+    SectionId last_dec(-1);
+    SectionId cached_dec(-1);
+
+    auto range_src = dag_path + "/range";
+    if (QFile::exists(range_src)) {
+        QFile src_file(range_src);
+        if (src_file.open(QFile::ReadOnly)) {
+            auto content = src_file.readAll().toStdString();
+            src_file.close();
+
+            auto range = Json::deserialize<SectionRange>(content);
+            if (range.has_value()) {
+                auto first_hex  = range->first;
+                auto last_hex   = range->last;
+                auto cached_hex = range->last_cached;
+
+                first_dec  = BigNumber::is_hex_string(first_hex)
+                    ? BigNumber::from_hex(first_hex) : BigNumber(first_hex);
+                last_dec   = BigNumber::is_hex_string(last_hex)
+                    ? BigNumber::from_hex(last_hex) : BigNumber(last_hex);
+                cached_dec = BigNumber::is_hex_string(cached_hex)
+                    ? BigNumber::from_hex(cached_hex) : BigNumber(cached_hex);
+
+                eLog("[Dag] Range: first={}, last={}, cached={}", first_dec, last_dec, cached_dec);
+            }
+        }
+    }
+
+    if (!QDir().rename(dag_path, backup_path)) {
+        eCritical("[Dag] Failed to rename dag folder");
+        return;
+    }
+
+    QDir().mkpath(dag_path);
+
+    auto cache_src = backup_path + "/cache";
+    auto cache_dst = dag_path + "/cache";
+    if (QDir(cache_src).exists()) {
+        QDir().mkpath(cache_dst);
+        QDir src_dir(cache_src);
+        for (const auto &file : src_dir.entryList(QDir::Files)) {
+            QFile::copy(cache_src + "/" + file, cache_dst + "/" + file);
+        }
+    }
+
+    std::vector<std::pair<SectionId, QString>> sections_to_convert;
+
+    QDir old_dag(backup_path);
+    for (const auto &shard_name : old_dag.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        bool is_shard = false;
+        shard_name.toInt(&is_shard);
+        if (!is_shard) continue;
+
+        QDir shard_dir(backup_path + "/" + shard_name);
+        for (const auto &filename : shard_dir.entryList(QDir::Files)) {
+            if (filename.startsWith(".")) continue;
+
+            auto section_id_hex = filename.toStdString();
+            auto section_id_int = std::stoull(section_id_hex, nullptr, 16);
+            SectionId section_id(static_cast<long long>(section_id_int));
+
+            QString file_path = backup_path + "/" + shard_name + "/" + filename;
+            sections_to_convert.push_back({section_id, file_path});
+        }
+    }
+
+    std::sort(sections_to_convert.begin(), sections_to_convert.end(),
+              [](const auto &a, const auto &b) { return a.first < b.first; });
+
+    eLog("[Dag] Converting {} sections...", sections_to_convert.size());
+
+    int         converted     = 0;
+    std::string prev_shard_id = "";
+
+    for (const auto &[section_id, file_path] : sections_to_convert) {
+        QFile file(file_path);
+        if (!file.open(QFile::ReadOnly)) continue;
+
+        auto content = file.readAll().toStdString();
+        file.close();
+
+        auto section = Json::deserialize<Section>(content);
+        if (!section.has_value()) continue;
+
+        section->id = section_id;
+
+        auto current_shard_id = shard_id(section_id);
+        if (!prev_shard_id.empty() && prev_shard_id != current_shard_id) {
+            pack_shard(prev_shard_id);
+            eLog("[Dag] Packed shard {}", prev_shard_id);
+        }
+        prev_shard_id = current_shard_id;
+
+        auto folder = this->file_folder(section->id);
+        if (!std::filesystem::exists(folder)) {
+            std::filesystem::create_directory(folder);
+        }
+
+        auto p    = this->file_path(section->id);
+        auto path = FsPath::create(p);
+        if (path.has_value()) {
+            Utils::write_file_content(path.value(), Json::serialize(section.value()));
+        }
+
+        converted++;
+        if (converted % 10000 == 0) {
+            eLog("[Dag] Converted {} sections...", converted);
+        }
+    }
+
+    if (!prev_shard_id.empty()) {
+        auto last_shard = shard_id(last_dec);
+        if (prev_shard_id != last_shard) {
+            pack_shard(prev_shard_id);
+            eLog("[Dag] Packed final shard {}", prev_shard_id);
+        }
+    }
+
+    SectionRange new_range {
+        .first       = first_dec.to_string(),
+        .last        = last_dec.to_string(),
+        .last_cached = cached_dec.to_string()
+    };
+
+    QFile dst_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
+    if (dst_file.open(QFile::WriteOnly)) {
+        dst_file.write(QByteArray::fromStdString(Json::serialize(new_range)));
+        dst_file.close();
+    }
+
+    QFile migrated_file(dag_path + "_migrated_2");
+    migrated_file.open(QFile::WriteOnly);
+    migrated_file.close();
+
+    eLog("[Dag] Migration complete: {} sections converted", converted);
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
@@ -2273,7 +2444,7 @@ void Dag::clear_dag_folder() {
 #ifdef IS_APP_CLIENT
     auto dag_path      = QString::fromStdString(ChainConst::DAG_FOLDER);
     auto remove_path   = dag_path + "_to_remove";
-    auto migrated_path = dag_path + "_migrated";
+    auto migrated_path = dag_path + "_migrated_2";
 
     // Clean up leftover from previous interrupted deletion
     if (QDir(remove_path).exists()) {
