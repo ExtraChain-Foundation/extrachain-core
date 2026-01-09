@@ -34,6 +34,8 @@ BigNumber::BigNumber(const std::string &bigNumber) {
     try {
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);
+        } else if (is_hex_string(bigNumber)) {
+            *this = from_hex(bigNumber);
         } else {
             std::string trimmed = bigNumber;
             trimmed.erase(0, trimmed.find_first_not_of('0'));

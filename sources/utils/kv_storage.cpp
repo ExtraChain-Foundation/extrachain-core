@@ -82,7 +82,7 @@ std::expected<void, KvError> KvStorage::open(const KvConfig& config) {
     }
 
     MDB_txn* txn;
-    rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+    rc = mdb_txn_begin(env_, nullptr, config.read_only ? MDB_RDONLY : 0, &txn);
     if (rc != 0) {
         mdb_env_close(env_);
         env_ = nullptr;

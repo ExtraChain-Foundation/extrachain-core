@@ -31,6 +31,8 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat) {
     try {
         if (bigNumberFloat.empty()) {
             this->m_data = cpp_dec_float_exc(0);
+        } else if (BigNumber::is_hex_string(bigNumberFloat)) {
+            *this = BigNumberFloat::from_hex(bigNumberFloat);
         } else {
             this->m_data = cpp_dec_float_exc(bigNumberFloat);
         }

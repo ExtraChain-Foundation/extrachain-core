@@ -1973,11 +1973,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     emit node->dagTimerStop();
 
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
-        const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
-            qUncompress(QByteArray::fromStdString(compressed)).toStdString());
+        auto uncompressed = qUncompress(QByteArray::fromStdString(compressed));
+        if (uncompressed.isEmpty()) {
+            return;
+        }
 
+        const auto file_sync = MessagePack::deserialize<FileSectionsSync>(uncompressed.toStdString());
         if (!file_sync.has_value()) {
-            eLog("[Dag] File sections sync: failed to deserialize");
             return;
         }
 
