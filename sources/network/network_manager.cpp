@@ -1727,6 +1727,34 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
 
+    case MessageType::DagFileSections: {
+        if (status == MessageStatus::Request) {
+            auto range = MessagePack::deserialize<SectionRange>(serialized);
+            if (!range.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for file sections request", type);
+                break;
+            }
+
+            auto first = BigNumber::create(range->first);
+            auto last  = BigNumber::create(range->last);
+            if (!first.has_value() || !last.has_value()) {
+                break;
+            }
+
+            node->dag()->network_request_file_sections(first.value(), last.value(), responder);
+        } else if (status == MessageStatus::Response) {
+            auto data = MessagePack::deserialize<std::string>(serialized);
+            if (!data.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed for file sections response", type);
+                break;
+            }
+
+            node->dag()->network_file_sections_response(data.value(), responder);
+        }
+
+        break;
+    }
+
     case MessageType::DagLightData: {
         if (status == MessageStatus::Request) {
 #ifdef IS_APP_UI_CLIENT // only for ui clients, not for consoles, luminance priority
