@@ -28,6 +28,7 @@
 #include "utils/thread_pool_boost.h"
 
 #include <QTimer>
+#include <algorithm>
 
 LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     : QObject(parent)
@@ -63,6 +64,45 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 auto& load_info      = it.second;
                 bool  ignore_timeout = file_link_to_proceed == it.first;
                 bool  is_requested   = false;
+
+                // Remove disconnected identifiers from the list
+                load_info.identifier_list.erase(
+                    std::remove_if(load_info.identifier_list.begin(),
+                                   load_info.identifier_list.end(),
+                                   [this](const auto& id_pair) {
+                                       return !node->network()->is_connection_exists(id_pair.first);
+                                   }),
+                    load_info.identifier_list.end());
+
+                // If no identifiers left, try to find new peers who have this file
+                if (load_info.identifier_list.empty()) {
+                    eLog("[LoadManager] No active identifiers for file {}, asking neighbours",
+                         it.first.file_id);
+                    load_info.identifier_storage_checker.clear();
+
+                    // Add all active connections as potential sources
+                    auto connections_locked = *node->network()->connections();
+                    for (const auto& socket : *connections_locked) {
+                        if (!socket || !socket->is_active())
+                            continue;
+                        auto conn_id = socket->identifier().toStdString();
+                        if (conn_id.empty())
+                            continue;
+                        if (!load_info.identifier_storage_checker.contains(conn_id)) {
+                            load_info.identifier_storage_checker.emplace(conn_id);
+                            load_info.identifier_list.emplace_back(conn_id, LoadInfo::Attempts { .counter = 0 });
+                        }
+                    }
+
+                    // If still no identifiers, remove from queue
+                    if (load_info.identifier_list.empty()) {
+                        eLog("[LoadManager] No connections available for file {}, removing from queue",
+                             it.first.file_id);
+                        active_downloads_locked->erase(it.first);
+                        continue;
+                    }
+                }
+
                 for (auto& identifier : load_info.identifier_list) {
                     if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                         return false;
@@ -70,9 +110,6 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     auto now      = std::chrono::system_clock::now();
                     auto duration = now - identifier.second.last_attempt;
                     if (!node->network()->is_connection_exists(identifier.first)) {
-                        // eCritical(
-                        //     "LoadManager::timer_runner, connection with identifier ({}) not exist for file_link:
-                        //     {}.", identifier.first, it.first);
                         continue;
                     }
 

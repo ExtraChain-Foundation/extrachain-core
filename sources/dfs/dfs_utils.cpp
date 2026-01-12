@@ -356,7 +356,16 @@ bool Dfs::Tables::DirsFile::ActorSpace::add_dir_row(const std::shared_ptr<DbConn
     dir_row.sign = sign.value();
 
     auto dir_row_db = Utils::to_dbrow(dir_row);
+
+    // Empty prev_file_id should be NULL in database to avoid UNIQUE constraint conflict
+    if (prev_file_id.empty()) {
+        dir_row_db.erase("prev_file_id");
+    }
+
     bool res        = db->replace(TableNameActorsFiles, dir_row_db);
+
+    eLog("[add_dir_row] owner={}, name={}, file_id={}, prev_file_id={}, result={}",
+         owner_id.to_string(), dir_row.name, dir_row.file_id, dir_row.prev_file_id, res);
 
     return res;
 }

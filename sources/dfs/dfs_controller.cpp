@@ -60,7 +60,7 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
-    // set_mode(DfsMode::Light);
+    set_mode(DfsMode::Light);
 #endif
 
     // #ifdef IS_RC
@@ -823,11 +823,15 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector_impl(
 
     std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> rows =
         dfs_vector->generate_content_package();
-    if (!rows.has_value() && rows.error() != DfsVectorError::CollectionEmpty) {
-        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
-        return std::unexpected(Dfs::DfsError::Unknown);
-    }
     if (!rows.has_value()) {
+        if (rows.error() == DfsVectorError::CollectionEmpty) {
+            Dfs::Packets::DfsVectorContentPackage empty_package;
+            empty_package.owner_id = owner_id;
+            empty_package.file_id = file_id;
+            node->network()->send_broadcast(empty_package, MessageType::DfsVectorCreation);
+            return dir_row;
+        }
+        eCritical("[DfsCollection] Can't find row for {} and {}", owner_id, file_id);
         return std::unexpected(Dfs::DfsError::Unknown);
     }
 
@@ -842,6 +846,7 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
                                    const ActorId               &signer_id,
                                    const Dfs::DataSecurityData &security_data,
                                    bool                         thothed) {
+    eLog("[Dfs] add_vector_row: owner={}, file_id={}", owner_id.to_string(), file_id);
     auto res = this->make_vector(owner_id, file_id, false, signer_id, security_data);
     if (!res.has_value()) {
         eWarning("[Dfs] Can't find vector {} / {}", owner_id, file_id);
@@ -1902,6 +1907,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         DbRow dirRowDb    = Utils::to_dbrow(dir_row2);
         bool  insertRes   = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
 
+        eLog("[addFolder] owner={}, name={}, file_id={}, result={}",
+             owner_id.to_string(), dir_row.name, dir_row.file_id, insertRes);
+
         if (!insertRes) {
             eLog("[Dfs] addFolder: insert failed");
             return "";
@@ -1946,6 +1954,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     dir_row2.state  = Dfs::FileState::Known;
     DbRow dirRowDb  = Utils::to_dbrow(dir_row2);
     bool  insertRes = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
+
+    eLog("[addFile] owner={}, name={}, file_id={}, result={}",
+         owner_id.to_string(), dir_row.name, dir_row.file_id, insertRes);
 
     if (!insertRes) {
         auto errorStr = fmt::format("[Dfs] addFile: insert failed:{} {}",
