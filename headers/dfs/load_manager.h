@@ -47,6 +47,7 @@ struct LoadInfo {
 
     size_t           amount_fragments;
     std::set<size_t> fragments_left;
+    std::chrono::system_clock::time_point last_fragment_received {};
 
     bool notify_neighbours;
 
@@ -99,6 +100,8 @@ public:
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
+
+    bool is_downloading(const Dfs::FileLink& file_link) const;
 
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});

@@ -645,6 +645,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                             if (notify_neighbours)
                                 broadcast_file_exist(file_link.owner_id, file_link.file_id);
                         } else {
+                            res->second.last_fragment_received = std::chrono::system_clock::now();
                             if (res->second.amount_fragments == 0) {
                                 res->second.amount_fragments = file_content.full_amount_fragments;
                                 for (int i = 0; i < res->second.amount_fragments; ++i) {
@@ -677,4 +678,33 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
                                                          Dfs::FileState::Ready);
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
+}
+
+bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
+    constexpr auto ACTIVITY_TIMEOUT = std::chrono::seconds(60);
+    auto now = std::chrono::system_clock::now();
+
+    auto check_active = [&](const SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& downloads) -> bool {
+        auto locked = *downloads;
+        auto it = locked->find(file_link);
+        if (it == locked->end()) {
+            return false;
+        }
+
+        // Check if fragment was received within last minute
+        if (it->second.last_fragment_received.time_since_epoch().count() > 0) {
+            auto elapsed = now - it->second.last_fragment_received;
+            if (elapsed < ACTIVITY_TIMEOUT) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if (check_active(m_active_downloads_priority)) {
+        return true;
+    }
+
+    return check_active(m_active_downloads);
 }
