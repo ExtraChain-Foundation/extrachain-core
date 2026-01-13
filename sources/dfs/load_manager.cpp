@@ -480,14 +480,18 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 // file_link_fragment.file_link.file_id, offset);
 
                 // offset += Dfs::Basic::FRAGMENT_SIZE;
+
+                int progress = static_cast<int>((fragment_number * 100) / max_offsets);
+                emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
+                                                  file_link_fragment.file_link.file_id,
+                                                  progress);
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
-            // while (offset < total_size) {
-
-            // }
-
-            // emit node->dfs()->uploaded(file_link_fragment.file_link.owner_id, dir_row.value());
+            emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
+                                              file_link_fragment.file_link.file_id,
+                                              100);
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);

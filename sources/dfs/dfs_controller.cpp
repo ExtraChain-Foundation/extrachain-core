@@ -347,6 +347,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     // load_manager_.broadcast_stored_file(owner_id, dir_row.file_id);
     load_manager_.broadcast_file_exist(owner_id, dir_row.file_id);
 
+    emit uploadProgress(owner_id, file_id, 0);
+
     return dir_row;
 }
 
