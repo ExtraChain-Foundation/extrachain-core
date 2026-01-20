@@ -246,7 +246,7 @@ QByteArray SocketService::generate_first_message() {
         auto connections_locked = *node->network()->connections();
         for (auto &it : *connections_locked) {
             auto ip = it->ip().toStdString();
-            if (ip.empty() || ip == ip_) {
+            if (ip.empty() || ip == ip_ || ip == "127.0.0.1") {
                 continue;
             }
             if (!it->is_active()) {

@@ -383,6 +383,10 @@ std::pair<bool, std::vector<Dfs::DirRow>> Dfs::Tables::DirsFile::ActorSpace::add
         }
 
         auto dir_row_db = Utils::to_dbrow(dir_row);
+        if (!dir_row.prev_file_id.has_value() || dir_row.prev_file_id->empty()) {
+            dir_row_db.erase("prev_file_id");
+        }
+
         // TODO: temp, because this function used only for loads
         if (dir_row.state != Dfs::FileState::Removed && dir_row.type != Dfs::FileType::Folder) {
             dir_row_db["state"] = std::to_string(std::to_underlying(Dfs::FileState::Known));

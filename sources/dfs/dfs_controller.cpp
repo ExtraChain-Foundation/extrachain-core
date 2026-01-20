@@ -1907,6 +1907,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
         auto dir_row2     = dir_row;
         dir_row2.state    = Dfs::FileState::Ready;
         DbRow dirRowDb    = Utils::to_dbrow(dir_row2);
+        if (auto it = dirRowDb.find("prev_file_id"); it != dirRowDb.end() && it->second.empty()) {
+            dirRowDb.erase(it);
+        }
         bool  insertRes   = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
 
         eLog("[addFolder] owner={}, name={}, file_id={}, result={}",
@@ -1955,6 +1958,9 @@ std::string DfsController::network_store_file(const ActorId        &owner_id,
     auto dir_row2   = dir_row;
     dir_row2.state  = Dfs::FileState::Known;
     DbRow dirRowDb  = Utils::to_dbrow(dir_row2);
+    if (auto it = dirRowDb.find("prev_file_id"); it != dirRowDb.end() && it->second.empty()) {
+        dirRowDb.erase(it);
+    }
     bool  insertRes = db_instance->replace(DfsT::DirsFile::TableNameActorsFiles, dirRowDb);
 
     eLog("[addFile] owner={}, name={}, file_id={}, result={}",

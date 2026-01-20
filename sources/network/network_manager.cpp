@@ -335,7 +335,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 }
 
                 for (const auto &[ip, identifier] : connections) {
-                    if (this->failed_ips_.contains(ip)) {
+                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
                         continue;
                     }
 
