@@ -502,7 +502,12 @@ std::optional<std::string> ExtraChainNode::add_file_id(const ActorId&     vector
                                       .file_id   = file_id,
                                       .state     = state };
 
-    auto res = dfs_->add_vector_row(vector_owner_id, vector_file_id, files_id_data, system_id);
+    auto db_row = Utils::to_dbrow(files_id_data);
+    if (with_state == FileIdState::Without) {
+        db_row.erase("state");
+    }
+
+    auto res = dfs_->add_vector_row(vector_owner_id, vector_file_id, db_row, system_id);
     if (!res) {
         return std::nullopt;
     }
