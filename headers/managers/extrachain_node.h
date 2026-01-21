@@ -92,8 +92,8 @@ struct SubscriptionRow {
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
 enum class FileIdState {
-    None,
-    With
+    With,
+    Without
 };
 
 struct FileIdData {
@@ -176,14 +176,14 @@ public:
     //
     DfsFileStatus create_renames_vector();
 
-    bool create_file_id_template(FileIdState with_state = FileIdState::None);
-    bool create_file_id_vector(const std::string& vector_name, FileIdState with_state = FileIdState::None);
+    bool create_file_id_template(FileIdState with_state = FileIdState::Without);
+    bool create_file_id_vector(const std::string& vector_name, FileIdState with_state = FileIdState::Without);
     std::optional<std::string> add_file_id(const ActorId&     vector_owner_id,
                                            const std::string& vector_file_id,
                                            const ActorId&     owner_id,
                                            const std::string& file_id,
                                            int                state      = 0,
-                                           FileIdState        with_state = FileIdState::None);
+                                           FileIdState        with_state = FileIdState::Without);
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
