@@ -325,6 +325,15 @@ public:
                            const std::string &primary_data,
                            const ActorId     &signer_id = ActorId());
 
+    std::optional<std::string> add_file_id(const ActorId&      network_id,
+                                           const ActorId&      vector_owner_id,
+                                           const std::string&  vector_file_id,
+                                           const ActorId&      owner_id,
+                                           const std::string&  file_id,
+                                           const ActorId&      signer_id,
+                                           int                 state     = 0,
+                                           Dfs::FileIdState    with_state = Dfs::FileIdState::Without);
+
     std::expected<DbRow, DfsVectorError> read_vector_row(
         const ActorId               &owner_id,
         const std::string           &file_id,

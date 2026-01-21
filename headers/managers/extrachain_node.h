@@ -91,21 +91,6 @@ struct SubscriptionRow {
 };
 BOOST_DESCRIBE_STRUCT(SubscriptionRow, (), (type, date_start, auto_renew, section_id, transaction_hash))
 
-enum class FileIdState {
-    With,
-    Without
-};
-
-struct FileIdData {
-    std::string   id;
-    std::uint64_t timestamp = 0;
-    ActorId       actor;
-    ActorId       owner;
-    std::string   file_id;
-    int           state;
-};
-BOOST_DESCRIBE_STRUCT(FileIdData, (), (id, timestamp, actor, owner, file_id, state))
-
 extern std::atomic<bool> node_enabled;
 
 class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
@@ -176,14 +161,8 @@ public:
     //
     DfsFileStatus create_renames_vector();
 
-    bool create_file_id_template(FileIdState with_state = FileIdState::Without);
-    bool create_file_id_vector(const std::string& vector_name, FileIdState with_state = FileIdState::Without);
-    std::optional<std::string> add_file_id(const ActorId&     vector_owner_id,
-                                           const std::string& vector_file_id,
-                                           const ActorId&     owner_id,
-                                           const std::string& file_id,
-                                           int                state      = 0,
-                                           FileIdState        with_state = FileIdState::Without);
+    bool create_file_id_template(Dfs::FileIdState with_state = Dfs::FileIdState::Without);
+    bool create_file_id_vector(const std::string& vector_name, Dfs::FileIdState with_state = Dfs::FileIdState::Without);
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();

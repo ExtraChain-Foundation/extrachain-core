@@ -887,6 +887,47 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     return operation_res;
 }
 
+std::optional<std::string> DfsController::add_file_id(const ActorId&      network_id,
+                                                      const ActorId&      vector_owner_id,
+                                                      const std::string&  vector_file_id,
+                                                      const ActorId&      owner_id,
+                                                      const std::string&  file_id,
+                                                      const ActorId&      signer_id,
+                                                      int                 state,
+                                                      Dfs::FileIdState    with_state) {
+    auto file_row = read_file_status(network_id,
+                                     with_state == Dfs::FileIdState::With ? "FilesListState" : "FilesList",
+                                     Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
+    if (!file_row.has_value()) {
+        return std::nullopt;
+    }
+
+    if (file_row->state != Dfs::FileState::Ready) {
+        add_to_waiting_file(network_id, file_row->file_id);
+        request_file(network_id, file_row->file_id);
+        return std::nullopt;
+    }
+
+    auto files_id_data = Dfs::FileIdData { .id        = Utils::generate_random_hex(6),
+                                           .timestamp = 0,
+                                           .actor     = signer_id,
+                                           .owner     = owner_id,
+                                           .file_id   = file_id,
+                                           .state     = state };
+
+    auto db_row = Utils::to_dbrow(files_id_data);
+    if (with_state == Dfs::FileIdState::Without) {
+        db_row.erase("state");
+    }
+
+    auto res = add_vector_row(vector_owner_id, vector_file_id, db_row, signer_id);
+    if (!res) {
+        return std::nullopt;
+    }
+
+    return files_id_data.id;
+}
+
 bool DfsController::remove_vector_row(const ActorId     &owner_id,
                                       const std::string &file_id,
                                       const std::string &primary_data,

@@ -211,6 +211,21 @@ namespace Dfs {
         Unknown    = 100
     };
 
+    enum class FileIdState {
+        With,
+        Without
+    };
+
+    struct FileIdData {
+        std::string   id;
+        std::uint64_t timestamp = 0;
+        ActorId       actor;
+        ActorId       owner;
+        std::string   file_id;
+        int           state = 0;
+    };
+    BOOST_DESCRIBE_STRUCT(FileIdData, (), (id, timestamp, actor, owner, file_id, state))
+
     enum class DataSecurity {
         Public    = 0,
         Encrypted = 1,

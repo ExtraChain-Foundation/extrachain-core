@@ -425,13 +425,13 @@ DfsFileStatus ExtraChainNode::create_renames_vector() {
     return DfsFileStatus::Created;
 }
 
-bool ExtraChainNode::create_file_id_template(FileIdState with_state) {
+bool ExtraChainNode::create_file_id_template(Dfs::FileIdState with_state) {
     auto        system_actor_id = account_controller_->system_actor().id();
-    std::string template_name   = with_state == FileIdState::With ? "FilesListState" : "FilesList";
+    std::string template_name   = with_state == Dfs::FileIdState::With ? "FilesListState" : "FilesList";
     auto        template_obj    = Dfs::CollectionTemplate::create(template_name).value().use_id();
     template_obj.add_fields({ Dfs::Field::Blob("owner").not_null(), Dfs::Field::Blob("file_id").not_null() });
 
-    if (with_state == FileIdState::With) {
+    if (with_state == Dfs::FileIdState::With) {
         template_obj.add_fields({ Dfs::Field::Integer("state") });
     }
 
@@ -444,7 +444,7 @@ bool ExtraChainNode::create_file_id_template(FileIdState with_state) {
     return true;
 }
 
-bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, FileIdState with_state) {
+bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, Dfs::FileIdState with_state) {
     auto network_id = actor_index_->network_id();
     auto system_id  = account_controller_->system_actor().id();
 
@@ -456,7 +456,7 @@ bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, FileI
         Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
                                                                           network_id,
                                                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                          with_state == FileIdState::With
+                                                                          with_state == Dfs::FileIdState::With
                                                                               ? "FilesListState"
                                                                               : "FilesList");
     if (!search_result.has_value()) {
@@ -471,48 +471,6 @@ bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, FileI
     }
 
     return true;
-}
-
-std::optional<std::string> ExtraChainNode::add_file_id(const ActorId&     vector_owner_id,
-                                                       const std::string& vector_file_id,
-                                                       const ActorId&     owner_id,
-                                                       const std::string& file_id,
-                                                       int                state,
-                                                       FileIdState        with_state) {
-    auto file_row = dfs_->read_file_status(this->network_id(),
-                                           with_state == FileIdState::With ? "FilesListState" : "FilesList",
-                                           Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
-    if (!file_row.has_value()) {
-        // TODO: wait for exists
-        return std::nullopt;
-    }
-
-    if (file_row->state != Dfs::FileState::Ready) {
-        dfs_->add_to_waiting_file(this->network_id(), file_row->file_id);
-        dfs_->request_file(this->network_id(), file_row->file_id);
-        return std::nullopt;
-    }
-
-    auto system_id = account_controller_->system_actor().id();
-
-    auto files_id_data = FileIdData { .id        = Utils::generate_random_hex(6),
-                                      .timestamp = 0,
-                                      .actor     = system_id,
-                                      .owner     = owner_id,
-                                      .file_id   = file_id,
-                                      .state     = state };
-
-    auto db_row = Utils::to_dbrow(files_id_data);
-    if (with_state == FileIdState::Without) {
-        db_row.erase("state");
-    }
-
-    auto res = dfs_->add_vector_row(vector_owner_id, vector_file_id, db_row, system_id);
-    if (!res) {
-        return std::nullopt;
-    }
-
-    return files_id_data.id;
 }
 
 bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {
