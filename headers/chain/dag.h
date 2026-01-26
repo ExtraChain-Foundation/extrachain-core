@@ -32,37 +32,19 @@
 #include "chain/transaction.h"
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
+#include "chain/dag_control.h"
 
 #include "3rdparty/rustex.h"
 
 class ExtraChainNode;
 class Responder;
 
-static const SectionId CONTROL_INTERVAL      = SectionId(20);
-static const int       CONTROL_INTERVAL_MOD  = 20;
-static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
-static constexpr size_t SHARD_PACK_DELAY     = 100; // pack when 100 sections into next shard
+static constexpr size_t SHARD_PACK_DELAY     = 100;  // pack when 100 sections into next shard
+static constexpr int    SYNC_SECTIONS_BATCH  = 2100;
+static constexpr int    SYNC_SECTIONS_MAX_REQ = 2500;
 
-// helpers
-static inline bool is_aligned20(const SectionId &s) {
-    return (s % CONTROL_INTERVAL) == 0;
-}
-static inline SectionId align_down20(const SectionId &s) {
-    eLog("align_down20 {}", s);
-    SectionId m;
-    m = s % CONTROL_INTERVAL;
-    return m == 0 ? s : (s - m);
-}
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
     return (a < b) ? b : a;
-}
-
-// generate control sections [from..to] with step 20
-static inline std::vector<SectionId> control_ids_in(SectionId from, SectionId to) {
-    std::vector<SectionId> v;
-    for (SectionId s = from; s <= to; s += CONTROL_INTERVAL_MOD)
-        v.push_back(s);
-    return v;
 }
 
 /**
