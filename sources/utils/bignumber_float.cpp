@@ -19,88 +19,133 @@
 
 #include "utils/bignumber_float.h"
 #include "utils/bignumber.h"
+#include "utils/exc_logs.h"
 #include <exception>
 
-#include "utils/exc_logs.h"
+#ifdef QT_DEBUG
+    #define UPDATE_DEBUG() qdata = to_string()
+#else
+    #define UPDATE_DEBUG()
+#endif
 
-BigNumberFloat::BigNumberFloat()
-    : m_data(0) {
+mpd_context_t *BigNumberFloat::get_context() {
+    static mpd_context_t ctx;
+    static bool          initialized = false;
+    if (!initialized) {
+        mpd_maxcontext(&ctx);
+        ctx.prec  = 60;
+        ctx.emax  = 30000;
+        ctx.emin  = -30000 + 1;
+        ctx.round = MPD_ROUND_HALF_EVEN;
+        ctx.traps = 0;
+        ctx.clamp = 1;
+        initialized = true;
+    }
+    return &ctx;
+}
+
+void BigNumberFloat::init_from_string(const std::string &str) {
+    if (m_data) {
+        mpd_del(m_data);
+    }
+    m_data = mpd_new(get_context());
+    mpd_set_string(m_data, str.c_str(), get_context());
+}
+
+BigNumberFloat::BigNumberFloat() {
+    m_data = mpd_new(get_context());
+    mpd_set_i64(m_data, 0, get_context());
 }
 
 BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat) {
+    m_data = mpd_new(get_context());
     try {
         if (bigNumberFloat.empty()) {
-            this->m_data = cpp_dec_float_exc(0);
+            mpd_set_i64(m_data, 0, get_context());
         } else if (BigNumber::is_hex_string(bigNumberFloat)) {
             *this = BigNumberFloat::from_hex(bigNumberFloat);
         } else {
-            this->m_data = cpp_dec_float_exc(bigNumberFloat);
+            mpd_set_string(m_data, bigNumberFloat.c_str(), get_context());
         }
     } catch (std::exception &) {
         eLog("Incorrect BigNumberFloat value: {}", bigNumberFloat);
         assert(false);
     }
 
-    UPDATE_DEBUG()
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
-    this->m_data = other.data();
-    UPDATE_DEBUG()
+    m_data = mpd_new(get_context());
+    mpd_copy(m_data, other.m_data, get_context());
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(BigNumberFloat &&other) noexcept {
-    this->m_data = std::move(other.m_data);
-    UPDATE_DEBUG()
+    m_data       = other.m_data;
+    other.m_data = nullptr;
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumber &other) {
-    this->m_data = cpp_dec_float_exc(other.data());
-    UPDATE_DEBUG()
-}
-
-BigNumberFloat::BigNumberFloat(const cpp_dec_float_exc &number) {
-    this->m_data = number;
-    UPDATE_DEBUG()
+    m_data = mpd_new(get_context());
+    mpd_set_string(m_data, other.to_string().c_str(), get_context());
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(int number) {
-    this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    m_data = mpd_new(get_context());
+    mpd_set_i32(m_data, number, get_context());
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(long long number) {
-    this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    m_data = mpd_new(get_context());
+    mpd_set_i64(m_data, number, get_context());
+    UPDATE_DEBUG();
 }
 
 BigNumberFloat::BigNumberFloat(std::uint64_t number) {
-    this->m_data = cpp_dec_float_exc(number);
-    UPDATE_DEBUG()
+    m_data = mpd_new(get_context());
+    mpd_set_u64(m_data, number, get_context());
+    UPDATE_DEBUG();
+}
+
+BigNumberFloat::~BigNumberFloat() {
+    if (m_data) {
+        mpd_del(m_data);
+        m_data = nullptr;
+    }
 }
 
 BigNumberFloat BigNumberFloat::operator+(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data + bigNumberFloat.data());
+    BigNumberFloat result;
+    mpd_add(result.m_data, m_data, bigNumberFloat.m_data, get_context());
+    return result;
 }
 
 BigNumberFloat BigNumberFloat::operator+(long long number) const {
-    return BigNumberFloat(m_data + number);
+    return *this + BigNumberFloat(number);
 }
 
 BigNumberFloat BigNumberFloat::operator-(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data - bigNumberFloat.data());
+    BigNumberFloat result;
+    mpd_sub(result.m_data, m_data, bigNumberFloat.m_data, get_context());
+    return result;
 }
 
 BigNumberFloat BigNumberFloat::operator-(long long number) const {
-    return BigNumberFloat(m_data - number);
+    return *this - BigNumberFloat(number);
 }
 
 BigNumberFloat BigNumberFloat::operator*(const BigNumberFloat &bigNumberFloat) const {
-    return BigNumberFloat(m_data * bigNumberFloat.data());
+    BigNumberFloat result;
+    mpd_mul(result.m_data, m_data, bigNumberFloat.m_data, get_context());
+    return result;
 }
 
 BigNumberFloat BigNumberFloat::operator*(long long number) const {
-    return BigNumberFloat(m_data * number);
+    return *this * BigNumberFloat(number);
 }
 
 BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) const {
@@ -108,117 +153,207 @@ BigNumberFloat BigNumberFloat::operator/(const BigNumberFloat &bigNumberFloat) c
         eFatal("BigNumberFloat: Division by zero");
     }
 
-    return BigNumberFloat(m_data / bigNumberFloat.data());
+    BigNumberFloat result;
+    mpd_div(result.m_data, m_data, bigNumberFloat.m_data, get_context());
+    return result;
 }
 
 BigNumberFloat BigNumberFloat::operator/(long long number) const {
-    return BigNumberFloat(m_data / number);
+    return *this / BigNumberFloat(number);
 }
 
 BigNumberFloat &BigNumberFloat::operator=(const BigNumberFloat &bigNumberFloat) {
-    m_data = bigNumberFloat.data();
-    UPDATE_DEBUG()
+    if (this != &bigNumberFloat) {
+        if (!m_data) {
+            m_data = mpd_new(get_context());
+        }
+        mpd_copy(m_data, bigNumberFloat.m_data, get_context());
+    }
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator=(long long number) {
-    m_data = number;
-    UPDATE_DEBUG()
+    if (!m_data) {
+        m_data = mpd_new(get_context());
+    }
+    mpd_set_i64(m_data, number, get_context());
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator++() {
-    *this = *this + 1;
-    UPDATE_DEBUG()
+    mpd_t *one = mpd_new(get_context());
+    mpd_set_i32(one, 1, get_context());
+    mpd_add(m_data, m_data, one, get_context());
+    mpd_del(one);
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat BigNumberFloat::operator++(int) {
-    ++m_data;
-    UPDATE_DEBUG()
-    return BigNumberFloat(m_data);
+    BigNumberFloat old = *this;
+    ++(*this);
+    return old;
 }
 
 BigNumberFloat &BigNumberFloat::operator--() {
-    m_data--;
-    UPDATE_DEBUG()
+    mpd_t *one = mpd_new(get_context());
+    mpd_set_i32(one, 1, get_context());
+    mpd_sub(m_data, m_data, one, get_context());
+    mpd_del(one);
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat BigNumberFloat::operator--(int) {
-    --m_data;
-    UPDATE_DEBUG()
-    return BigNumberFloat(m_data);
+    BigNumberFloat old = *this;
+    --(*this);
+    return old;
 }
 
 BigNumberFloat &BigNumberFloat::operator+=(const BigNumberFloat &bigNumberFloat) {
-    this->m_data += bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    mpd_add(m_data, m_data, bigNumberFloat.m_data, get_context());
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator+=(long long number) {
-    this->m_data += number;
-    UPDATE_DEBUG()
+    *this += BigNumberFloat(number);
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator-=(const BigNumberFloat &bigNumberFloat) {
-    this->m_data -= bigNumberFloat.data();
-    UPDATE_DEBUG()
+    mpd_sub(m_data, m_data, bigNumberFloat.m_data, get_context());
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator-=(long long number) {
-    this->m_data -= number;
-    UPDATE_DEBUG()
+    *this -= BigNumberFloat(number);
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator*=(const BigNumberFloat &bigNumberFloat) {
-    this->m_data *= bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    mpd_mul(m_data, m_data, bigNumberFloat.m_data, get_context());
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator*=(long long number) {
-    this->m_data *= number;
-    UPDATE_DEBUG()
+    *this *= BigNumberFloat(number);
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator/=(const BigNumberFloat &bigNumberFloat) {
-    this->m_data /= bigNumberFloat.m_data;
-    UPDATE_DEBUG()
+    mpd_div(m_data, m_data, bigNumberFloat.m_data, get_context());
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat &BigNumberFloat::operator/=(long long number) {
-    this->m_data /= number;
-
-    UPDATE_DEBUG()
+    *this /= BigNumberFloat(number);
+    UPDATE_DEBUG();
     return *this;
 }
 
 BigNumberFloat BigNumberFloat::operator-() const {
-    return BigNumberFloat(-m_data);
+    BigNumberFloat result;
+    mpd_minus(result.m_data, m_data, get_context());
+    return result;
 }
 
-const cpp_dec_float_exc &BigNumberFloat::data() const {
+mpd_t *BigNumberFloat::data() const {
     return m_data;
 }
 
 std::string BigNumberFloat::to_string() const {
-    std::stringstream ss;
-    ss << std::setprecision(float_size) << std::fixed << m_data;
-    std::string str = ss.str();
-
-    str.erase(str.find_last_not_of('0') + 1, std::string::npos);
-    if (str.back() == '.') {
-        str.pop_back();
+    char *sci = mpd_to_sci(m_data, 1);
+    if (!sci) {
+        return "0";
     }
 
-    return str;
+    std::string s(sci);
+    mpd_free(sci);
+
+    // Convert scientific notation to fixed decimal
+    auto posE = s.find('E');
+    if (posE != std::string::npos) {
+        std::string mant = s.substr(0, posE);
+        int         exp  = std::stoi(s.substr(posE + 1));
+        bool        neg  = false;
+
+        if (!mant.empty() && mant[0] == '-') {
+            neg = true;
+            mant.erase(0, 1);
+        }
+
+        auto        posDot = mant.find('.');
+        std::string intp   = mant.substr(0, posDot);
+        std::string frac   = (posDot == std::string::npos) ? "" : mant.substr(posDot + 1);
+
+        if (exp >= 0) {
+            if (static_cast<int>(frac.size()) <= exp) {
+                frac.append(exp - static_cast<int>(frac.size()), '0');
+                mant = intp + frac;
+                if (mant.empty()) mant = "0";
+            } else {
+                std::string left  = frac.substr(0, exp);
+                std::string right = frac.substr(exp);
+                mant              = intp + left + "." + right;
+            }
+        } else {
+            int n = -exp;
+            if (static_cast<int>(intp.size()) <= n) {
+                std::string zeros(n - static_cast<int>(intp.size()), '0');
+                mant = "0." + zeros + intp + frac;
+            } else {
+                std::string left  = intp.substr(0, static_cast<int>(intp.size()) - n);
+                std::string right = intp.substr(static_cast<int>(intp.size()) - n);
+                mant              = left + "." + right + frac;
+            }
+        }
+
+        if (neg) mant.insert(mant.begin(), '-');
+        s = mant;
+    }
+
+    // Normalize: remove leading zeros in integer part, trailing zeros in fractional part
+    {
+        bool        neg = false;
+        std::string t   = s;
+        if (!t.empty() && t[0] == '-') {
+            neg = true;
+            t.erase(0, 1);
+        }
+
+        auto        posDot = t.find('.');
+        std::string I      = posDot == std::string::npos ? t : t.substr(0, posDot);
+        std::string F      = posDot == std::string::npos ? "" : t.substr(posDot + 1);
+
+        // Remove leading zeros in integer part
+        size_t nz = I.find_first_not_of('0');
+        if (nz == std::string::npos)
+            I = "0";
+        else if (nz > 0)
+            I.erase(0, nz);
+
+        // Remove trailing zeros in fractional part
+        if (!F.empty()) {
+            size_t nz2 = F.find_last_not_of('0');
+            if (nz2 == std::string::npos)
+                F.clear();
+            else
+                F.erase(nz2 + 1);
+        }
+
+        if (F.empty())
+            s = (neg ? "-" : "") + I;
+        else
+            s = (neg ? "-" : "") + I + "." + F;
+    }
+
+    return s;
 }
 
 std::string BigNumberFloat::to_hex_string() const {
@@ -242,17 +377,22 @@ std::string BigNumberFloat::to_hex_string() const {
 }
 
 BigNumberFloat BigNumberFloat::pow(unsigned long number) {
-    auto res = boost::multiprecision::pow(m_data, number);
-    return BigNumberFloat(res);
+    BigNumberFloat result;
+    mpd_t         *exp = mpd_new(get_context());
+    mpd_set_u64(exp, number, get_context());
+    mpd_pow(result.m_data, m_data, exp, get_context());
+    mpd_del(exp);
+    return result;
 }
 
 BigNumberFloat BigNumberFloat::abs() const {
-    auto res = boost::multiprecision::abs(m_data);
-    return BigNumberFloat(res);
+    BigNumberFloat result;
+    mpd_abs(result.m_data, m_data, get_context());
+    return result;
 }
 
 std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::string &bigNumberFloat) {
-    if (bigNumberFloat == "inf") {
+    if (bigNumberFloat == "inf" || bigNumberFloat == "-inf") {
         return std::unexpected(BigNumberError::Infinity);
     }
 
@@ -299,35 +439,41 @@ void BigNumberFloat::truncate(int decimalPlaces) {
 }
 
 std::strong_ordering BigNumberFloat::operator<=>(const int &other) const {
-    if (m_data < other)
-        return std::strong_ordering::less;
-    if (m_data > other)
-        return std::strong_ordering::greater;
+    mpd_t *other_mpd = mpd_new(get_context());
+    mpd_set_i32(other_mpd, other, get_context());
+    int cmp = mpd_cmp(m_data, other_mpd, get_context());
+    mpd_del(other_mpd);
+
+    if (cmp < 0) return std::strong_ordering::less;
+    if (cmp > 0) return std::strong_ordering::greater;
     return std::strong_ordering::equal;
 }
 
 bool BigNumberFloat::operator==(const int &other) const {
-    return m_data == other;
+    mpd_t *other_mpd = mpd_new(get_context());
+    mpd_set_i32(other_mpd, other, get_context());
+    int cmp = mpd_cmp(m_data, other_mpd, get_context());
+    mpd_del(other_mpd);
+    return cmp == 0;
 }
 
 bool BigNumberFloat::operator!=(const int &other) const {
-    return !(m_data == other);
+    return !(*this == other);
 }
 
 bool BigNumberFloat::operator==(const BigNumberFloat &other) const {
-    return m_data == other.m_data;
+    return mpd_cmp(m_data, other.m_data, get_context()) == 0;
 }
 
 std::strong_ordering BigNumberFloat::operator<=>(const BigNumberFloat &other) const {
-    if (m_data < other.m_data)
-        return std::strong_ordering::less;
-    if (m_data > other.m_data)
-        return std::strong_ordering::greater;
+    int cmp = mpd_cmp(m_data, other.m_data, get_context());
+    if (cmp < 0) return std::strong_ordering::less;
+    if (cmp > 0) return std::strong_ordering::greater;
     return std::strong_ordering::equal;
 }
 
 bool BigNumberFloat::operator!=(const BigNumberFloat &other) const {
-    return !(m_data == other.m_data);
+    return !(*this == other);
 }
 
 namespace magic {

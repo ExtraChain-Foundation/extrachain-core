@@ -215,14 +215,17 @@ set(bip3x_BUILD_TESTS OFF CACHE BOOL "")
 set(bip3x_USE_OPENSSL_RANDOM OFF CACHE BOOL "")
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/mpdecimal ${CMAKE_CURRENT_BINARY_DIR}/mpdecimal)
 
 target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x/include)
+target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/mpdecimal/libmpdec)
 
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
     Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x
-    unofficial::lmdb::lmdb $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+    unofficial::lmdb::lmdb $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>
+    mpdec)
 # extrachainc
 # target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
 #     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)
