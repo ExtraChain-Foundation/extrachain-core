@@ -622,6 +622,8 @@ private:
     std::optional<std::string> read_section_content(const SectionId &section_id) const;
 
     void migrate_hex_to_decimal();
+public:
+    void migrate_balance_cache(const QString &src_path, const QString &dst_path);
 
     /**
      * @brief write_section_diff

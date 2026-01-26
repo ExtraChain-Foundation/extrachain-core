@@ -20,6 +20,7 @@
 #include "chain/dag.h"
 
 #include "managers/extrachain_node.h"
+#include "utils/db_connector.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
 #include "utils/thread_pool_boost.h"
@@ -432,12 +433,16 @@ std::optional<std::string> Dag::read_section_content(const SectionId &section_id
 }
 
 void Dag::migrate_hex_to_decimal() {
+    auto settings = Utils::read_settings();
+    if (settings.dag_version.value_or(0) >= CURRENT_DAG_VERSION) {
+        return;
+    }
+
     auto dag_path    = QString::fromStdString(ChainConst::DAG_FOLDER);
     auto backup_path = dag_path + "_before_convert";
 
     if (QDir(backup_path).exists()) return;
     if (!QDir(dag_path).exists()) return;
-    if (QFile::exists(dag_path + "_migrated_2")) return;
 
     bool needs_migration = false;
     QDir dag_dir(dag_path);
@@ -502,7 +507,11 @@ void Dag::migrate_hex_to_decimal() {
         QDir().mkpath(cache_dst);
         QDir src_dir(cache_src);
         for (const auto &file : src_dir.entryList(QDir::Files)) {
-            QFile::copy(cache_src + "/" + file, cache_dst + "/" + file);
+            if (file == "BalanceCache.db") {
+                migrate_balance_cache(cache_src + "/" + file, cache_dst + "/" + file);
+            } else {
+                QFile::copy(cache_src + "/" + file, cache_dst + "/" + file);
+            }
         }
     }
 
@@ -591,11 +600,62 @@ void Dag::migrate_hex_to_decimal() {
         dst_file.close();
     }
 
-    QFile migrated_file(dag_path + "_migrated_2");
-    migrated_file.open(QFile::WriteOnly);
-    migrated_file.close();
+    settings.dag_version = CURRENT_DAG_VERSION;
+    Utils::write_settings(settings);
 
     eLog("[Dag] Migration complete: {} sections converted", converted);
+}
+
+void Dag::migrate_balance_cache(const QString &src_path, const QString &dst_path) {
+    auto settings = Utils::read_settings();
+    if (settings.dag_version.value_or(0) >= CURRENT_DAG_VERSION) {
+        return;
+    }
+
+    eLog("[Dag] Migrating balance cache...");
+
+    QFile::copy(src_path, dst_path);
+
+    DbConnector db(dst_path.toStdString());
+    if (!db.open()) {
+        eWarning("[Dag] Failed to open balance cache for migration");
+        return;
+    }
+
+    auto rows = db.select("SELECT actor_id, token_id, balance FROM balance_cache");
+    if (rows.empty()) {
+        eLog("[Dag] Balance cache is empty, nothing to migrate");
+        return;
+    }
+
+    int converted = 0;
+    db.query("BEGIN TRANSACTION");
+
+    for (const auto &row : rows) {
+        auto balance_str = row.at("balance");
+
+        if (!BigNumber::is_hex_string(balance_str)) {
+            continue;
+        }
+
+        auto balance_dec = BigNumberFloat::from_hex(balance_str);
+        auto new_balance = balance_dec.to_string();
+
+        auto query = fmt::format(
+            "UPDATE balance_cache SET balance = '{}' WHERE actor_id = '{}' AND token_id = '{}'",
+            new_balance,
+            row.at("actor_id"),
+            row.at("token_id"));
+
+        db.query(query);
+        converted++;
+    }
+
+    db.query("COMMIT");
+    eLog("[Dag] Migrated {} balance entries from hex to decimal", converted);
+
+    settings.dag_version = CURRENT_DAG_VERSION;
+    Utils::write_settings(settings);
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
@@ -2444,9 +2504,9 @@ void Dag::handle_sync_request() {
 
 void Dag::clear_dag_folder() {
 #ifdef IS_APP_CLIENT
-    auto dag_path      = QString::fromStdString(ChainConst::DAG_FOLDER);
-    auto remove_path   = dag_path + "_to_remove";
-    auto migrated_path = dag_path + "_migrated_2";
+    auto settings    = Utils::read_settings();
+    auto dag_path    = QString::fromStdString(ChainConst::DAG_FOLDER);
+    auto remove_path = dag_path + "_to_remove";
 
     // Clean up leftover from previous interrupted deletion
     if (QDir(remove_path).exists()) {
@@ -2456,8 +2516,8 @@ void Dag::clear_dag_folder() {
     }
 
     // One-time migration: if dag exists and not yet migrated
-    if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
-        QFile(migrated_path).open(QFile::WriteOnly);
+    bool needs_clear = settings.dag_version.value_or(0) < CURRENT_DAG_VERSION;
+    if (QDir(dag_path).exists() && needs_clear) {
         QDir().rename(dag_path, remove_path);
         std::thread([path = remove_path.toStdString()]() {
             QDir(QString::fromStdString(path)).removeRecursively();
@@ -2468,6 +2528,9 @@ void Dag::clear_dag_folder() {
 
         current_section_     = SectionId(-1);
         first_saved_section_ = SectionId(-1);
+
+        settings.dag_version = CURRENT_DAG_VERSION;
+        Utils::write_settings(settings);
     }
 #endif
 }
