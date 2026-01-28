@@ -133,22 +133,25 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
 
     schema->set_table_name("Vector");
 
-    if (!is_link) {
-        // Write original template without service fields to file
-        auto json     = Json::serialize(original_template);
-        auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
-        if (!res_json.has_value()) {
-            return std::unexpected(DfsVectorError::Unknown);
-        }
-    } else {
-        if (std::holds_alternative<Dfs::CollectionTemplateLink>(variant_template)) {
-            auto link = std::get<Dfs::CollectionTemplateLink>(variant_template);
-            link.name = vector_template.name();
-
-            auto json     = Json::serialize(link);
+    // Dictionary uses static template from dictionary_template(), no need to write file
+    if (file_type != Dfs::FileType::Dictionary) {
+        if (!is_link) {
+            // Write original template without service fields to file
+            auto json     = Json::serialize(original_template);
             auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
             if (!res_json.has_value()) {
                 return std::unexpected(DfsVectorError::Unknown);
+            }
+        } else {
+            if (std::holds_alternative<Dfs::CollectionTemplateLink>(variant_template)) {
+                auto link = std::get<Dfs::CollectionTemplateLink>(variant_template);
+                link.name = vector_template.name();
+
+                auto json     = Json::serialize(link);
+                auto res_json = Utils::write_file_content(dfs_vector.vector_path_, std::move(json));
+                if (!res_json.has_value()) {
+                    return std::unexpected(DfsVectorError::Unknown);
+                }
             }
         }
     }
@@ -178,12 +181,16 @@ std::expected<DfsVector, DfsVectorError> DfsVector::load(ExtraChainNode         
 
     DfsVector dfs_vector(node, actor, file_actor_id, file_id, data_security, security_data, file_type);
 
-    auto vector_template = dfs_vector.read_template();
-    if (!vector_template.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
+    // Dictionary uses static template, no need to read from file
+    if (file_type == Dfs::FileType::Dictionary) {
+        dfs_vector.collection_template_ = Dfs::dictionary_template();
+    } else {
+        auto vector_template = dfs_vector.read_template();
+        if (!vector_template.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+        dfs_vector.collection_template_ = vector_template.value();
     }
-
-    dfs_vector.collection_template_ = vector_template.value();
     // checks
 
     return dfs_vector;
@@ -272,6 +279,11 @@ std::expected<std::vector<DbRow>, DfsVectorError> DfsVector::read_rows(const std
 }
 
 std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template() {
+    // Dictionary uses static template, no file needed
+    if (file_type_ == Dfs::FileType::Dictionary) {
+        return Dfs::dictionary_template();
+    }
+
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
         node->dfs()->request_file(file_actor_id_, file_id_);
@@ -315,30 +327,36 @@ std::expected<Dfs::Packets::DfsVectorContentPackage, DfsVectorError> DfsVector::
 
     auto rows = read_rows("");
 
-    auto res = Utils::read_file_content(vector_path_);
-    if (!res.has_value()) {
-        return std::unexpected(DfsVectorError::Unknown);
-    }
-
     auto vector_template = read_template();
     if (!vector_template.has_value()) {
         return std::unexpected(DfsVectorError::Unknown);
     }
 
+    // Dictionary uses static template, no file to read
+    std::string vector_file_content;
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        auto res = Utils::read_file_content(vector_path_);
+        if (!res.has_value()) {
+            return std::unexpected(DfsVectorError::Unknown);
+        }
+        vector_file_content = ByteArray(res.value()).toString();
+    }
+
     return Dfs::Packets::DfsVectorContentPackage { .owner_id        = file_actor_id_,
                                                    .file_id         = file_id_,
                                                    .vector_template = vector_template.value(),
-                                                   .vector_file     = ByteArray(res.value()).toString(),
+                                                   .vector_file     = vector_file_content,
                                                    .content =
                                                        rows.has_value() ? rows.value() : std::vector<DbRow> {} };
 }
 
 bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) {
-    // TODO: move this to create?
-    // auto json     = Json::serialize(dfs_vector_content.vector_template);
-    auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
-    if (!res_json.has_value()) {
-        return false;
+    // Dictionary uses static template, no file to write
+    if (file_type_ != Dfs::FileType::Dictionary) {
+        auto res_json = Utils::write_file_content(vector_path_, dfs_vector_content.vector_file);
+        if (!res_json.has_value()) {
+            return false;
+        }
     }
 
     auto vector_template = dfs_vector_content.vector_template;
@@ -512,6 +530,13 @@ std::pair<std::string, bool> DfsVector::calculate_hash(const DbRow &row) {
 }
 
 std::optional<std::pair<std::string, std::size_t>> DfsVector::calculate_template_file_hash() {
+    // Dictionary uses static template, calculate hash from JSON serialization
+    if (file_type_ == Dfs::FileType::Dictionary) {
+        auto json = Json::serialize(Dfs::dictionary_template());
+        auto hash = Utils::calculate_hash(json);
+        return std::pair { hash, json.size() };
+    }
+
     auto hash_result = Utils::calculate_hash_file(vector_path_);
     if (!hash_result.has_value()) {
         return std::nullopt;
