@@ -187,6 +187,11 @@ else()
     add_library(extrachain SHARED ${EXTRACHAIN_CORE_SOURCES})
 endif()
 
+if(MSVC)
+    # Avoid C1128 (too many sections) on large translation units
+    target_compile_options(extrachain PRIVATE /bigobj)
+endif()
+
 # link time optimization
 if (EXTRACHAIN_ENABLE_LTO)
     set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)

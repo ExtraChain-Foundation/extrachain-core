@@ -95,3 +95,4 @@ CMakeSettings.json
 html
 Doxyfile
 logs/
+.cache/

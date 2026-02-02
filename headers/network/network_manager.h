@@ -354,6 +354,7 @@ public:
     asio::io_context& io_context() { return *ioc_; }
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
+    bool is_first_node_public(const std::string& identifier) { return is_first_node(identifier); }
 
     // Concurrency control for message handlers
     void acquire_handler_slot();
