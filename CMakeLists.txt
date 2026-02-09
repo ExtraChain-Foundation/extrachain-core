@@ -166,9 +166,9 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     )
 
-# add_library(extrachainc
-#     ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.h ${CMAKE_CURRENT_LIST_DIR}/Cbindings/extrachainc.cpp
-#     )
+# C FFI bindings (optional)
+option(EXTRACHAIN_BUILD_CBINDINGS "Build C FFI bindings (libextrachainc)" OFF)
+option(EXTRACHAIN_BUILD_CBINDINGS_EXAMPLE "Build C FFI example program" OFF)
 
 if (EXTRACHAIN_STATIC_BUILD)
     message("ExtraChain: static build")
@@ -202,7 +202,6 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="$
 
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
-# target_include_directories(extrachainc PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 set(bip3x_BUILD_SHARED_LIBS OFF CACHE BOOL "")
 set(bip3x_BUILD_JNI_BINDINGS OFF CACHE BOOL "")
@@ -218,9 +217,10 @@ target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
     Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x)
-# extrachainc
-# target_link_libraries(extrachainc Qt6::Core Qt6::Network Qt6::WebSockets
-#     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx Boost::boost Boost::system Boost::thread)
+# C FFI bindings
+if(EXTRACHAIN_BUILD_CBINDINGS)
+    add_subdirectory(Cbindings)
+endif()
 
 set_property(TARGET extrachain PROPERTY POSITION_INDEPENDENT_CODE 1)
 
