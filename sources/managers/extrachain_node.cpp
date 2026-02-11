@@ -665,13 +665,13 @@ ThothManager* ExtraChainNode::thoth_manager() {
     return thoth_manager_;
 }
 
-bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
+std::expected<Transaction, TransactionError> ExtraChainNode::add_subscription(const ActorId&     owner_id,
                                       const std::string& file_id,
                                       int                type,
                                       bool               auto_renew,
                                       const TokenId&     token_id) {
     if (subscription_row_.has_value()) {
-        return false;
+        return std::unexpected(TransactionError::SubscriptionRowFull);
     }
 
     ActorId system_id = account_controller_->system_actor().id();
@@ -686,13 +686,17 @@ bool ExtraChainNode::add_subscription(const ActorId&     owner_id,
     transaction.set_token(token_id); // TODO: get token_id from json
     transaction.set_meta(std::to_string(type));
     transaction.set_type(TransactionType::Repeatable);
-    this->send_transaction(transaction, account_controller_->system_actor());
+
+    auto res = this->send_transaction(transaction, account_controller_->system_actor());
+    if (!res.has_value()) {
+        return res;
+    }
     // transaction.setHash()
 
     auto row =
         SubscriptionRow { .owner_id = owner_id, .file_id = file_id, .type = type, .auto_renew = auto_renew };
     subscription_row_ = row;
-    return true;
+    return res;
 }
 
 void ExtraChainNode::selfTxRepeatableAdded(const Transaction& transaction) {

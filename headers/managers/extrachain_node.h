@@ -226,7 +226,7 @@ public:
     ChatManager*  chat_manager();
     ThothManager* thoth_manager();
 
-    bool add_subscription(const ActorId&     owner_id,
+    std::expected<Transaction, TransactionError> add_subscription(const ActorId&     owner_id,
                           const std::string& file_id,
                           int                type,
                           bool               auto_renew,

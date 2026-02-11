@@ -49,7 +49,8 @@ enum class TransactionError {
     NoLastSection,     ///< No previous section found
     InsufficientFunds, ///< Sender lacks required balance
     NoCurrentUser,     ///< No active user context
-    ZeroAmount         ///< Transaction amount is zero
+    ZeroAmount,        ///< Transaction amount is zero
+    SubscriptionRowFull
 };
 
 /**
