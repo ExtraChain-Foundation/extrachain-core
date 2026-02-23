@@ -163,6 +163,17 @@ void Dag::set_mode(DagMode mode) {
     Utils::write_settings(settings);
 }
 
+void Dag::force_full_mode() {
+    if (mode_ == DagMode::Full) {
+        return;
+    }
+
+    set_mode(DagMode::Full);
+    set_status(DagStatus::Sync);
+    clear_dag();
+    start_sync();
+}
+
 void Dag::set_status(DagStatus status) {
     this->status_ = status;
     emit node->dagStatus(status_);
