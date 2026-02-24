@@ -76,6 +76,20 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
             else
                 ++it;
         }
+
+        // Evict Normal slots when higher-priority downloads are waiting
+        bool has_priority = !m_active_downloads_priority->empty() || !m_active_downloads_meta->empty();
+        if (has_priority && amount_file_fragments_requests_locked->size() >= MAX_CONCURRENT_DOWNLOADS) {
+            for (auto it = amount_file_fragments_requests_locked->begin();
+                 it != amount_file_fragments_requests_locked->end();) {
+                if (find_queue(it->first.file_link) == DownloadQueue::Normal)
+                    it = amount_file_fragments_requests_locked->erase(it);
+                else
+                    ++it;
+                if (amount_file_fragments_requests_locked->size() < MAX_CONCURRENT_DOWNLOADS)
+                    break;
+            }
+        }
     }
 
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
@@ -668,33 +682,16 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
 
 bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
     constexpr auto ACTIVITY_TIMEOUT = std::chrono::seconds(60);
-    auto now = std::chrono::system_clock::now();
+    auto           now              = std::chrono::system_clock::now();
 
-    auto check_active = [&](const SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& downloads) -> bool {
-        auto locked = *downloads;
-        auto it = locked->find(file_link);
-        if (it == locked->end()) {
-            return false;
+    for (auto* q : { &m_active_downloads_priority, &m_active_downloads_meta, &m_active_downloads }) {
+        auto locked = **q;
+        auto it     = locked->find(file_link);
+        if (it != locked->end()
+            && it->second.last_fragment_received.time_since_epoch().count() > 0
+            && (now - it->second.last_fragment_received) < ACTIVITY_TIMEOUT) {
+            return true;
         }
-
-        // Check if fragment was received within last minute
-        if (it->second.last_fragment_received.time_since_epoch().count() > 0) {
-            auto elapsed = now - it->second.last_fragment_received;
-            if (elapsed < ACTIVITY_TIMEOUT) {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
-    if (check_active(m_active_downloads_priority)) {
-        return true;
     }
-
-    if (check_active(m_active_downloads_meta)) {
-        return true;
-    }
-
-    return check_active(m_active_downloads);
+    return false;
 }
