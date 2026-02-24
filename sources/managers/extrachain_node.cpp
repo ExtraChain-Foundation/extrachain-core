@@ -604,7 +604,6 @@ void ExtraChainNode::start() {
 
     // Version compatibility: 0.19.2 (temp)
 #ifdef IS_APP_UI_CLIENT
-    /*
     QThreadPool::globalInstance()->start([this]() {
         auto main_id       = account_controller_->current_profile().main_id();
         auto data_security = Dfs::DataSecuritySelf { .my_actor = main_id };
@@ -641,7 +640,6 @@ void ExtraChainNode::start() {
             }
         }
     });
-    */
 #endif
 
     // Version compatibility: 0.20.0

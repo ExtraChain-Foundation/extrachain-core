@@ -182,7 +182,12 @@ public:
         }
         actor.set_id(ActorId(array[0].toString().toStdString()));
         actor.set_type(ActorType(array[1].toInt()));
-        auto pub = ByteArray::fromBase64(array[2].toString()).toArray<crypto_sign_PUBLICKEYBYTES>();
+        auto pub_decoded = ByteArray::fromBase64(array[2].toString());
+        if (!pub_decoded.has_value()) {
+            eFatal("Invalid base64 in public key");
+            return actor;
+        }
+        auto pub = pub_decoded->toArray<crypto_sign_PUBLICKEYBYTES>();
 
         if constexpr (std::is_same_v<T, KeyPublic>) {
             actor.set_public_key(pub);
@@ -192,7 +197,12 @@ public:
                 eFatal("?2");
                 return actor;
             }
-            auto sec = ByteArray::fromBase64(array[3].toString()).toArray<crypto_sign_SECRETKEYBYTES>();
+            auto sec_decoded = ByteArray::fromBase64(array[3].toString());
+            if (!sec_decoded.has_value()) {
+                eFatal("Invalid base64 in secret key");
+                return actor;
+            }
+            auto sec = sec_decoded->toArray<crypto_sign_SECRETKEYBYTES>();
             actor.set_secret_key(sec, pub);
         }
 

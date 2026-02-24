@@ -1276,12 +1276,12 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::find_file_self(const Ac
             return row;
         }
 
-        auto bytes = ByteArray::fromBase64(row.name).toBytes();
-        if (bytes.empty()) {
+        auto decoded = ByteArray::fromBase64(row.name);
+        if (!decoded.has_value()) {
             continue;
         }
 
-        auto res = actor->get().key().decrypt_self(bytes);
+        auto res = actor->get().key().decrypt_self(decoded->toBytes());
         if (!res.has_value()) {
             continue;
         }
@@ -1813,7 +1813,6 @@ void DfsController::network_file_exist_notification(const Dfs::Packets::FileStat
 }
 
 std::expected<void, bool> DfsController::remove_stored_file(const ActorId &owner_id, const std::string &file_id) {
-    return std::unexpected(false);
     auto db_instance = dirs_manager_.get_db_instance();
     auto dir_row     = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, owner_id, file_id);
     if (!dir_row.has_value()) {
@@ -1887,7 +1886,7 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
         return;
     }
 
-    remove_local_file(owner_id, file_id);
+    this->remove_local_file(owner_id, file_id);
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(db_instance, owner_id, file_id, Dfs::FileState::Removed);
     Dfs::Tables::DirsFile::ActorSpace::update_file_after_stored_remove(db_instance,
                                                                        owner_id,
@@ -1901,7 +1900,6 @@ void DfsController::network_remove_stored_file(const ActorId     &owner_id,
 }
 
 std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_id, const std::string &file_id) {
-    return std::unexpected(false);
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(dirs_manager_.get_db_instance(),
                                                          owner_id,
                                                          file_id,
@@ -2179,24 +2177,26 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
         auto encrypted_name = Utils::from_base64(dir_row_result->name);
 
         if (key.has_value()) {
-            if (encrypted_name.has_value()) {
-                auto res =
-                    Cryptography::symmetric_decrypt(ByteArray(encrypted_name.value()).toBytes(), key.value());
-                if (res.has_value()) {
-                    auto name = ByteArray(res.value()).toString();
-                    output_path.append(name);
-
-                    if (output_path.exists()) {
-                        return std::unexpected(ExportFileError::OutputFileExists);
-                    }
-                }
-
-                auto decrypt_result = Cryptography::symmetric_decrypt_file(dfs_path, output_path, key.value());
-                if (!decrypt_result.has_value()) {
-                    return std::unexpected(ExportFileError::Unknown);
-                }
-                return {};
+            if (!encrypted_name.has_value()) {
+                return std::unexpected(ExportFileError::Unknown);
             }
+
+            auto res =
+                Cryptography::symmetric_decrypt(ByteArray(encrypted_name.value()).toBytes(), key.value());
+            if (res.has_value()) {
+                auto name = ByteArray(res.value()).toString();
+                output_path.append(name);
+
+                if (output_path.exists()) {
+                    return std::unexpected(ExportFileError::OutputFileExists);
+                }
+            }
+
+            auto decrypt_result = Cryptography::symmetric_decrypt_file(dfs_path, output_path, key.value());
+            if (!decrypt_result.has_value()) {
+                return std::unexpected(ExportFileError::Unknown);
+            }
+            return {};
         } else {
             auto actor = node->account_controller()->current_profile().get_actor(owner_id);
             if (!actor.has_value()) {
