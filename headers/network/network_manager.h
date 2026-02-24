@@ -288,7 +288,7 @@ private:
     std::string first_node_;
 
 public:
-    explicit NetworkManager(ExtraChainNode* node);
+    explicit NetworkManager(ExtraChainNode* node, std::uint16_t port);
     ~NetworkManager();
     void                        local_inizialization();
     std::pair<QString, QString> search_public_ip_and_country_(const QString& ip = "", bool alt = false);
@@ -296,8 +296,8 @@ public:
     bool remove_one_connection();
 
     // protected:
-    // quint16 tcpPort = 17593;
-    const quint16 wsPort = 17593;
+    // std::uint16_t tcp_port = 17593;
+    std::uint16_t ws_port = 17593;
 
 private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);

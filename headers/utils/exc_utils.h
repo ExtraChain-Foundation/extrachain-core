@@ -189,16 +189,15 @@ public:
         return ByteArray(result);
     }
 
-    static ByteArray fromBase64(const std::string &encoded) {
+    static std::expected<ByteArray, Base64Error> fromBase64(const std::string &encoded) {
         auto decoded = Utils::from_base64(encoded);
         if (!decoded.has_value()) {
-            eFatal("Incorrect base64 in: {}", encoded);
-            return ByteArray("");
+            return std::unexpected(decoded.error());
         }
         return ByteArray(decoded.value());
     }
 
-    static ByteArray fromBase64(const QString &encoded) {
+    static std::expected<ByteArray, Base64Error> fromBase64(const QString &encoded) {
         return fromBase64(encoded.toStdString());
     }
 

@@ -69,7 +69,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        msgpack_pk.pack_str(m_id.size());
+        msgpack_pk.pack_str(static_cast<uint32_t>(m_id.size()));
         msgpack_pk.pack_str_body(m_id.data(), m_id.size());
     }
 

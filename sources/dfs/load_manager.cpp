@@ -28,6 +28,7 @@
 #include "utils/thread_pool_boost.h"
 
 #include <QTimer>
+#include <algorithm>
 
 LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     : QObject(parent)
@@ -63,6 +64,45 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 auto& load_info      = it.second;
                 bool  ignore_timeout = file_link_to_proceed == it.first;
                 bool  is_requested   = false;
+
+                // Remove disconnected identifiers from the list
+                load_info.identifier_list.erase(
+                    std::remove_if(load_info.identifier_list.begin(),
+                                   load_info.identifier_list.end(),
+                                   [this](const auto& id_pair) {
+                                       return !node->network()->is_connection_exists(id_pair.first);
+                                   }),
+                    load_info.identifier_list.end());
+
+                // If no identifiers left, try to find new peers who have this file
+                if (load_info.identifier_list.empty()) {
+                    eLog("[LoadManager] No active identifiers for file {}, asking neighbours",
+                         it.first.file_id);
+                    load_info.identifier_storage_checker.clear();
+
+                    // Add all active connections as potential sources
+                    auto connections_locked = *node->network()->connections();
+                    for (const auto& socket : *connections_locked) {
+                        if (!socket || !socket->is_active())
+                            continue;
+                        auto conn_id = socket->identifier().toStdString();
+                        if (conn_id.empty())
+                            continue;
+                        if (!load_info.identifier_storage_checker.contains(conn_id)) {
+                            load_info.identifier_storage_checker.emplace(conn_id);
+                            load_info.identifier_list.emplace_back(conn_id, LoadInfo::Attempts { .counter = 0 });
+                        }
+                    }
+
+                    // If still no identifiers, remove from queue
+                    if (load_info.identifier_list.empty()) {
+                        eLog("[LoadManager] No connections available for file {}, removing from queue",
+                             it.first.file_id);
+                        active_downloads_locked->erase(it.first);
+                        continue;
+                    }
+                }
+
                 for (auto& identifier : load_info.identifier_list) {
                     if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                         return false;
@@ -254,7 +294,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 // return; // TODO: vectorupdate
             }
 
-            if (row->type == Dfs::FileType::Vector && file_path->exists() && row->hash == dir_row.hash) {
+            if ((row->type == Dfs::FileType::Vector || row->type == Dfs::FileType::Dictionary)
+                && file_path->exists() && row->hash == dir_row.hash) {
                 auto res = node->dfs()->make_vector(owner_id,
                                                     dir_row.file_id,
                                                     false,
@@ -382,7 +423,7 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
             // eCritical("LoadManager::share_stored_file, its a collection. Another thlow. file_id: {}",
             // file_link_fragment.file_link.file_id);
         }
-        if (dir_row->type == Dfs::FileType::Vector) {
+        if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
             node->dfs()->network_request_vector(file_link_fragment.file_link.owner_id,
                                                 file_link_fragment.file_link.file_id,
                                                 responder);
@@ -442,14 +483,18 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
                 // file_link_fragment.file_link.file_id, offset);
 
                 // offset += Dfs::Basic::FRAGMENT_SIZE;
+
+                int progress = static_cast<int>((fragment_number * 100) / max_offsets);
+                emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
+                                                  file_link_fragment.file_link.file_id,
+                                                  progress);
+
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
-            // while (offset < total_size) {
-
-            // }
-
-            // emit node->dfs()->uploaded(file_link_fragment.file_link.owner_id, dir_row.value());
+            emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
+                                              file_link_fragment.file_link.file_id,
+                                              100);
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
@@ -480,7 +525,7 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
         if (dir_row->type == Dfs::FileType::Collection) {
             node->dfs()->network_request_collection(owner_id, file_id, {});
         }
-        if (dir_row->type == Dfs::FileType::Vector) {
+        if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
             node->dfs()->network_request_vector(owner_id, file_id, {});
         }
         return;
@@ -603,6 +648,7 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                             if (notify_neighbours)
                                 broadcast_file_exist(file_link.owner_id, file_link.file_id);
                         } else {
+                            res->second.last_fragment_received = std::chrono::system_clock::now();
                             if (res->second.amount_fragments == 0) {
                                 res->second.amount_fragments = file_content.full_amount_fragments;
                                 for (int i = 0; i < res->second.amount_fragments; ++i) {
@@ -635,4 +681,33 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
                                                          Dfs::FileState::Ready);
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
+}
+
+bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
+    constexpr auto ACTIVITY_TIMEOUT = std::chrono::seconds(60);
+    auto now = std::chrono::system_clock::now();
+
+    auto check_active = [&](const SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& downloads) -> bool {
+        auto locked = *downloads;
+        auto it = locked->find(file_link);
+        if (it == locked->end()) {
+            return false;
+        }
+
+        // Check if fragment was received within last minute
+        if (it->second.last_fragment_received.time_since_epoch().count() > 0) {
+            auto elapsed = now - it->second.last_fragment_received;
+            if (elapsed < ACTIVITY_TIMEOUT) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if (check_active(m_active_downloads_priority)) {
+        return true;
+    }
+
+    return check_active(m_active_downloads);
 }

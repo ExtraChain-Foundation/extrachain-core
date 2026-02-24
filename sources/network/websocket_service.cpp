@@ -536,14 +536,14 @@ quint16 WebSocketService::port() const {
     if (m_ws == nullptr) {
         return 0;
     }
-    if (m_ws->peerPort() != node->network()->wsPort)
+    if (m_ws->peerPort() != node->network()->ws_port)
         return m_ws->peerPort();
     else
         return m_ws->localPort();
 }
 
 quint16 WebSocketService::server_port() const {
-    return node->network()->wsPort;
+    return node->network()->ws_port;
 }
 
 void WebSocketService::processCachedMessages() {

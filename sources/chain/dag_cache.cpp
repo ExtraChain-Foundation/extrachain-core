@@ -177,6 +177,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
         return;
     }
 
+    // Lock mutex to protect transaction block from concurrent access
     std::unique_lock<std::mutex> lock(mutex_);
 
     // Start a transaction for efficiency
@@ -453,21 +454,21 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
             }
 
             // ThreadPoolBoost::instance()->post([this, res] {
-                auto last_hash    = node->dag()->generate_hash_from_section(res.from);
-                auto control_hash = node->dag()->read_control(res.to);
-                if (!control_hash.has_value()) {
-                    eCritical("[DagCache] Problem with control hash from {}", res.to);
-                    return;
-                }
-                if (!last_hash.has_value()) {
-                    eCritical("[DagCache] No last hash");
-                    return;
-                }
+            auto last_hash    = node->dag()->generate_hash_from_section(res.from);
+            auto control_hash = node->dag()->read_control(res.to);
+            if (!control_hash.has_value()) {
+                eCritical("[DagCache] Problem with control hash from {}", res.to);
+                return;
+            }
+            if (!last_hash.has_value()) {
+                eCritical("[DagCache] No last hash");
+                return;
+            }
 
-                auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
-                eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
-                // eLog("[Dag] Send {}", hash_interval);
-                node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
+            auto hash_interval = HashInterval { .from = res.from, .to = res.to, .hash = last_hash.value() };
+            eLog("[Dag] Cache from {} to {}", res.from.to_int(), res.to.to_int());
+            // eLog("[Dag] Send {}", hash_interval);
+            node->network()->send_message(hash_interval, MessageType::DagIntervalHash, SendMode::Neighbours);
             // });
         }
     }
@@ -489,6 +490,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         return { false, BigNumber(-1) };
     }
 
+    // Lock mutex to protect transaction block from concurrent access
     std::unique_lock<std::mutex> lock(mutex_);
 
     bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
@@ -671,6 +673,7 @@ bool DagCache::init_db() {
 
     if (!cache_db_->open()) {
         eLog("[DagCache] Failed to open cache database");
+
         return false;
     }
 
@@ -699,6 +702,7 @@ bool DagCache::init_db() {
 
     eLog("[DagCache] Cache database initialized");
     db_initialized_ = true;
+
     return true;
 }
 

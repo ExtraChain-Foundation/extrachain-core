@@ -623,7 +623,11 @@ std::expected<DbRow, CollectionError> HistoricalCollection::decrypt_data(
             continue;
         }
 
-        auto res = decryptor(ByteArray::fromBase64(value));
+        auto decoded = ByteArray::fromBase64(value);
+        if (!decoded.has_value()) {
+            return std::unexpected(CollectionError::IncorrectEncryption);
+        }
+        auto res = decryptor(decoded.value());
         if (!res.has_value()) {
             return std::unexpected(CollectionError::IncorrectEncryption);
         }

@@ -71,7 +71,7 @@ public:
             printf("> ");
             if (!instance->m_currentInput.empty()) {
                 printf("%s", instance->m_currentInput.c_str());
-                int moveBack = instance->m_currentInput.length() - instance->m_cursorPos;
+                int moveBack = static_cast<int>(instance->m_currentInput.length() - instance->m_cursorPos);
                 if (moveBack > 0)
                     printf("\033[%dD", moveBack);
             }
@@ -177,10 +177,10 @@ private:
     }
 
     void redrawLine() {
-        int savedPos = m_cursorPos;
+        size_t savedPos = m_cursorPos;
         printf("\r\033[K> ");
         printf("%s", m_currentInput.c_str());
-        int moveBack = m_currentInput.length() - savedPos;
+        int moveBack = static_cast<int>(m_currentInput.length() - savedPos);
         if (moveBack > 0)
             printf("\033[%dD", moveBack);
         fflush(stdout);

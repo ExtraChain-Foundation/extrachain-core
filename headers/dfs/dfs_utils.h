@@ -98,6 +98,7 @@ namespace Dfs {
         static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
         static const std::string TEMPLATE_CHAT                = ":Chat";
+        static const std::string TEMPLATE_JANUS               = ":Janus";
     } // namespace Basic
 
     enum class FileIdError {
@@ -209,6 +210,21 @@ namespace Dfs {
         Processing = 4,
         Unknown    = 100
     };
+
+    enum class FileIdState {
+        With,
+        Without
+    };
+
+    struct FileIdData {
+        std::string   id;
+        std::uint64_t timestamp = 0;
+        ActorId       actor;
+        ActorId       owner;
+        std::string   file_id;
+        int           state = 0;
+    };
+    BOOST_DESCRIBE_STRUCT(FileIdData, (), (id, timestamp, actor, owner, file_id, state))
 
     enum class DataSecurity {
         Public    = 0,

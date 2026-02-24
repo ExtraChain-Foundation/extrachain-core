@@ -68,6 +68,9 @@ void DirsManager::old_dfs_to_new_dfs_converter() {
         db_->query("BEGIN TRANSACTION");
         for (auto& db_row : old_db_data) {
             db_row.emplace("owner_id", owner_id);
+            if (auto it = db_row.find("prev_file_id"); it != db_row.end() && it->second.empty()) {
+                db_row.erase(it);
+            }
             db_->insert(Dfs::Tables::DirsFile::TableNameActorsFiles, db_row);
         }
         db_->query("COMMIT");

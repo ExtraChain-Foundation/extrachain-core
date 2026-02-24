@@ -61,6 +61,7 @@ enum class MessageStatus;
 class WebSocketService;
 class ChatManager;
 class ThothManager;
+class JanusManager;
 
 enum class ImportProfileError {
     DataEmpty,
@@ -96,7 +97,7 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false);
+    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false, std::uint16_t ws_port = 17593);
 
     ~ExtraChainNodeWrapper();
 
@@ -123,6 +124,7 @@ private:
     TokenManager*      token_manager_      = nullptr;
     ChatManager*       chat_manager_       = nullptr;
     ThothManager*      thoth_manager_      = nullptr;
+    JanusManager*      janus_manager_      = nullptr;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
     QTimer*            timer_luminance_    = nullptr;
@@ -138,6 +140,8 @@ private:
     std::string                              renames_file_id_waiting_;
     std::unordered_map<ActorId, std::string> renames_todo_;
     std::string                              node_identifier_;
+
+    uint16_t ws_port;
 
 public: // TODO
     std::vector<Actor<KeyPublic>>                 actors_broadcast_;
@@ -156,6 +160,9 @@ public:
     bool create_renames_template();
     //
     DfsFileStatus create_renames_vector();
+
+    bool create_file_id_template(Dfs::FileIdState with_state = Dfs::FileIdState::Without);
+    bool create_file_id_vector(const std::string& vector_name, Dfs::FileIdState with_state = Dfs::FileIdState::Without);
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
@@ -225,6 +232,7 @@ public:
 
     ChatManager*  chat_manager();
     ThothManager* thoth_manager();
+    JanusManager* janus_manager();
 
     std::expected<Transaction, TransactionError> add_subscription(const ActorId&     owner_id,
                           const std::string& file_id,
@@ -233,7 +241,7 @@ public:
                           const TokenId&     token_id);
 
 private:
-    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false);
+    ExtraChainNode(bool is_client_application = false, bool is_custom_app = false, std::uint16_t port = 17593);
 
     /**
      * @brief Connect signals between NetworkManager and

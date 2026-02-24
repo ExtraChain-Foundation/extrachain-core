@@ -118,7 +118,13 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     }
 
     // 2. Network id check
-    ActorId json_network_id         = ActorId(handshake.network_id);
+    auto json_network_id_creation         = ActorId::create(handshake.network_id);
+    if (!json_network_id_creation.has_value()) {
+        // error
+        return false;
+    }
+
+    ActorId json_network_id         = json_network_id_creation.value();
     ActorId our_network_id          = node->actor_index()->network_id();
     bool    is_network_ids_contains = our_network_id == json_network_id;
     bool    something_empty         = json_network_id.is_zero() || our_network_id.is_zero();
@@ -240,7 +246,7 @@ QByteArray SocketService::generate_first_message() {
         auto connections_locked = *node->network()->connections();
         for (auto &it : *connections_locked) {
             auto ip = it->ip().toStdString();
-            if (ip.empty() || ip == ip_) {
+            if (ip.empty() || ip == ip_ || ip == "127.0.0.1") {
                 continue;
             }
             if (!it->is_active()) {

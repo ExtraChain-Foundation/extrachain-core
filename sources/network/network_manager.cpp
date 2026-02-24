@@ -116,9 +116,10 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
     }
 }
 
-NetworkManager::NetworkManager(ExtraChainNode *node)
+NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     : QObject(node)
-    , node(node) {
+    , node(node)
+    , ws_port(port) {
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }
@@ -334,7 +335,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                 }
 
                 for (const auto &[ip, identifier] : connections) {
-                    if (this->failed_ips_.contains(ip)) {
+                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
                         continue;
                     }
 
@@ -415,7 +416,7 @@ void NetworkManager::check_port(const QString     ip,
     //     timer->deleteLater();
     // });
 
-    socket->connectToHost(QHostAddress(ip), wsPort);
+    socket->connectToHost(QHostAddress(ip), ws_port);
     // timer->start(timeoutMs);
 }
 
@@ -425,12 +426,12 @@ bool NetworkManager::check_port_sync(const QString    &ip,
                                      const bool        isConstant) {
     QTcpSocket socket;
 
-    socket.connectToHost(QHostAddress(ip), wsPort);
+    socket.connectToHost(QHostAddress(ip), ws_port);
 
     if (!socket.waitForConnected(1600)) {
         eLog("[Network] Failed to connect to {}:{} - {}",
              ip.toStdString(),
-             wsPort,
+             ws_port,
              socket.errorString().toStdString());
         return false;
     }
@@ -479,7 +480,7 @@ void NetworkManager::check_connections_status() {
 }
 
 void NetworkManager::start_network() {
-    eLog("[NetworkManager] Start servers... {}", (wsPort == 17593 ? "Network" : "Else"));
+    eLog("[NetworkManager] Start servers... {}", (ws_port == 17593 ? "Network" : "Else"));
 
     if (!local_) {
         eLog("[NetworkManager] Can't detect local ip");
@@ -491,8 +492,8 @@ void NetworkManager::start_network() {
 
     ws_server_ = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
 
-    if (!ws_server_->listen(QHostAddress::Any, wsPort)) {
-        eLog("[NetworkManager] Can't listen port {}", wsPort);
+    if (!ws_server_->listen(QHostAddress::Any, ws_port)) {
+        eLog("[NetworkManager] Can't listen port {}", ws_port);
         return;
     }
 
@@ -539,7 +540,7 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
         return;
     }
 
-    const quint16 port = (protocol == Network::Protocol::WebSocket ? wsPort : 0);
+    const quint16 port = (protocol == Network::Protocol::WebSocket ? ws_port : 0);
     eLog("[NetworkManager] Connect to {}, protocol: {}, port: {}", ip, Utils::enum_value_name(protocol), port);
     // m_reconnections.insert(NetworkReconnect { .ip = ip, .port = port, .protocol = protocol });
 
@@ -1140,10 +1141,6 @@ void NetworkManager::message_received(const std::string &message,
 #endif
 
     calculate_traffic_->add_bytes_received(ip, message.size());
-
-    if (type == MessageType::DagLightData) {
-        eLog("DagLight {}", status);
-    }
 
     // QElapsedTimer timer;
     // timer.start();
