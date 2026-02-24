@@ -287,6 +287,14 @@ public:
     void set_mode(DagMode mode);
 
     /**
+     * @brief Switch from Light to Full mode on-the-fly
+     *
+     * Sets status to Sync, changes mode to Full, clears Light data,
+     * and starts full chain synchronization. No-op if already in Full mode.
+     */
+    void force_full_mode();
+
+    /**
      * @brief Set the DAG operational status
      *
      * @param status The new status
