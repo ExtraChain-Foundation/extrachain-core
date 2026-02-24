@@ -150,9 +150,9 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
 
     constexpr uintmax_t MB_700 = 700ULL * 1024 * 1024; // 734'003'200
     // constexpr uintmax_t GB_10 = 10ULL * 1024 * 1024 * 1024; // 10'737'418'240
-    // if (file_size_.value() > MB_700) {
-    //     return std::unexpected(Dfs::DfsError::MaxFileSize);
-    // }
+    if (file_size_.value() > MB_700) {
+        return std::unexpected(Dfs::DfsError::MaxFileSize);
+    }
 
     // TODO: check path, check :***
     auto name_res = NameValidator::validate(visual_name);
@@ -858,7 +858,7 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     auto &[dir_row, dfs_vector] = res.value();
     auto operation_res          = dfs_vector.store_add(row);
     if (!operation_res) {
-        eWarning("[Dfs] Can't stoere to vector {} / {}", owner_id, file_id);
+        eWarning("[Dfs] Can't store to vector {} / {}", owner_id, file_id);
         return false;
     }
     // get and exists check id?
@@ -1041,7 +1041,6 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_vector(const Acto
     return store_vector(owner_id, author_id, visual_name, link, data_security, security_data);
 }
 
-// Dictionary operations
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_dictionary(
     const ActorId               &owner_id,
     const ActorId               &author_id,
@@ -2177,7 +2176,6 @@ std::expected<void, ExportFileError> DfsController::export_file(const ActorId   
     auto output_path = output_folder;
 
     if (dir_row_result->encryption) {
-        // -----
         auto encrypted_name = Utils::from_base64(dir_row_result->name);
 
         if (key.has_value()) {

@@ -178,9 +178,7 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
     }
 
     // Lock mutex to protect transaction block from concurrent access
-    // eLog("MUTEX! Start");
     std::unique_lock<std::mutex> lock(mutex_);
-    // eLog("MUTEX! Continue");
 
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
@@ -212,7 +210,6 @@ void DagCache::write_cached_balances(const Balances& balances, const std::option
     }
 
     eLog("[DagCache] Wrote {} balances to cache", balances.size());
-    // eLog("MUTEX! End");
 }
 
 BigNumberFloat DagCache::read_cached_balance(const ActorId& actor_id, const TokenId& token_id) {
@@ -493,9 +490,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     }
 
     // Lock mutex to protect transaction block from concurrent access
-    // eLog("MUTEX! Start");
     std::unique_lock<std::mutex> lock(mutex_);
-    // eLog("MUTEX! Continue");
 
     bool show = dag->status_ == DagStatus::Sync ? genesis_section % 500 == 0 : true;
     if (show) {
@@ -600,7 +595,6 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
     set_section(genesis_section);
     // eLog("[DagCache] Cache updated to section {}", cached_section_);
     dag->update_range();
-    // eLog("MUTEX! End");
     return { true, start_section };
 }
 
@@ -663,13 +657,10 @@ bool DagCache::init_db() {
 
     if (cache_db_ && cache_db_->is_open()) {
         db_initialized_ = true;
-
         return true;
     }
 
-    // eLog("MUTEX! Start");
     std::unique_lock<std::mutex> lock(mutex_);
-    // eLog("MUTEX! Continue");
 
     // bool is_exists = QFile(QString::fromStdString(ChainConst::BALANCE_CACHE)).exists();
 
@@ -682,7 +673,6 @@ bool DagCache::init_db() {
     if (!cache_db_->open()) {
         eLog("[DagCache] Failed to open cache database");
 
-        // eLog("MUTEX! End");
         return false;
     }
 
@@ -691,8 +681,6 @@ bool DagCache::init_db() {
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
-
-        // eLog("MUTEX! End");
         return false;
     }
 
@@ -714,7 +702,6 @@ bool DagCache::init_db() {
     eLog("[DagCache] Cache database initialized");
     db_initialized_ = true;
 
-    // eLog("MUTEX! End");
     return true;
 }
 
