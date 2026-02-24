@@ -282,7 +282,7 @@ private:
 #else
         {
             "51.68.181.52", // release node 1
-             // "149.33.19.250" // release node 2
+            "149.33.19.250" // release node 2
         };
 #endif
     std::string first_node_;
