@@ -106,6 +106,13 @@ public:
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
 
+    static constexpr std::size_t SMALL_FILE_THRESHOLD = 100 * 1024; // 100 KB
+
+    enum class DownloadQueue { Priority, Meta, Normal };
+    DownloadQueue classify(const Dfs::FileLink& file_link, Dfs::FileType type, std::size_t size) const;
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& queue_for(DownloadQueue q);
+    DownloadQueue find_queue(const Dfs::FileLink& file_link) const;
+
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
@@ -114,8 +121,9 @@ private:
 
     PullMode pull_mode = PullMode::All;
 
-    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;
-    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority;
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads;          // File >= 100KB (lowest)
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_meta;     // non-File + File < 100KB (mid)
+    SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>> m_active_downloads_priority; // priority actors (highest)
     SafePtr<std::map<Dfs::FileLinkFragment, std::chrono::system_clock::time_point>>
         m_amount_file_fragments_requests;
 
