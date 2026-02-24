@@ -31,7 +31,8 @@ enum class ImportError {
     NoNetworkId,
     EmptyProfile,
     CryptoError,
-    NoActor
+    NoActor,
+    FileError
 };
 
 enum class PrivateProfileReadError {

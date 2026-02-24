@@ -809,7 +809,9 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
 std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
     if (account_controller_->profile_type() == ProfileType::New) {
         QFile file(account_controller_->profile_seed.filename().c_str());
-        file.open(QFile::ReadOnly);
+        if (!file.open(QFile::ReadOnly)) {
+            return std::unexpected(ImportError::FileError);
+        }
         return file.readAll().toStdString();
     }
 

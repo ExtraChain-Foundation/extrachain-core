@@ -332,7 +332,10 @@ QByteArray ActorIndex::read_by_id(const ActorId &id) const {
         // eLog("[ActorIndex] File with path {} not found", filePath);
         return QByteArray();
     }
-    file.open(QIODevice::ReadOnly);
+    bool is_open = file.open(QIODevice::ReadOnly);
+    if (!is_open) {
+        return QByteArray();
+    }
     QByteArray data = file.readAll();
     file.close();
     return data;
