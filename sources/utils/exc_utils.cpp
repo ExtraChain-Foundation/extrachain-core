@@ -563,7 +563,8 @@ QString Utils::fix_file_name(const QString &fileName, const QString &replaceSymb
 
 bool Utils::isValidIp(const QString &ip) {
     QHostAddress address(ip);
-    return QAbstractSocket::IPv4Protocol == address.protocol();
+    return address.protocol() == QAbstractSocket::IPv4Protocol
+        || address.protocol() == QAbstractSocket::IPv6Protocol;
 }
 
 void Utils::benchmark(std::function<void()> func, int count) {
@@ -995,13 +996,27 @@ bool Utils::is_valid_domain(const std::string_view domain) {
 }
 
 bool Utils::is_valid_ip(const std::string_view ip) {
-    static const std::regex ip_regex(
+    static const std::regex ipv4_regex(
         "^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
         "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
         "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)"
         "\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$");
 
-    return std::regex_match(ip.begin(), ip.end(), ip_regex);
+    static const std::regex ipv6_regex(
+        "^("
+        "([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|"          // full
+        "([0-9a-fA-F]{1,4}:){1,7}:|"                         // trailing ::
+        "([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|"        // ::x
+        "([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|" // ::x:x
+        "([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|"
+        "([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|"
+        "([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|"
+        "[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|"
+        ":((:[0-9a-fA-F]{1,4}){1,7}|:)"                      // ::...
+        ")$");
+
+    return std::regex_match(ip.begin(), ip.end(), ipv4_regex)
+        || std::regex_match(ip.begin(), ip.end(), ipv6_regex);
 }
 
 bool Utils::is_external_ip(const QString &ip) {
