@@ -169,7 +169,16 @@ void Dag::force_full_mode() {
     }
 
     set_mode(DagMode::Full);
-    set_status(DagStatus::Sync);
+    clear_dag();
+    start_sync();
+}
+
+void Dag::force_light_mode() {
+    if (mode_ == DagMode::Light) {
+        return;
+    }
+
+    set_mode(DagMode::Light);
     clear_dag();
     start_sync();
 }
@@ -1149,26 +1158,32 @@ void Dag::update_range() {
     try {
         std::lock_guard<std::mutex> lock(range_mutex_);
 
-        std::string json = Json::serialize(SectionRange { .first       = first_saved_section_.to_string(),
-                                                          .last        = current_section_.to_string(),
-                                                          .last_cached = cache_.section().to_string() });
+        auto new_first = first_saved_section_;
+        auto new_last  = current_section_;
 
-        // eLog("[Dag] Updating range: first={}, last={}, last_cached={}",
-        //      first_saved_section_,
-        //      current_section_,
-        //      cache_.section());
+        QFile read_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
+        if (read_file.open(QFile::ReadOnly)) {
+            auto existing = Json::deserialize<SectionRange>(read_file.readAll().toStdString());
+            read_file.close();
+
+            if (existing.has_value()) {
+                auto existing_first = SectionId::create(existing->first);
+                if (existing_first.has_value() && existing_first.value() != SectionId(-1)
+                    && new_first != SectionId(-1) && new_first < existing_first.value()) {
+                    eLog("[Dag] update_range blocked: new first {} < existing {}", new_first, existing_first.value());
+                    return;
+                }
+            }
+        }
+
+        std::string json = Json::serialize(SectionRange { .first       = new_first.to_string(),
+                                                          .last        = new_last.to_string(),
+                                                          .last_cached = cache_.section().to_string() });
 
         QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
         if (file.open(QFile::WriteOnly)) {
             file.write(json.data());
             file.close();
-
-            QFile check_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-            if (check_file.open(QFile::ReadOnly)) {
-                auto content = check_file.readAll();
-                // eLog("[Dag] Range file written: {}", content.toStdString());
-                check_file.close();
-            }
         } else {
             eLog("[Dag] Failed to open range file for writing");
         }
@@ -1599,6 +1614,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
     emit node->dagTimerStop();
 
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
+        if (mode_ == DagMode::Light) {
+            eLog("[Dag] Skip file sections response: light mode");
+            return;
+        }
+
         const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
 
@@ -1608,6 +1628,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         for (const auto &section_data : file_sync->sections) {
+            if (mode_ == DagMode::Light) {
+                eLog("[Dag] Skip file section write: light mode");
+                return;
+            }
+
             auto folder = this->file_folder(section_data.section_id);
             if (!std::filesystem::exists(folder)) {
                 std::filesystem::create_directory(folder);
@@ -1620,7 +1645,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             }
 
             Utils::write_file_content(path.value(), section_data.file_bytes);
+        }
 
+        if (mode_ == DagMode::Light) {
+            return;
+        }
+
+        for (const auto &section_data : file_sync->sections) {
             if (first_saved_section_ == SectionId(-1) || section_data.section_id < first_saved_section_) {
                 first_saved_section_ = section_data.section_id;
             }
@@ -1667,6 +1698,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 }
 
 void Dag::request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder) {
+    if (mode_ == DagMode::Light) {
+        eLog("[Dag] Skip file sections request: light mode");
+        return;
+    }
+
     auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
@@ -2116,17 +2152,14 @@ void Dag::clear_dag() {
     #else
     QStringList to_delete;
     QDir        parent_dir(QString::fromStdString(ChainConst::DAG_FOLDER));
+    auto        suffix = QString::fromStdString(Utils::generate_random_hex(4));
 
     for (SectionId i = SectionId(0); i <= max_section; ++i) {
         QString old_name = QString::fromStdString(i.to_string());
         if (!parent_dir.exists(old_name)) {
             continue;
         }
-        QString new_name = old_name + "_old1";
-        int     counter  = 1;
-        while (parent_dir.exists(new_name)) {
-            new_name = old_name + "_old" + QString::number(++counter);
-        }
+        QString new_name = old_name + "_del_" + suffix;
         if (parent_dir.rename(old_name, new_name)) {
             to_delete << QString::fromStdString(ChainConst::DAG_FOLDER) + "/" + new_name;
         }

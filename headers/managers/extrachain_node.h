@@ -182,6 +182,9 @@ public:
     DfsController*     dfs() const;
     DataMiningManager* data_mining_manager() const;
 
+    void start_mining();
+    void stop_mining();
+
     std::expected<void, LoadError> login(const std::string& login, const std::string& password);
     std::expected<void, LoadError> login(const std::string& hash);
     void                           logout();
