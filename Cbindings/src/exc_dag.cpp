@@ -342,4 +342,65 @@ EXC_API void exc_section_free(ExcHandle section) {
     }
 }
 
+/* ── DAG mode ────────────────────────────────────────────────────── */
+
+EXC_API ExcError exc_dag_set_mode(ExcDagMode mode) {
+    EXC_CHECK_NODE();
+
+    ExcError result = EXC_OK;
+
+    bool ok = dispatch_sync([&]() {
+        auto& gs = GlobalState::instance();
+        auto* dag = gs.node->dag();
+        if (mode == EXC_DAG_MODE_FULL)
+            dag->force_full_mode();
+        else
+            dag->force_light_mode();
+    });
+
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+/* ── Mining ──────────────────────────────────────────────────────── */
+
+EXC_API ExcError exc_mining_start(void) {
+    EXC_CHECK_NODE();
+
+    ExcError result = EXC_OK;
+
+    bool ok = dispatch_sync([&]() {
+        auto& gs = GlobalState::instance();
+        gs.node->start_mining();
+    });
+
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_mining_stop(void) {
+    EXC_CHECK_NODE();
+
+    ExcError result = EXC_OK;
+
+    bool ok = dispatch_sync([&]() {
+        auto& gs = GlobalState::instance();
+        gs.node->stop_mining();
+    });
+
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_mining_is_active(bool* out_active) {
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(out_active);
+
+    ExcError result = EXC_OK;
+
+    bool ok = dispatch_sync([&]() {
+        auto& gs = GlobalState::instance();
+        *out_active = gs.node->dag()->mode() == DagMode::Full;
+    });
+
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
 } // extern "C"

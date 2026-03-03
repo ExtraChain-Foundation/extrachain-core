@@ -159,6 +159,8 @@ struct CallbackRegistry {
     CallbackSlot<ExcDagSyncFinishCallback>      dag_sync_finish;
     CallbackSlot<ExcDagStatusCallback>          dag_status;
 
+    CallbackSlot<ExcMiningStatusCallback>       mining_status;
+
     CallbackSlot<ExcDagTxSendedCallback>        dag_tx_sended;
     CallbackSlot<ExcDagTxApprovedCallback>      dag_tx_approved;
     CallbackSlot<ExcDagTxNotApprovedCallback>   dag_tx_not_approved;
