@@ -199,6 +199,9 @@ EXC_API ExcError exc_dag_current_section(char** out_section);
 EXC_API ExcError exc_dag_status(ExcDagStatus* out_status);
 EXC_API ExcError exc_dag_mode(ExcDagMode* out_mode);
 
+/* Set DAG mode (force_full_mode or force_light_mode). */
+EXC_API ExcError exc_dag_set_mode(ExcDagMode mode);
+
 /* Read a section by ID. Returns JSON string. Caller frees via exc_string_free. */
 EXC_API ExcError exc_dag_read_section(const char* section_id, char** out_json);
 
@@ -207,6 +210,19 @@ EXC_API ExcError exc_dag_search_transaction(const char* hash, ExcHandle* out_tx)
 
 /* Free a section handle (from exc_dag_read_section if handle-based). */
 EXC_API void exc_section_free(ExcHandle section);
+
+/* ════════════════════════════════════════════════════════════════════
+ *  Mining
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* Start mining (switches DAG to Full mode, starts reward timer). */
+EXC_API ExcError exc_mining_start(void);
+
+/* Stop mining (stops reward timer, switches DAG to Light mode). */
+EXC_API ExcError exc_mining_stop(void);
+
+/* Check if mining is active (DAG mode is Full). */
+EXC_API ExcError exc_mining_is_active(bool* out_active);
 
 /* ════════════════════════════════════════════════════════════════════
  *  Cryptography (standalone, no node required after init)
@@ -459,6 +475,9 @@ EXC_API void exc_on_dfs_download_progress(ExcDfsDownloadProgressCallback cb, Exc
 /* Network */
 EXC_API void exc_on_connection_status(ExcConnectionStatusCallback cb, ExcUserData user_data);
 EXC_API void exc_on_connection_count(ExcConnectionCountCallback cb, ExcUserData user_data);
+
+/* Mining */
+EXC_API void exc_on_mining_status(ExcMiningStatusCallback cb, ExcUserData user_data);
 
 /* Actor rename */
 EXC_API void exc_on_actor_renamed(ExcActorRenamedCallback cb, ExcUserData user_data);

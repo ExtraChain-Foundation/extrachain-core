@@ -284,6 +284,9 @@ typedef void (*ExcDagSyncProgressCallback)(const char* section, ExcUserData user
 typedef void (*ExcDagSyncFinishCallback)(ExcUserData user_data);
 typedef void (*ExcDagStatusCallback)(ExcDagStatus status, ExcUserData user_data);
 
+/* Mining */
+typedef void (*ExcMiningStatusCallback)(bool active, ExcUserData user_data);
+
 /* DAG transactions */
 typedef void (*ExcDagTxSendedCallback)(const char* section_id, const char* hash, ExcUserData user_data);
 typedef void (*ExcDagTxApprovedCallback)(const char* section_id, const char* hash, ExcUserData user_data);

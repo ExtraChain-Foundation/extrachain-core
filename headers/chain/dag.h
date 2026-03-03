@@ -293,6 +293,7 @@ public:
      * and starts full chain synchronization. No-op if already in Full mode.
      */
     void force_full_mode();
+    void force_light_mode();
 
     /**
      * @brief Set the DAG operational status

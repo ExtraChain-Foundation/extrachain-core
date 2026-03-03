@@ -1021,6 +1021,22 @@ void ExtraChainNode::timer_reward_request() {
     data_mining_manager()->request_reward();
 }
 
+void ExtraChainNode::start_mining() {
+    dag_->force_full_mode();
+    if (timer_reward_ && !timer_reward_->isActive()) {
+        timer_reward_->start(MINING_TIMER_TICK);
+    }
+    eLog("[Mining] Started");
+}
+
+void ExtraChainNode::stop_mining() {
+    if (timer_reward_ && timer_reward_->isActive()) {
+        timer_reward_->stop();
+    }
+    dag_->force_light_mode();
+    eLog("[Mining] Stopped");
+}
+
 void ExtraChainNode::timer_luminance_autoremove() {
     luminance_manager_->remove_old();
 }

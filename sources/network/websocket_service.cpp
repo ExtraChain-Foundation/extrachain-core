@@ -132,7 +132,8 @@ void WebSocketService::open(const QString &ip, quint16 port) {
     } else {
         timestamp_ = Utils::current_date_ms();
 
-        auto url = QUrl(QString("ws://%1:%2").arg(ip).arg(port));
+        auto host = ip.contains(':') ? QString("[%1]").arg(ip) : ip;
+        auto url  = QUrl(QString("ws://%1:%2").arg(host).arg(port));
         eLog("[WS] Open {}", url);
         connections();
         m_ws->open(url);

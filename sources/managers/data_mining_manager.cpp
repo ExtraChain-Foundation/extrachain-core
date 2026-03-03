@@ -143,11 +143,14 @@ BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     // node->dfs()->refresh_calculate();
     const auto &totalBytes = node->network()->calculate_traffic()->total_bytes();
 
-    if (totalBytes.first == 0 || node->dfs()->totalDfsSize() == 0) {
+    auto totalDfsSize = BigNumberFloat(node->dfs()->totalDfsSize());
+
+    if (/*totalBytes.first == 0 ||*/ totalDfsSize == 0) {
         // eLog("[Reward] Request calculation: return amount 0. TotalBytes: {}, total dfs: {}",
         //      totalBytes.first,
         //      node->dfs()->totalDfsSize());
-        return BigNumberFloat(0);
+        // return BigNumberFloat(0);
+        totalDfsSize = 1;
     }
 
     auto current_section = BigNumberFloat(node->dag()->current_section());
@@ -156,7 +159,6 @@ BigNumberFloat DataMiningManager::calculate_reward_amount() const {
     }
 
     auto sizeTaken        = BigNumberFloat(node->dfs()->sizeTaken());
-    auto totalDfsSize     = BigNumberFloat(node->dfs()->totalDfsSize());
     auto totalBytesFirst  = BigNumberFloat(totalBytes.first);
     auto totalBytesSecond = BigNumberFloat(totalBytes.second);
     // auto sectionsStored     =

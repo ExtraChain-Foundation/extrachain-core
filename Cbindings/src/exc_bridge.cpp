@@ -121,6 +121,15 @@ void connect_signals(ExtraChainNode* node) {
                                        cr.dag_status.user_data);
         });
 
+    /* Mining status (derived from DAG status changes) */
+    QObject::connect(node, &ExtraChainNode::dagStatus,
+        [&cr, node](DagStatus /*status*/) {
+            if (cr.mining_status.callback) {
+                bool active = node->dag()->mode() == DagMode::Full;
+                cr.mining_status.callback(active, cr.mining_status.user_data);
+            }
+        });
+
     /* DAG transactions */
     QObject::connect(node, &ExtraChainNode::dagTxSended,
         [&cr](SectionId section_id, std::string hash) {
@@ -331,6 +340,11 @@ EXC_API void exc_on_connection_status(ExcConnectionStatusCallback cb, ExcUserDat
 
 EXC_API void exc_on_connection_count(ExcConnectionCountCallback cb, ExcUserData user_data) {
     auto& s = CallbackRegistry::instance().connection_count;
+    s.callback = cb; s.user_data = user_data;
+}
+
+EXC_API void exc_on_mining_status(ExcMiningStatusCallback cb, ExcUserData user_data) {
+    auto& s = CallbackRegistry::instance().mining_status;
     s.callback = cb; s.user_data = user_data;
 }
 
