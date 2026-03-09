@@ -83,8 +83,9 @@ struct ExtraChainSettings {
     std::optional<DagMode>     dag_mode;
     std::optional<DfsMode>     dfs_mode;
     std::optional<std::string> node_identifier;
+    std::optional<bool>        dag_full_via_light;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier, dag_full_via_light))
 
 class ByteArray {
 public:

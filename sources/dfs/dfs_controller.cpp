@@ -2081,7 +2081,7 @@ std::string DfsController::getFileFromStorage(const ActorId &owner_id, const std
     std::filesystem::path tempFilePath = fmt::format("temp{}{}", pathDelim, owner_id.to_string());
     if (!actrDirData.empty()) {
         std::filesystem::path virtualFilePath = actrDirData.at(0).at("file_id");
-        if ((virtualFilePath.end()--)->string() == "secured") {
+        if (virtualFilePath.filename().string() == "secured") {
             if (!localOwner->get().empty()) {
                 std::filesystem::create_directories(tempFilePath);
                 tempFilePath /= virtualFilePath.filename();

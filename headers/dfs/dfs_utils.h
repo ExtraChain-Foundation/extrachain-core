@@ -46,9 +46,13 @@ namespace Tools {
 
     template <typename T>
     T byteArrayToType(std::vector<unsigned char> value) {
-        T* res;
-        res = reinterpret_cast<T*>(value.data());
-        return *res;
+        static_assert(std::is_trivially_copyable_v<T>);
+        if (value.size() < sizeof(T)) {
+            return T{};
+        }
+        T res;
+        std::memcpy(&res, value.data(), sizeof(T));
+        return res;
     }
 
     template <typename T>
@@ -62,9 +66,13 @@ namespace Tools {
 
     template <typename T>
     T stdStringBytesToType(std::string value) {
-        T* res;
-        res = reinterpret_cast<T*>(value.data());
-        return *res;
+        static_assert(std::is_trivially_copyable_v<T>);
+        if (value.size() < sizeof(T)) {
+            return T{};
+        }
+        T res;
+        std::memcpy(&res, value.data(), sizeof(T));
+        return res;
     }
 } // namespace Tools
 

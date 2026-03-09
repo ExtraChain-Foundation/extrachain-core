@@ -47,6 +47,8 @@ UPNPConnection::~UPNPConnection() {
     QObject::disconnect(udp_socket, SIGNAL(readyRead()), this, SLOT(getUdp()));
     QObject::disconnect(timer, SIGNAL(timeout()), this, SLOT(timeExpired()));
     timer->deleteLater();
+    udp_socket->deleteLater();
+    http_socket->deleteLater();
 }
 
 void UPNPConnection::makeTunnel(int internal, int external, QString protocol, QString text) {

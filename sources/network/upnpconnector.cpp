@@ -252,6 +252,7 @@ void UPnPConnector::retrieveDeviceDescription(const QUrl &deviceDescriptionUrl) 
             emit errorOccurred("Control URL for WANIPConnection not found in device description.");
         }
 
+        delete accumulatedData;
         reply->deleteLater();
     });
 }

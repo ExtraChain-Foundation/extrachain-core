@@ -61,6 +61,10 @@ void NetworkManager::connect_network() {
         return;
     }
 
+    if (first_nodes_.empty()) {
+        return;
+    }
+
     if (this->check_port_sync(QString::fromStdString(first_nodes_[0]),
                               Network::Protocol::WebSocket,
                               false,
@@ -597,6 +601,15 @@ void NetworkManager::clear_network_caches() {
                 ++it;
         }
     }
+
+    auto now = QDateTime::currentSecsSinceEpoch();
+    for (auto it = msg_hash_list_.begin(); it != msg_hash_list_.end();) {
+        if (now - it.value().second > 600) {
+            it = msg_hash_list_.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 bool NetworkManager::send_message_checker(MessageType      type,
@@ -981,19 +994,21 @@ int NetworkManager::active_connections_count() {
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {
-    bool                             flag_result = true;
-    bool                             value       = 0;
-    std::string                      hashMsg     = Utils::calculate_hash(msg);
-    QMap<std::string, int>::iterator it          = msg_hash_list_.find(hashMsg);
+    bool        flag_result = true;
+    std::string hashMsg     = Utils::calculate_hash(msg);
+    auto        it          = msg_hash_list_.find(hashMsg);
+    auto        now         = QDateTime::currentSecsSinceEpoch();
+    auto        conn_size   = connections_->size();
 
-    if (it == msg_hash_list_.end())
-        msg_hash_list_.insert(hashMsg, value);
-    else {
-        if (msg_hash_list_.find(hashMsg).value() == connections_->size() - 1) {
+    if (it == msg_hash_list_.end()) {
+        msg_hash_list_.insert(hashMsg, { 0, now });
+    } else {
+        if (conn_size > 0
+            && it.value().first == static_cast<int>(conn_size) - 1) {
             msg_hash_list_.remove(hashMsg);
             flag_result = false;
         } else {
-            msg_hash_list_.find(hashMsg).value()++;
+            it.value().first++;
             flag_result = true;
         }
     }
@@ -1011,6 +1026,11 @@ void NetworkManager::message_received(const std::string &message,
 
     if (!check_message_count(message)) {
         eLog("[Network Manager] checkMsgCount have returned false: such message has been already added");
+        return;
+    }
+
+    if (message.size() < 64) {
+        eWarning("[NetworkManager] message_received: message too short ({})", message.size());
         return;
     }
 
