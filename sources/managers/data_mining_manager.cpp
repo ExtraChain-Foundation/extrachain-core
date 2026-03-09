@@ -64,7 +64,7 @@ void DataMiningManager::request_reward() {
         return;
     }
 
-    if (node->dag()->status() != DagStatus::Ready) {
+    if (node->dag()->status() != DagStatus::Ready && node->dag()->status() != DagStatus::BackgroundSync) {
         return;
     }
 

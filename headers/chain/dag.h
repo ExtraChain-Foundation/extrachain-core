@@ -130,6 +130,12 @@ struct SectionRange {
 };
 BOOST_DESCRIBE_STRUCT(SectionRange, (), (first, last, last_cached))
 
+struct SectionRangeFile : SectionRange {
+    std::optional<std::string> background_from;
+    std::optional<std::string> background_target;
+};
+BOOST_DESCRIBE_STRUCT(SectionRangeFile, (SectionRange), (background_from, background_target))
+
 struct DagControl {
     SectionId   section_id;
     std::string control;
@@ -177,12 +183,13 @@ enum class DagSyncStatus {
  * @brief Enumeration of the DAG operational states
  */
 enum class DagStatus {
-    Started, // Dag has been initialized
-    Ready,   // Dag is operational and ready for transactions
-    Final,   // Dag is processing final operations
-    Sync,    // Dag is synchronizing with the network
-    Maybe,   // Dag is in a potential sync state
-    Timered, // Dag is processing timed operations
+    Started,        // Dag has been initialized
+    Ready,          // Dag is operational and ready for transactions
+    Final,          // Dag is processing final operations
+    Sync,           // Dag is synchronizing with the network
+    Maybe,          // Dag is in a potential sync state
+    Timered,        // Dag is processing timed operations
+    BackgroundSync, // Ready for transactions, background history download
 };
 
 enum class WriteResult {
@@ -294,6 +301,9 @@ public:
      */
     void force_full_mode();
     void force_light_mode();
+
+    void set_full_via_light(bool enabled);
+    bool full_via_light() const;
 
     /**
      * @brief Set the DAG operational status
@@ -544,7 +554,7 @@ public:
      * Processes transactions that were received while the chain
      * was synchronizing with the network.
      */
-    void process_cached_transactions(bool not_ready = false);
+    void process_cached_transactions(bool not_ready = false, bool keep_background = false);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
         return sended_transactions_;
@@ -580,6 +590,11 @@ private:
     std::uint64_t                                timestamp_bigger_sync_start_ = 0;
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
+    bool      full_via_light_enabled_     = false;
+    bool      light_requested_bootstrap_  = false;
+    bool      background_sync_active_     = false;
+    SectionId background_sync_from_       = SectionId(-1);
+    SectionId background_sync_target_     = SectionId(-1);
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
@@ -596,6 +611,8 @@ private:
     void request_sections(const SectionId &from, const SectionId &to, const Responder &responder);
 
     void request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
+
+    void start_background_full_sync(const SectionId &from, const SectionId &target, const Responder &responder);
 
     /**
      * @brief Send a sync request to the network

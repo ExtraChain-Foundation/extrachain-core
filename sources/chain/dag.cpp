@@ -42,6 +42,10 @@ Dag::Dag(ExtraChainNode *node)
         mode_ = settings.dag_mode.value();
     }
 
+    if (settings.dag_full_via_light.has_value()) {
+        full_via_light_enabled_ = settings.dag_full_via_light.value();
+    }
+
     if (!settings.dag_mode.has_value()) {
 #ifdef IS_APP_UI_CLIENT
         set_mode(DagMode::Light);
@@ -54,7 +58,7 @@ Dag::Dag(ExtraChainNode *node)
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
 
-        auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
+        auto section_range = Json::deserialize<SectionRangeFile>(last_id_content.toStdString());
         if (section_range.has_value()) {
             auto first_id_result    = SectionId::create(section_range->first);
             auto current_id_result  = SectionId::create(section_range->last);
@@ -77,6 +81,23 @@ Dag::Dag(ExtraChainNode *node)
 
                 if (last_cached_result.has_value()) {
                     cache_.set_section(last_cached_result.value());
+                }
+            }
+
+            if (section_range->background_from.has_value() && full_via_light_enabled_) {
+                auto bg_from_result = SectionId::create(section_range->background_from.value());
+                if (bg_from_result.has_value()) {
+                    background_sync_active_ = true;
+                    background_sync_from_   = bg_from_result.value();
+                    background_sync_target_ = current_section_;
+                    if (section_range->background_target.has_value()) {
+                        auto bg_target_result = SectionId::create(section_range->background_target.value());
+                        if (bg_target_result.has_value()) {
+                            background_sync_target_ = bg_target_result.value();
+                        }
+                    }
+                    light_requested_bootstrap_ = true;
+                    eLog("[DagTest] Resuming background sync from {} to {}", background_sync_from_, background_sync_target_);
                 }
             }
 
@@ -163,6 +184,17 @@ void Dag::set_mode(DagMode mode) {
     Utils::write_settings(settings);
 }
 
+void Dag::set_full_via_light(bool enabled) {
+    full_via_light_enabled_ = enabled;
+    auto settings = Utils::read_settings();
+    settings.dag_full_via_light = enabled;
+    Utils::write_settings(settings);
+}
+
+bool Dag::full_via_light() const {
+    return full_via_light_enabled_;
+}
+
 void Dag::force_full_mode() {
     if (mode_ == DagMode::Full) {
         return;
@@ -170,6 +202,11 @@ void Dag::force_full_mode() {
 
     set_mode(DagMode::Full);
     clear_dag();
+
+    if (full_via_light_enabled_) {
+        light_requested_bootstrap_ = true;
+    }
+
     start_sync();
 }
 
@@ -187,7 +224,7 @@ void Dag::set_status(DagStatus status) {
     this->status_ = status;
     emit node->dagStatus(status_);
 
-    if (status == DagStatus::Ready) {
+    if (status == DagStatus::Ready || status == DagStatus::BackgroundSync) {
         emit node->dagTimerStop();
         min_req_count_ = 5;
     }
@@ -292,13 +329,13 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
         */
 
-        if (/* !sync_timeout && */ status_ != DagStatus::Ready) {
+        if (/* !sync_timeout && */ status_ != DagStatus::Ready && status_ != DagStatus::BackgroundSync) {
             if (mode_ == DagMode::Light || light_requested_) {
                 this->add_to_cached_tx(transaction);
             }
         }
 
-        if (status_ != DagStatus::Ready) {
+        if (status_ != DagStatus::Ready && status_ != DagStatus::BackgroundSync) {
             // Update sync target if transaction section is ahead but within reasonable range
             if (transaction.section() > sync_last_index_
                 && transaction.section() <= sync_last_index_ + 15) {
@@ -470,7 +507,7 @@ Balances Dag::calculate_actors_balance(const std::vector<ActorId> &actor_ids,
     return cache_.calculate_balances(actor_ids, current_section_, first_saved_section_, to_section);
 }
 
-void Dag::process_cached_transactions(bool not_ready) {
+void Dag::process_cached_transactions(bool not_ready, bool keep_background) {
     // TODO: check controls
 
     {
@@ -516,7 +553,11 @@ void Dag::process_cached_transactions(bool not_ready) {
     }
 
     if (!not_ready) {
-        set_status(DagStatus::Ready);
+        if (keep_background && background_sync_active_) {
+            set_status(DagStatus::BackgroundSync);
+        } else {
+            set_status(DagStatus::Ready);
+        }
         set_sync_status(DagSyncStatus::None);
     }
 }
@@ -682,6 +723,10 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
 }
 
 void Dag::timer_tick() {
+    if (background_sync_active_) {
+        return;
+    }
+
     eLog("[Dag] Timer tick");
     this->timer_sync_->stop(); // no need emit?
     this->set_status(DagStatus::Timered);
@@ -1163,7 +1208,7 @@ void Dag::update_range() {
 
         QFile read_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
         if (read_file.open(QFile::ReadOnly)) {
-            auto existing = Json::deserialize<SectionRange>(read_file.readAll().toStdString());
+            auto existing = Json::deserialize<SectionRangeFile>(read_file.readAll().toStdString());
             read_file.close();
 
             if (existing.has_value()) {
@@ -1176,9 +1221,17 @@ void Dag::update_range() {
             }
         }
 
-        std::string json = Json::serialize(SectionRange { .first       = new_first.to_string(),
-                                                          .last        = new_last.to_string(),
-                                                          .last_cached = cache_.section().to_string() });
+        SectionRangeFile range;
+        range.first             = new_first.to_string();
+        range.last              = new_last.to_string();
+        range.last_cached       = cache_.section().to_string();
+        range.background_from   = (background_sync_active_ && background_sync_from_ != SectionId(-1))
+                                      ? std::optional<std::string>(background_sync_from_.to_string())
+                                      : std::nullopt;
+        range.background_target = (background_sync_active_ && background_sync_target_ != SectionId(-1))
+                                      ? std::optional<std::string>(background_sync_target_.to_string())
+                                      : std::nullopt;
+        std::string json = Json::serialize(range);
 
         QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
         if (file.open(QFile::WriteOnly)) {
@@ -1259,6 +1312,10 @@ std::optional<std::pair<SectionId, std::string>> Dag::search_duplicate_by_sender
 
 void Dag::start_sync() {
     // start timer, after end -> again request
+    if (status_ == DagStatus::BackgroundSync) {
+        return;
+    }
+
     if (status_ == DagStatus::Sync) {
         // eLog("BC 11 start_sync return");
         return;
@@ -1285,12 +1342,12 @@ void Dag::start_sync() {
 void Dag::start_check() {
     // temp
 #ifndef IS_APP_CLIENT
-    if (status_ == DagStatus::Ready) {
+    if (status_ == DagStatus::Ready || status_ == DagStatus::BackgroundSync) {
         return;
     }
 #endif
 
-    if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
+    if ((status_ != DagStatus::Ready && status_ != DagStatus::BackgroundSync) || status_ == DagStatus::Maybe) {
         start_sync();
         // QTimer::singleShot(3000, [this]() {
         //     this->start_sync();
@@ -1613,6 +1670,8 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
     emit node->dagTimerStop();
 
+    eLog("[DagTest] network_file_sections_response received, bg_active={}", background_sync_active_);
+
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
         if (mode_ == DagMode::Light) {
             eLog("[Dag] Skip file sections response: light mode");
@@ -1662,6 +1721,27 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         }
 
         update_range();
+
+        if (background_sync_active_) {
+            background_sync_from_ = file_sync->to + 1;
+            this->update_range();
+
+            if (file_sync->to >= background_sync_target_ - 1) {
+                background_sync_active_ = false;
+                background_sync_from_   = SectionId(-1);
+                background_sync_target_ = SectionId(-1);
+                this->update_range();
+                this->start_control(Force::Active);
+                set_status(DagStatus::Ready);
+                eLog("[DagTest] Background full sync completed");
+                return;
+            }
+
+            emit node->dagSyncProgress(file_sync->to);
+            auto next = file_sync->to + 1;
+            this->request_file_sections(next, std::min(background_sync_target_, next + SYNC_SECTIONS_BATCH), responder);
+            return;
+        }
 
         if (file_sync->last_section > sync_last_index_) {
             sync_last_index_ = file_sync->last_section;
@@ -1822,19 +1902,65 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
             eLog("[Dag] Balances updated");
         }
 
-        if (mode_ == DagMode::Full) {
-            this->start_control(Force::Active);
-        }
+        light_requested_            = false;
+        light_requested_bootstrap_  = false;
 
-        light_requested_ = false;
-        this->process_cached_transactions();
-        // start check hash
+        if (mode_ == DagMode::Full && full_via_light_enabled_) {
+            SectionId bg_from   = background_sync_active_ ? background_sync_from_ : SectionId(0);
+            SectionId bg_target = sync_last_index_ > current_section_ ? sync_last_index_ : current_section_;
+            if (background_sync_active_ && background_sync_target_ > bg_target) {
+                bg_target = background_sync_target_;
+            }
+
+            eLog("[DagTest] Background sync: from {} to {} (current: {}, sync_last: {})",
+                 bg_from, bg_target, current_section_, sync_last_index_);
+
+            background_sync_active_ = true;
+            background_sync_from_   = bg_from;
+            background_sync_target_ = bg_target;
+            this->update_range();
+
+            this->process_cached_transactions(false, true);
+            set_status(DagStatus::BackgroundSync);
+            emit node->dagSyncStart(bg_from, bg_target);
+            this->start_background_full_sync(bg_from, bg_target, responder);
+        } else {
+            if (mode_ == DagMode::Full) {
+                this->start_control(Force::Active);
+            }
+            this->process_cached_transactions();
+        }
         // TIMER_END(network_response_light)
     });
 }
 
+void Dag::start_background_full_sync(const SectionId &from, const SectionId &target,
+                                     const Responder &responder) {
+    eLog("[DagTest] start_background_full_sync: from {} to {}, active={}, responder empty={}",
+         from, target, background_sync_active_, responder.empty());
+
+    if (!background_sync_active_) {
+        return;
+    }
+
+    if (from >= target) {
+        background_sync_active_ = false;
+        background_sync_from_   = SectionId(-1);
+        background_sync_target_ = SectionId(-1);
+        this->update_range();
+        this->start_control(Force::Active);
+        set_status(DagStatus::Ready);
+        eLog("[DagTest] Background full sync completed");
+        return;
+    }
+
+    auto batch_end = std::min(target, from + SYNC_SECTIONS_BATCH);
+    eLog("[DagTest] Background sync requesting sections {} to {}", from, batch_end);
+    this->request_file_sections(from, batch_end, responder);
+}
+
 void Dag::network_hash_interval(const HashInterval &hash_interval, const Responder &responder) {
-    if (status_ != DagStatus::Ready) {
+    if (status_ != DagStatus::Ready && status_ != DagStatus::BackgroundSync) {
         eLog("[Dag] Hash interval check: ignore", hash_interval);
         return;
     }
@@ -1900,6 +2026,26 @@ void Dag::set_sync_status(DagSyncStatus status) {
 
 void Dag::handle_sync_request() {
     emit node->dagTimerStop();
+
+    if (background_sync_active_ && light_requested_bootstrap_) {
+        // After restart: light bootstrap done, now resume background sync
+        Responder responder(node->network());
+        for (const auto &[id, info] : last_info_) {
+            responder.add_identifier(id);
+            if (info.last_section_id > background_sync_target_) {
+                background_sync_target_ = info.last_section_id;
+            }
+        }
+        light_requested_bootstrap_ = false;
+        eLog("[DagTest] handle_sync_request resume: from {} to {}",
+             background_sync_from_, background_sync_target_);
+        set_status(DagStatus::BackgroundSync);
+        emit node->dagSyncStart(background_sync_from_, background_sync_target_);
+        this->start_background_full_sync(background_sync_from_, background_sync_target_, responder);
+        check_status_ = DagSyncStatus::None;
+        set_sync_status(DagSyncStatus::None);
+        return;
+    }
 
     // if (search_control_) {
     //     eLog("[Dag] Ignore sync, because search control");
@@ -2083,7 +2229,7 @@ void Dag::handle_sync_request() {
          sync_last_index_,
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
-    if (mode_ == DagMode::Full) {
+    if (mode_ == DagMode::Full && !light_requested_bootstrap_) {
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();

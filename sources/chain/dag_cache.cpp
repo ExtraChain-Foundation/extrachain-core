@@ -406,7 +406,7 @@ void DagCache::check_and_update_cache_thread(const SectionId& current_section) {
     if (dag == nullptr) {
         return;
     }
-    if (dag->status() != DagStatus::Ready) {
+    if (dag->status() != DagStatus::Ready && dag->status() != DagStatus::BackgroundSync) {
         // ThreadPoolBoost::instance()->post([this] { // remove
         auto res = this->check_and_update_cache(dag->current_section());
 
