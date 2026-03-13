@@ -111,11 +111,16 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
     Q_UNUSED(file)
     Q_UNUSED(line)
     Q_UNUSED(function)
-    static QFile logFile("logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss.zzz")
-                         + ".log");
+    QString file_name = "logs/extrachain" + QDateTime::currentDateTime().toString("-MM-dd-hh.mm.ss.zzz")
+                        + ".log";
+    static QFile logFile(file_name);
 
-    if (LogsManager::toFile && !logFile.isOpen())
-        logFile.open(QFile::Append | QFile::Text);
+    if (LogsManager::toFile && !logFile.isOpen()) {
+        if (!logFile.open(QFile::Append | QFile::Text)) {
+            eWarning("Failed to open file: %s. Error: %s", file_name, logFile.errorString());
+            return;
+        }
+    }
 
     QString   message         = msg;
     QDateTime currentDateTime = QDateTime::currentDateTime();
