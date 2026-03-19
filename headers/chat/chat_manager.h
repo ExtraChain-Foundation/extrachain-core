@@ -51,6 +51,7 @@ public:
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 
     std::expected<Chat::Chat, ChatError> create_channel();
+    std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,

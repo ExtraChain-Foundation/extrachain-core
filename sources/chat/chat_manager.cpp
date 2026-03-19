@@ -265,6 +265,20 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
     return chat;
 }
 
+std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorId&     owner_id,
+                                                                     const std::string& file_id) {
+    auto chat      = Chat::Chat { .owner_id = owner_id,
+                                  .file_id  = file_id,
+                                  .chat     = Chat::ChatData { .chat_type = Chat::ChatType::Channel } };
+    auto my_result = insert_chat_to_mychats(chat);
+    if (!my_result.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    node->dfs()->request_file(owner_id, file_id);
+    return chat;
+}
+
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     auto main_actor = node->account_controller()->current_profile().main()->get();
     auto my_chats   = this->read_my_chats_row();
@@ -391,6 +405,9 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
     bool encryption = true;
     if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
+        if (chat->owner_id != chat_actor_) {
+            return std::unexpected(ChatError::Unknown);
+        }
     }
 
     auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
