@@ -480,28 +480,54 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
         encryption = false;
     }
 
-    auto db_row = node->dfs()->read_vector_rows(owner_id,
-                                                file_id,
-                                                "where status = '1' ORDER by timestamp DESC LIMIT 1",
-                                                encryption ? security_key : Dfs::DataSecurityData());
-    if (!db_row.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+    constexpr int batch_size = 10;
+    Chat::Message best;
+    std::uint64_t best_ts = 0;
+    bool found_non_edited = false;
+
+    for (int offset = 0; offset < 100; offset += batch_size) {
+        auto query   = fmt::format("where status = '1' ORDER by timestamp DESC LIMIT {} OFFSET {}", batch_size, offset);
+        auto db_rows = node->dfs()->read_vector_rows(owner_id, file_id, query,
+                                                     encryption ? security_key : Dfs::DataSecurityData());
+        if (!db_rows.has_value() || db_rows->empty()) {
+            break;
+        }
+
+        for (auto &db_row : db_rows.value()) {
+            db_row.erase("sign");
+            db_row.erase("status");
+
+            auto message = Utils::from_dbrow<Chat::Message>(db_row);
+            if (!message.has_value()) {
+                continue;
+            }
+
+            auto effective_ts = message->message.original_timestamp.value_or(message->timestamp);
+
+            if (effective_ts >= best_ts) {
+                best    = message.value();
+                best_ts = effective_ts;
+            }
+
+            if (!message->message.original_timestamp.has_value()) {
+                found_non_edited = true;
+            }
+        }
+
+        if (found_non_edited) {
+            break;
+        }
+
+        if (static_cast<int>(db_rows->size()) < batch_size) {
+            break;
+        }
     }
 
-    if (db_row->empty()) {
-        return std::unexpected(ChatError::Unknown);
+    if (best_ts > 0) {
+        return best;
     }
 
-    auto row = db_row->at(0);
-    row.erase("sign");
-    row.erase("status");
-
-    auto message = Utils::from_dbrow<Chat::Message>(row);
-    if (!message.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    return message.value();
+    return std::unexpected(ChatError::Unknown);
 }
 
 std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       owner_id,
