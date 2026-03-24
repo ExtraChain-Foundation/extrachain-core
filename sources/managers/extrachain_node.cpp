@@ -452,6 +452,15 @@ bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, Dfs::
         return false;
     }
 
+    auto existing_vector =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          system_id,
+                                                                          Dfs::Basic::TEMPLATE_VECTOR,
+                                                                          vector_name);
+    if (existing_vector.has_value()) {
+        return true;
+    }
+
     auto search_result =
         Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
                                                                           network_id,
@@ -471,6 +480,28 @@ bool ExtraChainNode::create_file_id_vector(const std::string& vector_name, Dfs::
     }
 
     return true;
+}
+
+DfsFileStatus ExtraChainNode::create_channels_vector() {
+    auto system_id = account_controller_->system_actor().id();
+    if (system_id.is_zero()) {
+        return DfsFileStatus::CantCreate;
+    }
+
+    auto existing_vector =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          system_id,
+                                                                          Dfs::Basic::TEMPLATE_VECTOR,
+                                                                          CHANNELS_VECTOR_NAME);
+    if (existing_vector.has_value()) {
+        return DfsFileStatus::Existed;
+    }
+
+    if (!create_file_id_vector(CHANNELS_VECTOR_NAME, Dfs::FileIdState::Without)) {
+        return DfsFileStatus::CantCreate;
+    }
+
+    return DfsFileStatus::Created;
 }
 
 bool ExtraChainNode::write_actor_rename(const ActorId& actor_id, const std::string& name) {

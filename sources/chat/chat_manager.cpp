@@ -304,6 +304,34 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         node->dfs()->dictionary_set_value(main_actor_id, dict_res->file_id, "name", name, chat_actor_);
     }
 
+    // TODO: public channels list — needs name field in vector entry
+    // auto channels_status = node->create_channels_vector();
+    // if (channels_status == DfsFileStatus::CantCreate) {
+    //     return std::unexpected(ChatError::Unknown);
+    // }
+    //
+    // const auto system_actor_id = node->account_controller()->system_actor().id();
+    // auto channels_row =
+    //     Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+    //                                                                       system_actor_id,
+    //                                                                       Dfs::Basic::TEMPLATE_VECTOR,
+    //                                                                       ExtraChainNode::CHANNELS_VECTOR_NAME);
+    // if (!channels_row.has_value()) {
+    //     return std::unexpected(ChatError::Unknown);
+    // }
+    //
+    // auto channel_declared = node->dfs()->add_file_id(network_id,
+    //                                                  channels_row->owner_id,
+    //                                                  channels_row->file_id,
+    //                                                  chat.owner_id,
+    //                                                  chat.file_id,
+    //                                                  main_actor_id,
+    //                                                  0,
+    //                                                  Dfs::FileIdState::Without);
+    // if (!channel_declared.has_value()) {
+    //     return std::unexpected(ChatError::Unknown);
+    // }
+
     insert_chat_to_mychats(chat);
     add_new_message_created(chat.owner_id, chat.file_id);
 
@@ -514,9 +542,12 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
 std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           owner_id,
                                                                  const std::string&       file_id,
                                                                  const Chat::MessageText& message_text) {
-    // ... checks for file ...
+    auto text = Utils::trim(Utils::sanitize_text(message_text.text));
+    if (text.empty()) {
+        return std::unexpected(ChatError::Unknown);
+    }
 
-    auto message_data = Chat::MessageData { .data = message_text.text, .reply_id = message_text.reply_id };
+    auto message_data = Chat::MessageData { .data = text, .reply_id = message_text.reply_id };
     message_data.type = Chat::MessageType::Text;
     // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
@@ -589,6 +620,62 @@ std::expected<bool, ChatError> ChatManager::add_file_message(const ActorId&     
     auto message_data = Chat::MessageData { .type = Chat::MessageType::File, .data = message_text.text };
     auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     return add_new_message(owner_id, file_id, message);
+}
+
+std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owner_id,
+                                                         const std::string& file_id,
+                                                         const std::string& message_id,
+                                                         const std::string& new_text) {
+    auto text = Utils::trim(Utils::sanitize_text(new_text));
+    if (text.empty()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto chat = get_chat(owner_id, file_id);
+    if (!chat.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    bool encryption = true;
+    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
+        encryption = false;
+        if (chat->owner_id != chat_actor_) {
+            return std::unexpected(ChatError::Unknown);
+        }
+    }
+
+    // Read original message to preserve its timestamp
+    auto messages = read_chat_messages(owner_id, file_id);
+    if (!messages.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    std::uint64_t original_timestamp = 0;
+    for (const auto &msg : messages.value()) {
+        if (msg.id == message_id) {
+            original_timestamp = msg.timestamp;
+            if (msg.message.original_timestamp.has_value()) {
+                original_timestamp = msg.message.original_timestamp.value();
+            }
+            break;
+        }
+    }
+
+    auto message_data = Chat::MessageData { .type = Chat::MessageType::Text, .data = text, .original_timestamp = original_timestamp };
+    auto message      = Chat::Message { .id = message_id, .message = message_data };
+
+    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
+    auto res          = node->dfs()->update_vector_row(owner_id,
+                                              file_id,
+                                              message,
+                                              chat_actor_,
+                                              encryption ? security_key : Dfs::DataSecurityData());
+
+    if (!res) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    return res;
 }
 
 std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     owner_id,

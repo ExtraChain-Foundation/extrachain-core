@@ -99,6 +99,11 @@ public:
                                                     const std::string       &file_id,
                                                     const Chat::MessageText &message_text);
 
+    std::expected<bool, ChatError> edit_message(const ActorId     &owner_id,
+                                                const std::string &file_id,
+                                                const std::string &message_id,
+                                                const std::string &new_text);
+
     std::expected<bool, ChatError> remove_message(const ActorId     &owner_id,
                                                   const std::string &file_id,
                                                   const std::string &message_id);
