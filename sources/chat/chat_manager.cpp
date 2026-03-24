@@ -653,9 +653,6 @@ std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owne
                                                          const std::string& message_id,
                                                          const std::string& new_text) {
     auto text = Utils::trim(Utils::sanitize_text(new_text));
-    if (text.empty()) {
-        return std::unexpected(ChatError::Unknown);
-    }
 
     auto chat = get_chat(owner_id, file_id);
     if (!chat.has_value()) {
@@ -677,17 +674,44 @@ std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owne
     }
 
     std::uint64_t original_timestamp = 0;
+    Chat::MessageData original_data;
+    bool found = false;
     for (const auto &msg : messages.value()) {
         if (msg.id == message_id) {
             original_timestamp = msg.timestamp;
             if (msg.message.original_timestamp.has_value()) {
                 original_timestamp = msg.message.original_timestamp.value();
             }
+            original_data = msg.message;
+            found = true;
             break;
         }
     }
 
-    auto message_data = Chat::MessageData { .type = Chat::MessageType::Text, .data = text, .original_timestamp = original_timestamp };
+    if (!found) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    std::string new_data;
+    auto msg_type = original_data.type.value_or(Chat::MessageType::Text);
+
+    if (msg_type == Chat::MessageType::Text) {
+        if (text.empty()) {
+            return std::unexpected(ChatError::Unknown);
+        }
+        new_data = text;
+    } else {
+        // Media message — update caption in JSON, keep path/hash/etc
+        auto original_json = boost::json::parse(original_data.data.value_or("{}"));
+        if (original_json.is_object()) {
+            original_json.as_object()["caption"] = text;
+            new_data = boost::json::serialize(original_json);
+        } else {
+            new_data = text;
+        }
+    }
+
+    auto message_data = Chat::MessageData { .type = msg_type, .data = new_data, .original_timestamp = original_timestamp };
     auto message      = Chat::Message { .id = message_id, .message = message_data };
 
     auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
