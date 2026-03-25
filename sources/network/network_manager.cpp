@@ -391,33 +391,32 @@ void NetworkManager::check_port(const QString     ip,
     //     return;
     // }
 
-    // int         timeoutMs = 1000;
-    QTcpSocket *socket = new QTcpSocket(this);
+    auto *socket = new QTcpSocket(this);
+    auto *timer  = new QTimer(this);
+    timer->setSingleShot(true);
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+    connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
+        timer->stop();
+        timer->deleteLater();
         socket->disconnectFromHost();
         socket->deleteLater();
-        // emit portCheckResult(ip, port, true);
         connect_to_node_slot(ip, protocol, request, isConstant);
     });
 
-    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer](QAbstractSocket::SocketError) {
+        timer->stop();
+        timer->deleteLater();
         socket->deleteLater();
     });
 
-    // QTimer* timer = new QTimer(this);
-    // timer->setSingleShot(true);
-    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
-    //     if (socket->state() == QAbstractSocket::ConnectingState) {
-    //         socket->abort();
-    //         // emit portCheckResult(ip, wsPort, false);
-    //         socket->deleteLater();
-    //     }
-    //     timer->deleteLater();
-    // });
+    connect(timer, &QTimer::timeout, this, [socket, timer]() {
+        socket->abort();
+        socket->deleteLater();
+        timer->deleteLater();
+    });
 
     socket->connectToHost(QHostAddress(ip), ws_port);
-    // timer->start(timeoutMs);
+    timer->start(3000);
 }
 
 bool NetworkManager::check_port_sync(const QString    &ip,
@@ -595,6 +594,17 @@ void NetworkManager::clear_network_caches() {
                 it = messages_locked->erase(it);
             } else
                 ++it;
+        }
+    }
+
+    {
+        qint64 now = QDateTime::currentSecsSinceEpoch();
+        for (auto it = msg_hash_list_.begin(); it != msg_hash_list_.end();) {
+            if (now - it.value().second >= 120) {
+                it = msg_hash_list_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 }
@@ -981,19 +991,18 @@ int NetworkManager::active_connections_count() {
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {
-    bool                             flag_result = true;
-    bool                             value       = 0;
-    std::string                      hashMsg     = Utils::calculate_hash(msg);
-    QMap<std::string, int>::iterator it          = msg_hash_list_.find(hashMsg);
+    bool        flag_result = true;
+    std::string hashMsg     = Utils::calculate_hash(msg);
+    auto        it          = msg_hash_list_.find(hashMsg);
 
-    if (it == msg_hash_list_.end())
-        msg_hash_list_.insert(hashMsg, value);
-    else {
-        if (msg_hash_list_.find(hashMsg).value() == connections_->size() - 1) {
-            msg_hash_list_.remove(hashMsg);
+    if (it == msg_hash_list_.end()) {
+        msg_hash_list_.insert(hashMsg, { 0, QDateTime::currentSecsSinceEpoch() });
+    } else {
+        if (connections_->empty() || it.value().first == connections_->size() - 1) {
+            msg_hash_list_.erase(it);
             flag_result = false;
         } else {
-            msg_hash_list_.find(hashMsg).value()++;
+            it.value().first++;
             flag_result = true;
         }
     }

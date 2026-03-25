@@ -252,7 +252,7 @@ private:
     std::unique_ptr<UPNPConnection> upnp_dis_;
     std::unique_ptr<UPNPConnection> upnp_net_;
     std::unique_ptr<UPnPConnector>  upnp_connector_;
-    QMap<std::string, int>          msg_hash_list_ = {};
+    QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
     ExtraChainNode*                       node;
     std::shared_ptr<QNetworkAddressEntry> local_;

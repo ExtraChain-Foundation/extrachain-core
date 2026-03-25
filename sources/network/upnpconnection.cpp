@@ -34,8 +34,8 @@ UPNPConnection::UPNPConnection(std::shared_ptr<QNetworkAddressEntry> local, QObj
     conn_state   = State::NotOpened;
     localAddress = local;
     waitTime     = 1000;
-    udp_socket   = new QUdpSocket();
-    http_socket  = new QNetworkAccessManager();
+    udp_socket   = new QUdpSocket(this);
+    http_socket  = new QNetworkAccessManager(this);
     http_reply   = nullptr;
     timer        = new QTimer(this);
     udp_socket->bind(localAddress->ip(), 1900);
