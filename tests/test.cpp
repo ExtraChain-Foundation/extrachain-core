@@ -18,7 +18,7 @@
  */
 
 #include "managers/extrachain_node.h"
-#include "managers/logs_manager.h"
+#include "utils/exc_logs.h"
 #include <QtTest/QtTest>
 
 class Test : public QObject {
@@ -124,7 +124,7 @@ private slots:
     }
 
     void createNetwork() {
-        LogsManager::qtHandler();
+        reset_qt_log_handler();
         QDir().mkdir("test-data");
         QDir::setCurrent("test-data");
         Utils::wipeDataFiles();
