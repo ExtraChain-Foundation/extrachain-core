@@ -1051,6 +1051,30 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 
+#ifdef Q_OS_LINUX
+    {
+        std::ifstream statm("/proc/self/statm");
+        if (statm.is_open()) {
+            long pages = 0;
+            statm >> pages; // total
+            statm >> pages; // RSS
+            long rss_mb = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
+            eLog("[Mem] RSS: {} MB | net.msg_hash: {} net.messages: {} net.forwarded: {} "
+                 "dag.sended_tx: {} dag.failed_tx: {} dag.last_txs: {} dag.cached_txs: {} "
+                 "net.connections: {}",
+                 rss_mb,
+                 network_manager_->msg_hash_list_size(),
+                 network_manager_->messages_size(),
+                 network_manager_->forwarded_messages_size(),
+                 dag_->sended_transactions_size(),
+                 dag_->failed_transactions_size(),
+                 dag_->last_txs_size(),
+                 dag_->cached_txs_size(),
+                 network_manager_->active_connections_count());
+        }
+    }
+#endif
+
     if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
         && !dag_->read_section(dag_->current_section()).has_value()) {
         eCritical("[Dag] No physical section");

@@ -346,6 +346,10 @@ protected:
      */
     bool check_message_count(const std::string& msg);
 
+    size_t msg_hash_list_size() const { return msg_hash_list_.size(); }
+    size_t messages_size() { return messages_->size(); }
+    size_t forwarded_messages_size() { return forwarded_messages_->size(); }
+
 private slots:
     void onNewWsConnection();
 
