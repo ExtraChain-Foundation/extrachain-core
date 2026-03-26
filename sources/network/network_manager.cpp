@@ -567,8 +567,13 @@ void NetworkManager::connect_to_websocket(const QString &ip,
     {
         auto connectionsLocked = *connections_;
         for (const auto &el : *connectionsLocked) {
-            if (el->ip() == ip && !el->is_closed()) {
-                el->closeSocket();
+            if (el->ip() == ip) {
+                if (el->is_active()) {
+                    return;
+                }
+                if (!el->is_closed()) {
+                    el->closeSocket();
+                }
             }
         }
     }
