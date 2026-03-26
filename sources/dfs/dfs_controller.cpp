@@ -2470,7 +2470,7 @@ LoadManager &DfsController::download_manager() {
 }
 
 size_t DfsController::load_manager_downloads_size() {
-    return load_manager_.m_active_downloads->size() + load_manager_.m_active_downloads_priority->size();
+    return load_manager_.active_downloads_size();
 }
 
 void DfsController::check_all_files(std::string identifier) {
