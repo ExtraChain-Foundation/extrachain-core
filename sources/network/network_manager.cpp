@@ -564,6 +564,15 @@ void NetworkManager::connect_to_websocket(const QString &ip,
         return;
     }
 
+    {
+        auto connectionsLocked = *connections_;
+        for (const auto &el : *connectionsLocked) {
+            if (el->ip() == ip && el->is_active()) {
+                return;
+            }
+        }
+    }
+
     auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
     service->set_direction(SocketDirection::Outgoing);
     connectWsService(service, requestListNodes);
