@@ -1092,7 +1092,7 @@ void ExtraChainNode::timer_info_print() {
                  network_manager_->connections_size(),
                  queue_total,
                  bytes_to_write_total / 1024,
-                 dfs_controller_->load_manager_downloads_size());
+                 dfs_->load_manager_downloads_size());
         }
     }
 #endif
