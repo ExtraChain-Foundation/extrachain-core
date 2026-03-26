@@ -1058,6 +1058,7 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
 
+#ifndef IS_APP_CLIENT
 #ifdef Q_OS_LINUX
     {
         std::ifstream statm("/proc/self/statm");
@@ -1094,6 +1095,7 @@ void ExtraChainNode::timer_info_print() {
                  dfs_controller_->load_manager_downloads_size());
         }
     }
+#endif
 #endif
 
     if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
