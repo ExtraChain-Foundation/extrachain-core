@@ -1066,9 +1066,19 @@ void ExtraChainNode::timer_info_print() {
             statm >> pages; // total
             statm >> pages; // RSS
             long rss_mb = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
+            long queue_total = 0;
+            long bytes_to_write_total = 0;
+            {
+                auto conns = *network_manager_->connections();
+                for (const auto &s : *conns) {
+                    queue_total += s->queue_size();
+                    bytes_to_write_total += s->pending_bytes();
+                }
+            }
+
             eLog("[Mem] RSS: {} MB | net.msg_hash: {} net.messages: {} net.forwarded: {} "
                  "dag.sended_tx: {} dag.failed_tx: {} dag.last_txs: {} dag.cached_txs: {} "
-                 "net.connections: {}",
+                 "net.connections: {} ws.queue: {} ws.pending_kb: {}",
                  rss_mb,
                  network_manager_->msg_hash_list_size(),
                  network_manager_->messages_size(),
@@ -1077,7 +1087,9 @@ void ExtraChainNode::timer_info_print() {
                  dag_->failed_transactions_size(),
                  dag_->last_txs_size(),
                  dag_->cached_txs_size(),
-                 network_manager_->active_connections_count());
+                 network_manager_->active_connections_count(),
+                 queue_total,
+                 bytes_to_write_total / 1024);
         }
     }
 #endif

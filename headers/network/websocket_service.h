@@ -55,6 +55,10 @@ public:
 
     virtual void flush() override;
 
+    qint64 pending_bytes() const override {
+        return m_ws ? m_ws->bytesToWrite() : 0;
+    }
+
 signals:
     void sendMessageInternal(const QByteArray &data);
     void needToTryDequeue();
