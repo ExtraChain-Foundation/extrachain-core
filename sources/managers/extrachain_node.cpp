@@ -1076,9 +1076,9 @@ void ExtraChainNode::timer_info_print() {
                 }
             }
 
-            eLog("[Mem] RSS: {} MB | net.msg_hash: {} net.messages: {} net.forwarded: {} "
-                 "dag.sended_tx: {} dag.failed_tx: {} dag.last_txs: {} dag.cached_txs: {} "
-                 "net.connections: {} ws.queue: {} ws.pending_kb: {}",
+            eLog("[Mem] RSS: {} MB | msg_hash: {} messages: {} forwarded: {} "
+                 "snd_tx: {} fail_tx: {} last_tx: {} cached_tx: {} "
+                 "conn: {}/{} queue: {} pending_kb: {} dfs_dl: {}",
                  rss_mb,
                  network_manager_->msg_hash_list_size(),
                  network_manager_->messages_size(),
@@ -1088,8 +1088,10 @@ void ExtraChainNode::timer_info_print() {
                  dag_->last_txs_size(),
                  dag_->cached_txs_size(),
                  network_manager_->active_connections_count(),
+                 network_manager_->connections_size(),
                  queue_total,
-                 bytes_to_write_total / 1024);
+                 bytes_to_write_total / 1024,
+                 dfs_controller_->load_manager_downloads_size());
         }
     }
 #endif

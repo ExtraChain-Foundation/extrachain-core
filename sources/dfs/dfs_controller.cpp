@@ -60,7 +60,7 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
-    set_mode(DfsMode::Light);
+    // set_mode(DfsMode::Light);
 #endif
 
     // #ifdef IS_RC
@@ -2467,6 +2467,10 @@ DirsManager &DfsController::dirs_manager() {
 
 LoadManager &DfsController::download_manager() {
     return load_manager_;
+}
+
+size_t DfsController::load_manager_downloads_size() {
+    return load_manager_.m_active_downloads->size() + load_manager_.m_active_downloads_priority->size();
 }
 
 void DfsController::check_all_files(std::string identifier) {
