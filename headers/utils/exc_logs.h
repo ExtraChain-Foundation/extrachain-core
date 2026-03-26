@@ -132,6 +132,12 @@ class Logger {
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
     }
 
+public:
+    void cleanup_logs() {
+        cleanup_old_logs();
+    }
+
+private:
     void start_file_logging() {
         if (!file_output_enabled) {
             file_output_enabled = true;
