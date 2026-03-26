@@ -56,15 +56,20 @@ bool NetworkManager::server_status(Network::Protocol protocol) const {
 }
 
 void NetworkManager::connect_network() {
+    auto own_ip = node->init_public_ip_and_country().first.toStdString();
+
     if (!Utils::vector_contains(first_nodes_, first_node_)) {
-        emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        if (first_node_ != own_ip) {
+            emit connect_to_node(QString::fromStdString(first_node_), Network::Protocol::WebSocket);
+        }
         return;
     }
 
-    if (this->check_port_sync(QString::fromStdString(first_nodes_[0]),
-                              Network::Protocol::WebSocket,
-                              false,
-                              true)) {
+    if (first_nodes_[0] != own_ip
+        && this->check_port_sync(QString::fromStdString(first_nodes_[0]),
+                                 Network::Protocol::WebSocket,
+                                 false,
+                                 true)) {
         eLog("[Network] Reconnect to first node (priority) {}", first_nodes_[0]);
         this->save_first_node(first_nodes_[0]);
         emit this->connect_to_node(QString::fromStdString(first_nodes_[0]), Network::Protocol::WebSocket);
@@ -73,7 +78,8 @@ void NetworkManager::connect_network() {
 
     if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
         QString second_node = QString::fromStdString(first_nodes_[1]);
-        if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
+        if (first_nodes_[1] != own_ip
+            && this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
             eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
             this->save_first_node(second_node.toStdString());
             emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
