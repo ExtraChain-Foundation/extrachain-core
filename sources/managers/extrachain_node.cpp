@@ -21,6 +21,10 @@
 
 #include <array>
 
+#ifdef Q_OS_LINUX
+    #include <malloc.h>
+#endif
+
 #include <QJsonObject>
 #include <sodium/core.h>
 
@@ -1042,6 +1046,9 @@ void ExtraChainNode::timer_luminance_autoremove() {
 }
 
 void ExtraChainNode::timer_info_print() {
+#ifdef Q_OS_LINUX
+    malloc_trim(0);
+#endif
     eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
