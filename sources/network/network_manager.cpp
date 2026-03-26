@@ -1945,7 +1945,7 @@ void NetworkManager::socket_error(Network::SocketServiceError error,
         || error == Network::SocketServiceError::VersionTooNew
         || error == Network::SocketServiceError::PeerUnavailable) {
         reconn_.erase(ip);
-        if (!Utils::vector_contains(first_nodes_, ip)) {
+        if (!Utils::vector_contains(first_nodes_, ip) && ip != first_node_) {
             failed_ips_.insert(ip);
         }
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
