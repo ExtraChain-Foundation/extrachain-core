@@ -193,6 +193,11 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
+#ifndef IS_APP_CLIENT
+    if (!node->is_client_application())
+        return;
+#endif
+
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
