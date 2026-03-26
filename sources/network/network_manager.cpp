@@ -565,6 +565,7 @@ void NetworkManager::connect_to_websocket(const QString &ip,
     }
 
     {
+        std::vector<SocketService *> to_close;
         auto connectionsLocked = *connections_;
         for (const auto &el : *connectionsLocked) {
             if (el->ip() == ip) {
@@ -572,9 +573,12 @@ void NetworkManager::connect_to_websocket(const QString &ip,
                     return;
                 }
                 if (!el->is_closed()) {
-                    el->closeSocket();
+                    to_close.push_back(el);
                 }
             }
+        }
+        for (auto *el : to_close) {
+            el->closeSocket();
         }
     }
 
