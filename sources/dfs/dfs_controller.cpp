@@ -60,7 +60,7 @@ DfsController::DfsController(ExtraChainNode *node)
     });
 
 #ifdef IS_APP_UI_CLIENT
-    // set_mode(DfsMode::Light);
+    set_mode(DfsMode::Light);
 #endif
 
     // #ifdef IS_RC
