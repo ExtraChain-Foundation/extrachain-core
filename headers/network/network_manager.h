@@ -262,7 +262,11 @@ private:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
     NetworkStatus                                network_status_;
 
-    std::map<std::string, int> reconn_;
+    struct ReconnEntry {
+        uint64_t attempts       = 0;
+        qint64   next_attempt_ms = 0;
+    };
+    std::map<std::string, ReconnEntry> reconn_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;

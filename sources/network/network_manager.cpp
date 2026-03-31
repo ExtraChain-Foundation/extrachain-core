@@ -257,19 +257,23 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    for (const auto &[ip, count] : need_reconnect) {
-        eLog("[Network] Reconnect to node: {}", ip);
+    const qint64 now = Utils::current_date_ms();
+    for (auto &[ip, entry] : reconn_) {
+        if (!need_reconnect.contains(ip)) continue;
+        if (this->failed_ips_.contains(ip)) continue;
+        if (now < entry.next_attempt_ms) continue;
 
-        if (this->failed_ips_.contains(ip)) {
-            continue;
-        }
-
+        eLog("[Network] Reconnect to node: {} (attempt {})", ip, entry.attempts + 1);
         emit this->connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
-        // reconn_[ip] += 1; // count
 
-        // if (reconn_[ip] > 1000) {
-        //     reconn_.erase(ip);
-        // }
+        if (entry.attempts < 7) entry.attempts++;
+#ifdef IS_APP_UI_CLIENT
+        constexpr int max_delay_ms = 60'000;
+#else
+        constexpr int max_delay_ms = 300'000;
+#endif
+        const int delay         = std::min(5000 * (1 << entry.attempts), max_delay_ms);
+        entry.next_attempt_ms   = now + delay;
     }
 }
 
@@ -302,7 +306,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivated();
 
         if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
-            reconn_.insert({ service->ip().toStdString(), 1 });
+            reconn_.insert({ service->ip().toStdString(), {} });
         }
     });
 
