@@ -21,7 +21,7 @@
 
 #include <array>
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     #include <malloc.h>
 #endif
 
@@ -49,6 +49,10 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
+
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    #include <malloc.h>
+#endif
 
 std::atomic<bool> node_enabled { true };
 
@@ -1046,9 +1050,10 @@ void ExtraChainNode::timer_luminance_autoremove() {
 }
 
 void ExtraChainNode::timer_info_print() {
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     malloc_trim(0);
 #endif
+
     eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
