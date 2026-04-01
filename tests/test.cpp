@@ -18,6 +18,8 @@
  */
 
 #include "managers/extrachain_node.h"
+#include "dfs/fragments/merkle.h"
+#include "dfs/fragments/fragment_storage.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
 
@@ -121,6 +123,132 @@ private slots:
         //    eLog("{}", (b - 5 == i - 5));
 
         //    return 0;
+    }
+
+    void merkle_hash_leaf_deterministic() {
+        std::vector<uint8_t> data(1024, 0xAB);
+        auto h1 = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        auto h2 = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        QCOMPARE(h1, h2);
+    }
+
+    void merkle_hash_leaf_different_data() {
+        std::vector<uint8_t> a(1024, 0xAB);
+        std::vector<uint8_t> b(1024, 0xCD);
+        QVERIFY(Dfs::Fragments::hash_leaf(a.data(), a.size())
+                != Dfs::Fragments::hash_leaf(b.data(), b.size()));
+    }
+
+    void merkle_hash_node_order_matters() {
+        std::vector<uint8_t> a(512, 0x01), b(512, 0x02);
+        auto ha = Dfs::Fragments::hash_leaf(a.data(), a.size());
+        auto hb = Dfs::Fragments::hash_leaf(b.data(), b.size());
+        QVERIFY(Dfs::Fragments::hash_node(ha, hb) != Dfs::Fragments::hash_node(hb, ha));
+    }
+
+    void merkle_single_leaf_is_root() {
+        std::vector<uint8_t> data(256, 0xFF);
+        auto leaf = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        QCOMPARE(Dfs::Fragments::compute_root({ leaf }), leaf);
+    }
+
+    void merkle_two_leaves() {
+        std::vector<uint8_t> a(256, 0x01), b(256, 0x02);
+        auto la = Dfs::Fragments::hash_leaf(a.data(), a.size());
+        auto lb = Dfs::Fragments::hash_leaf(b.data(), b.size());
+        QCOMPARE(Dfs::Fragments::compute_root({ la, lb }), Dfs::Fragments::hash_node(la, lb));
+    }
+
+    void merkle_three_leaves_odd_duplication() {
+        std::vector<uint8_t> a(256, 0x01), b(256, 0x02), c(256, 0x03);
+        auto la = Dfs::Fragments::hash_leaf(a.data(), a.size());
+        auto lb = Dfs::Fragments::hash_leaf(b.data(), b.size());
+        auto lc = Dfs::Fragments::hash_leaf(c.data(), c.size());
+        auto expected = Dfs::Fragments::hash_node(
+            Dfs::Fragments::hash_node(la, lb),
+            Dfs::Fragments::hash_node(lc, lc));
+        QCOMPARE(Dfs::Fragments::compute_root({ la, lb, lc }), expected);
+    }
+
+    void merkle_empty_leaves() {
+        Dfs::Fragments::Hash32 zero {};
+        QCOMPARE(Dfs::Fragments::compute_root({}), zero);
+    }
+
+    void merkle_verify_leaf_correct() {
+        std::vector<uint8_t> data(512000, 0x42);
+        auto expected = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        QVERIFY(Dfs::Fragments::verify_leaf(expected, data.data(), data.size()));
+    }
+
+    void merkle_verify_leaf_corrupted() {
+        std::vector<uint8_t> data(512000, 0x42);
+        auto expected = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        data[0] = 0x00;
+        QVERIFY(!Dfs::Fragments::verify_leaf(expected, data.data(), data.size()));
+    }
+
+    void fragments_hex_roundtrip() {
+        std::vector<uint8_t> data(100, 0xDE);
+        auto h = Dfs::Fragments::hash_leaf(data.data(), data.size());
+        auto hex = Dfs::Fragments::to_hex(h);
+        QCOMPARE(Dfs::Fragments::from_hex(hex), h);
+        QCOMPARE(hex.size(), size_t(64));
+    }
+
+    void fragments_hash_prefix() {
+        QVERIFY(Dfs::Fragments::is_fragment_hash("fg:abcdef"));
+        QVERIFY(!Dfs::Fragments::is_fragment_hash("abcdef"));
+        QCOMPARE(Dfs::Fragments::parse_merkle_root_hex("fg:abcdef"), std::string("abcdef"));
+        QVERIFY(Dfs::Fragments::parse_merkle_root_hex("abcdef").empty());
+    }
+
+    void fragments_file_write_read_roundtrip() {
+        using namespace Dfs::Fragments;
+
+        std::vector<Hash32> leaves;
+        for (int i = 0; i < 10; i++) {
+            std::vector<uint8_t> d(512, static_cast<uint8_t>(i));
+            leaves.push_back(hash_leaf(d.data(), d.size()));
+        }
+        auto root = compute_root(leaves);
+
+        FragmentsFile ff {
+            .version = STORAGE_VERSION,
+            .fragment_size = MERKLE_LEAF_SIZE,
+            .fragment_count = static_cast<uint32_t>(leaves.size()),
+            .merkle_root = root,
+            .leaves = leaves,
+        };
+
+        auto path = std::filesystem::temp_directory_path() / "test_merkle.fragments";
+        auto wr = write(path, ff);
+        QVERIFY(wr.has_value());
+
+        auto rd = read(path);
+        QVERIFY(rd.has_value());
+        QCOMPARE(rd->merkle_root, root);
+        QCOMPARE(rd->leaves.size(), leaves.size());
+        QCOMPARE(rd->fragment_count, static_cast<uint32_t>(leaves.size()));
+        QCOMPARE(rd->version, STORAGE_VERSION);
+
+        for (size_t i = 0; i < leaves.size(); i++) {
+            QCOMPARE(rd->leaves[i], leaves[i]);
+        }
+
+        std::filesystem::remove(path);
+    }
+
+    void merkle_large_tree() {
+        std::vector<Dfs::Fragments::Hash32> leaves;
+        for (int i = 0; i < 10000; i++) {
+            std::vector<uint8_t> d(32, static_cast<uint8_t>(i % 256));
+            leaves.push_back(Dfs::Fragments::hash_leaf(d.data(), d.size()));
+        }
+        auto r1 = Dfs::Fragments::compute_root(leaves);
+        auto r2 = Dfs::Fragments::compute_root(leaves);
+        QCOMPARE(r1, r2);
+        QVERIFY(r1 != Dfs::Fragments::Hash32 {});
     }
 
     void createNetwork() {

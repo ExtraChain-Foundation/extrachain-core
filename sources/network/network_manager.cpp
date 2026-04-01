@@ -1496,6 +1496,16 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
 
+    case MessageType::DfsFragments: {
+        auto result = MessagePack::deserialize<Dfs::Packets::DfsFragmentsData>(serialized);
+        if (!result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for DfsFragmentsData", type);
+            break;
+        }
+        node->dfs()->download_manager().dfs_fragments_received(result.value(), identifier);
+        break;
+    }
+
     case MessageType::DfsFileState: {
         if (status == MessageStatus::Request) {
             auto link_result = MessagePack::deserialize<Dfs::FileLink>(serialized);

@@ -63,6 +63,7 @@ enum class MessageType {
     // DfsFileThanks   = 61,
     DfsFileRemove                = 62,
     DfsFileRequestContinueUpload = 63,
+    DfsFragments                 = 64,
 
     DfsCollectionRequest   = 70,
     DfsCollectionContent   = 71,

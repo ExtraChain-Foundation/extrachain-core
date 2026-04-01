@@ -57,6 +57,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/name_validator.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/collection_template.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/dfs_vector.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragments/merkle.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/dfs/fragments/fragment_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor_id.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/actor_index.h
@@ -121,6 +123,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_utils.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/name_validator.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_vector.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragments/merkle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/fragments/fragment_storage.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_id.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/actor_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction.cpp

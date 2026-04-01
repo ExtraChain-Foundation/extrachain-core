@@ -19,6 +19,8 @@
 
 #include "dfs/load_manager.h"
 
+#include "dfs/fragments/merkle.h"
+#include "dfs/fragments/fragment_storage.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 #include "dfs/dfs_controller.h"
@@ -57,12 +59,12 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty() && m_amount_file_fragments_requests->size() <= MAX_CONCURRENT_DOWNLOADS) {
             auto active_downloads_locked = *active_downloads;
-            for (auto& it : *active_downloads_locked) {
+            for (auto it = active_downloads_locked->begin(); it != active_downloads_locked->end();) {
                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                     return false;
 
-                auto& load_info      = it.second;
-                bool  ignore_timeout = file_link_to_proceed == it.first;
+                auto& load_info      = it->second;
+                bool  ignore_timeout = file_link_to_proceed == it->first;
                 bool  is_requested   = false;
 
                 // Remove disconnected identifiers from the list
@@ -77,7 +79,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 // If no identifiers left, try to find new peers who have this file
                 if (load_info.identifier_list.empty()) {
                     eLog("[LoadManager] No active identifiers for file {}, asking neighbours",
-                         it.first.file_id);
+                         it->first.file_id);
                     load_info.identifier_storage_checker.clear();
 
                     // Add all active connections as potential sources
@@ -97,8 +99,8 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // If still no identifiers, remove from queue
                     if (load_info.identifier_list.empty()) {
                         eLog("[LoadManager] No connections available for file {}, removing from queue",
-                             it.first.file_id);
-                        active_downloads_locked->erase(it.first);
+                             it->first.file_id);
+                        it = active_downloads_locked->erase(it);
                         continue;
                     }
                 }
@@ -121,7 +123,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     else if (identifier.second.counter == 0
                              || (duration > std::chrono::seconds(10) || ignore_timeout)) {
                         if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1) {
-                            this->node->network()->send_message(it.first,
+                            this->node->network()->send_message(it->first,
                                                                 MessageType::DfsFileRequestContinueUpload,
                                                                 SendMode::Neighbours,
                                                                 MessageStatus::Request);
@@ -134,12 +136,12 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                         responder.add_identifier(identifier.first);
 
                         Dfs::FileLinkFragment output;
-                        output.file_link = it.first;
+                        output.file_link = it->first;
 
                         bool is_setted = false;
 
-                        if (it.second.amount_fragments > 0) {
-                            for (auto number : it.second.fragments_left) {
+                        if (it->second.amount_fragments > 0) {
+                            for (auto number : it->second.fragments_left) {
                                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                                     break;
                                 output.fragment_numbers.emplace(number);
@@ -177,6 +179,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     // eCritical("LoadManager::timer_runner, cannot download file. No response from identifiers.
                     // Identifiers list size: {}", identifier_list_size);
                 }
+                ++it;
             }
             return true;
         }
@@ -440,6 +443,31 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
 
     std::string identifier = *responder.identifiers().begin();
+
+    if (Dfs::Fragments::is_fragment_hash(dir_row->hash)) {
+        auto frag_path = Dfs::Fragments::make_path(file_link_fragment.file_link.owner_id,
+                                                    file_link_fragment.file_link.file_id);
+        auto ff = Dfs::Fragments::read(frag_path);
+        if (ff.has_value()) {
+            Dfs::Packets::DfsFragmentsData fragments_packet;
+            fragments_packet.owner_id       = file_link_fragment.file_link.owner_id;
+            fragments_packet.file_id        = file_link_fragment.file_link.file_id;
+            fragments_packet.fragment_size  = ff->fragment_size;
+            fragments_packet.fragment_count = ff->fragment_count;
+            fragments_packet.merkle_root    = Dfs::Fragments::to_hex(ff->merkle_root);
+            fragments_packet.leaf_hashes.reserve(ff->leaves.size());
+            for (const auto& leaf : ff->leaves) {
+                fragments_packet.leaf_hashes.push_back(Dfs::Fragments::to_hex(leaf));
+            }
+
+            node->network()->send_message(fragments_packet,
+                                          MessageType::DfsFragments,
+                                          SendMode::Focused,
+                                          MessageStatus::NoStatus,
+                                          responder);
+        }
+    }
+
     ThreadPoolBoost::instance_dfs()->post(
         [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
             uint64_t offset = 0;
@@ -571,15 +599,14 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
                 if (item->second.fragments_achieved.contains(file_content.fragment_number)) {
-                    // eCritical("[Dfs] LoadManager::file_fragment_achieved, offset already exist. file_link: {},
-                    // offset: {}, fragment_number: {}", file_link, file_content.offset,
-                    // file_content.fragment_number);
                     return;
+                }
+                if (item->second.amount_fragments == 0) {
+                    item->second.amount_fragments = file_content.full_amount_fragments;
                 }
             } else {
                 ReadStorage read_storage { .amount_fragments   = file_content.full_amount_fragments,
                                            .fragments_achieved = {} };
-                // read_storage.offsets_read_progress.emplace(file_content.offset, false);
                 active_reads_locked->emplace(file_link, read_storage);
             }
         }
@@ -604,6 +631,41 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             auto item                = active_reads_locked->find(file_link);
             if (item != active_reads_locked->end()) {
                 item->second.fragments_achieved.emplace(file_content.fragment_number);
+
+                // Per-fragment Merkle verification
+                if (item->second.has_fragments_info) {
+                    constexpr size_t frags_per_leaf =
+                        Dfs::Fragments::MERKLE_LEAF_SIZE / Dfs::Basic::FRAGMENT_SIZE;
+                    size_t leaf_idx = (file_content.fragment_number - 1) / frags_per_leaf;
+                    size_t first_frag_of_leaf = leaf_idx * frags_per_leaf + 1;
+
+                    // Check if all network fragments for this leaf have arrived
+                    bool leaf_complete = true;
+                    for (size_t f = first_frag_of_leaf;
+                         f < first_frag_of_leaf + frags_per_leaf && f <= file_content.full_amount_fragments;
+                         ++f) {
+                        if (!item->second.fragments_achieved.contains(f)) {
+                            leaf_complete = false;
+                            break;
+                        }
+                    }
+
+                    if (leaf_complete && leaf_idx < item->second.leaf_hashes.size()) {
+                        uint64_t leaf_offset = static_cast<uint64_t>(leaf_idx) * Dfs::Fragments::MERKLE_LEAF_SIZE;
+                        auto leaf_data = Utils::read_file_chunk(path.value(), leaf_offset,
+                                                                 Dfs::Fragments::MERKLE_LEAF_SIZE);
+                        if (leaf_data.has_value()) {
+                            bool ok = Dfs::Fragments::verify_leaf(
+                                item->second.leaf_hashes[leaf_idx],
+                                reinterpret_cast<const uint8_t*>(leaf_data->data()),
+                                leaf_data->size());
+                            if (!ok) {
+                                eWarning("[Dfs] Leaf {} verification failed for {}/{}",
+                                         leaf_idx, file_link.owner_id, file_link.file_id);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -710,4 +772,51 @@ bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
     }
 
     return check_active(m_active_downloads);
+}
+
+void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& data,
+                                          const std::string&                    identifier) {
+    auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
+
+    // Parse leaf hashes from hex
+    std::vector<Dfs::Fragments::Hash32> leaves;
+    leaves.reserve(data.leaf_hashes.size());
+    for (const auto& hex : data.leaf_hashes) {
+        leaves.push_back(Dfs::Fragments::from_hex(hex));
+    }
+
+    // Verify merkle root matches leaves
+    auto expected_root = Dfs::Fragments::from_hex(data.merkle_root);
+    auto computed_root = Dfs::Fragments::compute_root(leaves);
+    if (computed_root != expected_root) {
+        eWarning("[Dfs] Merkle root mismatch from peer for {}/{}", data.owner_id, data.file_id);
+        return;
+    }
+
+    // Save .fragments file to disk
+    Dfs::Fragments::FragmentsFile ff {
+        .version        = Dfs::Fragments::STORAGE_VERSION,
+        .fragment_size  = data.fragment_size,
+        .fragment_count = data.fragment_count,
+        .merkle_root    = expected_root,
+        .leaves         = leaves,
+    };
+    auto frag_path = Dfs::Fragments::make_path(data.owner_id, data.file_id);
+    Dfs::Fragments::write(frag_path, ff);
+
+    // Store in ReadStorage for per-fragment verification
+    auto active_reads_locked = *m_active_reads;
+    auto item = active_reads_locked->find(file_link);
+    if (item == active_reads_locked->end()) {
+        ReadStorage rs {};
+        rs.amount_fragments  = 0;
+        rs.has_fragments_info = true;
+        rs.merkle_root       = expected_root;
+        rs.leaf_hashes       = std::move(leaves);
+        active_reads_locked->emplace(file_link, std::move(rs));
+    } else {
+        item->second.has_fragments_info = true;
+        item->second.merkle_root       = expected_root;
+        item->second.leaf_hashes       = std::move(leaves);
+    }
 }

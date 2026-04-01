@@ -26,6 +26,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include "dfs/dfs_utils.h"
+#include "dfs/fragments/merkle.h"
 #include "chain/actor_id.h"
 #include "network/network_manager.h"
 
@@ -98,6 +99,7 @@ public:
     void broadcast_file_exist(const ActorId& owner_id, const std::string& file_id);
 
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
+    void dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& data, const std::string& identifier);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
@@ -124,10 +126,13 @@ private:
         m_amount_file_fragments_requests;
 
     struct ReadStorage {
-        // uint64_t current_size;
         std::size_t      amount_fragments;
         std::set<size_t> fragments_achieved;
-        // std::map<uint64_t, bool> offsets_read_progress;
+
+        // Merkle verification (new fragment system)
+        bool                                has_fragments_info = false;
+        Dfs::Fragments::Hash32              merkle_root {};
+        std::vector<Dfs::Fragments::Hash32> leaf_hashes;
     };
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;

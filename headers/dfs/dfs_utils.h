@@ -352,6 +352,19 @@ namespace Dfs {
             (),
             (owner_id, file_id, data, offset, current_size, fragment_number, full_amount_fragments))
 
+        struct DfsFragmentsData {
+            ActorId                  owner_id;
+            std::string              file_id;
+            std::uint32_t            fragment_size;
+            std::uint32_t            fragment_count;
+            std::string              merkle_root;
+            std::vector<std::string> leaf_hashes;
+        };
+        BOOST_DESCRIBE_STRUCT(
+            DfsFragmentsData,
+            (),
+            (owner_id, file_id, fragment_size, fragment_count, merkle_root, leaf_hashes))
+
         struct FileState {
             ActorId        owner_id;
             std::string    file_id;
