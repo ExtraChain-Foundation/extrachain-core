@@ -34,6 +34,7 @@ enum class TransactionType {
     Reward       = 4,  ///< Mining/validation reward
     Burn         = 5,  ///< Token destruction
     Conversion   = 6,  ///< Token conversion
+    Minting      = 7,  ///< Token minting (owner only)
     Balance      = 99, ///< Balance query transaction
     Unknown      = 100 ///< Unrecognized transaction type
 };

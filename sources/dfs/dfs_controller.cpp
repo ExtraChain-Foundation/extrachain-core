@@ -2469,6 +2469,10 @@ LoadManager &DfsController::download_manager() {
     return load_manager_;
 }
 
+size_t DfsController::load_manager_downloads_size() {
+    return load_manager_.active_downloads_size();
+}
+
 void DfsController::check_all_files(std::string identifier) {
     auto db_instance = dirs_manager_.get_db_instance();
     auto dirs        = Dfs::Tables::DirsFile::DirsSpace::load_all(db_instance);

@@ -252,7 +252,7 @@ private:
     std::unique_ptr<UPNPConnection> upnp_dis_;
     std::unique_ptr<UPNPConnection> upnp_net_;
     std::unique_ptr<UPnPConnector>  upnp_connector_;
-    QMap<std::string, int>          msg_hash_list_ = {};
+    QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
     ExtraChainNode*                       node;
     std::shared_ptr<QNetworkAddressEntry> local_;
@@ -262,7 +262,11 @@ private:
     SafePtr<std::map<NetworkReconnect, QString>> reconnections_to_identifier_;
     NetworkStatus                                network_status_;
 
-    std::map<std::string, int> reconn_;
+    struct ReconnEntry {
+        uint64_t attempts       = 0;
+        qint64   next_attempt_ms = 0;
+    };
+    std::map<std::string, ReconnEntry> reconn_;
 
     SafePtr<std::map<std::string, std::pair<std::string, QDateTime>>>           messages_;
     std::map<std::string, MessageIdDataWaiting>                                 messages_waiting_;
@@ -345,6 +349,12 @@ protected:
      * @return
      */
     bool check_message_count(const std::string& msg);
+
+public:
+    size_t msg_hash_list_size() const { return msg_hash_list_.size(); }
+    size_t messages_size() { return messages_->size(); }
+    size_t forwarded_messages_size() { return forwarded_messages_->size(); }
+    size_t connections_size() { return connections_->size(); }
 
 private slots:
     void onNewWsConnection();

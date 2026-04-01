@@ -21,6 +21,10 @@
 
 #include <array>
 
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    #include <malloc.h>
+#endif
+
 #include <QJsonObject>
 #include <sodium/core.h>
 
@@ -1042,6 +1046,10 @@ void ExtraChainNode::timer_luminance_autoremove() {
 }
 
 void ExtraChainNode::timer_info_print() {
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    malloc_trim(0);
+#endif
+
     eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
          dag_->current_section().to_string(NumeralBase::Dec),
          dag_->current_section(),
@@ -1050,6 +1058,46 @@ void ExtraChainNode::timer_info_print() {
          dag_->cache().section()/*,
          m_dfs->sizeTaken() / 1024.0,
          m_dfs->totalDfsSize() / 1024.0*/);
+
+#ifndef IS_APP_CLIENT
+#ifdef Q_OS_LINUX
+    {
+        std::ifstream statm("/proc/self/statm");
+        if (statm.is_open()) {
+            long pages = 0;
+            statm >> pages; // total
+            statm >> pages; // RSS
+            long rss_mb = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
+            long queue_total = 0;
+            long bytes_to_write_total = 0;
+            {
+                auto conns = *network_manager_->connections();
+                for (const auto &s : *conns) {
+                    queue_total += s->queue_size();
+                    bytes_to_write_total += s->pending_bytes();
+                }
+            }
+
+            eLog("[Mem] RSS: {} MB | msg_hash: {} messages: {} forwarded: {} "
+                 "snd_tx: {} fail_tx: {} last_tx: {} cached_tx: {} "
+                 "conn: {}/{} queue: {} pending_kb: {} dfs_dl: {}",
+                 rss_mb,
+                 network_manager_->msg_hash_list_size(),
+                 network_manager_->messages_size(),
+                 network_manager_->forwarded_messages_size(),
+                 dag_->sended_transactions_size(),
+                 dag_->failed_transactions_size(),
+                 dag_->last_txs_size(),
+                 dag_->cached_txs_size(),
+                 network_manager_->active_connections_count(),
+                 network_manager_->connections_size(),
+                 queue_total,
+                 bytes_to_write_total / 1024,
+                 dfs_->load_manager_downloads_size());
+        }
+    }
+#endif
+#endif
 
     if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready
         && !dag_->read_section(dag_->current_section()).has_value()) {

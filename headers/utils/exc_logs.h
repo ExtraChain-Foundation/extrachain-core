@@ -103,14 +103,41 @@ class Logger {
         }
     }
 
+    void cleanup_old_logs(int max_age_days = 7) {
+        std::error_code ec;
+        auto            now = std::filesystem::file_time_type::clock::now();
+
+        for (const auto &entry : std::filesystem::directory_iterator(logs_directory, ec)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".log")
+                continue;
+
+            std::error_code file_ec;
+            auto            age = now - entry.last_write_time(file_ec);
+            if (file_ec)
+                continue;
+
+            auto days = std::chrono::duration_cast<std::chrono::hours>(age).count() / 24;
+            if (days >= max_age_days) {
+                std::filesystem::remove(entry.path(), file_ec);
+            }
+        }
+    }
+
     void open_log_file() {
         if (!file_output_enabled)
             return;
         ensure_logs_directory();
+        cleanup_old_logs();
         current_log_filename = logs_directory + "/" + create_log_filename();
         log_file.open(current_log_filename, std::ios::out | std::ios::app);
     }
 
+public:
+    void cleanup_logs() {
+        cleanup_old_logs();
+    }
+
+private:
     void start_file_logging() {
         if (!file_output_enabled) {
             file_output_enabled = true;
@@ -486,5 +513,21 @@ namespace detail {
 #define eLog(...)      eDebug(__VA_ARGS__)
 #define eUnimplemented eFatal("Unimplemented function: {}", std::source_location::current().function_name())
 #define eTemp(...)     eDebug(__VA_ARGS__)
+
+inline void reset_qt_log_handler() {
+    qInstallMessageHandler(nullptr);
+}
+
+inline void install_qt_log_handler() {
+    std::ios_base::sync_with_stdio(false);
+    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+        auto level = type == QtDebugMsg      ? LogLevel::Debug
+                     : type == QtWarningMsg  ? LogLevel::Debug
+                     : type == QtCriticalMsg ? LogLevel::Critical
+                     : type == QtFatalMsg    ? LogLevel::Fatal
+                                             : LogLevel::Info;
+        detail::println_impl(level, ctx.file ? ctx.file : "FromQt", ctx.line, "{}", msg.toStdString());
+    });
+}
 
 #include "utils/exc_logs_extra.h"

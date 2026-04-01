@@ -491,6 +491,7 @@ public:
 
     DirsManager &dirs_manager();
     LoadManager &download_manager();
+    size_t       load_manager_downloads_size();
 
     void sync(const std::string &identifier);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
