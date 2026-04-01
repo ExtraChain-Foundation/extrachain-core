@@ -50,10 +50,6 @@
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
 
-#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
-    #include <malloc.h>
-#endif
-
 std::atomic<bool> node_enabled { true };
 
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
