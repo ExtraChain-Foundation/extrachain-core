@@ -327,7 +327,27 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
-    // eLog("Adding file to download queue: {} / {}", owner_id, dir_row);
+    // For fg: files, request DfsFragments before starting download
+    if (Dfs::Fragments::is_fragment_hash(dir_row.hash)) {
+        auto active_reads_locked = *m_active_reads;
+        auto item = active_reads_locked->find(file_link);
+        if (item == active_reads_locked->end() || !item->second.has_fragments_info) {
+            eLog("[Dfs-dbg] Requesting DfsFragments for {}/{}", owner_id, dir_row.file_id);
+            Dfs::Packets::DfsFragmentsData request;
+            request.owner_id = owner_id;
+            request.file_id  = dir_row.file_id;
+
+            Responder resp(nullptr);
+            resp.add_identifier(identifier);
+            node->network()->send_message(request,
+                                          MessageType::DfsFragments,
+                                          SendMode::Focused,
+                                          MessageStatus::Request,
+                                          resp);
+            return;
+        }
+        eLog("[Dfs-dbg] DfsFragments already available, proceeding to download {}/{}", owner_id, dir_row.file_id);
+    }
 
     try {
         std::filesystem::create_directories(fmt::format("{}/{}", DfsB::DFS_FOLDER, owner_id));
@@ -443,30 +463,6 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
     auto max_offsets = calculate_max_offsets(total_size, Dfs::Basic::FRAGMENT_SIZE);
 
     std::string identifier = *responder.identifiers().begin();
-
-    if (Dfs::Fragments::is_fragment_hash(dir_row->hash)) {
-        auto frag_path = Dfs::Fragments::make_path(file_link_fragment.file_link.owner_id,
-                                                    file_link_fragment.file_link.file_id);
-        auto ff = Dfs::Fragments::read(frag_path);
-        if (ff.has_value()) {
-            Dfs::Packets::DfsFragmentsData fragments_packet;
-            fragments_packet.owner_id       = file_link_fragment.file_link.owner_id;
-            fragments_packet.file_id        = file_link_fragment.file_link.file_id;
-            fragments_packet.fragment_size  = ff->fragment_size;
-            fragments_packet.fragment_count = ff->fragment_count;
-            fragments_packet.merkle_root    = Dfs::Fragments::to_hex(ff->merkle_root);
-            fragments_packet.leaf_hashes.reserve(ff->leaves.size());
-            for (const auto& leaf : ff->leaves) {
-                fragments_packet.leaf_hashes.push_back(Dfs::Fragments::to_hex(leaf));
-            }
-
-            node->network()->send_message(fragments_packet,
-                                          MessageType::DfsFragments,
-                                          SendMode::Focused,
-                                          MessageStatus::NoStatus,
-                                          responder);
-        }
-    }
 
     ThreadPoolBoost::instance_dfs()->post(
         [this, identifier, max_offsets, total_size, file_link_fragment, path = *path, dir_row]() {
@@ -632,6 +628,13 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             if (item != active_reads_locked->end()) {
                 item->second.fragments_achieved.emplace(file_content.fragment_number);
 
+                // Emit download progress
+                if (item->second.amount_fragments > 0) {
+                    int progress = static_cast<int>(
+                        item->second.fragments_achieved.size() * 100 / item->second.amount_fragments);
+                    emit node->dfs()->downloadProgress(file_link.owner_id, file_link.file_id, progress);
+                }
+
                 // Per-fragment Merkle verification
                 if (item->second.has_fragments_info) {
                     constexpr size_t frags_per_leaf =
@@ -776,6 +779,7 @@ bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
 
 void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& data,
                                           const std::string&                    identifier) {
+    eLog("[Dfs-dbg] DfsFragments received for {}/{}, leaves={}", data.owner_id, data.file_id, data.leaf_hashes.size());
     auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
 
     // Parse leaf hashes from hex
@@ -819,4 +823,39 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
         item->second.merkle_root       = expected_root;
         item->second.leaf_hashes       = std::move(leaves);
     }
+
+    // Now initiate download — fragments info is ready
+    eLog("[Dfs-dbg] Initiating download after DfsFragments for {}/{}", data.owner_id, data.file_id);
+    auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(
+        node->dfs()->get_db_instance(), data.owner_id, data.file_id);
+    if (dir_row.has_value()) {
+        add_to_queue(data.owner_id, dir_row.value(), identifier);
+    }
+}
+
+void LoadManager::share_fragments(const Dfs::Packets::DfsFragmentsData& request,
+                                   const Responder&                      responder) {
+    eLog("[Dfs-dbg] share_fragments request for {}/{}", request.owner_id, request.file_id);
+    auto frag_path = Dfs::Fragments::make_path(request.owner_id, request.file_id);
+    auto ff = Dfs::Fragments::read(frag_path);
+    if (!ff.has_value()) {
+        return;
+    }
+
+    Dfs::Packets::DfsFragmentsData response;
+    response.owner_id       = request.owner_id;
+    response.file_id        = request.file_id;
+    response.fragment_size  = ff->fragment_size;
+    response.fragment_count = ff->fragment_count;
+    response.merkle_root    = Dfs::Fragments::to_hex(ff->merkle_root);
+    response.leaf_hashes.reserve(ff->leaves.size());
+    for (const auto& leaf : ff->leaves) {
+        response.leaf_hashes.push_back(Dfs::Fragments::to_hex(leaf));
+    }
+
+    node->network()->send_message(response,
+                                  MessageType::DfsFragments,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
 }

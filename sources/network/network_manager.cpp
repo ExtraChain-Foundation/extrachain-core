@@ -1502,7 +1502,11 @@ void NetworkManager::message_received(const std::string &message,
             eWarning("[NetworkManager] {} deserialization failed for DfsFragmentsData", type);
             break;
         }
-        node->dfs()->download_manager().dfs_fragments_received(result.value(), identifier);
+        if (status == MessageStatus::Request) {
+            node->dfs()->download_manager().share_fragments(result.value(), responder);
+        } else {
+            node->dfs()->download_manager().dfs_fragments_received(result.value(), identifier);
+        }
         break;
     }
 

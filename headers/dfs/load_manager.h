@@ -100,6 +100,7 @@ public:
 
     void file_fragment_achieved(const Dfs::Packets::FragmentData& file_content, const std::string& identifier);
     void dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& data, const std::string& identifier);
+    void share_fragments(const Dfs::Packets::DfsFragmentsData& request, const Responder& responder);
 
     void finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row);
 
