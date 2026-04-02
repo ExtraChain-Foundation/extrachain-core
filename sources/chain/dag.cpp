@@ -230,7 +230,7 @@ std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Tran
         return std::unexpected(TransactionError::NoLastSection);
     }
 
-    auto section = read_section(tx.section() - 1);
+    auto section = this->read_section(tx.section() - 1);
     if (!section.has_value() && transaction.type() != TransactionType::Genesis) {
         return std::unexpected(TransactionError::NoLastSection);
     }
@@ -1021,6 +1021,29 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     receiverActor = node->actor_index()->read_actor_old(targetReceiver);
     if (receiverActor.empty()) {
         return TransactionProveError::ReceiverNotExists;
+    }
+
+    // Validate Minting transactions (owner-only)
+    if (tx.type() == TransactionType::Minting) {
+        static const ActorId minting_owner("46710a2d823c23db9fc2ac01e0f84212a8128373");
+        static const TokenId minting_token("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
+
+        if (targetSender != minting_owner) {
+            return TransactionProveError::InvalidSignature;
+        }
+        if (tx.token() != minting_token) {
+            return TransactionProveError::RewardInvalidToken;
+        }
+        if (targetSender == targetReceiver) {
+            return TransactionProveError::IdenticalSenderReceiver;
+        }
+
+        bool verify = tx.verify(senderActor);
+        if (!verify) {
+            return TransactionProveError::InvalidSignature;
+        }
+
+        return TransactionProveError::NoError;
     }
 
     // Check sender-receiver relationship based on transaction type

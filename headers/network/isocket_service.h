@@ -107,6 +107,13 @@ public:
 
     bool is_closed();
 
+    long queue_size() {
+        QMutexLocker locker(&queue_mutex_);
+        return high_queue_.size() + normal_queue_.size() + low_queue_.size();
+    }
+
+    virtual qint64 pending_bytes() const { return 0; }
+
 // protected slots:
 public slots:
     virtual void closeSocket();

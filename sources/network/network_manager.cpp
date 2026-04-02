@@ -187,8 +187,10 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
+#ifndef IS_APP_CLIENT
     if (!node->is_client_application())
         return;
+#endif
 
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
@@ -255,19 +257,23 @@ void NetworkManager::reconnection() {
         return;
     }
 
-    for (const auto &[ip, count] : need_reconnect) {
-        eLog("[Network] Reconnect to node: {}", ip);
+    const qint64 now = Utils::current_date_ms();
+    for (auto &[ip, entry] : reconn_) {
+        if (!need_reconnect.contains(ip)) continue;
+        if (this->failed_ips_.contains(ip)) continue;
+        if (now < entry.next_attempt_ms) continue;
 
-        if (this->failed_ips_.contains(ip)) {
-            continue;
-        }
-
+        eLog("[Network] Reconnect to node: {} (attempt {})", ip, entry.attempts + 1);
         emit this->connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
-        // reconn_[ip] += 1; // count
 
-        // if (reconn_[ip] > 1000) {
-        //     reconn_.erase(ip);
-        // }
+        if (entry.attempts < 7) entry.attempts++;
+#ifdef IS_APP_UI_CLIENT
+        constexpr int max_delay_ms = 60'000;
+#else
+        constexpr int max_delay_ms = 300'000;
+#endif
+        const int delay         = std::min(5000 * (1 << entry.attempts), max_delay_ms);
+        entry.next_attempt_ms   = now + delay;
     }
 }
 
@@ -300,7 +306,7 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivated();
 
         if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
-            reconn_.insert({ service->ip().toStdString(), 1 });
+            reconn_.insert({ service->ip().toStdString(), {} });
         }
     });
 
@@ -391,33 +397,32 @@ void NetworkManager::check_port(const QString     ip,
     //     return;
     // }
 
-    // int         timeoutMs = 1000;
-    QTcpSocket *socket = new QTcpSocket(this);
+    auto *socket = new QTcpSocket(this);
+    auto *timer  = new QTimer(this);
+    timer->setSingleShot(true);
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, ip, protocol, request, isConstant]() {
+    connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
+        timer->stop();
+        timer->deleteLater();
         socket->disconnectFromHost();
         socket->deleteLater();
-        // emit portCheckResult(ip, port, true);
         connect_to_node_slot(ip, protocol, request, isConstant);
     });
 
-    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket, ip](QAbstractSocket::SocketError error) {
+    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer](QAbstractSocket::SocketError) {
+        timer->stop();
+        timer->deleteLater();
         socket->deleteLater();
     });
 
-    // QTimer* timer = new QTimer(this);
-    // timer->setSingleShot(true);
-    // connect(timer, &QTimer::timeout, this, [this, socket, timer, ip]() {
-    //     if (socket->state() == QAbstractSocket::ConnectingState) {
-    //         socket->abort();
-    //         // emit portCheckResult(ip, wsPort, false);
-    //         socket->deleteLater();
-    //     }
-    //     timer->deleteLater();
-    // });
+    connect(timer, &QTimer::timeout, this, [socket, timer]() {
+        socket->abort();
+        socket->deleteLater();
+        timer->deleteLater();
+    });
 
     socket->connectToHost(QHostAddress(ip), ws_port);
-    // timer->start(timeoutMs);
+    timer->start(3000);
 }
 
 bool NetworkManager::check_port_sync(const QString    &ip,
@@ -565,6 +570,24 @@ void NetworkManager::connect_to_websocket(const QString &ip,
         return;
     }
 
+    {
+        std::vector<SocketService *> to_close;
+        auto connectionsLocked = *connections_;
+        for (const auto &el : *connectionsLocked) {
+            if (el->ip() == ip) {
+                if (el->is_active()) {
+                    return;
+                }
+                if (!el->is_closed()) {
+                    to_close.push_back(el);
+                }
+            }
+        }
+        for (auto *el : to_close) {
+            el->closeSocket();
+        }
+    }
+
     auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
     service->set_direction(SocketDirection::Outgoing);
     connectWsService(service, requestListNodes);
@@ -595,6 +618,17 @@ void NetworkManager::clear_network_caches() {
                 it = messages_locked->erase(it);
             } else
                 ++it;
+        }
+    }
+
+    {
+        qint64 now = QDateTime::currentSecsSinceEpoch();
+        for (auto it = msg_hash_list_.begin(); it != msg_hash_list_.end();) {
+            if (now - it.value().second >= 120) {
+                it = msg_hash_list_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 }
@@ -981,19 +1015,18 @@ int NetworkManager::active_connections_count() {
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {
-    bool                             flag_result = true;
-    bool                             value       = 0;
-    std::string                      hashMsg     = Utils::calculate_hash(msg);
-    QMap<std::string, int>::iterator it          = msg_hash_list_.find(hashMsg);
+    bool        flag_result = true;
+    std::string hashMsg     = Utils::calculate_hash(msg);
+    auto        it          = msg_hash_list_.find(hashMsg);
 
-    if (it == msg_hash_list_.end())
-        msg_hash_list_.insert(hashMsg, value);
-    else {
-        if (msg_hash_list_.find(hashMsg).value() == connections_->size() - 1) {
-            msg_hash_list_.remove(hashMsg);
+    if (it == msg_hash_list_.end()) {
+        msg_hash_list_.insert(hashMsg, { 0, QDateTime::currentSecsSinceEpoch() });
+    } else {
+        if (connections_->empty() || it.value().first == connections_->size() - 1) {
+            msg_hash_list_.erase(it);
             flag_result = false;
         } else {
-            msg_hash_list_.find(hashMsg).value()++;
+            it.value().first++;
             flag_result = true;
         }
     }
@@ -1922,7 +1955,9 @@ void NetworkManager::socket_error(Network::SocketServiceError error,
         || error == Network::SocketServiceError::VersionTooNew
         || error == Network::SocketServiceError::PeerUnavailable) {
         reconn_.erase(ip);
-        failed_ips_.insert(ip);
+        if (!Utils::vector_contains(first_nodes_, ip) && ip != first_node_) {
+            failed_ips_.insert(ip);
+        }
         emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
         return;
     }

@@ -605,6 +605,14 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
         return;
     }
 
+    // Minting transactions (creates from nothing, adds to receiver)
+    if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
+        auto key = std::make_pair(tx.receiver(), tx.token());
+
+        balances[key] += tx.amount();
+        return;
+    }
+
     // Reward transactions
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
         auto key = std::make_pair(tx.sender(), tx.token());

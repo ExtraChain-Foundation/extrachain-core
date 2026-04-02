@@ -554,6 +554,11 @@ public:
         return failed_transactions_;
     }
 
+    size_t sended_transactions_size() const { return sended_transactions_.size(); }
+    size_t failed_transactions_size() const { return failed_transactions_.size(); }
+    size_t last_txs_size() const { return last_txs_.size(); }
+    size_t cached_txs_size() { auto g = cached_txs_.lock(); return g->size(); }
+
 private:
     ExtraChainNode                              *node;                 // Parent node reference
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups

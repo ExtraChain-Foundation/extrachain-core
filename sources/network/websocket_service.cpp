@@ -137,23 +137,23 @@ void WebSocketService::open(const QString &ip, quint16 port) {
         eLog("[WS] Open {}", url);
         connections();
         m_ws->open(url);
-        ip_ = ip; // m_ws->peerAddress().toString();
+        ip_ = ip;
 
-        // port_ = m_ws->peerPort();
+        auto *timeout = new QTimer(this);
+        timeout->setSingleShot(true);
 
-        // QTimer *timeout = new QTimer(this);
-        // timeout->setSingleShot(true);
+        connect(timeout, &QTimer::timeout, this, [this, timeout]() {
+            eLog("[WS] Connection timeout: {}", ip_);
+            timeout->deleteLater();
+            closeSocket();
+        });
 
-        // connect(timeout, &QTimer::timeout, this, [this, timeout]() {
-        //     eLog("[WS] Connection timeout");
-        //     timeout->deleteLater();
-        //     closeSocket();
-        // });
+        connect(m_ws, &QWebSocket::connected, timeout, [timeout]() {
+            timeout->stop();
+            timeout->deleteLater();
+        });
 
-        // connect(m_ws, &QWebSocket::connected, timeout, [timeout]() {
-        //     timeout->stop();
-        //     timeout->deleteLater();
-        // });
+        timeout->start(10000);
     }
 }
 

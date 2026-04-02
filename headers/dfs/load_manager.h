@@ -103,6 +103,10 @@ public:
 
     bool is_downloading(const Dfs::FileLink& file_link) const;
 
+    size_t active_downloads_size() {
+        return m_active_downloads->size() + m_active_downloads_priority->size();
+    }
+
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
 
