@@ -47,12 +47,16 @@ QHash<int, QByteArray> VariantModel::roleNames() const {
 }
 
 QVariant VariantModel::data(const QModelIndex &index, int role) const {
-    if (index.row() < 0) {
+    if (index.row() < 0 || index.row() >= m_datas.length()) {
         return {};
     }
 
-    QVariantMap variants = m_datas[index.row()];
-    return variants[m_roles[role]];
+    const QVariantMap &variants = m_datas[index.row()];
+    const QByteArray   roleName = m_roles.value(role);
+    if (roleName.isEmpty()) {
+        return {};
+    }
+    return variants.value(roleName);
 }
 
 bool VariantModel::setData(const QModelIndex &index, const QVariant &value, int role) {
@@ -166,6 +170,9 @@ QVariantMap VariantModel::get(int index) {
 }
 
 void VariantModel::set(int indx, const QByteArray &role, const QVariant &value) {
+    if (indx < 0 || indx >= m_datas.length()) {
+        return;
+    }
     auto &val = m_datas[indx];
     val[role] = value;
     emit dataChanged(index(indx, 0), index(indx, 0), QList<int>() << m_roles.key(role));
@@ -260,10 +267,10 @@ void VariantModel::clear() {
         return;
     }
 
-    beginResetModel();
+    beginRemoveRows(QModelIndex(), 0, m_datas.size() - 1);
     m_datas.clear();
     m_count = 0;
-    endResetModel();
+    endRemoveRows();
 
     emit countChanged(m_count);
 }

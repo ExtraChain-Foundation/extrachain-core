@@ -114,6 +114,122 @@ std::string Utils::str_to_upper(const std::string &str) {
     return str_;
 }
 
+std::string Utils::sanitize_text(const std::string &input) {
+    std::string result;
+    result.reserve(input.size());
+
+    size_t i = 0;
+    while (i < input.size()) {
+        auto byte = static_cast<unsigned char>(input[i]);
+
+        // Determine UTF-8 sequence length
+        int seq_len = 0;
+        if (byte <= 0x7F) {
+            seq_len = 1;
+        } else if ((byte & 0xE0) == 0xC0) {
+            seq_len = 2;
+        } else if ((byte & 0xF0) == 0xE0) {
+            seq_len = 3;
+        } else if ((byte & 0xF8) == 0xF0) {
+            seq_len = 4;
+        } else {
+            ++i;
+            continue;
+        }
+
+        if (i + seq_len > input.size()) {
+            break;
+        }
+
+        bool valid = true;
+        for (int j = 1; j < seq_len; ++j) {
+            if ((static_cast<unsigned char>(input[i + j]) & 0xC0) != 0x80) {
+                valid = false;
+                break;
+            }
+        }
+
+        if (!valid) {
+            ++i;
+            continue;
+        }
+
+        uint32_t cp = 0;
+        if (seq_len == 1) {
+            cp = byte;
+        } else if (seq_len == 2) {
+            cp = (byte & 0x1F) << 6 | (static_cast<unsigned char>(input[i + 1]) & 0x3F);
+        } else if (seq_len == 3) {
+            cp = (byte & 0x0F) << 12
+                 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 6
+                 | (static_cast<unsigned char>(input[i + 2]) & 0x3F);
+        } else {
+            cp = (byte & 0x07) << 18
+                 | (static_cast<unsigned char>(input[i + 1]) & 0x3F) << 12
+                 | (static_cast<unsigned char>(input[i + 2]) & 0x3F) << 6
+                 | (static_cast<unsigned char>(input[i + 3]) & 0x3F);
+        }
+
+        if (cp == 0x00) {
+            i += seq_len;
+            continue;
+        }
+
+        if (cp == 0x09) {
+            result += ' ';
+            i += seq_len;
+            continue;
+        }
+
+        if ((cp >= 0x01 && cp <= 0x1F && cp != 0x0A && cp != 0x0D)
+            || (cp >= 0x7F && cp <= 0x9F)) {
+            i += seq_len;
+            continue;
+        }
+
+        if (cp >= 0xD800 && cp <= 0xDFFF) {
+            i += seq_len;
+            continue;
+        }
+
+        if ((cp >= 0xFDD0 && cp <= 0xFDEF)
+            || (cp & 0xFFFF) == 0xFFFE
+            || (cp & 0xFFFF) == 0xFFFF) {
+            i += seq_len;
+            continue;
+        }
+
+        if ((seq_len == 2 && cp < 0x80)
+            || (seq_len == 3 && cp < 0x800)
+            || (seq_len == 4 && cp < 0x10000)) {
+            i += seq_len;
+            continue;
+        }
+
+        if (cp > 0x10FFFF) {
+            i += seq_len;
+            continue;
+        }
+
+        result.append(input, i, seq_len);
+        i += seq_len;
+    }
+
+    return result;
+}
+
+std::string Utils::trim(const std::string &str) {
+    auto start = str.begin();
+    while (start != str.end() && std::isspace(static_cast<unsigned char>(*start))) {
+        ++start;
+    }
+    auto end = str.end();
+    while (end != start && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+        --end;
+    }
+    return { start, end };
+}
+
 bool Utils::is_hex_string(const std::string &str) {
     if (str.empty())
         return false;
