@@ -200,10 +200,6 @@ string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
-# Work around an Apple Clang + fmt 11 regression where consteval-based
-# format-string checking fails while building the precompiled header.
-target_compile_definitions(extrachain PUBLIC FMT_USE_CONSTEVAL=0)
-
 target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 

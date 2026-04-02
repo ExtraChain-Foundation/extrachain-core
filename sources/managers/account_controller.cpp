@@ -335,7 +335,7 @@ std::set<ActorId> AccountController::profiles_list() {
         return {};
 
     if (!file.open(QFile::ReadOnly)) {
-        eWarning("Failed to open file: %s. Error: %s", file_name, file.errorString());
+        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
         return {};
     }
 
@@ -362,8 +362,8 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
 
     QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
     QFile file(file_name);
-    if (!file.open(QFile::ReadOnly)) {
-        eWarning("Failed to open file: %s. Error: %s", file_name, file.errorString());
+    if (!file.open(QFile::WriteOnly)) {
+        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
         return;
     }
 

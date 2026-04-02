@@ -117,7 +117,7 @@ void LogsManager::makeLog(const QString& file, int line, const QString& function
 
     if (LogsManager::toFile && !logFile.isOpen()) {
         if (!logFile.open(QFile::Append | QFile::Text)) {
-            eWarning("Failed to open file: %s. Error: %s", file_name, logFile.errorString());
+            eWarning("Failed to open file: {}. Error: {}", file_name, logFile.errorString());
             return;
         }
     }
