@@ -156,4 +156,79 @@ std::expected<FragmentsFile, StorageError> read(const std::filesystem::path& pat
     return result;
 }
 
+std::filesystem::path make_partial_path(const ActorId& owner_id, const std::string& file_id) {
+    return fmt::format("{}/{}/{}.partial", Dfs::Basic::DFS_FOLDER, owner_id, file_id);
+}
+
+bool partial_exists(const ActorId& owner_id, const std::string& file_id) {
+    return std::filesystem::exists(make_partial_path(owner_id, file_id));
+}
+
+std::expected<void, StorageError> write_partial(const std::filesystem::path& path,
+                                                uint32_t total_fragments,
+                                                const std::set<size_t>& achieved) {
+    FILE* f = fopen(path.string().c_str(), "wb");
+    if (!f) {
+        return std::unexpected(StorageError::WriteError);
+    }
+
+    if (fwrite(&total_fragments, sizeof(uint32_t), 1, f) != 1) {
+        fclose(f);
+        return std::unexpected(StorageError::WriteError);
+    }
+
+    size_t bitmap_size = (total_fragments + 7) / 8;
+    std::vector<uint8_t> bitmap(bitmap_size, 0);
+    for (size_t frag : achieved) {
+        if (frag >= 1 && frag <= total_fragments) {
+            size_t idx = frag - 1; // 1-based to 0-based
+            bitmap[idx / 8] |= (1 << (idx % 8));
+        }
+    }
+
+    if (fwrite(bitmap.data(), 1, bitmap_size, f) != bitmap_size) {
+        fclose(f);
+        return std::unexpected(StorageError::WriteError);
+    }
+
+    fclose(f);
+    return {};
+}
+
+std::expected<std::set<size_t>, StorageError> read_partial(const std::filesystem::path& path) {
+    FILE* f = fopen(path.string().c_str(), "rb");
+    if (!f) {
+        return std::unexpected(StorageError::FileNotFound);
+    }
+
+    uint32_t total_fragments;
+    if (fread(&total_fragments, sizeof(uint32_t), 1, f) != 1) {
+        fclose(f);
+        return std::unexpected(StorageError::ReadError);
+    }
+
+    size_t bitmap_size = (total_fragments + 7) / 8;
+    std::vector<uint8_t> bitmap(bitmap_size, 0);
+    if (fread(bitmap.data(), 1, bitmap_size, f) != bitmap_size) {
+        fclose(f);
+        return std::unexpected(StorageError::ReadError);
+    }
+
+    fclose(f);
+
+    std::set<size_t> achieved;
+    for (uint32_t i = 0; i < total_fragments; ++i) {
+        if (bitmap[i / 8] & (1 << (i % 8))) {
+            achieved.insert(i + 1); // 0-based to 1-based
+        }
+    }
+
+    return achieved;
+}
+
+void remove_partial(const ActorId& owner_id, const std::string& file_id) {
+    auto path = make_partial_path(owner_id, file_id);
+    std::filesystem::remove(path);
+}
+
 } // namespace Dfs::Fragments

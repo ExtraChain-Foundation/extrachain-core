@@ -303,8 +303,15 @@ void DirsManager::network_response_dir_rows(
                 }
 
                 if (row.type == Dfs::FileType::File && row.state == Dfs::FileState::Ready) {
-                    if (!file_path->exists()) { // TODO: size
-                        // eLog("Not exists: {} {}", owner_id, row.file_id);
+                    if (!file_path->exists()) {
+                        dir_rows_todo.push_back(row);
+                    }
+                }
+
+                // Resume incomplete downloads — check local state
+                if (row.type == Dfs::FileType::File) {
+                    auto local_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
+                    if (local_row.has_value() && local_row->state == Dfs::FileState::Partial) {
                         dir_rows_todo.push_back(row);
                     }
                 }

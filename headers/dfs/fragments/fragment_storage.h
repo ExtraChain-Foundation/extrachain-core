@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -52,8 +53,18 @@ std::pair<std::string, std::vector<Hash32>> hash_file(const FsPath& path);
 std::filesystem::path make_path(const ActorId& owner_id, const std::string& file_id);
 bool exists(const ActorId& owner_id, const std::string& file_id);
 
-// Binary I/O
+// Binary I/O for .fragments
 std::expected<void, StorageError> write(const std::filesystem::path& path, const FragmentsFile& file);
 std::expected<FragmentsFile, StorageError> read(const std::filesystem::path& path);
+
+// .partial file — bitmap of downloaded network fragments
+// Format: [4 bytes total_fragments] [ceil(N/8) bytes bitmap]
+std::filesystem::path make_partial_path(const ActorId& owner_id, const std::string& file_id);
+bool partial_exists(const ActorId& owner_id, const std::string& file_id);
+std::expected<void, StorageError> write_partial(const std::filesystem::path& path,
+                                                uint32_t total_fragments,
+                                                const std::set<size_t>& achieved);
+std::expected<std::set<size_t>, StorageError> read_partial(const std::filesystem::path& path);
+void remove_partial(const ActorId& owner_id, const std::string& file_id);
 
 } // namespace Dfs::Fragments

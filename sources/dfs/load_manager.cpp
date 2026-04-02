@@ -282,7 +282,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                 return;
             }
 
-            if (row->type == Dfs::FileType::File && file_path->exists()) {
+            if (row->type == Dfs::FileType::File && file_path->exists()
+                && row->state != Dfs::FileState::Partial) {
                 auto size = file_path->file_size();
                 if (size.has_value() && size == row->size) {
                     return;
@@ -324,15 +325,43 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     // check duplicate
     if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
+        // Fix stale Partial state — file is actually complete
+        if (row.has_value() && row->state == Dfs::FileState::Partial) {
+            Dfs::Tables::DirsFile::ActorSpace::update_file_state(
+                node->dfs()->get_db_instance(), owner_id, dir_row.file_id, Dfs::FileState::Ready);
+            Dfs::Fragments::remove_partial(owner_id, dir_row.file_id);
+        }
         return;
     }
 
-    // For fg: files, request DfsFragments before starting download
+    // For fg: files, ensure we have fragments info before downloading
     if (Dfs::Fragments::is_fragment_hash(dir_row.hash)) {
         auto active_reads_locked = *m_active_reads;
         auto item = active_reads_locked->find(file_link);
-        if (item == active_reads_locked->end() || !item->second.has_fragments_info) {
-            eLog("[Dfs-dbg] Requesting DfsFragments for {}/{}", owner_id, dir_row.file_id);
+        bool has_info = item != active_reads_locked->end() && item->second.has_fragments_info;
+
+        // Try loading from disk if not in memory
+        if (!has_info && Dfs::Fragments::exists(owner_id, dir_row.file_id)) {
+            auto frag_path = Dfs::Fragments::make_path(owner_id, dir_row.file_id);
+            auto ff = Dfs::Fragments::read(frag_path);
+            if (ff.has_value()) {
+                ReadStorage rs {};
+                rs.amount_fragments   = 0;
+                rs.has_fragments_info = true;
+                rs.merkle_root       = ff->merkle_root;
+                rs.leaf_hashes       = ff->leaves;
+                if (item != active_reads_locked->end()) {
+                    item->second.has_fragments_info = true;
+                    item->second.merkle_root       = ff->merkle_root;
+                    item->second.leaf_hashes       = ff->leaves;
+                } else {
+                    active_reads_locked->emplace(file_link, std::move(rs));
+                }
+                has_info = true;
+            }
+        }
+
+        if (!has_info) {
             Dfs::Packets::DfsFragmentsData request;
             request.owner_id = owner_id;
             request.file_id  = dir_row.file_id;
@@ -346,7 +375,6 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
                                           resp);
             return;
         }
-        eLog("[Dfs-dbg] DfsFragments already available, proceeding to download {}/{}", owner_id, dir_row.file_id);
     }
 
     try {
@@ -357,14 +385,97 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     }
 
     auto load_info = LoadInfo { .dir_row = dir_row };
-    // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
     LoadInfo::Attempts attempts { .counter = 0 };
     load_info.identifier_storage_checker.emplace(identifier);
     load_info.identifier_list.emplace_back(identifier, attempts);
 
     load_info.dir_row.state = Dfs::FileState::Known;
-
     load_info.notify_neighbours = notify_neighbours;
+
+    // Resume from .partial if available
+    auto partial_path = Dfs::Fragments::make_partial_path(owner_id, dir_row.file_id);
+    auto partial_result = Dfs::Fragments::read_partial(partial_path);
+    if (partial_result.has_value() && !partial_result->empty()) {
+        auto& achieved = partial_result.value();
+
+        // Verify achieved fragments via Merkle leaf hashes if available
+        auto frag_path = Dfs::Fragments::make_path(owner_id, dir_row.file_id);
+        auto ff = Dfs::Fragments::read(frag_path);
+
+        std::set<size_t> verified_achieved;
+        if (ff.has_value()) {
+            constexpr size_t frags_per_leaf = Dfs::Fragments::MERKLE_LEAF_SIZE / Dfs::Basic::FRAGMENT_SIZE;
+            auto data_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
+            if (data_path.has_value()) {
+                size_t total_frags = (dir_row.size + Dfs::Basic::FRAGMENT_SIZE - 1) / Dfs::Basic::FRAGMENT_SIZE;
+                for (size_t leaf_idx = 0; leaf_idx < ff->leaves.size(); ++leaf_idx) {
+                    size_t first_frag = leaf_idx * frags_per_leaf + 1;
+                    size_t last_frag = std::min(first_frag + frags_per_leaf - 1, total_frags);
+
+                    bool leaf_complete = true;
+                    for (size_t f = first_frag; f <= last_frag; ++f) {
+                        if (!achieved.contains(f)) {
+                            leaf_complete = false;
+                            break;
+                        }
+                    }
+
+                    if (leaf_complete) {
+                        uint64_t leaf_offset = static_cast<uint64_t>(leaf_idx) * Dfs::Fragments::MERKLE_LEAF_SIZE;
+                        auto chunk = Utils::read_file_chunk(data_path.value(), leaf_offset,
+                                                             Dfs::Fragments::MERKLE_LEAF_SIZE);
+                        if (chunk.has_value() && Dfs::Fragments::verify_leaf(
+                                ff->leaves[leaf_idx],
+                                reinterpret_cast<const uint8_t*>(chunk->data()),
+                                chunk->size())) {
+                            for (size_t f = first_frag; f <= last_frag; ++f) {
+                                verified_achieved.insert(f);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            verified_achieved = achieved;
+        }
+
+        if (!verified_achieved.empty()) {
+            // Populate ReadStorage with achieved fragments
+            size_t exact_total = (dir_row.size + Dfs::Basic::FRAGMENT_SIZE - 1) / Dfs::Basic::FRAGMENT_SIZE;
+            auto active_reads_locked = *m_active_reads;
+            auto item = active_reads_locked->find(file_link);
+            if (item != active_reads_locked->end()) {
+                item->second.fragments_achieved = verified_achieved;
+                item->second.amount_fragments = exact_total;
+            } else {
+                ReadStorage rs {};
+                rs.amount_fragments = exact_total;
+                rs.fragments_achieved = verified_achieved;
+                if (ff.has_value()) {
+                    rs.has_fragments_info = true;
+                    rs.merkle_root = ff->merkle_root;
+                    rs.leaf_hashes = ff->leaves;
+                }
+                active_reads_locked->emplace(file_link, std::move(rs));
+            }
+
+            // Set amount_fragments and fragments_left in LoadInfo for resume
+            if (ff.has_value()) {
+                auto file_size = dir_row.size;
+                size_t exact_total = (file_size + Dfs::Basic::FRAGMENT_SIZE - 1) / Dfs::Basic::FRAGMENT_SIZE;
+                load_info.amount_fragments = exact_total;
+
+                for (size_t i = 1; i <= exact_total; ++i) {
+                    if (!verified_achieved.contains(i)) {
+                        load_info.fragments_left.emplace(i);
+                    }
+                }
+            }
+
+            eLog("[LoadManager] Resuming download {}/{}, verified={}, left={}",
+                 owner_id, dir_row.file_id, verified_achieved.size(), load_info.fragments_left.size());
+        }
+    }
 
     std::pair<std::unordered_map<Dfs::FileLink, LoadInfo>::iterator, bool> res;
     if (is_priority)
@@ -628,11 +739,25 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             if (item != active_reads_locked->end()) {
                 item->second.fragments_achieved.emplace(file_content.fragment_number);
 
-                // Emit download progress
+                // Emit download progress and save .partial
                 if (item->second.amount_fragments > 0) {
                     int progress = static_cast<int>(
                         item->second.fragments_achieved.size() * 100 / item->second.amount_fragments);
                     emit node->dfs()->downloadProgress(file_link.owner_id, file_link.file_id, progress);
+
+                    auto partial_path = Dfs::Fragments::make_partial_path(file_link.owner_id, file_link.file_id);
+                    Dfs::Fragments::write_partial(partial_path,
+                                                  static_cast<uint32_t>(item->second.amount_fragments),
+                                                  item->second.fragments_achieved);
+
+                    // Set state to Partial on first fragment
+                    if (item->second.fragments_achieved.size() == 1) {
+                        Dfs::Tables::DirsFile::ActorSpace::update_file_state(
+                            node->dfs()->get_db_instance(),
+                            file_link.owner_id,
+                            file_link.file_id,
+                            Dfs::FileState::Partial);
+                    }
                 }
 
                 // Per-fragment Merkle verification
@@ -716,9 +841,20 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                             res->second.last_fragment_received = std::chrono::system_clock::now();
                             if (res->second.amount_fragments == 0) {
                                 res->second.amount_fragments = file_content.full_amount_fragments;
-                                for (int i = 0; i < res->second.amount_fragments; ++i) {
-                                    if (i + 1 != file_content.fragment_number)
-                                        res->second.fragments_left.emplace(i + 1);
+
+                                // Get already achieved fragments (from resume)
+                                auto active_reads_check = *m_active_reads;
+                                auto reads_item = active_reads_check->find(file_link);
+                                std::set<size_t> already_achieved;
+                                if (reads_item != active_reads_check->end()) {
+                                    already_achieved = reads_item->second.fragments_achieved;
+                                }
+
+                                for (size_t i = 0; i < res->second.amount_fragments; ++i) {
+                                    size_t frag_num = i + 1;
+                                    if (frag_num != file_content.fragment_number
+                                        && !already_achieved.contains(frag_num))
+                                        res->second.fragments_left.emplace(frag_num);
                                 }
                             } else {
                                 res->second.fragments_left.erase(file_content.fragment_number);
@@ -744,6 +880,8 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
                                                          owner_id,
                                                          dir_row.file_id,
                                                          Dfs::FileState::Ready);
+    Dfs::Fragments::remove_partial(owner_id, dir_row.file_id);
+
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
 }
@@ -779,7 +917,6 @@ bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
 
 void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& data,
                                           const std::string&                    identifier) {
-    eLog("[Dfs-dbg] DfsFragments received for {}/{}, leaves={}", data.owner_id, data.file_id, data.leaf_hashes.size());
     auto file_link = Dfs::FileLink { .owner_id = data.owner_id, .file_id = data.file_id };
 
     // Parse leaf hashes from hex
@@ -825,7 +962,6 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
     }
 
     // Now initiate download — fragments info is ready
-    eLog("[Dfs-dbg] Initiating download after DfsFragments for {}/{}", data.owner_id, data.file_id);
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(
         node->dfs()->get_db_instance(), data.owner_id, data.file_id);
     if (dir_row.has_value()) {
@@ -835,7 +971,6 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
 
 void LoadManager::share_fragments(const Dfs::Packets::DfsFragmentsData& request,
                                    const Responder&                      responder) {
-    eLog("[Dfs-dbg] share_fragments request for {}/{}", request.owner_id, request.file_id);
     auto frag_path = Dfs::Fragments::make_path(request.owner_id, request.file_id);
     auto ff = Dfs::Fragments::read(frag_path);
     if (!ff.has_value()) {

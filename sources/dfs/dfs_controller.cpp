@@ -280,13 +280,20 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     }
     auto [visual_name_new, visual_folder_new] = names_result.value();
 
-    auto [flat_hash, leaves]   = Dfs::Fragments::hash_file(dfs_path);
-    auto merkle_root           = Dfs::Fragments::compute_root(leaves);
-    std::string merkle_root_hex = Dfs::Fragments::to_hex(merkle_root);
-    std::string file_hash      = std::string(Dfs::Fragments::HASH_PREFIX) + merkle_root_hex;
     auto        file_size_dfs  = dfs_path.file_size();
     if (!file_size_dfs.has_value()) {
         return std::unexpected(Dfs::DfsError::Unknown);
+    }
+
+    std::string file_hash;
+    std::vector<Dfs::Fragments::Hash32> leaves;
+    if (file_size_dfs.value() > Dfs::Fragments::MERKLE_LEAF_SIZE) {
+        auto [flat, l] = Dfs::Fragments::hash_file(dfs_path);
+        leaves = std::move(l);
+        auto merkle_root = Dfs::Fragments::compute_root(leaves);
+        file_hash = std::string(Dfs::Fragments::HASH_PREFIX) + Dfs::Fragments::to_hex(merkle_root);
+    } else {
+        file_hash = Utils::calculate_hash_file(dfs_path).value();
     }
 
     // auto search_result2 = Dfs::Tables::ActorDirFile::search_file_by_folder_and_name(owner_id,
@@ -339,7 +346,8 @@ std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::store_file(const ActorI
     increaseSizeTaken(file_size);
     m_totalDfsSize += file_size; // TODO: is need at this place?
 
-    {
+    if (!leaves.empty()) {
+        auto merkle_root = Dfs::Fragments::compute_root(leaves);
         Dfs::Fragments::FragmentsFile ff {
             .version        = Dfs::Fragments::STORAGE_VERSION,
             .fragment_size  = Dfs::Fragments::MERKLE_LEAF_SIZE,
@@ -1242,32 +1250,30 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
     if (exists) {
         if (dir_row->type == Dfs::FileType::File) {
             if (Dfs::Fragments::is_fragment_hash(hash)) {
+                // Quick size check first — incomplete file can't match
+                auto file_size = path->file_size();
+                if (file_size.has_value() && dir_row->size > 0 && file_size.value() != dir_row->size) {
+                    return false;
+                }
+
                 auto expected_root_hex = Dfs::Fragments::parse_merkle_root_hex(hash);
                 auto expected_root = Dfs::Fragments::from_hex(expected_root_hex);
-
-                // Try reading existing .fragments file first
-                auto frag_path = Dfs::Fragments::make_path(owner_id, file_id);
-                auto ff = Dfs::Fragments::read(frag_path);
-                if (ff.has_value()) {
-                    auto computed_root = Dfs::Fragments::compute_root(ff->leaves);
-                    if (computed_root == expected_root) {
-                        return true;
-                    }
-                    eWarning("[Dfs] .fragments root mismatch for {}", file_id);
-                }
 
                 auto [flat_hash, leaves] = Dfs::Fragments::hash_file(path.value());
                 auto computed_root = Dfs::Fragments::compute_root(leaves);
                 if (computed_root == expected_root) {
-                    // Save .fragments for future use
-                    Dfs::Fragments::FragmentsFile new_ff {
-                        .version        = Dfs::Fragments::STORAGE_VERSION,
-                        .fragment_size  = Dfs::Fragments::MERKLE_LEAF_SIZE,
-                        .fragment_count = static_cast<uint32_t>(leaves.size()),
-                        .merkle_root    = computed_root,
-                        .leaves         = std::move(leaves),
-                    };
-                    Dfs::Fragments::write(frag_path, new_ff);
+                    // Save .fragments if not exists
+                    auto frag_path = Dfs::Fragments::make_path(owner_id, file_id);
+                    if (!std::filesystem::exists(frag_path)) {
+                        Dfs::Fragments::FragmentsFile new_ff {
+                            .version        = Dfs::Fragments::STORAGE_VERSION,
+                            .fragment_size  = Dfs::Fragments::MERKLE_LEAF_SIZE,
+                            .fragment_count = static_cast<uint32_t>(leaves.size()),
+                            .merkle_root    = computed_root,
+                            .leaves         = std::move(leaves),
+                        };
+                        Dfs::Fragments::write(frag_path, new_ff);
+                    }
                     return true;
                 }
                 eWarning("[Dfs] Merkle root mismatch after rebuild for {}", file_id);
@@ -1962,6 +1968,10 @@ std::expected<void, bool> DfsController::remove_local_file(const ActorId &owner_
     }
 
     std::filesystem::remove(file_path->native());
+    Dfs::Fragments::remove_partial(owner_id, file_id);
+    auto frag_path = Dfs::Fragments::make_path(owner_id, file_id);
+    std::filesystem::remove(frag_path);
+
     emit localRemoved(owner_id, file_id);
     return {};
 }
