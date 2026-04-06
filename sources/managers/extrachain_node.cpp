@@ -371,6 +371,57 @@ bool ExtraChainNode::create_token_allocations() {
     }
 
     eSuccess("[Node] token_allocations dictionary created: {}", dict_res->file_id);
+
+    // Backfill from current section down to April 1, 2026 in background
+    QThreadPool::globalInstance()->start([this]() {
+        QThread::sleep(10);
+
+        auto network_id = actor_index()->network_id();
+        auto alloc_row  = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+            dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+        if (!alloc_row.has_value()) {
+            eWarning("[Node] token_allocations backfill: dictionary not found");
+            return;
+        }
+
+        constexpr std::uint64_t cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
+        std::map<std::string, BigNumberFloat> totals;
+
+        SectionId section_id = dag_->current_section();
+        while (section_id >= SectionId(0)) {
+            auto section = dag_->read_section(section_id);
+            if (!section.has_value()) {
+                if (section_id == SectionId(0))
+                    break;
+                section_id = section_id - SectionId(1);
+                continue;
+            }
+
+            if (section->middle() < cutoff_ms) {
+                eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
+                break;
+            }
+
+            for (const auto& tx : section->transactions) {
+                if (tx.type() != TransactionType::Minting)
+                    continue;
+                std::string key = fmt::format("{}:{}", tx.receiver().to_string(), tx.token().to_string());
+                totals[key] += tx.amount();
+            }
+
+            if (section_id == SectionId(0))
+                break;
+            section_id = section_id - SectionId(1);
+        }
+
+        for (const auto& [key, amount] : totals) {
+            dfs_->dictionary_set_value(network_id, alloc_row->file_id, key,
+                                       amount.to_string(NumeralBase::Dec), network_id);
+        }
+
+        eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
+    });
+
     return true;
 }
 
