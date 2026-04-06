@@ -19,6 +19,7 @@
 
 #include "chain/dag.h"
 
+#include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
@@ -1166,6 +1167,26 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     // Check if the sender has sufficient balance
     if (senderBalance < transactionAmount) {
         return TransactionProveError::SenderBalanceBelowZero;
+    }
+
+    // Freeze check: block spending of minted amount (Regular only)
+    if (tx.type() == TransactionType::Regular) {
+        auto network_id = node->actor_index()->network_id();
+        if (!network_id.is_zero()) {
+            auto alloc_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+                node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+            if (alloc_row.has_value()) {
+                auto minted_str = node->dfs()->read_dictionary(
+                    network_id, alloc_row->file_id,
+                    fmt::format("{}:{}", targetSender.to_string(), token.to_string()));
+                if (minted_str.has_value() && !minted_str->empty()) {
+                    BigNumberFloat minted_amount(*minted_str, NumeralBase::Dec);
+                    if (senderBalance - minted_amount < transactionAmount) {
+                        return TransactionProveError::SenderBalanceBelowZero;
+                    }
+                }
+            }
+        }
     }
 
     return TransactionProveError::NoError;

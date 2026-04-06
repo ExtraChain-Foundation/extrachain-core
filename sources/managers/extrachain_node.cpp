@@ -351,6 +351,29 @@ bool ExtraChainNode::create_token_vector() {
     return true;
 }
 
+bool ExtraChainNode::create_token_allocations() {
+    auto network_id = actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+    if (search_result.has_value()) {
+        eLog("[Node] token_allocations dictionary already exists");
+        return true;
+    }
+
+    auto dict_res = dfs_->store_dictionary(network_id, network_id, "token_allocations");
+    if (!dict_res.has_value()) {
+        eCritical("[Node] Can't create token_allocations dictionary: {}", dict_res.error());
+        return false;
+    }
+
+    eSuccess("[Node] token_allocations dictionary created: {}", dict_res->file_id);
+    return true;
+}
+
 bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     auto network_id = actor_index()->network_id();
     if (network_id.is_zero()) {
