@@ -251,137 +251,17 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     return chat;
 }
 
-std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::string &name) {
-    const auto main_actor_id = node->account_controller()->current_profile().main_id();
-    chat_actor_              = main_actor_id;
+std::expected<Chat::Chat, ChatError> ChatManager::create_channel() {
+    auto chat = create_chat(false);
 
-    auto db_instance = node->dfs()->get_db_instance();
-    auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, main_actor_id);
-    if (!rows.has_value()) {
+    if (!chat.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto network_id = node->actor_index()->network_id();
-    if (network_id.is_zero()) {
-        return std::unexpected(ChatError::Unknown);
-    }
+    chat->chat.chat_type = Chat::ChatType::Channel;
+    insert_chat_to_mychats(chat.value());
+    add_new_message_created(chat->owner_id, chat->file_id);
 
-    auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
-                                                                          network_id,
-                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                          "Chat");
-    if (!search_result.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    auto channel_hash = node->dfs()->create_file_id_from(
-        fmt::format("{}{}{}", name, Utils::current_date_ms(), main_actor_id.to_string())).substr(0, 10);
-    auto channel_name = fmt::format("Channel-{}", channel_hash);
-
-    auto chat     = Chat::Chat {};
-    chat.chat_key = Cryptography::keygen();
-
-    // Create channel vector (public)
-    auto store_res = node->dfs()->store_vector(main_actor_id,
-                                               main_actor_id,
-                                               channel_name,
-                                               network_id,
-                                               search_result->file_id,
-                                               Dfs::DataSecurity::Public);
-    if (!store_res.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    chat.owner_id        = store_res->actor_id;
-    chat.file_id         = store_res->file_id;
-    chat.chat.chat_type  = Chat::ChatType::Channel;
-
-    // Create metadata dictionary (public, same naming + "-meta")
-    auto meta_name = fmt::format("{}-meta", channel_name);
-    auto dict_res  = node->dfs()->store_dictionary(main_actor_id, chat_actor_, meta_name);
-    if (dict_res.has_value() && !name.empty()) {
-        node->dfs()->dictionary_set_value(main_actor_id, dict_res->file_id, "name", name, chat_actor_);
-    }
-
-    // TODO: public channels list — needs name field in vector entry
-    // auto channels_status = node->create_channels_vector();
-    // if (channels_status == DfsFileStatus::CantCreate) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
-    //
-    // const auto system_actor_id = node->account_controller()->system_actor().id();
-    // auto channels_row =
-    //     Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
-    //                                                                       system_actor_id,
-    //                                                                       Dfs::Basic::TEMPLATE_VECTOR,
-    //                                                                       ExtraChainNode::CHANNELS_VECTOR_NAME);
-    // if (!channels_row.has_value()) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
-    //
-    // auto channel_declared = node->dfs()->add_file_id(network_id,
-    //                                                  channels_row->owner_id,
-    //                                                  channels_row->file_id,
-    //                                                  chat.owner_id,
-    //                                                  chat.file_id,
-    //                                                  main_actor_id,
-    //                                                  0,
-    //                                                  Dfs::FileIdState::Without);
-    // if (!channel_declared.has_value()) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
-
-    insert_chat_to_mychats(chat);
-    add_new_message_created(chat.owner_id, chat.file_id);
-
-    return chat;
-}
-
-std::optional<std::string> ChatManager::get_channel_name(const Chat::Chat &chat) {
-    auto db_instance   = node->dfs()->get_db_instance();
-    auto channel_row   = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, chat.owner_id, chat.file_id);
-    if (!channel_row.has_value() || channel_row->name.empty()) {
-        return std::nullopt;
-    }
-
-    auto meta_name = channel_row->name + "-meta";
-    auto meta_row  = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, chat.owner_id, meta_name, "name");
-    if (!meta_row.has_value()) {
-        return std::nullopt;
-    }
-
-    return node->dfs()->read_dictionary(chat.owner_id, meta_row->file_id, "name");
-}
-
-bool ChatManager::set_channel_name(const Chat::Chat &chat, const std::string &name) {
-    auto db_instance   = node->dfs()->get_db_instance();
-    auto channel_row   = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, chat.owner_id, chat.file_id);
-    if (!channel_row.has_value() || channel_row->name.empty()) {
-        return false;
-    }
-
-    auto meta_name = channel_row->name + "-meta";
-    auto meta_row  = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_instance, chat.owner_id, meta_name, "name");
-    if (!meta_row.has_value()) {
-        return false;
-    }
-
-    auto author_id = node->account_controller()->current_profile().main_id();
-    return node->dfs()->dictionary_set_value(chat.owner_id, meta_row->file_id, "name", name, author_id);
-}
-
-std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorId&     owner_id,
-                                                                     const std::string& file_id) {
-    auto chat      = Chat::Chat { .owner_id = owner_id,
-                                  .file_id  = file_id,
-                                  .chat     = Chat::ChatData { .chat_type = Chat::ChatType::Channel } };
-    auto my_result = insert_chat_to_mychats(chat);
-    if (!my_result.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    node->dfs()->request_file(owner_id, file_id);
     return chat;
 }
 
@@ -475,59 +355,29 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
     }
 
     auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
-    bool encryption   = true;
-    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
-        encryption = false;
+
+    auto db_row = node->dfs()->read_vector_rows(owner_id,
+                                                file_id,
+                                                "where status = '1' ORDER by timestamp DESC LIMIT 1",
+                                                security_key);
+    if (!db_row.has_value()) {
+        return std::unexpected(ChatError::Unknown);
     }
 
-    constexpr int batch_size = 10;
-    Chat::Message best;
-    std::uint64_t best_ts = 0;
-    bool found_non_edited = false;
-
-    for (int offset = 0; offset < 100; offset += batch_size) {
-        auto query   = fmt::format("where status = '1' ORDER by timestamp DESC LIMIT {} OFFSET {}", batch_size, offset);
-        auto db_rows = node->dfs()->read_vector_rows(owner_id, file_id, query,
-                                                     encryption ? security_key : Dfs::DataSecurityData());
-        if (!db_rows.has_value() || db_rows->empty()) {
-            break;
-        }
-
-        for (auto &db_row : db_rows.value()) {
-            db_row.erase("sign");
-            db_row.erase("status");
-
-            auto message = Utils::from_dbrow<Chat::Message>(db_row);
-            if (!message.has_value()) {
-                continue;
-            }
-
-            auto effective_ts = message->message.original_timestamp.value_or(message->timestamp);
-
-            if (effective_ts >= best_ts) {
-                best    = message.value();
-                best_ts = effective_ts;
-            }
-
-            if (!message->message.original_timestamp.has_value()) {
-                found_non_edited = true;
-            }
-        }
-
-        if (found_non_edited) {
-            break;
-        }
-
-        if (static_cast<int>(db_rows->size()) < batch_size) {
-            break;
-        }
+    if (db_row->empty()) {
+        return std::unexpected(ChatError::Unknown);
     }
 
-    if (best_ts > 0) {
-        return best;
+    auto row = db_row->at(0);
+    row.erase("sign");
+    row.erase("status");
+
+    auto message = Utils::from_dbrow<Chat::Message>(row);
+    if (!message.has_value()) {
+        return std::unexpected(ChatError::Unknown);
     }
 
-    return std::unexpected(ChatError::Unknown);
+    return message.value();
 }
 
 std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&       owner_id,
@@ -541,9 +391,6 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
     bool encryption = true;
     if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
-        if (chat->owner_id != chat_actor_) {
-            return std::unexpected(ChatError::Unknown);
-        }
     }
 
     auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
@@ -568,12 +415,9 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
 std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId&           owner_id,
                                                                  const std::string&       file_id,
                                                                  const Chat::MessageText& message_text) {
-    auto text = Utils::trim(Utils::sanitize_text(message_text.text));
-    if (text.empty()) {
-        return std::unexpected(ChatError::Unknown);
-    }
+    // ... checks for file ...
 
-    auto message_data = Chat::MessageData { .data = text, .reply_id = message_text.reply_id };
+    auto message_data = Chat::MessageData { .data = message_text.text, .reply_id = message_text.reply_id };
     message_data.type = Chat::MessageType::Text;
     // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
@@ -646,86 +490,6 @@ std::expected<bool, ChatError> ChatManager::add_file_message(const ActorId&     
     auto message_data = Chat::MessageData { .type = Chat::MessageType::File, .data = message_text.text };
     auto message      = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     return add_new_message(owner_id, file_id, message);
-}
-
-std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owner_id,
-                                                         const std::string& file_id,
-                                                         const std::string& message_id,
-                                                         const std::string& new_text) {
-    auto text = Utils::trim(Utils::sanitize_text(new_text));
-
-    auto chat = get_chat(owner_id, file_id);
-    if (!chat.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    bool encryption = true;
-    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
-        encryption = false;
-        if (chat->owner_id != chat_actor_) {
-            return std::unexpected(ChatError::Unknown);
-        }
-    }
-
-    // Read original message to preserve its timestamp
-    auto messages = read_chat_messages(owner_id, file_id);
-    if (!messages.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    std::uint64_t original_timestamp = 0;
-    Chat::MessageData original_data;
-    bool found = false;
-    for (const auto &msg : messages.value()) {
-        if (msg.id == message_id) {
-            original_timestamp = msg.timestamp;
-            if (msg.message.original_timestamp.has_value()) {
-                original_timestamp = msg.message.original_timestamp.value();
-            }
-            original_data = msg.message;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    std::string new_data;
-    auto msg_type = original_data.type.value_or(Chat::MessageType::Text);
-
-    if (msg_type == Chat::MessageType::Text) {
-        if (text.empty()) {
-            return std::unexpected(ChatError::Unknown);
-        }
-        new_data = text;
-    } else {
-        // Media message — update caption in JSON, keep path/hash/etc
-        auto original_json = boost::json::parse(original_data.data.value_or("{}"));
-        if (original_json.is_object()) {
-            original_json.as_object()["caption"] = text;
-            new_data = boost::json::serialize(original_json);
-        } else {
-            new_data = text;
-        }
-    }
-
-    auto message_data = Chat::MessageData { .type = msg_type, .data = new_data, .original_timestamp = original_timestamp };
-    auto message      = Chat::Message { .id = message_id, .message = message_data };
-
-    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
-    auto res          = node->dfs()->update_vector_row(owner_id,
-                                              file_id,
-                                              message,
-                                              chat_actor_,
-                                              encryption ? security_key : Dfs::DataSecurityData());
-
-    if (!res) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    return res;
 }
 
 std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     owner_id,

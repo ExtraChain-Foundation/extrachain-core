@@ -50,10 +50,7 @@ public:
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 
-    std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
-    std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
-    std::optional<std::string>           get_channel_name(const Chat::Chat &chat);
-    bool                                 set_channel_name(const Chat::Chat &chat, const std::string &name);
+    std::expected<Chat::Chat, ChatError> create_channel();
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
@@ -98,11 +95,6 @@ public:
     std::expected<bool, ChatError> add_file_message(const ActorId           &owner_id,
                                                     const std::string       &file_id,
                                                     const Chat::MessageText &message_text);
-
-    std::expected<bool, ChatError> edit_message(const ActorId     &owner_id,
-                                                const std::string &file_id,
-                                                const std::string &message_id,
-                                                const std::string &new_text);
 
     std::expected<bool, ChatError> remove_message(const ActorId     &owner_id,
                                                   const std::string &file_id,

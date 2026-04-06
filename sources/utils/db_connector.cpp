@@ -48,7 +48,7 @@ DbConnector::DbConnector(const std::string &filePath, DbConnectorType type) {
         }
         auto  data_uncompressed = qUncompress(file.readAll());
         QFile fileTemp(QString::fromStdString(filePath) + ".temp");
-        (void)fileTemp.open(QFile::WriteOnly);
+        fileTemp.open(QFile::WriteOnly);
         fileTemp.write(data_uncompressed);
         fileTemp.close();
         return;
@@ -139,7 +139,7 @@ bool DbConnector::close() {
             }
             auto  data_compressed = qCompress(file.readAll());
             QFile fileTemp(QString::fromStdString(m_file).mid(0, m_file.size() - 4));
-            (void)fileTemp.open(QFile::WriteOnly);
+            fileTemp.open(QFile::WriteOnly);
             fileTemp.write(data_compressed);
             fileTemp.close();
             file.remove();

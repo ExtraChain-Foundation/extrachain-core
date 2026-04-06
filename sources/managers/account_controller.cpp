@@ -329,16 +329,11 @@ void AccountController::clear() {
 }
 
 std::set<ActorId> AccountController::profiles_list() {
-    QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile file(file_name);
+    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
     if (!file.exists())
         return {};
 
-    if (!file.open(QFile::ReadOnly)) {
-        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
-        return {};
-    }
-
+    file.open(QFile::ReadOnly);
     auto json_bytes    = file.readAll();
     auto profiles_json = QJsonDocument::fromJson(json_bytes).array();
 
@@ -360,13 +355,8 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
     }
     auto json = QJsonDocument(array).toJson(QJsonDocument::Compact);
 
-    QString file_name = QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles);
-    QFile file(file_name);
-    if (!file.open(QFile::WriteOnly)) {
-        eWarning("Failed to open file: {}. Error: {}", file_name, file.errorString());
-        return;
-    }
-
+    QFile file(QString::fromStdString(Profiles::folder + Utils::platformDelimeter() + Profiles::profiles));
+    file.open(QFile::WriteOnly);
     file.write(json);
     file.close();
 }

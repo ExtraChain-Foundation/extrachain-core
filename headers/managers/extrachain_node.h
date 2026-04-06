@@ -148,8 +148,6 @@ public: // TODO
     std::set<std::pair<std::string, std::string>> identifiers_after_actors_sync_;
 
 public:
-    static constexpr const char* CHANNELS_VECTOR_NAME = "Channels";
-
     ~ExtraChainNode();
 
     bool create_new_network(const std::string& login, const std::string& password);
@@ -162,7 +160,6 @@ public:
     bool create_token_allocations();
     bool create_renames_template();
     //
-    DfsFileStatus create_channels_vector();
     DfsFileStatus create_renames_vector();
 
     bool create_file_id_template(Dfs::FileIdState with_state = Dfs::FileIdState::Without);

@@ -587,8 +587,6 @@ namespace Utils {
 
     EXTRACHAIN_EXPORT std::string str_to_lower(const std::string &str);
     EXTRACHAIN_EXPORT std::string str_to_upper(const std::string &str);
-    EXTRACHAIN_EXPORT std::string sanitize_text(const std::string &input);
-    EXTRACHAIN_EXPORT std::string trim(const std::string &str);
     bool                          is_hex_string(const std::string &str);
     bool                          is_hex_string_lower(const std::string &str);
 
