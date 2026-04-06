@@ -404,9 +404,12 @@ void ExtraChainNode::backfill_token_allocations() {
                 continue;
             }
 
-            if (!section->transactions.empty() && section->middle() < cutoff_ms) {
-                eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
-                break;
+            if (!section->transactions.empty()) {
+                eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}", section_id, section->middle(), cutoff_ms);
+                if (section->middle() < cutoff_ms) {
+                    eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
+                    break;
+                }
             }
 
             for (const auto& tx : section->transactions) {
