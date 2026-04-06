@@ -1180,8 +1180,8 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
                     network_id, alloc_row->file_id,
                     fmt::format("{}:{}", targetSender.to_string(), token.to_string()));
                 if (minted_str.has_value() && !minted_str->empty()) {
-                    BigNumberFloat minted_amount(*minted_str, NumeralBase::Dec);
-                    if (senderBalance - minted_amount < transactionAmount) {
+                    auto minted_amount = BigNumberFloat::create(*minted_str, NumeralBase::Dec);
+                    if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
                         return TransactionProveError::SenderBalanceBelowZero;
                     }
                 }
