@@ -387,16 +387,17 @@ bool ExtraChainNode::create_token_allocations() {
         constexpr std::uint64_t cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
         std::map<std::string, BigNumberFloat> totals;
 
-        SectionId current = dag_->current_section();
-        SectionId section_id = SectionId(0);
-        while (section_id <= current) {
+        SectionId section_id = dag_->current_section();
+        while (section_id >= SectionId(0)) {
             auto section = dag_->read_section(section_id);
             if (!section.has_value()) {
-                section_id = section_id + SectionId(1);
+                if (section_id == SectionId(0))
+                    break;
+                section_id = section_id - SectionId(1);
                 continue;
             }
 
-            if (section->middle() > cutoff_ms) {
+            if (section->middle() < cutoff_ms) {
                 eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
                 break;
             }
@@ -408,7 +409,9 @@ bool ExtraChainNode::create_token_allocations() {
                 totals[key] += tx.amount();
             }
 
-            section_id = section_id + SectionId(1);
+            if (section_id == SectionId(0))
+                break;
+            section_id = section_id - SectionId(1);
         }
 
         for (const auto& [key, amount] : totals) {
