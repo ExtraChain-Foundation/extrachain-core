@@ -391,15 +391,14 @@ void ExtraChainNode::backfill_token_allocations() {
 
         SectionId start_section = dag_->current_section();
         SectionId section_id    = start_section;
+        SectionId min_section   = SectionId(BigNumber("a05133", NumeralBase::Hex));
         eLog("[Node] token_allocations backfill: starting from section {}", section_id);
 
-        while (section_id >= SectionId(0)) {
+        while (section_id >= min_section) {
             eLog("[Node] token_allocations backfill: section {}", section_id);
 
             auto section = dag_->read_section(section_id);
             if (!section.has_value()) {
-                if (section_id == SectionId(0))
-                    break;
                 section_id = section_id - SectionId(1);
                 continue;
             }
@@ -419,8 +418,6 @@ void ExtraChainNode::backfill_token_allocations() {
                 totals[key] += tx.amount();
             }
 
-            if (section_id == SectionId(0))
-                break;
             section_id = section_id - SectionId(1);
         }
 
