@@ -371,8 +371,10 @@ bool ExtraChainNode::create_token_allocations() {
     }
 
     eSuccess("[Node] token_allocations dictionary created: {}", dict_res->file_id);
+    return true;
+}
 
-    // Backfill from current section down to April 1, 2026 in background
+void ExtraChainNode::backfill_token_allocations() {
     QThreadPool::globalInstance()->start([this]() {
         QThread::sleep(10);
 
@@ -384,7 +386,7 @@ bool ExtraChainNode::create_token_allocations() {
             return;
         }
 
-        constexpr std::uint64_t cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
+        constexpr std::uint64_t       cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
         std::map<std::string, BigNumberFloat> totals;
 
         SectionId section_id = dag_->current_section();
@@ -397,7 +399,7 @@ bool ExtraChainNode::create_token_allocations() {
                 continue;
             }
 
-            if (section->middle() < cutoff_ms) {
+            if (!section->transactions.empty() && section->middle() < cutoff_ms) {
                 eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
                 break;
             }
@@ -421,8 +423,6 @@ bool ExtraChainNode::create_token_allocations() {
 
         eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
     });
-
-    return true;
 }
 
 bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
