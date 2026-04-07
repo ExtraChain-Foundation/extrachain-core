@@ -57,15 +57,27 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     }
 
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
-        if (!active_downloads->empty() && m_amount_file_fragments_requests->size() <= MAX_CONCURRENT_DOWNLOADS) {
+        if (!active_downloads->empty()) {
             auto active_downloads_locked = *active_downloads;
+            int  files_requesting        = 0;
             for (auto it = active_downloads_locked->begin(); it != active_downloads_locked->end();) {
-                if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
-                    return false;
+                if (file_link_to_proceed != it->first && files_requesting >= MAX_CONCURRENT_FILES)
+                    break;
 
                 auto& load_info      = it->second;
                 bool  ignore_timeout = file_link_to_proceed == it->first;
                 bool  is_requested   = false;
+
+                // Reset counters if stalled (no fragment received for STALL_TIMEOUT)
+                if (load_info.last_fragment_received.time_since_epoch().count() > 0) {
+                    auto stall = std::chrono::system_clock::now() - load_info.last_fragment_received;
+                    if (stall > STALL_TIMEOUT) {
+                        eLog("[LoadManager] Stall detected for {}, resetting counters", it->first.file_id);
+                        for (auto& id : load_info.identifier_list)
+                            id.second.counter = 0;
+                        load_info.last_fragment_received = {};
+                    }
+                }
 
                 // Remove disconnected identifiers from the list
                 load_info.identifier_list.erase(
@@ -106,8 +118,6 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 }
 
                 for (auto& identifier : load_info.identifier_list) {
-                    if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
-                        return false;
 
                     auto now      = std::chrono::system_clock::now();
                     auto duration = now - identifier.second.last_attempt;
@@ -142,8 +152,6 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                         if (it->second.amount_fragments > 0) {
                             for (auto number : it->second.fragments_left) {
-                                if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
-                                    break;
                                 output.fragment_numbers.emplace(number);
                                 Dfs::FileLinkFragment single_fragment_request;
                                 single_fragment_request.file_link = it->first;
@@ -174,6 +182,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                            // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
                            // identifier.second.counter, it.first, output.fragment_numbers);
                             is_requested = true;
+                            files_requesting++;
                             break;
                         }
                     } else {

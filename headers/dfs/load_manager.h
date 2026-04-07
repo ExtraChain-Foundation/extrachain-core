@@ -115,8 +115,8 @@ private:
 
     ExtraChainNode* node;
 
-    static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
+    static constexpr int  MAX_ATTEMPTS          = 10;
+    static constexpr int  MAX_CONCURRENT_FILES  = 5;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
