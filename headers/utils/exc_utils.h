@@ -78,6 +78,10 @@ enum class Force {
     Active
 };
 
+enum class HexError {
+    InvalidFormat
+};
+
 struct ExtraChainSettings {
     std::optional<std::string> first_node;
     std::optional<DagMode>     dag_mode;
@@ -738,7 +742,7 @@ namespace Utils {
     }
 
     std::string to_hex(const std::string &data);
-    std::string from_hex(const std::string &data);
+    std::expected<std::string, HexError> from_hex(const std::string &data);
 
     std::string generate_random_hex(size_t length);
 

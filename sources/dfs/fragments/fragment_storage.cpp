@@ -5,22 +5,24 @@
 
 #include <cstdio>
 #include <cstring>
-
 namespace Dfs::Fragments {
 
 std::string to_hex(const Hash32& hash) {
     return fmt::format("{:02x}", fmt::join(std::span(hash.data(), BLAKE3_OUT_LEN), ""));
 }
 
-Hash32 from_hex(const std::string& hex) {
+std::expected<Hash32, StorageError> from_hex(const std::string& hex) {
+    auto bytes = Utils::from_hex(hex);
+    if (!bytes.has_value()) {
+        return std::unexpected(StorageError::InvalidFormat);
+    }
+
+    if (bytes->size() != BLAKE3_OUT_LEN) {
+        return std::unexpected(StorageError::InvalidFormat);
+    }
+
     Hash32 result {};
-    if (hex.size() != BLAKE3_OUT_LEN * 2) {
-        return result;
-    }
-    for (size_t i = 0; i < BLAKE3_OUT_LEN; ++i) {
-        auto byte_str = hex.substr(i * 2, 2);
-        result[i] = static_cast<uint8_t>(std::stoul(byte_str, nullptr, 16));
-    }
+    std::memcpy(result.data(), bytes->data(), BLAKE3_OUT_LEN);
     return result;
 }
 

@@ -192,8 +192,15 @@ private slots:
         std::vector<uint8_t> data(100, 0xDE);
         auto h = Dfs::Fragments::hash_leaf(data.data(), data.size());
         auto hex = Dfs::Fragments::to_hex(h);
-        QCOMPARE(Dfs::Fragments::from_hex(hex), h);
+        auto parsed = Dfs::Fragments::from_hex(hex);
+        QVERIFY(parsed.has_value());
+        QCOMPARE(parsed.value(), h);
         QCOMPARE(hex.size(), size_t(64));
+    }
+
+    void fragments_hex_invalid() {
+        auto parsed = Dfs::Fragments::from_hex(std::string(64, 'z'));
+        QVERIFY(!parsed.has_value());
     }
 
     void fragments_hash_prefix() {

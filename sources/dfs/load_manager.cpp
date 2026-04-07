@@ -145,13 +145,20 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                                 if (m_amount_file_fragments_requests->size() >= MAX_CONCURRENT_DOWNLOADS)
                                     break;
                                 output.fragment_numbers.emplace(number);
-                                m_amount_file_fragments_requests->emplace(output,
+                                Dfs::FileLinkFragment single_fragment_request;
+                                single_fragment_request.file_link = it->first;
+                                single_fragment_request.fragment_numbers.emplace(number);
+                                m_amount_file_fragments_requests->emplace(single_fragment_request,
                                                                           std::chrono::system_clock::now());
                                 is_setted = true;
                             }
                         } else {
                             output.fragment_numbers.emplace(1);
-                            m_amount_file_fragments_requests->emplace(output, std::chrono::system_clock::now());
+                            Dfs::FileLinkFragment single_fragment_request;
+                            single_fragment_request.file_link = it->first;
+                            single_fragment_request.fragment_numbers.emplace(1);
+                            m_amount_file_fragments_requests->emplace(single_fragment_request,
+                                                                      std::chrono::system_clock::now());
                             is_setted = true;
                         }
 
@@ -712,6 +719,20 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                     item->second.amount_fragments = file_content.full_amount_fragments;
                 }
             } else {
+                // File not in active_reads — check if it's actually being downloaded.
+                // Stale/late packets arriving after finish_him must be dropped.
+                bool in_active_downloads = false;
+                {
+                    auto dl = *m_active_downloads;
+                    in_active_downloads = dl->contains(file_link);
+                }
+                if (!in_active_downloads) {
+                    auto dl = *m_active_downloads_priority;
+                    in_active_downloads = dl->contains(file_link);
+                }
+                if (!in_active_downloads) {
+                    return;
+                }
                 ReadStorage read_storage { .amount_fragments   = file_content.full_amount_fragments,
                                            .fragments_achieved = {} };
                 active_reads_locked->emplace(file_link, read_storage);
@@ -743,6 +764,9 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                 if (item->second.amount_fragments > 0) {
                     int progress = static_cast<int>(
                         item->second.fragments_achieved.size() * 100 / item->second.amount_fragments);
+                    if (progress >= 100) {
+                        progress = 99;
+                    }
                     emit node->dfs()->downloadProgress(file_link.owner_id, file_link.file_id, progress);
 
                     auto partial_path = Dfs::Fragments::make_partial_path(file_link.owner_id, file_link.file_id);
@@ -822,8 +846,6 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
                                                                                          file_link.file_id,
                                                                                          dir_row.hash);
                             if (!is_downloaded) {
-                                eLog("[Fragment] Ooops, something wrong. File not downloaded. File link: {}",
-                                     file_link);
                                 timer_runner(file_link);
                                 return;
                             }
@@ -882,8 +904,12 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
                                                          Dfs::FileState::Ready);
     Dfs::Fragments::remove_partial(owner_id, dir_row.file_id);
 
-    emit node->dfs()->added(owner_id, dir_row);
-    emit node->dfs()->downloaded(owner_id, dir_row);
+    auto ready_row   = dir_row;
+    ready_row.state  = Dfs::FileState::Ready;
+
+    emit node->dfs()->downloadProgress(owner_id, dir_row.file_id, 100);
+    emit node->dfs()->added(owner_id, ready_row);
+    emit node->dfs()->downloaded(owner_id, ready_row);
 }
 
 bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
@@ -923,13 +949,22 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
     std::vector<Dfs::Fragments::Hash32> leaves;
     leaves.reserve(data.leaf_hashes.size());
     for (const auto& hex : data.leaf_hashes) {
-        leaves.push_back(Dfs::Fragments::from_hex(hex));
+        auto leaf = Dfs::Fragments::from_hex(hex);
+        if (!leaf.has_value()) {
+            eWarning("[Dfs] Invalid leaf hash in DfsFragmentsData for {}/{}", data.owner_id, data.file_id);
+            return;
+        }
+        leaves.push_back(leaf.value());
     }
 
     // Verify merkle root matches leaves
     auto expected_root = Dfs::Fragments::from_hex(data.merkle_root);
+    if (!expected_root.has_value()) {
+        eWarning("[Dfs] Invalid merkle root in DfsFragmentsData for {}/{}", data.owner_id, data.file_id);
+        return;
+    }
     auto computed_root = Dfs::Fragments::compute_root(leaves);
-    if (computed_root != expected_root) {
+    if (computed_root != expected_root.value()) {
         eWarning("[Dfs] Merkle root mismatch from peer for {}/{}", data.owner_id, data.file_id);
         return;
     }
@@ -939,7 +974,7 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
         .version        = Dfs::Fragments::STORAGE_VERSION,
         .fragment_size  = data.fragment_size,
         .fragment_count = data.fragment_count,
-        .merkle_root    = expected_root,
+        .merkle_root    = expected_root.value(),
         .leaves         = leaves,
     };
     auto frag_path = Dfs::Fragments::make_path(data.owner_id, data.file_id);
@@ -952,12 +987,12 @@ void LoadManager::dfs_fragments_received(const Dfs::Packets::DfsFragmentsData& d
         ReadStorage rs {};
         rs.amount_fragments  = 0;
         rs.has_fragments_info = true;
-        rs.merkle_root       = expected_root;
+        rs.merkle_root       = expected_root.value();
         rs.leaf_hashes       = std::move(leaves);
         active_reads_locked->emplace(file_link, std::move(rs));
     } else {
         item->second.has_fragments_info = true;
-        item->second.merkle_root       = expected_root;
+        item->second.merkle_root       = expected_root.value();
         item->second.leaf_hashes       = std::move(leaves);
     }
 

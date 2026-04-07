@@ -37,7 +37,7 @@ struct FragmentsFile {
 
 // Hex conversion (64-char lowercase hex <-> 32-byte array)
 std::string to_hex(const Hash32& hash);
-Hash32 from_hex(const std::string& hex);
+std::expected<Hash32, StorageError> from_hex(const std::string& hex);
 
 // Check if DirRow::hash has fg: prefix
 bool is_fragment_hash(const std::string& hash);

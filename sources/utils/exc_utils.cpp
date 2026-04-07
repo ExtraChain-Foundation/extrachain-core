@@ -533,17 +533,17 @@ std::string Utils::to_hex_impl(const unsigned char *data, size_t size) {
     return std::string(p.data(), size * 2);
 }
 
-std::string Utils::from_hex(const std::string &data) {
+std::expected<std::string, HexError> Utils::from_hex(const std::string &data) {
     std::vector<unsigned char> p;
     p.resize(data.length() / 2 + 1);
-    const char *end;
-    size_t      size;
+    const char *end = nullptr;
+    size_t      size = 0;
     int         r = sodium_hex2bin(p.data(), p.size(), data.c_str(), data.length(), NULL, &size, &end);
-    std::string res;
-    if (r == 0) {
-        res = std::string(p.begin(), p.end());
-        res.resize(res.size() - 1);
+    if (r != 0) {
+        return std::unexpected(HexError::InvalidFormat);
     }
+
+    std::string res(p.begin(), p.begin() + static_cast<std::ptrdiff_t>(size));
     return res;
 }
 

@@ -1258,10 +1258,13 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
 
                 auto expected_root_hex = Dfs::Fragments::parse_merkle_root_hex(hash);
                 auto expected_root = Dfs::Fragments::from_hex(expected_root_hex);
+                if (!expected_root.has_value()) {
+                    return false;
+                }
 
                 auto [flat_hash, leaves] = Dfs::Fragments::hash_file(path.value());
                 auto computed_root = Dfs::Fragments::compute_root(leaves);
-                if (computed_root == expected_root) {
+                if (computed_root == expected_root.value()) {
                     // Save .fragments if not exists
                     auto frag_path = Dfs::Fragments::make_path(owner_id, file_id);
                     if (!std::filesystem::exists(frag_path)) {
@@ -1276,7 +1279,6 @@ bool DfsController::is_file_already_downloaded(const ActorId     &owner_id,
                     }
                     return true;
                 }
-                eWarning("[Dfs] Merkle root mismatch after rebuild for {}", file_id);
             } else {
                 auto existing_hash = Utils::calculate_hash_file(path.value());
                 if (existing_hash.has_value() && existing_hash.value() == hash) {
