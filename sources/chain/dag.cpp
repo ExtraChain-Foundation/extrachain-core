@@ -2141,7 +2141,7 @@ void Dag::clear_dag_folder() {
 
     // One-time migration: if dag exists and not yet migrated
     if (QDir(dag_path).exists() && !QFile::exists(migrated_path)) {
-        QFile(migrated_path).open(QFile::WriteOnly);
+        (void)QFile(migrated_path).open(QFile::WriteOnly);
         QDir().rename(dag_path, remove_path);
         std::thread([path = remove_path.toStdString()]() {
             QDir(QString::fromStdString(path)).removeRecursively();
