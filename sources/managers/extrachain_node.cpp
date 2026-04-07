@@ -351,6 +351,85 @@ bool ExtraChainNode::create_token_vector() {
     return true;
 }
 
+bool ExtraChainNode::create_token_allocations() {
+    auto network_id = actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+    if (search_result.has_value()) {
+        eLog("[Node] token_allocations dictionary already exists");
+        return true;
+    }
+
+    auto dict_res = dfs_->store_dictionary(network_id, network_id, "token_allocations");
+    if (!dict_res.has_value()) {
+        eCritical("[Node] Can't create token_allocations dictionary: {}", dict_res.error());
+        return false;
+    }
+
+    eSuccess("[Node] token_allocations dictionary created: {}", dict_res->file_id);
+    return true;
+}
+
+void ExtraChainNode::backfill_token_allocations() {
+    QThreadPool::globalInstance()->start([this]() {
+        QThread::sleep(10);
+
+        auto network_id = actor_index()->network_id();
+        auto alloc_row  = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+            dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+        if (!alloc_row.has_value()) {
+            eWarning("[Node] token_allocations backfill: dictionary not found");
+            return;
+        }
+
+        constexpr std::uint64_t       cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
+        std::map<std::string, BigNumberFloat> totals;
+
+        SectionId start_section = dag_->current_section();
+        SectionId section_id    = start_section;
+        SectionId min_section   = SectionId(BigNumber("a05133", NumeralBase::Hex));
+        eLog("[Node] token_allocations backfill: starting from section {}", section_id);
+
+        while (section_id >= min_section) {
+            eLog("[Node] token_allocations backfill: section {}", section_id);
+
+            auto section = dag_->read_section(section_id);
+            if (!section.has_value()) {
+                section_id = section_id - SectionId(1);
+                continue;
+            }
+
+            if (!section->transactions.empty()) {
+                eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}", section_id, section->middle(), cutoff_ms);
+                if (section->middle() < cutoff_ms) {
+                    eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
+                    break;
+                }
+            }
+
+            for (const auto& tx : section->transactions) {
+                if (tx.type() != TransactionType::Minting)
+                    continue;
+                std::string key = fmt::format("{}:{}", tx.receiver().to_string(), tx.token().to_string());
+                totals[key] += tx.amount();
+            }
+
+            section_id = section_id - SectionId(1);
+        }
+
+        for (const auto& [key, amount] : totals) {
+            dfs_->dictionary_set_value(network_id, alloc_row->file_id, key,
+                                       amount.to_string(NumeralBase::Dec), network_id);
+        }
+
+        eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
+    });
+}
+
 bool ExtraChainNode::create_subscription_vector(const std::string& file_name) {
     auto network_id = actor_index()->network_id();
     if (network_id.is_zero()) {
