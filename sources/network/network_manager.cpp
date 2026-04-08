@@ -23,12 +23,12 @@
 #include "managers/data_mining_manager.h"
 #include "managers/extrachain_node.h"
 #include "managers/luminance_manager.h"
+#include "dfs/historical_collection.h"
+#include "dfs/dirs_manager.h"
 #include "network/upnpconnection.h"
 #include "network/upnpconnector.h"
 #include "network/websocket_service.h"
 #include "utils/exc_logs.h"
-#include "dfs/historical_collection.h"
-#include "dfs/dirs_manager.h"
 #include "utils/thread_pool_boost.h"
 
 #include <filesystem>
@@ -39,7 +39,7 @@
 
 CalculateTraffic *CalculateTraffic::calculateTraffic_ = nullptr;
 
-SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
+SafePtr<std::set<SocketService::Ptr>> NetworkManager::connections() const {
     return connections_;
 }
 
@@ -48,7 +48,7 @@ bool NetworkManager::server_status(Network::Protocol protocol) const {
     case Network::Protocol::Udp:
         break;
     case Network::Protocol::WebSocket:
-        return ws_server_ == nullptr ? false : ws_server_->isListening();
+        return acceptor_ && acceptor_->is_open();
     case Network::Protocol::Undefined:
         return false;
     }
@@ -119,7 +119,8 @@ void NetworkManager::set_public_ip(const std::string &new_public_ip) {
 NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
     : QObject(node)
     , node(node)
-    , ws_port(port) {
+    , ws_port(port)
+    , ioc_(std::make_unique<asio::io_context>()) {
     if (!first_nodes_.empty()) {
         first_node_ = first_nodes_.front();
     }
@@ -138,20 +139,22 @@ NetworkManager::NetworkManager(ExtraChainNode *node, std::uint16_t port)
 
     connect(this, &NetworkManager::connect_to_node, this, &NetworkManager::check_port);
 
-    connect(this, &NetworkManager::messageReceivedSignal, this, &NetworkManager::message_received);
-
-    /*
-    QTimer::singleShot(20000, [this]() {
-        std::string a = Network::currentIdentifier().toStdString();
-        eLog("[WS] Current Identifier print: {}", a);
-
-         auto connectionsLocked = *m_connections;
-         for (const auto &service : *connectionsLocked) {
-             std::string b = service->identifier().toStdString();
-             eLog("[WS] Service ident: {}", b);
-         }
-     });
-     */
+    io_running_ = true;
+    const unsigned int thread_count = std::max(2u, std::thread::hardware_concurrency() / 2);
+    for (unsigned int i = 0; i < thread_count; ++i) {
+        io_threads_.emplace_back([this]() {
+            while (io_running_) {
+                try {
+                    ioc_->run();
+                    if (io_running_) {
+                        ioc_->restart();
+                    }
+                } catch (const std::exception &e) {
+                    eLog("[NetworkManager] IO thread exception: {}", e.what());
+                }
+            }
+        });
+    }
 }
 
 void NetworkManager::add_all_services_identifiers_to_message(MessageBody &msg) {
@@ -164,7 +167,7 @@ void NetworkManager::add_all_services_identifiers_to_message(MessageBody &msg) {
 
     auto connectionsLocked = *connections_;
     for (const auto &service : *connectionsLocked) {
-        std::string ident = service->identifier().toStdString();
+        const std::string &ident = service->identifier();
 
         if (!ident.empty())
             msg.nodes_identifiers_to_ignore_later.emplace(ident);
@@ -210,9 +213,9 @@ void NetworkManager::reconnection() {
     //     return;
     // }
 
-    bool                      skip_first_node = false;
-    auto                      need_reconnect  = this->reconn_;
-    std::set<SocketService *> to_close;
+    bool                          skip_first_node = false;
+    auto                          need_reconnect  = this->reconn_;
+    std::set<SocketService::Ptr>  to_close;
 
     {
         auto connectionsLocked = *this->connections_;
@@ -237,8 +240,8 @@ void NetworkManager::reconnection() {
                 }
             }
 
-            if (el->timestamp() != 0 && need_reconnect.contains(el->ip().toStdString())) {
-                need_reconnect.erase(el->ip().toStdString());
+            if (el->timestamp() != 0 && need_reconnect.contains(el->ip())) {
+                need_reconnect.erase(el->ip());
             }
 
             if (el->timestamp() != 0 && !el->is_active() && Utils::current_date_ms() - el->timestamp() > 30000) {
@@ -249,7 +252,7 @@ void NetworkManager::reconnection() {
     }
 
     for (const auto &el : to_close) {
-        emit el->close(Network::SocketServiceError::Secs10Inactive);
+        el->close_connection();
     }
 
     if (!skip_first_node) {
@@ -277,98 +280,60 @@ void NetworkManager::reconnection() {
     }
 }
 
-void NetworkManager::setup_proxy(QNetworkProxy::ProxyType type,
-                                 const QString           &hostName,
-                                 quint16                  port,
-                                 const QString           &user,
-                                 const QString           &password) {
-    QNetworkProxy proxy;
-    proxy.setType(type);
-    proxy.setHostName(hostName);
-    proxy.setPort(port);
-    proxy.setUser(user);
-    proxy.setPassword(password);
-    QNetworkProxy::setApplicationProxy(proxy);
-}
-
-void NetworkManager::connectWsService(WebSocketService *service, bool requestListNodes) {
-    connect(service, &WebSocketService::error, this, &NetworkManager::socket_error);
-    connect(service, &WebSocketService::disconnected, this, &NetworkManager::remove_socket_connection);
-    connect(service, &WebSocketService::activated, this, &NetworkManager::check_connections_status);
-    connect(service, &WebSocketService::activated, this, [&] {
-        auto senderObj = QObject::sender();
-        if (senderObj == nullptr)
-            return;
-
-        auto service = qobject_cast<SocketService *>(senderObj);
-
-        emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
-        emit this->newSocketActivated();
-
-        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
-            reconn_.insert({ service->ip().toStdString(), {} });
-        }
-    });
-
-    {
-        auto connectionsLocked = *connections_;
-        if (!connectionsLocked->contains(service))
-            connectionsLocked->insert(service);
-    }
-    connect(service,
-            &WebSocketService::shareConnections,
+void NetworkManager::setup_service_callbacks(SocketService::Ptr service, bool requestListNodes) {
+    service->on_error = [this](SocketService::Ptr svc,
+                               Network::SocketServiceError error,
+                               const std::string &errorData,
+                               const std::string &identifier) {
+        QMetaObject::invokeMethod(
             this,
-            [&](const std::set<SocketService::SocketPair> &connections) {
-                // eLog("shareConnections: {}", connections);
+            [this, svc, error, errorData, identifier]() { socket_error(svc, error, errorData, identifier); },
+            Qt::QueuedConnection);
+    };
 
-                auto init_ip = node->init_public_ip_and_country().first;
+    service->on_disconnected = [this](SocketService::Ptr svc) {
+        QMetaObject::invokeMethod(this, [this, svc]() { remove_socket_connection(svc); }, Qt::QueuedConnection);
+    };
 
-                /*
-                // for tests
-                std::set<std::string> ips;
-                for (const auto &pair : connections) {
-                    ips.insert(pair.ip);
+    service->on_activated = [this](SocketService::Ptr svc) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, svc]() {
+                check_connections_status();
+                emit newSocketActivatedWithParams(svc->ip(), svc->identifier());
+                emit newSocketActivated();
+
+                if (svc->mode() == SocketMode::Full && svc->ip() != first_node()) {
+                    reconn_.insert({ svc->ip(), {} });
                 }
-                eLog("{}", ips);
-                */
+            },
+            Qt::QueuedConnection);
+    };
 
-                if (active_connections_count() >= Network::maxConnections) {
+    service->on_share_connections = [this](SocketService::Ptr svc, const std::set<SocketService::SocketPair> &connections) {
+        (void)svc;
+        QMetaObject::invokeMethod(
+            this,
+            [this, connections]() {
+                const auto init_ip = node->init_public_ip_and_country().first.toStdString();
+
+                if (active_connections_count() >= Network::maxConnections && init_ip != first_node_) {
                     eLog("shareConnections ignored by max connections limit");
-
-                    if (init_ip != first_node_) {
-                        return;
-                    }
+                    return;
                 }
 
                 for (const auto &[ip, identifier] : connections) {
-                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
+                    if (failed_ips_.contains(ip) || ip == "127.0.0.1") {
                         continue;
                     }
 
                     bool can_connect = true;
-
-                    {
-                        auto connections_locked = *connections_;
-                        for (const auto &conn_item : *connections_locked) {
-                            if (ip == init_ip) {
-                                can_connect = false;
-                                break;
-                            }
-
-                            if (identifier == node->node_identifier()) {
-                                can_connect = false;
-                                break;
-                            }
-
-                            if (conn_item->identifier() == identifier) {
-                                can_connect = false;
-                                break;
-                            }
-
-                            if (conn_item->ip() == ip) {
-                                can_connect = false;
-                                break;
-                            }
+                    auto connections_locked = *connections_;
+                    for (const auto &conn_item : *connections_locked) {
+                        if (ip == init_ip || identifier == node->node_identifier()
+                            || conn_item->identifier() == identifier || conn_item->ip() == ip) {
+                            can_connect = false;
+                            break;
                         }
                     }
 
@@ -376,16 +341,28 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                         emit connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
                     }
                 }
-            });
+            },
+            Qt::QueuedConnection);
+    };
+
+    {
+        auto connectionsLocked = *connections_;
+        if (!connectionsLocked->contains(service)) {
+            connectionsLocked->insert(service);
+        }
+    }
 }
 
 void NetworkManager::remove_connection(const QString &identifier) {
-    if (identifier.isEmpty())
+    if (identifier.isEmpty()) {
         eFatal("Try remove with empty identifier");
+    }
+
     auto connectionsLocked = *connections_;
     for (const auto &connection : *connectionsLocked) {
-        if (connection->identifier() == identifier)
-            emit connection->close();
+        if (connection->identifier() == identifier.toStdString()) {
+            connection->close_connection();
+        }
     }
 }
 
@@ -397,54 +374,59 @@ void NetworkManager::check_port(const QString     ip,
     //     return;
     // }
 
-    auto *socket = new QTcpSocket(this);
-    auto *timer  = new QTimer(this);
-    timer->setSingleShot(true);
+    const auto ip_str = ip.toStdString();
+    asio::co_spawn(
+        *ioc_,
+        [this, ip_str, protocol, request, isConstant]() -> VoidTask {
+            tcp::resolver resolver(*ioc_);
+            auto [ec_resolve, results] = co_await resolver.async_resolve(
+                ip_str,
+                std::to_string(ws_port),
+                asio::as_tuple(asio::use_awaitable));
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
-        timer->stop();
-        timer->deleteLater();
-        socket->disconnectFromHost();
-        socket->deleteLater();
-        connect_to_node_slot(ip, protocol, request, isConstant);
-    });
+            if (ec_resolve) {
+                co_return;
+            }
 
-    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer](QAbstractSocket::SocketError) {
-        timer->stop();
-        timer->deleteLater();
-        socket->deleteLater();
-    });
+            tcp::socket socket(*ioc_);
+            auto [ec_connect, endpoint] = co_await asio::async_connect(
+                socket,
+                results,
+                asio::as_tuple(asio::use_awaitable));
+            (void)endpoint;
 
-    connect(timer, &QTimer::timeout, this, [socket, timer]() {
-        socket->abort();
-        socket->deleteLater();
-        timer->deleteLater();
-    });
+            if (ec_connect) {
+                co_return;
+            }
 
-    socket->connectToHost(QHostAddress(ip), ws_port);
-    timer->start(3000);
+            boost::system::error_code ec_close;
+            socket.close(ec_close);
+
+            QMetaObject::invokeMethod(
+                this,
+                [this, ip_str, protocol, request, isConstant]() {
+                    connect_to_node_slot(QString::fromStdString(ip_str), protocol, request, isConstant);
+                },
+                Qt::QueuedConnection);
+        },
+        asio::detached);
 }
 
 bool NetworkManager::check_port_sync(const QString    &ip,
                                      Network::Protocol protocol,
                                      const bool        request,
                                      const bool        isConstant) {
-    QTcpSocket socket;
-
-    socket.connectToHost(QHostAddress(ip), ws_port);
-
-    if (!socket.waitForConnected(1600)) {
-        eLog("[Network] Failed to connect to {}:{} - {}",
-             ip.toStdString(),
-             ws_port,
-             socket.errorString().toStdString());
+    try {
+        asio::io_context ioc;
+        tcp::resolver resolver(ioc);
+        auto results = resolver.resolve(ip.toStdString(), std::to_string(ws_port));
+        tcp::socket socket(ioc);
+        asio::connect(socket, results);
+        boost::system::error_code ec_close;
+        socket.close(ec_close);
+    } catch (const std::exception &e) {
+        eLog("[Network] Failed to connect to {}:{} - {}", ip.toStdString(), ws_port, e.what());
         return false;
-    }
-
-    socket.disconnectFromHost();
-
-    if (socket.state() != QAbstractSocket::UnconnectedState) {
-        socket.waitForDisconnected(1000);
     }
 
     return true;
@@ -453,7 +435,12 @@ bool NetworkManager::check_port_sync(const QString    &ip,
 NetworkManager::~NetworkManager() {
     eLog("[NetworkManager] Finish him with {} connections", connections_->size());
 
-    std::set<SocketService *> copied;
+    if (acceptor_ && acceptor_->is_open()) {
+        boost::system::error_code ec;
+        acceptor_->close(ec);
+    }
+
+    std::set<SocketService::Ptr> copied;
     {
         auto connectionsLocked = *connections_;
         copied                 = **connections_;
@@ -461,7 +448,18 @@ NetworkManager::~NetworkManager() {
 
     for (const auto &connection : copied) {
         connection->flush();
-        emit connection->close();
+        connection->close_connection();
+    }
+
+    io_running_ = false;
+    if (ioc_) {
+        ioc_->stop();
+    }
+
+    for (auto &thread : io_threads_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
     }
 }
 
@@ -472,11 +470,11 @@ void NetworkManager::check_connections_status() {
     int  count = 0;
     {
         auto connectionsLocked = *connections_;
-        std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](SocketService *el) {
+        std::for_each(connectionsLocked->begin(), connectionsLocked->end(), [&](const SocketService::Ptr &el) {
             flag = flag || el->is_active();
             if (el->is_active()) {
                 count++;
-                ind_temp.insert(el->identifier().toStdString());
+                ind_temp.insert(el->identifier());
             }
         });
     }
@@ -495,25 +493,76 @@ void NetworkManager::start_network() {
     if (!Network::isStartedServer)
         return;
 
-    ws_server_ = new QWebSocketServer("ExtraChain", QWebSocketServer::SslMode::NonSecureMode);
+    try {
+        tcp::endpoint endpoint(tcp::v4(), ws_port);
+        acceptor_ = std::make_unique<tcp::acceptor>(*ioc_);
+        acceptor_->open(endpoint.protocol());
+        acceptor_->set_option(asio::socket_base::reuse_address(true));
+        acceptor_->bind(endpoint);
+        acceptor_->listen();
 
-    if (!ws_server_->listen(QHostAddress::Any, ws_port)) {
-        eLog("[NetworkManager] Can't listen port {}", ws_port);
-        return;
+        asio::co_spawn(
+            *ioc_,
+            [this]() -> VoidTask { co_await accept_loop(); },
+            asio::detached);
+
+        eLog("[WS] Start listening on port: {}", ws_port);
+    } catch (const std::exception &e) {
+        eLog("[NetworkManager] Can't listen port {}: {}", ws_port, e.what());
     }
+}
 
-    connect(ws_server_, &QWebSocketServer::newConnection, this, &NetworkManager::onNewWsConnection);
-    connect(ws_server_, &QWebSocketServer::serverError, [](QWebSocketProtocol::CloseCode closeCode) {
-        eLog("[WS] Server error code: {}", int(closeCode));
-    });
-    connect(ws_server_, &QWebSocketServer::closed, [] {
-        eLog("[WS] Server: closed");
-    });
-    connect(ws_server_, &QWebSocketServer::acceptError, [](QAbstractSocket::SocketError socket_error) {
-        eLog("[WS] Server socker error: {}", int(socket_error));
-    });
+VoidTask NetworkManager::accept_loop() {
+    while (io_running_ && acceptor_ && acceptor_->is_open()) {
+        auto [ec, socket] = co_await acceptor_->async_accept(asio::as_tuple(asio::use_awaitable));
 
-    eLog("[WS] Start listening: {}:{}", ws_server_->serverAddress(), ws_server_->serverPort());
+        if (ec) {
+            if (ec != asio::error::operation_aborted) {
+                eLog("[WS] Accept error: {}", ec.message());
+            }
+            break;
+        }
+
+        if (active_connections_count() >= Network::maxConnections && !remove_one_connection()) {
+            boost::system::error_code close_ec;
+            socket.close(close_ec);
+            continue;
+        }
+
+        auto service = std::static_pointer_cast<WebSocketService>(WebSocketService::from_accepted(std::move(socket), *ioc_, node));
+        service->set_direction(SocketDirection::Incoming);
+        setup_service_callbacks(service);
+
+        asio::co_spawn(
+            *ioc_,
+            [service]() -> VoidTask { co_await service->run(true); },
+            asio::detached);
+    }
+}
+
+VoidTask NetworkManager::do_connect_websocket(const std::string &ip,
+                                              uint16_t port,
+                                              bool requestListNodes,
+                                              bool isConstant,
+                                              bool is_light) {
+    (void)requestListNodes;
+    try {
+        auto service = std::static_pointer_cast<WebSocketService>(
+            co_await WebSocketService::connect(*ioc_, ip, port, node, isConstant, is_light));
+        service->set_direction(SocketDirection::Outgoing);
+        setup_service_callbacks(service);
+
+        reconnections_to_identifier_->emplace(
+            NetworkReconnect { .ip = QString::fromStdString(ip), .port = port, .protocol = Network::Protocol::WebSocket },
+            "");
+
+        asio::co_spawn(
+            *ioc_,
+            [service]() -> VoidTask { co_await service->run(false); },
+            asio::detached);
+    } catch (const std::exception &e) {
+        eLog("[WS] Connection failed to {}:{} - {}", ip, port, e.what());
+    }
 }
 
 [[maybe_unused]] void NetworkManager::start_discovery() {
@@ -571,7 +620,7 @@ void NetworkManager::connect_to_websocket(const QString &ip,
     }
 
     {
-        std::vector<SocketService *> to_close;
+        std::vector<SocketService::Ptr> to_close;
         auto connectionsLocked = *connections_;
         for (const auto &el : *connectionsLocked) {
             if (el->ip() == ip) {
@@ -583,17 +632,17 @@ void NetworkManager::connect_to_websocket(const QString &ip,
                 }
             }
         }
-        for (auto *el : to_close) {
-            el->closeSocket();
+        for (const auto &el : to_close) {
+            el->close_connection();
         }
     }
 
-    auto service = new WebSocketService(nullptr, node, this, isConstant, is_light);
-    service->set_direction(SocketDirection::Outgoing);
-    connectWsService(service, requestListNodes);
-    service->open(ip, port);
-    reconnections_to_identifier_
-        ->emplace(NetworkReconnect { .ip = ip, .port = port, .protocol = Network::Protocol::WebSocket }, "");
+    asio::co_spawn(
+        *ioc_,
+        [this, ip = ip.toStdString(), port, requestListNodes, isConstant, is_light]() -> VoidTask {
+            co_await do_connect_websocket(ip, port, requestListNodes, isConstant, is_light);
+        },
+        asio::detached);
 }
 
 void NetworkManager::clear_network_caches() {
@@ -788,7 +837,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
     auto connections_locked = *connections_;
 
     if (send_mode == SendMode::NeighboursRandom || send_mode == SendMode::OneNeighbourRandom) {
-        std::vector<SocketService *> active_identifiers;
+        std::vector<SocketService::Ptr> active_identifiers;
         const int                    randoms = send_mode == SendMode::NeighboursRandom ? 3 : 1;
 
         for (auto service : *connections_locked) {
@@ -801,14 +850,18 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         if (send_mode == SendMode::NeighboursRandom && active_identifiers.size() > 3) {
 
             for (int index : indexes) {
-                active_identifiers[index]->send_message(QByteArray::fromStdString(serialized_message), priority);
+                active_identifiers[index]->send_message(
+                    std::vector<uint8_t>(serialized_message.begin(), serialized_message.end()),
+                    priority);
             }
 
             return;
         }
 
         if (send_mode == SendMode::OneNeighbourRandom) {
-            active_identifiers[indexes[0]]->send_message(QByteArray::fromStdString(serialized_message), priority);
+            active_identifiers[indexes[0]]->send_message(
+                std::vector<uint8_t>(serialized_message.begin(), serialized_message.end()),
+                priority);
         }
     }
 
@@ -831,12 +884,12 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
 
         bool send_checked = is_send_check(send_mode,
                                           receiver_identifier,
-                                          service->identifier().toStdString(),
+                                          service->identifier(),
                                           non_serialized_message);
 
         if (send_checked) {
-            calculate_traffic_->add_bytes_sent(service->ip().toStdString(), serialized_message.size());
-            service->send_message(QByteArray::fromStdString(serialized_message), priority);
+            calculate_traffic_->add_bytes_sent(service->ip(), serialized_message.size());
+            service->send_message(std::vector<uint8_t>(serialized_message.begin(), serialized_message.end()), priority);
             if (send_mode == SendMode::Focused) {
                 break;
             }
@@ -975,7 +1028,7 @@ bool NetworkManager::is_connection_exists(const std::string &identifier) {
         if (!service->is_active()) {
             continue;
         }
-        if (service->identifier().toStdString() == identifier) {
+        if (service->identifier() == identifier) {
             return true;
         }
     }
@@ -1216,10 +1269,10 @@ void NetworkManager::message_received(const std::string &message,
             {
                 auto locked_connections = *connections_;
                 for (const auto &connection : *locked_connections) {
-                    if (identifier != connection->identifier().toStdString()) {
-                        if (connection->ip().isEmpty())
+                    if (identifier != connection->identifier()) {
+                        if (connection->ip().empty())
                             continue;
-                        available_ips.emplace_back(connection->ip().toStdString());
+                        available_ips.emplace_back(connection->ip());
                     }
                 }
             }
@@ -1252,7 +1305,7 @@ void NetworkManager::message_received(const std::string &message,
                 bool can_connect        = true;
                 auto locked_connections = *connections_;
                 for (const auto &existing_connection : *locked_connections) {
-                    if (ip_address == existing_connection->ip().toStdString()) {
+                    if (ip_address == existing_connection->ip()) {
                         can_connect = false;
                         break;
                     }
@@ -1918,36 +1971,25 @@ void NetworkManager::message_received(const std::string &message,
     // eLog("Timer: {} ms for {}", timer.elapsed(), type);
 }
 
-void NetworkManager::remove_socket_connection() {
-    if (QObject::sender() == nullptr)
+void NetworkManager::remove_socket_connection(SocketService::Ptr connection) {
+    if (!connection) {
         return;
-
-    auto connection = qobject_cast<SocketService *>(QObject::sender());
+    }
 
     {
         auto connections_locked = connections();
-        auto removed            = connections_locked->erase(connection);
-        eLog("[WS] Removed {}", fmt::ptr(connection));
-    }
-    //    m_reconnections.remove(NetworkReconnect {
-    //        .ip = connection->ip(), .port = connection->port(), .protocol = Network::Protocol::WebSocket
-    //        });
-    if (connection != nullptr) {
-        connection->deleteLater();
+        connections_locked->erase(connection);
+        eLog("[WS] Removed {}", fmt::ptr(connection.get()));
     }
     check_connections_status();
 }
 
-void NetworkManager::socket_error(Network::SocketServiceError error,
-                                  QString                     errorData,
-                                  std::string                 ip,
-                                  std::string                 identifier,
-                                  SocketDirection             direction) {
-    // if (QObject::sender() == nullptr) {
-    //     return;
-    // }
-
-    // auto service = qobject_cast<SocketService *>(QObject::sender());
+void NetworkManager::socket_error(SocketService::Ptr          service,
+                                  Network::SocketServiceError error,
+                                  const std::string          &errorData,
+                                  const std::string          &identifier) {
+    const std::string ip = service ? service->ip() : "";
+    const auto direction = service ? service->direction() : SocketDirection::Outgoing;
     eLog("[NetworkManager] Error socket: {} {} {} {}", direction, error, ip, identifier);
 
     if (error == Network::SocketServiceError::IncompatibleNetwork
@@ -1958,7 +2000,10 @@ void NetworkManager::socket_error(Network::SocketServiceError error,
         if (!Utils::vector_contains(first_nodes_, ip) && ip != first_node_) {
             failed_ips_.insert(ip);
         }
-        emit connectionError(error, QString::fromStdString(ip), QString::fromStdString(identifier), errorData);
+        emit connectionError(error,
+                             QString::fromStdString(ip),
+                             QString::fromStdString(identifier),
+                             QString::fromStdString(errorData));
         return;
     }
 
@@ -1990,7 +2035,7 @@ void NetworkManager::local_inizialization() {
             break;
         case NetworkStatus::Status::Offline: {
             eInfo("Warning: World network is offline");
-            std::set<SocketService *> copied;
+            std::set<SocketService::Ptr> copied;
             {
                 auto connectionsLocked = *connections_;
                 copied                 = **connections_;
@@ -1998,7 +2043,7 @@ void NetworkManager::local_inizialization() {
 
             for (const auto &connection : copied) {
                 connection->flush();
-                emit connection->close();
+                connection->close_connection();
             }
             break;
         }
@@ -2146,37 +2191,11 @@ bool NetworkManager::save_first_node(const std::string_view first_node) {
     return true;
 }
 
-void NetworkManager::onNewWsConnection() {
-    eLog("NetworkManager::onNewWsConnection()");
-    auto ws = ws_server_->nextPendingConnection();
-    if (ws == nullptr)
-        eFatal("[WS] Error: ws == nulltpr");
-
-    bool needToDelete = false;
-    if (active_connections_count() >= Network::maxConnections) {
-        if (!remove_one_connection()) {
-            eLog(
-                "[NetworkManager] Can't connect from WS server because the maximum number of "
-                "constant connections reached!");
-            needToDelete = true;
-        }
-    }
-
-    auto service = new WebSocketService(ws, node, this, false);
-    service->set_direction(SocketDirection::Incoming);
-    connectWsService(service);
-    if (!needToDelete)
-        reconnections_to_identifier_->emplace(NetworkReconnect { .ip       = service->ip(),
-                                                                 .port     = service->port(),
-                                                                 .protocol = Network::Protocol::WebSocket },
-                                              "");
-}
-
 bool NetworkManager::remove_one_connection() {
     auto connectionsLocked = *connections_;
     bool isChanged         = false;
 
-    SocketService *doomed;
+    SocketService::Ptr doomed;
 
     for (auto socket : *connectionsLocked) {
         if (!socket->is_constant()) {
@@ -2201,7 +2220,7 @@ bool NetworkManager::remove_one_connection() {
     }
 
     if (isChanged) {
-        emit doomed->close();
+        doomed->close_connection();
     }
 
     return isChanged;

@@ -21,72 +21,77 @@
 
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
-#include "network/network_manager.h"
 #include "utils/exc_utils.h"
-#include <QWebSocket>
+
+#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/websocket.hpp>
+
+#include <deque>
 
 #include "extrachain_global.h"
 
+namespace asio = boost::asio;
+namespace beast = boost::beast;
+namespace websocket = beast::websocket;
+using tcp = asio::ip::tcp;
+
+template<typename T>
+using Task = asio::awaitable<T>;
+using VoidTask = Task<void>;
+
 class EXTRACHAIN_EXPORT WebSocketService : public SocketService {
-    Q_OBJECT
-
 public:
-    explicit WebSocketService(QWebSocket     *ws,
-                              ExtraChainNode *node,
-                              QObject        *parent      = nullptr,
-                              const bool      is_constant = false,
-                              const bool      is_light    = false);
-    // WebSocketService(const WebSocketService &);
-    ~WebSocketService();
+    using WebSocket = websocket::stream<tcp::socket>;
 
-    QWebSocket               *socket() const;
-    bool                      is_active() const override;
-    void                      open(const QString &ip, quint16 port);
-    virtual QString           protocol_string() const override;
-    virtual Network::Protocol protocol() const override;
+    static Task<Ptr> connect(asio::io_context &ioc,
+                             const std::string &host,
+                             uint16_t port,
+                             ExtraChainNode *node,
+                             bool is_constant = false,
+                             bool is_light = false);
 
-    bool operator==(const WebSocketService &service) const;
+    static Ptr from_accepted(tcp::socket socket, asio::io_context &ioc, ExtraChainNode *node);
 
-    quint16 port() const override;
-    quint16 server_port() const override;
+    ~WebSocketService() override;
 
-public:
-    void send_message(const QByteArray &data, Priority priority = Priority::High) override;
+    VoidTask run(bool accepted_socket = false);
 
-    virtual void flush() override;
-
-    qint64 pending_bytes() const override {
-        return m_ws ? m_ws->bytesToWrite() : 0;
-    }
-
-signals:
-    void sendMessageInternal(const QByteArray &data);
-    void needToTryDequeue();
-    void closeSocketSig();
-
-private slots:
-    void onTextMessage(const QString &message);
-    void onBinaryMessage(const QByteArray &message);
-
-    void onConnected();
-    void onSocketError(QAbstractSocket::SocketError error);
-public slots:
-    void closeSocket() override;
-private slots:
-    void sendMessageInternalSlot(const QByteArray &data);
-    void tryDequeueMessage();
+    bool              is_active() const override;
+    std::string       protocol_string() const override;
+    Network::Protocol protocol() const override;
+    uint16_t          port() const override;
+    uint16_t          server_port() const override;
+    void              send_message(const std::vector<uint8_t> &data, Priority priority) override;
+    void              flush() override;
+    void              close_connection() override;
+    int64_t           pending_bytes() const override;
 
 private:
-    void connections();
-    void send_public_key();
-    void handshake();
-    bool canSendMore() const;
-    void processMessage(const QByteArray &message);
-    void processCachedMessages();
+    explicit WebSocketService(asio::io_context &ioc, ExtraChainNode *node);
 
-    QWebSocket *m_ws = nullptr;
+    VoidTask do_connect(const std::string &host, uint16_t port);
+    VoidTask do_key_exchange();
+    VoidTask do_handshake();
+    VoidTask read_loop();
+    VoidTask write_loop();
+    VoidTask process_text_message(const std::string &message);
+    VoidTask process_binary_message(const std::vector<uint8_t> &data);
 
-    QTimer                *m_pingTimer   = nullptr;
-    int                    m_failedPongs = 0;
-    std::queue<QByteArray> m_messageCache;
+    asio::io_context &ioc_;
+    asio::strand<asio::io_context::executor_type> strand_;
+    std::unique_ptr<WebSocket> ws_;
+    std::unique_ptr<asio::steady_timer> write_timer_;
+    std::deque<std::vector<uint8_t>> high_queue_;
+    std::deque<std::vector<uint8_t>> normal_queue_;
+    std::deque<std::vector<uint8_t>> low_queue_;
+    std::vector<std::vector<uint8_t>> message_cache_;
+    std::atomic<bool> running_ { false };
+    std::atomic<bool> closed_async_ { false };
 };

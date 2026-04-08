@@ -85,7 +85,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     for (const auto& socket : *connections_locked) {
                         if (!socket || !socket->is_active())
                             continue;
-                        auto conn_id = socket->identifier().toStdString();
+                        const auto &conn_id = socket->identifier();
                         if (conn_id.empty())
                             continue;
                         if (!load_info.identifier_storage_checker.contains(conn_id)) {
@@ -523,10 +523,10 @@ void LoadManager::broadcast_file_exist(const ActorId& owner_id, const std::strin
             return;
         }
         if (dir_row->type == Dfs::FileType::Collection) {
-            node->dfs()->network_request_collection(owner_id, file_id, {});
+            node->dfs()->network_request_collection(owner_id, file_id, Responder {});
         }
         if (dir_row->type == Dfs::FileType::Vector || dir_row->type == Dfs::FileType::Dictionary) {
-            node->dfs()->network_request_vector(owner_id, file_id, {});
+            node->dfs()->network_request_vector(owner_id, file_id, Responder {});
         }
         return;
     }

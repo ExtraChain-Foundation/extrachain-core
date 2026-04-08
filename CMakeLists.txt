@@ -29,6 +29,10 @@ if(MSVC)
     # add_compile_options(/W4 /analyze)
 endif()
 
+if(WIN32)
+    add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
+
 
 find_package(Qt6 COMPONENTS Core Network WebSockets REQUIRED)
 find_package(unofficial-sodium CONFIG REQUIRED)
@@ -175,6 +179,10 @@ else()
     add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     message("ExtraChain: library build")
     add_library(extrachain SHARED ${EXTRACHAIN_CORE_SOURCES})
+endif()
+
+if(MSVC)
+    target_compile_options(extrachain PRIVATE /bigobj)
 endif()
 
 # link time optimization
