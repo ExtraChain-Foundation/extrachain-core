@@ -113,10 +113,6 @@ Dag::Dag(ExtraChainNode *node)
 
     timestamp_bigger_sync_start_ = 0;
 
-#ifndef IS_APP_CLIENT
-    this->set_status(DagStatus::Ready);
-#endif
-
     auto section = this->read_section(SectionId(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
@@ -131,11 +127,52 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     eLog("[Dag] Started. Mode: {}", mode_);
+
+    // Automatically start so existing callers get the previous default lifecycle.
+    // Callers that want explicit control can stop()/start() around migration etc.
+    start();
 }
 
 Dag::~Dag() {
+    stop();
     cache_.dag = nullptr;
     timer_sync_->deleteLater();
+}
+
+void Dag::start() {
+    // Idempotent: once started, later calls are no-ops so callers don't need
+    // to track state themselves.
+    if (started_.exchange(true)) {
+        return;
+    }
+    accepting_messages_.store(true);
+
+#ifndef IS_APP_CLIENT
+    this->set_status(DagStatus::Ready);
+#endif
+
+    eLog("[Dag] start: mode {}, current {}", mode_, current_section_);
+}
+
+void Dag::stop() {
+    // First close the door on incoming work, then tear down the pieces that
+    // would otherwise race against a late callback.
+    bool was_started = started_.exchange(false);
+    accepting_messages_.store(false);
+    if (!was_started) {
+        return;
+    }
+
+    if (timer_sync_) {
+        QMetaObject::invokeMethod(timer_sync_, "stop", Qt::QueuedConnection);
+    }
+    emit node->dagTimerStop();
+
+    eLog("[Dag] stop");
+}
+
+bool Dag::is_accepting_messages() const {
+    return accepting_messages_.load();
 }
 
 SectionId Dag::current_section() const {

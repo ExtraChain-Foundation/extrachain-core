@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <shared_mutex>
 
@@ -570,6 +571,28 @@ public:
     size_t last_txs_size() const { return last_txs_.size(); }
     size_t cached_txs_size() { auto g = cached_txs_.lock(); return g->size(); }
 
+    /**
+     * @brief Begin accepting sync and network messages; start sync timers.
+     *        Idempotent — calling twice is a no-op.
+     *        Call after construction (and after any migration) so the caller
+     *        can decide when the node is ready to join the network.
+     */
+    void start();
+
+    /**
+     * @brief Stop accepting network messages, halt timers, finish in-flight work.
+     *        Storage stays openable — a later start() resumes from where we stopped.
+     *        Safe to call before destruction, before mode change, or before wipe.
+     */
+    void stop();
+
+    /**
+     * @brief Whether the Dag is currently accepting incoming network messages.
+     *        Network handlers should consult this and drop messages when false
+     *        to avoid racing against shutdown.
+     */
+    bool is_accepting_messages() const;
+
 private:
     ExtraChainNode                              *node;                 // Parent node reference
     TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
@@ -601,6 +624,13 @@ private:
 
     // Immutable packed storage for cold sections (10k per pack)
     std::unique_ptr<Pack::Registry> pack_registry_;
+
+    // Lifecycle flags:
+    //   started_ — set by start(), cleared by stop(). Guards double-start.
+    //   accepting_messages_ — true between start() and stop(); network
+    //   handlers must check this to drop inbound traffic during shutdown.
+    std::atomic<bool> started_{false};
+    std::atomic<bool> accepting_messages_{false};
 
     //
     void add_to_cached_tx(const Transaction &transaction);
