@@ -521,7 +521,7 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
         }
 
         if (i % BigNumber(20000) == 0) {
-            eLog("update_to_genesis_section scan on 0x{} / {}", i, i.to_printable_string());
+            eLog("update_to_genesis_section scan on {}", i.to_printable_string());
         }
 
         for (const auto& tx : section->transactions) {

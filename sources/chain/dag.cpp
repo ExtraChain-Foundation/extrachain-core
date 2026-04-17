@@ -381,13 +381,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         eLog("[Dag] Transaction not approved: {} {}", tx, res);
 
         if (res == TransactionProveError::TooSectionDiff) {
-            eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
-
+            eLog("[Dag] Current: {} section (status: {}), but TooSectionDiff!: {}",
                  this->current_section().to_string(),
-                 this->current_section(),
                  this->status(),
-                 transaction.section().to_string(),
-                 transaction.section());
+                 transaction.section().to_string());
 
             if (tx.section() < this->current_section()) {
                 // need sync?
@@ -434,8 +431,7 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
     // this->sended_transactions.erase(hash);
 
     if (tx_result.result != TransactionProveError::NoError) {
-        eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
-             transaction.section(),
+        eLog("[Dag] Our transaction not approved: {} / {}, {}",
              transaction.section().to_string(),
              transaction.hash(),
              tx_result.result);
@@ -2158,9 +2154,7 @@ void Dag::handle_sync_request() {
         return;
     }
 
-    eLog("[Dag] sync_last_index: 0x{} / {} sections",
-         sync_last_index_,
-         sync_last_index_.to_string());
+    eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
@@ -2536,7 +2530,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
 
         if (i % SectionId(1000) == 0) {
-            eLog("Processing section 0x{} / {} from {}", i, i.to_string(), current_section_);
+            eLog("Processing section {} from {}", i.to_string(), current_section_);
         }
 
         for (const auto &tx : section->transactions) {
@@ -2786,16 +2780,12 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     // TODO: if first < from or to
 
     if (status_ != DagStatus::Sync) {
-        eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-             from.to_string(),
-             to.to_string(),
-             from,
-             to);
+        eLog("[Dag] Hash interval from {} to {}", from.to_string(), to.to_string());
     }
 
     // current or to?
     if (to > current_section_) {
-        eCritical("[Dag] Section to (0x{}) > current (0x{})", to, current_section_);
+        eCritical("[Dag] Section to ({}) > current ({})", to.to_string(), current_section_.to_string());
         return std::nullopt;
     }
 
