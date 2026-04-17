@@ -666,11 +666,17 @@ bool NetworkManager::send_message_checker(MessageType      type,
 }
 
 std::string NetworkManager::send_message_send(const std::string &data_serialized,
+                                              const std::string &data_serialized_legacy,
                                               MessageType        type,
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
     auto       &main_actor = node->account_controller()->system_actor();
+
+    // Build two parallel outer envelopes: canonical (decimal wire) and legacy (hex wire).
+    // Outer MessageBody carries the inner payload as-is plus signature; it has to be
+    // built and signed separately per variant so the signed hash matches the bytes
+    // that actually hit the network.
     MessageBody message    = make_init_message(data_serialized,
                                             send_mode,
                                             type,
@@ -678,19 +684,29 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                             main_actor.id(),
                                             responder.message_id(),
                                             node->node_identifier());
+    MessageBody message_legacy = message;
+    message_legacy.data         = data_serialized_legacy;
 
     if (send_mode == SendMode::Broadcast) {
         this->add_all_services_identifiers_to_message(message);
+        // Reuse broadcast identifiers in the legacy envelope.
+        message_legacy.nodes_identifiers_to_ignore = message.nodes_identifiers_to_ignore;
     }
 
-    auto serialized      = message.serialize();
-    auto serialized_hash = message.calculate_hash();
-    auto sign_result     = main_actor.key().sign(ByteArray(serialized_hash).toBytes());
-    if (!sign_result.has_value()) {
+    auto sign_envelope = [&main_actor](MessageBody &m) -> std::optional<std::string> {
+        auto serialized      = m.serialize();
+        auto serialized_hash = m.calculate_hash();
+        auto sign_result     = main_actor.key().sign(ByteArray(serialized_hash).toBytes());
+        if (!sign_result.has_value()) return std::nullopt;
+        auto sign = ByteArray(sign_result.value()).toString();
+        return serialized + sign;
+    };
+
+    auto canonical_blob = sign_envelope(message);
+    auto legacy_blob    = sign_envelope(message_legacy);
+    if (!canonical_blob.has_value() || !legacy_blob.has_value()) {
         return "";
     }
-
-    auto sign = ByteArray(sign_result.value()).toString();
 
     std::string to_message_id = responder.message_id();
     std::string receiver_identifier;
@@ -698,14 +714,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
         auto messages_locked = *messages_;
         if (messages_locked->count(to_message_id)) {
             receiver_identifier = messages_locked->at(to_message_id).first;
-        } else {
-            // eWarning("[Network Message] Can't send message, because no to_message_id in m_messages: {}",
-            //          to_message_id);
-            // return "";
         }
-        //            if (receiver_identifier.empty())
-        //                eFatal("Network send message error: receiver_identifier is empty");
-        // m_messages.erase(to_message_id);
     }
 
     if (!responder.identifiers().empty()) {
@@ -714,6 +723,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
+        auto                    serialized   = message.serialize();
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
@@ -725,11 +735,11 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
     }
 #endif
 
-    this->send_message_connections(serialized + sign,
+    this->send_message_connections(*canonical_blob,
+                                   *legacy_blob,
                                    message,
                                    send_mode,
                                    receiver_identifier,
-                                   // responder.identifiers().empty() ? "" : *responder.identifiers().begin(),
                                    type,
                                    status);
 
@@ -737,16 +747,21 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
 }
 
 void NetworkManager::send_message_connections(const std::string &serialized_message,
+                                              const std::string &serialized_message_legacy,
                                               const MessageBody &non_serialized_message,
                                               SendMode           send_mode,
                                               const std::string &receiver_identifier,
                                               MessageType        message_type,
                                               MessageStatus      status_info) {
     if (!is_active_connection_exists()) {
-        // eLog("[NetworkManager] Save message to cache {} {}", message_type, status_info);
+        // Cache canonical payload — if connection later comes back, peer version is unknown.
         save_to_cache(serialized_message, send_mode, receiver_identifier);
         return;
     }
+
+    auto payload_for = [&](const SocketService *s) -> const std::string & {
+        return s->peer_meta().is_legacy_dag() ? serialized_message_legacy : serialized_message;
+    };
 
     static auto is_send_check = [](const SendMode    &type_send,
                                    const std::string &receiver_identifier,
@@ -801,14 +816,16 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
         if (send_mode == SendMode::NeighboursRandom && active_identifiers.size() > 3) {
 
             for (int index : indexes) {
-                active_identifiers[index]->send_message(QByteArray::fromStdString(serialized_message), priority);
+                auto *svc = active_identifiers[index];
+                svc->send_message(QByteArray::fromStdString(payload_for(svc)), priority);
             }
 
             return;
         }
 
         if (send_mode == SendMode::OneNeighbourRandom) {
-            active_identifiers[indexes[0]]->send_message(QByteArray::fromStdString(serialized_message), priority);
+            auto *svc = active_identifiers[indexes[0]];
+            svc->send_message(QByteArray::fromStdString(payload_for(svc)), priority);
         }
     }
 
@@ -835,8 +852,9 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
                                           non_serialized_message);
 
         if (send_checked) {
-            calculate_traffic_->add_bytes_sent(service->ip().toStdString(), serialized_message.size());
-            service->send_message(QByteArray::fromStdString(serialized_message), priority);
+            const std::string &payload = payload_for(service);
+            calculate_traffic_->add_bytes_sent(service->ip().toStdString(), payload.size());
+            service->send_message(QByteArray::fromStdString(payload), priority);
             if (send_mode == SendMode::Focused) {
                 break;
             }
@@ -869,8 +887,11 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     add_all_services_identifiers_to_message(message_edited);
 
-    auto serialized = message_edited.serialize();
-    send_message_connections(serialized + package_data.sign, message_edited, SendMode::Broadcast, "");
+    auto serialized      = message_edited.serialize();
+    auto full_blob       = serialized + package_data.sign;
+    // Forwarded message: we don't re-sign for legacy; just send the same blob.
+    // Legacy peers will see wire format chosen by the original sender.
+    send_message_connections(full_blob, full_blob, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
 
@@ -960,7 +981,9 @@ void NetworkManager::send_from_cache() {
         const SendMode    send_mode           = send_mode_result.value();
         const std::string receiver_identifier = deserializedList[2];
 
+        // Cached-and-replayed payload: treat canonical and legacy payload as same blob.
         send_message_connections(deserialized_message,
+                                 deserialized_message,
                                  message_body,
                                  send_mode,
                                  receiver_identifier,
@@ -1132,7 +1155,10 @@ void NetworkManager::message_received(const std::string &message,
             message_edited.nodes_identifiers_to_ignore.emplace(node->node_identifier());
 
             auto serialized = message_edited.serialize();
-            send_message_connections(serialized + std::string(sign),
+            auto blob       = serialized + std::string(sign);
+            // Forwarded response reuses existing signed blob — same for legacy peer.
+            send_message_connections(blob,
+                                     blob,
                                      message_edited,
                                      SendMode::Focused,
                                      searchRes->second.first);

@@ -34,6 +34,7 @@
 #include "network/isocket_service.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "network/wire_format.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 #include "utils/safeptr.h"
@@ -307,6 +308,7 @@ private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
     void send_message_connections(const std::string& serialized_message,
+                                  const std::string& serialized_message_legacy,
                                   const MessageBody& non_serialized_message,
                                   SendMode           send_mode,
                                   const std::string& receiver_identifier,
@@ -412,10 +414,20 @@ public:
                                      MessageStatus    status,
                                      const Responder& responder);
     std::string send_message_send(const std::string& data_serialized,
+                                  const std::string& data_serialized_legacy,
                                   MessageType        type,
                                   SendMode           send_mode,
                                   MessageStatus      status,
                                   const Responder&   responder);
+
+    // Backward-compat overload for Responder::send_response in message_body.cpp.
+    std::string send_message_send(const std::string& data_serialized,
+                                  MessageType        type,
+                                  SendMode           send_mode,
+                                  MessageStatus      status,
+                                  const Responder&   responder) {
+        return send_message_send(data_serialized, data_serialized, type, send_mode, status, responder);
+    }
 
     template <class T>
     std::string send_message(const T&         data,
@@ -429,7 +441,15 @@ public:
         }
 
         auto data_serialized = MessagePack::serialize(data);
-        auto message_id      = send_message_send(data_serialized, type, send_mode, status, responder);
+        // Also serialize a legacy-wire variant for pre-decimal peers.
+        // Same payload, but BigNumber/BigNumberFloat come out as hex strings
+        // so old nodes parse them with their own BigNumber(const string&).
+        std::string data_serialized_legacy;
+        {
+            WireFormat::Scope scope(WireFormat::Mode::Legacy);
+            data_serialized_legacy = MessagePack::serialize(data);
+        }
+        auto message_id = send_message_send(data_serialized, data_serialized_legacy, type, send_mode, status, responder);
         return message_id;
     }
 

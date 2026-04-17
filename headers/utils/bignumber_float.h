@@ -25,6 +25,7 @@
 #include "msgpack.hpp"
 
 #include "extrachain_global.h"
+#include "network/wire_format.h"
 #include "utils/bignumber.h"
 
 const int float_size    = 60;
@@ -102,7 +103,9 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = to_string();
+        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy)
+                              ? to_hex_string()
+                              : to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }

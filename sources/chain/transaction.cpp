@@ -148,8 +148,14 @@ bool Transaction::sign(const Actor<KeyPrivate> &actor) {
         return false;
     }
 
-    update_hash();
-    auto sign = actor.key().sign(hash_);
+    // Sign with the LEGACY hex-form hash for wire compatibility: pre-decimal
+    // peers re-derive the hash in hex and expect the signature to match that.
+    // New peers always accept either hex or decimal in verify(), so we don't
+    // lose anything on the new side.
+    //
+    // Once we stop talking to legacy peers, switch back to calculate_hash().
+    this->hash_ = calculate_hash_hex();
+    auto sign   = actor.key().sign(hash_);
     if (!sign.has_value()) {
         return false;
     }
