@@ -69,6 +69,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack_registry.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_migration.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/encryption_tools.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_private.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/encryption/key_public.h
@@ -134,6 +135,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_migration.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/encryption_tools.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_private.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/encryption/key_public.cpp
