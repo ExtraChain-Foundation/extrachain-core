@@ -78,13 +78,22 @@ enum class Force {
     Active
 };
 
+// Storage schema versions. Bump when on-disk layout or canonical string formats change
+// so nodes can detect legacy data and trigger migration.
+// 100 = first decimal-first + packed DAG release.
+constexpr int CURRENT_DAG_VERSION = 100;
+constexpr int CURRENT_DFS_VERSION = 100;
+
 struct ExtraChainSettings {
     std::optional<std::string> first_node;
     std::optional<DagMode>     dag_mode;
     std::optional<DfsMode>     dfs_mode;
     std::optional<std::string> node_identifier;
+    std::optional<int>         dag_version;
+    std::optional<int>         dfs_version;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (), (first_node, dag_mode, dfs_mode, node_identifier))
+BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (),
+                      (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version))
 
 class ByteArray {
 public:
@@ -919,6 +928,11 @@ namespace ChainConst {
     static const std::string DAG_FOLDER     = "dag";
     static const std::string DAG_RANGE      = "range";
     static const std::string DAG_RANGE_PATH = DAG_FOLDER + "/" + DAG_RANGE;
+
+    // Hot sections: one file per not-yet-packed section
+    static const std::string DAG_HOT_FOLDER = DAG_FOLDER + "/hot";
+    // Packed sections: immutable .pack files, each covering SECTION_SIZE sections
+    static const std::string DAG_PACKS_FOLDER = DAG_FOLDER + "/packs";
 
     // Cache
     static const std::string DAG_CACHE_FOLDER  = DAG_FOLDER + "/cache";

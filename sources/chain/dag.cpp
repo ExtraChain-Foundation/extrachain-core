@@ -30,8 +30,13 @@ static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
-    , cache_(node, this) {
+    , cache_(node, this)
+    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     timer_sync_ = new QTimer();
+
+    std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
+    std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
+    pack_registry_->rescan();
 
 #ifdef IS_APP_CLIENT
     clear_dag_folder();
@@ -209,15 +214,13 @@ SectionId Dag::file_section(const SectionId &section) const {
     return section / Config::DataStorage::SECTION_SIZE;
 }
 
-std::string Dag::file_folder(const SectionId &section) const {
-    auto file_section = this->file_section(section);
-    auto path         = fmt::format("{}/{}", ChainConst::DAG_FOLDER, file_section.to_string());
-    return path;
+std::string Dag::file_folder(const SectionId &) const {
+    // Hot sections live in a flat directory until they're packed.
+    return ChainConst::DAG_HOT_FOLDER;
 }
 
 std::string Dag::file_path(const SectionId &section) const {
-    auto path = fmt::format("{}/{}", this->file_folder(section), section.to_string());
-    return path;
+    return fmt::format("{}/{}", ChainConst::DAG_HOT_FOLDER, section.to_string());
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
@@ -548,12 +551,25 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     try {
         std::shared_lock<std::shared_mutex> lock(section_mutex_);
 
+        // Hot path: per-section file
         auto p    = this->file_path(section_id);
         auto path = FsPath::create(p);
         if (path.has_value()) {
             auto content = Utils::read_file_content(path.value());
             if (content.has_value()) {
                 auto section = Json::deserialize<Section>(content.value());
+                if (section.has_value()) {
+                    section->id = section_id;
+                    return section.value();
+                }
+            }
+        }
+
+        // Cold path: look up in packs
+        if (pack_registry_) {
+            auto packed = pack_registry_->read_section(section_id);
+            if (packed.has_value()) {
+                auto section = Json::deserialize<Section>(*packed);
                 if (section.has_value()) {
                     section->id = section_id;
                     return section.value();
@@ -579,25 +595,28 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 
 std::optional<bool> Dag::write_section(const Section &section) {
     try {
-        std::unique_lock<std::shared_mutex> lock(section_mutex_);
+        {
+            std::unique_lock<std::shared_mutex> lock(section_mutex_);
 
-        auto folder = this->file_folder(section.id);
-        if (!std::filesystem::exists(folder)) {
-            std::filesystem::create_directory(folder);
-        }
+            auto folder = this->file_folder(section.id);
+            if (!std::filesystem::exists(folder)) {
+                std::filesystem::create_directories(folder);
+            }
 
-        auto p    = this->file_path(section.id);
-        auto path = FsPath::create(p);
-        if (!path.has_value()) {
-            return std::nullopt;
-        }
+            auto p    = this->file_path(section.id);
+            auto path = FsPath::create(p);
+            if (!path.has_value()) {
+                return std::nullopt;
+            }
 
-        auto res = Utils::write_file_content(path.value(), Json::serialize(section));
-        if (!res.has_value()) {
-            return std::nullopt;
+            auto res = Utils::write_file_content(path.value(), Json::serialize(section));
+            if (!res.has_value()) {
+                return std::nullopt;
+            }
         }
 
         update_range();
+        try_pack_hot();
         return true;
     } catch (const std::system_error &e) {
         return std::nullopt;
@@ -2220,8 +2239,73 @@ void Dag::clear_dag() {
 
     cache_.reset_db();
     cache_.init_db();
+
+    // Also clear hot and packed storage
+    std::error_code ec;
+    std::filesystem::remove_all(ChainConst::DAG_HOT_FOLDER, ec);
+    std::filesystem::remove_all(ChainConst::DAG_PACKS_FOLDER, ec);
+    std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
+    std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
+    if (pack_registry_) pack_registry_->rescan();
+
     eLog("[Dag] Cleared");
 #endif
+}
+
+void Dag::try_pack_hot() {
+    if (!pack_registry_) return;
+
+    // Candidate pack: the pack index whose boundary we most recently crossed.
+    // We look one pack behind the current section so in-flight writes stay hot.
+    auto section_size = Config::DataStorage::SECTION_SIZE;
+    if (current_section_ < section_size) return;
+
+    SectionId candidate_pack_idx = (current_section_ / section_size) - SectionId(1);
+    if (candidate_pack_idx < SectionId(0)) return;
+
+    // Skip if already packed
+    if (pack_registry_->find_pack_for_section(candidate_pack_idx * section_size).has_value()) {
+        return;
+    }
+
+    SectionId pack_first = candidate_pack_idx * section_size;
+    SectionId pack_last  = pack_first + section_size - 1;
+
+    // Gather all required hot section files. If any is missing, bail — we pack
+    // only complete, immutable ranges.
+    std::map<SectionId, std::string> sections;
+    for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+        auto p   = this->file_path(s);
+        auto fsp = FsPath::create(p);
+        if (!fsp.has_value() || !fsp->exists()) return;
+
+        auto content = Utils::read_file_content(fsp.value());
+        if (!content.has_value()) return;
+
+        sections.emplace(s, std::string(content->begin(), content->end()));
+    }
+
+    Pack::PackId pid;
+    {
+        auto candidate_int = candidate_pack_idx.to_int();
+        if (!candidate_int.has_value() || *candidate_int < 0) return;
+        pid = static_cast<Pack::PackId>(*candidate_int);
+    }
+
+    auto res = pack_registry_->create_pack(pid, sections);
+    if (!res.has_value()) {
+        eWarning("[Dag] Failed to pack sections {}..{} (error {})",
+                 pack_first, pack_last, static_cast<int>(res.error()));
+        return;
+    }
+
+    // Remove hot files that are now safely packed.
+    for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+        std::error_code ec;
+        std::filesystem::remove(this->file_path(s), ec);
+    }
+
+    eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
 }
 
 void Dag::remove_sections(const SectionId &from) {
@@ -2430,12 +2514,13 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
-    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
-    //       from < 0 ? current_section_ : from,
-    //       current_section_);
-    // emit checking local?
+    // `skips`: sections scanned since we last saw a control-aligned slot.
+    // `missing_aligned`: control-aligned slots with no section file at all.
+    // The `// jj++` in the missing-section branch is intentionally disabled:
+    // a missing aligned section currently resets `skips` only — preserve the existing
+    // consensus behaviour, but keep the variable as a guard-rail for future tuning.
+    int skips           = 0;
+    int missing_aligned = 0;
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
@@ -2446,7 +2531,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         }
     }
 
-    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+    for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
         if (i < first_saved_section_) {
             eCritical("[Dag] Try to find section < current first");
             break;
@@ -2456,8 +2541,8 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         if (!section.has_value()) {
             if (i % CONTROL_INTERVAL_MOD == 0) {
                 eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
+                skips = 0;
+                // missing_aligned++;  // kept intentionally disabled, see note above
             }
             continue;
         }
@@ -2471,8 +2556,10 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
             return DagControl { .section_id = i, .control = section->control.value() };
         }
 
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        skips += 1;
+        if (!disable_break
+            && (skips > CONTROL_SEARCH_SKIP_LIMIT
+                || missing_aligned > CONTROL_SEARCH_MISS_LIMIT)) {
             break;
         }
     }

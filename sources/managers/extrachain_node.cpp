@@ -175,6 +175,12 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     actor_index_->set_network_id(first.actors().front().id());
     // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
 
+    // Freshly created network starts at the current storage schema.
+    auto settings        = Utils::read_settings();
+    settings.dag_version = CURRENT_DAG_VERSION;
+    settings.dfs_version = CURRENT_DFS_VERSION;
+    Utils::write_settings(settings);
+
     this->create_new_dag();
 
     eSuccess("[Node] New network created");

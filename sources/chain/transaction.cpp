@@ -105,8 +105,21 @@ std::string Transaction::calculate_hash() const {
         hashData += prev_hash;
     }
 
-    std::string resultHash = Utils::calculate_hash(hashData);
-    return resultHash;
+    return Utils::calculate_hash(hashData);
+}
+
+std::string Transaction::calculate_hash_hex() const {
+    auto hashData =
+        section_.to_hex_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
+        + receiver_.to_string() + token_.to_string() + amount_.to_hex_string()
+        + std::to_string(timestamp_)
+        + (meta_.has_value() ? meta_.value() : "");
+
+    for (const auto &prev_hash : prev_hashs_) {
+        hashData += prev_hash;
+    }
+
+    return Utils::calculate_hash(hashData);
 }
 
 void Transaction::update_hash() {
@@ -149,14 +162,19 @@ bool Transaction::verify(const Actor<KeyPublic> &actor) const {
         return false;
     }
 
-    std::string actual_hash = calculate_hash();
-
-    auto verify = actor.key().verify(actual_hash, signature_);
-    if (!verify.has_value()) {
-        return false;
+    // New signatures are computed over the decimal form. Transactions signed before
+    // the hex → decimal migration still validate against the legacy hex form.
+    auto verify_primary = actor.key().verify(calculate_hash(), signature_);
+    if (verify_primary.has_value() && verify_primary.value()) {
+        return true;
     }
 
-    return verify.value();
+    auto verify_legacy = actor.key().verify(calculate_hash_hex(), signature_);
+    if (verify_legacy.has_value() && verify_legacy.value()) {
+        return true;
+    }
+
+    return false;
 }
 
 void Transaction::set_section(const BigNumber &value) {

@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <memory>
 #include <shared_mutex>
 
 #include <boost/describe.hpp>
@@ -28,24 +29,34 @@
 #include "chain/transaction.h"
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
+#include "chain/pack_registry.h"
 
 #include "3rdparty/rustex.h"
 
 class ExtraChainNode;
 class Responder;
 
+// Control hashes live on every CONTROL_INTERVAL-th section (section_id % 20 == 0).
+// They anchor the chain so peers can verify long histories without replaying every tx.
 static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
+
+// find_last_control() walks backwards from the current tip; these caps stop the walk
+// once enough evidence accumulates that no control is ever coming:
+//   - CONTROL_SEARCH_SKIP_LIMIT: sections scanned without finding a control. 37
+//     is deliberately > 20 so we always cross at least one expected control slot.
+//   - CONTROL_SEARCH_MISS_LIMIT: control-aligned sections that were missing
+//     entirely (slot at % 20 == 0 but no section file). Hints at a broken chain.
+static constexpr int CONTROL_SEARCH_SKIP_LIMIT = 37;
+static constexpr int CONTROL_SEARCH_MISS_LIMIT = 10;
 
 // helpers
 static inline bool is_aligned20(const SectionId &s) {
     return (s % CONTROL_INTERVAL) == 0;
 }
 static inline SectionId align_down20(const SectionId &s) {
-    eLog("align_down20 {}", s);
-    SectionId m;
-    m = s % CONTROL_INTERVAL;
+    SectionId m = s % CONTROL_INTERVAL;
     return m == 0 ? s : (s - m);
 }
 static inline SectionId max_sid(const SectionId &a, const SectionId &b) {
@@ -588,8 +599,15 @@ private:
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
 
+    // Immutable packed storage for cold sections (10k per pack)
+    std::unique_ptr<Pack::Registry> pack_registry_;
+
     //
     void add_to_cached_tx(const Transaction &transaction);
+
+    // Pack hot sections into an immutable pack when enough have accumulated.
+    // Called from write_section when the hot range crosses a pack boundary.
+    void try_pack_hot();
 
     /**
      * @brief Request sections from the network
