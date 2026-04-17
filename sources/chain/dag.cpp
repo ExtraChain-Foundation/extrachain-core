@@ -343,10 +343,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         if (res == TransactionProveError::TooSectionDiff) {
             eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
 
-                 this->current_section().to_string(NumeralBase::Dec),
+                 this->current_section().to_string(),
                  this->current_section(),
                  this->status(),
-                 transaction.section().to_string(NumeralBase::Dec),
+                 transaction.section().to_string(),
                  transaction.section());
 
             if (tx.section() < this->current_section()) {
@@ -396,7 +396,7 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
     if (tx_result.result != TransactionProveError::NoError) {
         eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
              transaction.section(),
-             transaction.section().to_string(NumeralBase::Dec),
+             transaction.section().to_string(),
              transaction.hash(),
              tx_result.result);
 
@@ -1987,8 +1987,8 @@ void Dag::handle_sync_request() {
                  last_control->control,
                  info.last_control_hash);
             eLog("____ {} {} {} {}",
-                 last_control->section_id.to_string(NumeralBase::Dec),
-                 info.last_control_section_id.to_string(NumeralBase::Dec),
+                 last_control->section_id.to_string(),
+                 info.last_control_section_id.to_string(),
                  last_control->control,
                  info.last_control_hash);
 
@@ -2104,7 +2104,7 @@ void Dag::handle_sync_request() {
 
     eLog("[Dag] sync_last_index: 0x{} / {} sections",
          sync_last_index_,
-         sync_last_index_.to_string(NumeralBase::Dec));
+         sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
@@ -2294,9 +2294,9 @@ void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {
                                 tx.receiver(),
                                 tx.type(),
                                 tx.token(),
-                                tx.amount().to_string(NumeralBase::Dec),
+                                tx.amount().to_string(),
                                 tx.timestamp(),
-                                balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec)));
+                                balances[{ actor_id, tx.token() }].to_string()));
             }
         }
     }
@@ -2327,7 +2327,7 @@ void Dag::cache_log() {
         eLog("ActorId: {}, TokenId: {}, Balance: {} (hex: {})",
              actor_id,
              token_id,
-             balance.to_string(NumeralBase::Dec),
+             balance.to_string(),
              balance.to_string());
     }
 
@@ -2415,7 +2415,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
 
         if (i % SectionId(1000) == 0) {
-            eLog("Processing section 0x{} / {} from {}", i, i.to_string(NumeralBase::Dec), current_section_);
+            eLog("Processing section 0x{} / {} from {}", i, i.to_string(), current_section_);
         }
 
         for (const auto &tx : section->transactions) {
@@ -2425,7 +2425,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
     }
 
-    eLog("Total rewards sum: {}", total_rewards.to_string(NumeralBase::Dec));
+    eLog("Total rewards sum: {}", total_rewards.to_string());
     return total_rewards;
 }
 
@@ -2464,7 +2464,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
 
         if (section->control.has_value()) {
             if (section->id % CONTROL_INTERVAL_MOD != 0) {
-                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
+                eCritical("[Dag] Control for section {}", section->id.to_string());
                 continue;
             }
 
@@ -2663,8 +2663,8 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
 
     if (status_ != DagStatus::Sync) {
         eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-             from.to_string(NumeralBase::Dec),
-             to.to_string(NumeralBase::Dec),
+             from.to_string(),
+             to.to_string(),
              from,
              to);
     }
@@ -2687,15 +2687,15 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         }
 
         if (is_empty) {
-            auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            auto hash = Utils::calculate_hash(i.to_string());
             section_hashs += hash;
-            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(), hash);
             continue;
         }
 
-        auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        auto hash = Utils::calculate_hash(i.to_string() + section->calculate_hash());
         section_hashs += hash;
-        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(), hash);
     }
 
     return Utils::calculate_hash(section_hashs);
@@ -2718,7 +2718,7 @@ void Dag::start_control(Force force, Force qt_signals) {
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string());
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);

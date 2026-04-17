@@ -31,13 +31,13 @@ const int float_size    = 60;
 using cpp_dec_float_exc = boost::multiprecision::number<boost::multiprecision::cpp_dec_float<float_size>>;
 
 /**
- * Data type for big hex numbers for addresses
- * example: ab11405c92a05c91c48
+ * Fixed-precision decimal. Canonical string form is decimal.
+ * Hex parsing retained for backward compatibility with pre-decimal chain data.
  */
 class EXTRACHAIN_EXPORT BigNumberFloat {
 public:
     BigNumberFloat();
-    explicit BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base = NumeralBase::Hex);
+    explicit BigNumberFloat(const std::string &bigNumberFloat);
     BigNumberFloat(const BigNumberFloat &other);
     BigNumberFloat(BigNumberFloat &&other) noexcept;
     explicit BigNumberFloat(const BigNumber &other);
@@ -52,7 +52,6 @@ private:
 
 #ifdef QT_DEBUG
     std::string qdata;
-    std::string qdataDec;
 #endif
 
 public:
@@ -82,14 +81,15 @@ public:
 
 public:
     const cpp_dec_float_exc &data() const;
-    std::string              to_string(NumeralBase base = NumeralBase::Hex) const;
+    std::string              to_string() const;
+    std::string              to_hex_string() const;
     BigNumberFloat           pow(unsigned long number);
-    // BigNumberFloat sqrt(unsigned long number = 2) const;
-    BigNumberFloat abs() const;
+    BigNumberFloat           abs() const;
 
-    static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat,
-                                                                NumeralBase        base = NumeralBase::Hex);
-    static BigNumberFloat                                from_hex(const std::string &number);
+    static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat);
+
+    // Legacy hex helper for migration and pre-decimal protocol peers.
+    static BigNumberFloat from_hex(const std::string &number);
 
     void truncate(int decimalPlaces = 3);
 
@@ -114,7 +114,11 @@ public:
 };
 
 inline size_t qHash(const BigNumberFloat &key, size_t seed) {
-    return qHash(key, seed);
+    std::string s = key.to_string();
+    size_t      h = seed;
+    for (char c : s)
+        h = (h * 131) ^ static_cast<unsigned char>(c);
+    return h;
 }
 
 MAKE_CUSTOM_MAGICAL(BigNumberFloat)

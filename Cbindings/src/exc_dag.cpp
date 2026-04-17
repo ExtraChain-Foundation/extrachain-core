@@ -34,7 +34,7 @@ EXC_API ExcError exc_transaction_send(const char* receiver, const char* amount,
         auto& gs = GlobalState::instance();
 
         ActorId recv_id{std::string(receiver)};
-        BigNumberFloat amt{std::string(amount), NumeralBase::Dec};
+        BigNumberFloat amt{std::string(amount)};
         ActorId token = (token_id && token_id[0]) ? ActorId(std::string(token_id)) : ActorId();
 
         auto res = gs.node->create_transaction(recv_id, amt, token);
@@ -74,7 +74,7 @@ EXC_API ExcError exc_transaction_send_from(const char* sender, const char* recei
 
         ActorId send_id{std::string(sender)};
         ActorId recv_id{std::string(receiver)};
-        BigNumberFloat amt{std::string(amount), NumeralBase::Dec};
+        BigNumberFloat amt{std::string(amount)};
         ActorId token = (token_id && token_id[0]) ? ActorId(std::string(token_id)) : ActorId();
 
         auto res = gs.node->create_transaction_from(send_id, recv_id, amt, token);
@@ -117,7 +117,7 @@ EXC_API ExcError exc_balance_query(const char* actor_id, const char* token_id,
         auto key = std::make_pair(aid, tid);
         auto it = balances.find(key);
         if (it != balances.end()) {
-            *out_balance = exc_strdup(it->second.to_string(NumeralBase::Dec));
+            *out_balance = exc_strdup(it->second.to_string());
         } else {
             *out_balance = exc_strdup("0");
         }
@@ -167,7 +167,7 @@ EXC_API ExcError exc_balance_query_all(const char** actor_ids, size_t count,
         for (auto& [key, value] : balances) {
             out_balances->entries[idx].actor_id = exc_strdup(key.first.to_string());
             out_balances->entries[idx].token_id = exc_strdup(key.second.to_string());
-            out_balances->entries[idx].amount = exc_strdup(value.to_string(NumeralBase::Dec));
+            out_balances->entries[idx].amount = exc_strdup(value.to_string());
             ++idx;
         }
     });
@@ -197,7 +197,7 @@ EXC_API ExcError exc_transaction_get_amount(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
     auto* t = HandleTable::instance().get<Transaction>(tx);
     if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->amount().to_string(NumeralBase::Dec));
+    *out = exc_strdup(t->amount().to_string());
     return EXC_OK;
 }
 

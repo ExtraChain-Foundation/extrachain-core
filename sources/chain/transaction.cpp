@@ -96,7 +96,7 @@ void Transaction::set_token(const ActorId &value) {
 std::string Transaction::calculate_hash() const {
     auto hashData =
         section_.to_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-        + receiver_.to_string() + token_.to_string() + amount_.to_string(NumeralBase::Hex)
+        + receiver_.to_string() + token_.to_string() + amount_.to_string()
         + std::to_string(timestamp_)
         + (meta_.has_value() ? meta_.value() : ""); // TODO: + amount.size() meta.size() + prev_hashs_.size()
                                                     // TODO: meta max 255 in prove + section size?

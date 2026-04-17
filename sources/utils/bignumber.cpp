@@ -20,35 +20,37 @@
 #include "utils/bignumber.h"
 
 #include <exception>
+#include <sstream>
 
 #include "utils/exc_logs.h"
 
 using boost::multiprecision::cpp_int;
 
 BigNumber::BigNumber()
-    : m_data(0) { UPDATE_DEBUG() }
+    : m_data(0) {
+    UPDATE_DEBUG()
+}
 
-    BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base) {
+BigNumber::BigNumber(const std::string &bigNumber) {
     if (bigNumber == "inf")
         eFatal("BigNumber: infinity");
     try {
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);
+        } else if (is_hex_string(bigNumber)) {
+            *this = from_hex(bigNumber);
         } else {
-            if (base == NumeralBase::Dec) {
-                std::string trimmed = bigNumber;
-                trimmed.erase(0, trimmed.find_first_not_of('0'));
-                this->m_data = cpp_int(trimmed);
-            } else {
-                std::stringstream ss;
-                ss << std::hex << bigNumber;
-                ss >> m_data;
-            }
+            std::string trimmed = bigNumber;
+            bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+            if (is_negative) trimmed = trimmed.substr(1);
+            trimmed.erase(0, trimmed.find_first_not_of('0'));
+            if (trimmed.empty()) trimmed = "0";
+            this->m_data = cpp_int(trimmed);
+            if (is_negative) this->m_data = -this->m_data;
         }
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
         this->m_data = -100000;
-        // eFatal("Incorrect BigNumber value: {}", bigNumber);
     }
 
     UPDATE_DEBUG()
@@ -62,7 +64,6 @@ BigNumber::BigNumber(const BigNumber &other) {
 BigNumber::BigNumber(BigNumber &&other) noexcept {
     this->m_data = std::move(other.m_data);
     UPDATE_DEBUG()
-    // other.m_data = boost::multiprecision::cpp_int(0);
 }
 
 BigNumber::BigNumber(const cpp_int &number) {
@@ -207,7 +208,6 @@ BigNumber &BigNumber::operator/=(const BigNumber &bigNumber) {
 
 BigNumber &BigNumber::operator/=(long long number) {
     this->m_data /= number;
-
     UPDATE_DEBUG()
     return *this;
 }
@@ -232,23 +232,23 @@ const cpp_int &BigNumber::data() const {
     return m_data;
 }
 
-std::string BigNumber::to_string(NumeralBase numSystem) const {
-    if (numSystem == NumeralBase::Dec) {
-        return m_data.str();
+std::string BigNumber::to_string() const {
+    return m_data.str();
+}
+
+std::string BigNumber::to_hex_string() const {
+    std::stringstream ss;
+    if (m_data >= 0) {
+        ss << std::hex << m_data;
+        return ss.str();
     } else {
-        std::stringstream ss;
-        if (m_data >= 0) {
-            ss << std::hex << m_data;
-            return ss.str();
-        } else {
-            ss << std::hex << boost::multiprecision::abs(m_data);
-            return "-" + ss.str();
-        }
+        ss << std::hex << boost::multiprecision::abs(m_data);
+        return "-" + ss.str();
     }
 }
 
 std::string BigNumber::to_printable_string() const {
-    auto res = this->to_string(NumeralBase::Dec);
+    auto res = this->to_string();
     if (res.length() < 6)
         return res;
 
@@ -280,32 +280,51 @@ BigNumber BigNumber::abs() const {
     return BigNumber(res);
 }
 
-std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bigNumber, NumeralBase base) {
+std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bigNumber) {
     if (bigNumber == "inf") {
         return std::unexpected(BigNumberError::Infinity);
     }
 
     try {
-        BigNumber bn;
-        if (bigNumber.empty()) {
-            bn.m_data = cpp_int(0);
-        } else {
-            if (base == NumeralBase::Dec) {
-                std::string trimmed = bigNumber;
-                trimmed.erase(0, trimmed.find_first_not_of('0'));
-                bn.m_data = cpp_int(trimmed);
-            } else {
-                std::stringstream ss;
-                ss << std::hex << bigNumber;
-                ss >> bn.m_data;
-            }
-        }
-        return bn;
+        return BigNumber(bigNumber);
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
-        // assert(false);
         return std::unexpected(BigNumberError::InvalidNumber);
     }
+}
+
+bool BigNumber::is_hex_string(const std::string &str) {
+    if (str.empty()) return false;
+
+    size_t start = 0;
+    if (str[0] == '-') start = 1;
+    if (start >= str.size()) return false;
+
+    for (size_t i = start; i < str.size(); i++) {
+        char c = str[i];
+        if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+BigNumber BigNumber::from_hex(const std::string &hex) {
+    if (hex.empty()) return BigNumber(0);
+
+    std::string trimmed = hex;
+    bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+    if (is_negative) trimmed = trimmed.substr(1);
+
+    trimmed.erase(0, trimmed.find_first_not_of('0'));
+    if (trimmed.empty()) trimmed = "0";
+
+    BigNumber result(boost::multiprecision::cpp_int("0x" + trimmed));
+    if (is_negative) {
+        result = BigNumber(-result.data());
+    }
+
+    return result;
 }
 
 std::strong_ordering BigNumber::operator<=>(const int &other) const {
@@ -334,10 +353,13 @@ bool BigNumber::operator==(const int &other) const {
 
 namespace magic {
     std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-        return value.to_string(NumeralBase::Hex);
+        return value.to_string();
     }
 
     BigNumber custom_magic<BigNumber>::write(const std::string &value) {
+        if (BigNumber::is_hex_string(value)) {
+            return BigNumber::from_hex(value);
+        }
         return BigNumber(value);
     }
 } // namespace magic
