@@ -93,6 +93,19 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     identifier_      = QString::fromStdString(handshake.identifier);
     dfs_mode_socket_ = handshake.dfs_mode;
 
+    peer_meta_ = PeerMeta {
+        .version     = handshake.version,
+        .dag_version = handshake.dag_version,
+        .dfs_version = std::nullopt,
+        .dfs_mode    = handshake.dfs_mode,
+    };
+
+    if (peer_meta_.dag_version.has_value()) {
+        eLog("[Socket] Peer dag_version: {}", *peer_meta_.dag_version);
+    } else {
+        eLog("[Socket] Peer is legacy (no dag_version)");
+    }
+
     // 0. Check mode
     if (handshake.socket_mode == SocketMode::Light) { // if full -> nothing change, because we can replace light
         mode_ = SocketMode::Light;
@@ -240,7 +253,8 @@ QByteArray SocketService::generate_first_message() {
                            .is_available = true,
                            .is_constant  = is_constant_.load(),
                            .socket_mode  = mode_,
-                           .dfs_mode     = node->dfs()->mode() };
+                           .dfs_mode     = node->dfs()->mode(),
+                           .dag_version  = CURRENT_DAG_VERSION };
 
     {
         auto connections_locked = *node->network()->connections();

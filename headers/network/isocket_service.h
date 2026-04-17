@@ -22,6 +22,7 @@
 
 #include "encryption/key_private.h"
 #include "encryption/key_public.h"
+#include "network/peer_meta.h"
 #include "utils/exc_utils.h"
 
 #include <queue>
@@ -67,6 +68,10 @@ public:
         bool                 is_constant  = false;
         SocketMode           socket_mode;
         DfsMode              dfs_mode;
+        // Storage schema version. Optional so legacy peers (who don't send it)
+        // parse cleanly — JSON serialization drops absent optionals entirely.
+        // Present + >= 100 = peer understands decimal wire format and pack sync.
+        std::optional<int>   dag_version;
     };
 
     enum class Priority {
@@ -100,6 +105,11 @@ public:
     }
 
     std::uint64_t timestamp() const;
+
+    // Snapshot of peer attributes derived from the initial handshake.
+    // Populated by check_first_message(); read by send/receive handlers to
+    // decide on wire format and feature availability.
+    const PeerMeta &peer_meta() const { return peer_meta_; }
 
 public:
     virtual void flush()                                                                  = 0;
@@ -147,6 +157,7 @@ protected:
     SocketMode       mode_             = SocketMode::Full;
     SocketDirection  direction_        = SocketDirection::Outgoing;
     DfsMode          dfs_mode_socket_;
+    PeerMeta         peer_meta_;
 
     QMutex                 queue_mutex_;
     std::queue<QByteArray> high_queue_;
@@ -165,7 +176,7 @@ protected:
 BOOST_DESCRIBE_STRUCT(
     SocketService::HandshakeMessage,
     (),
-    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode))
+    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode, dag_version))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 

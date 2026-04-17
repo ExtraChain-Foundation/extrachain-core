@@ -1023,10 +1023,13 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     //     }
     // }
 
-    // Verify transaction hash integrity
-    auto tx_copy = tx;
-    tx_copy.update_hash();
-    if (tx.hash() != tx_copy.hash()) {
+    // Verify transaction hash integrity.
+    // A transaction from a legacy peer will carry a hash computed in the old hex
+    // form — accept either the new canonical decimal hash or the legacy one.
+    auto tx_copy     = tx;
+    auto new_hash    = tx_copy.calculate_hash();
+    auto legacy_hash = tx_copy.calculate_hash_hex();
+    if (tx.hash() != new_hash && tx.hash() != legacy_hash) {
         return TransactionProveError::WrongHash;
     }
 
