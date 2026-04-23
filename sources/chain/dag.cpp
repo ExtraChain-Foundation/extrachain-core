@@ -19,6 +19,7 @@
 
 #include "chain/dag.h"
 
+#include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/message_body.h"
 #include "network/network_manager.h"
@@ -1168,6 +1169,26 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::SenderBalanceBelowZero;
     }
 
+    // Freeze check: block spending of minted amount (Regular only)
+    if (tx.type() == TransactionType::Regular) {
+        auto network_id = node->actor_index()->network_id();
+        if (!network_id.is_zero()) {
+            auto alloc_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+                node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+            if (alloc_row.has_value()) {
+                auto minted_str = node->dfs()->read_dictionary(
+                    network_id, alloc_row->file_id,
+                    fmt::format("{}:{}", targetSender.to_string(), token.to_string()));
+                if (minted_str.has_value() && !minted_str->empty()) {
+                    auto minted_amount = BigNumberFloat::create(*minted_str, NumeralBase::Dec);
+                    if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
+                        return TransactionProveError::SenderBalanceBelowZero;
+                    }
+                }
+            }
+        }
+    }
+
     return TransactionProveError::NoError;
 }
 
@@ -2306,6 +2327,206 @@ void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {
     }
 
     eLog("End tx_list_log");
+}
+
+void Dag::mint_analysis_log() {
+    eLog("[Dag] mint_analysis_log: start");
+
+    auto network_id = node->actor_index()->network_id();
+    if (network_id.is_zero()) {
+        eWarning("[Dag] mint_analysis_log: network_id is zero");
+        return;
+    }
+
+    auto alloc_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
+        node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+    if (!alloc_row.has_value()) {
+        eWarning("[Dag] mint_analysis_log: token_allocations not found");
+        return;
+    }
+
+    auto alloc_map = node->dfs()->read_dictionary_rows(network_id, alloc_row->file_id);
+    if (!alloc_map.has_value() || alloc_map->empty()) {
+        eWarning("[Dag] mint_analysis_log: token_allocations is empty");
+        return;
+    }
+
+    // Parse actor:token -> minted amount from token_allocations
+    using ActorTokenKey = std::pair<ActorId, TokenId>;
+    std::map<ActorTokenKey, BigNumberFloat> minted;
+    for (const auto& [key, val] : alloc_map.value()) {
+        auto sep = key.find(':');
+        if (sep == std::string::npos)
+            continue;
+        auto actor = ActorId::create(key.substr(0, sep));
+        auto token = TokenId::create(key.substr(sep + 1));
+        if (!actor.has_value() || !token.has_value())
+            continue;
+        auto parsed = BigNumberFloat::create(val, NumeralBase::Dec);
+        if (!parsed.has_value())
+            continue;
+        minted[{ actor.value(), token.value() }] = parsed.value();
+    }
+
+    // Build minted pairs set and per-token minted actors set for taint tracking
+    std::set<ActorTokenKey> minted_pairs;
+    std::map<TokenId, std::set<ActorId>> tainted; // token -> set of tainted actors
+    for (const auto& [key, _] : minted) {
+        minted_pairs.insert(key);
+        tainted[key.second].insert(key.first);
+    }
+
+    struct Transfer {
+        ActorId        from;
+        ActorId        to;
+        TokenId        token;
+        BigNumberFloat amount;
+        SectionId      section_id;
+        std::uint64_t  timestamp;
+    };
+
+    struct MintTx {
+        ActorId        actor;
+        TokenId        token;
+        BigNumberFloat amount;
+        SectionId      section_id;
+        std::uint64_t  timestamp;
+    };
+
+    std::map<ActorTokenKey, BigNumberFloat> spent;
+    std::vector<Transfer>  all_transfers; // all Regular txs (for taint chain)
+    std::vector<MintTx>    mint_txs;
+
+    // Scan chain from min_section to current
+    static const SectionId min_section = SectionId(BigNumber("a05133", NumeralBase::Hex));
+    eLog("[Dag] mint_analysis_log: scanning {} .. {}", min_section, current_section_);
+
+    SectionId section_id = min_section;
+    std::uint64_t sections_read = 0, sections_missing = 0;
+    while (section_id <= current_section_) {
+        auto section = read_section(section_id);
+        if (!section.has_value()) {
+            section_id = section_id + SectionId(1);
+            ++sections_missing;
+            continue;
+        }
+        ++sections_read;
+
+        for (const auto& tx : section->transactions) {
+            if (tx.type() == TransactionType::Minting) {
+                mint_txs.push_back({ tx.receiver(), tx.token(), tx.amount(), section_id, tx.timestamp() });
+            } else if (tx.type() == TransactionType::Regular) {
+                auto key = ActorTokenKey { tx.sender(), tx.token() };
+                if (minted_pairs.count(key)) {
+                    spent[key] += tx.amount();
+                }
+                all_transfers.push_back({ tx.sender(), tx.receiver(), tx.token(), tx.amount(), section_id, tx.timestamp() });
+            }
+        }
+
+        section_id = section_id + SectionId(1);
+    }
+    eLog("[Dag] mint_analysis_log: read={} missing={}", sections_read, sections_missing);
+
+    // Build tainted chain via BFS (max depth 10)
+    // transfers index: (sender, token) -> list of receivers
+    std::map<ActorTokenKey, std::vector<std::pair<ActorId, SectionId>>> transfers_by_sender;
+    for (const auto& t : all_transfers)
+        transfers_by_sender[{ t.from, t.token }].push_back({ t.to, t.section_id });
+
+    for (auto& [token, actors] : tainted) {
+        std::vector<ActorId> queue(actors.begin(), actors.end());
+        for (int depth = 0; depth < 10 && !queue.empty(); ++depth) {
+            std::vector<ActorId> next;
+            for (const auto& actor : queue) {
+                auto it = transfers_by_sender.find({ actor, token });
+                if (it == transfers_by_sender.end())
+                    continue;
+                for (const auto& [receiver, _] : it->second) {
+                    if (!actors.count(receiver)) {
+                        actors.insert(receiver);
+                        next.push_back(receiver);
+                    }
+                }
+            }
+            queue = std::move(next);
+        }
+    }
+
+    // Collect chain transfers (any tx involving tainted actors)
+    std::vector<Transfer> chain_transfers;
+    for (const auto& t : all_transfers) {
+        auto it = tainted.find(t.token);
+        if (it == tainted.end())
+            continue;
+        const auto& tainted_set = it->second;
+        if (tainted_set.count(t.from) || tainted_set.count(t.to))
+            chain_transfers.push_back(t);
+    }
+
+    // Collector stats: non-minted actors that received tainted tokens
+    std::map<ActorTokenKey, BigNumberFloat> collector_received;
+    for (const auto& t : chain_transfers) {
+        if (!minted_pairs.count({ t.to, t.token }))
+            collector_received[{ t.to, t.token }] += t.amount;
+    }
+
+    // ── Output ──────────────────────────────────────────────────────────────
+
+    eLog("[Dag] mint_analysis_log: === MINT TRANSACTIONS ===");
+    for (const auto& m : mint_txs) {
+        eLog("[Dag] mint_analysis_log: section={} actor={} token={} amount={}",
+             m.section_id, m.actor, m.token, m.amount.to_string(NumeralBase::Dec));
+    }
+
+    eLog("[Dag] mint_analysis_log: === SUMMARY PER ACTOR+TOKEN ===");
+    int abuse_count = 0;
+    for (const auto& [key, mint_amount] : minted) {
+        const auto& [actor, token] = key;
+        BigNumberFloat spent_amount = spent.count(key) ? spent.at(key) : BigNumberFloat(0);
+        BigNumberFloat frozen       = mint_amount - spent_amount;
+        if (frozen < BigNumberFloat(0))
+            frozen = BigNumberFloat(0);
+        BigNumberFloat overspend = spent_amount - mint_amount;
+        bool abused = spent_amount > BigNumberFloat(0);
+        if (abused)
+            ++abuse_count;
+
+        eLog("[Dag] mint_analysis_log: actor={} token={} minted={} spent={} frozen={} {}{}",
+             actor, token,
+             mint_amount.to_string(NumeralBase::Dec),
+             spent_amount.to_string(NumeralBase::Dec),
+             frozen.to_string(NumeralBase::Dec),
+             abused ? "USED_BEFORE_FREEZE " : "",
+             overspend > BigNumberFloat(0)
+                 ? fmt::format("OVERSPEND={}", overspend.to_string(NumeralBase::Dec))
+                 : "");
+    }
+
+    eLog("[Dag] mint_analysis_log: === COLLECTORS (received tainted, no direct mint) ===");
+    for (const auto& [key, total] : collector_received) {
+        const auto& [actor, token] = key;
+        eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}",
+             actor, token, total.to_string(NumeralBase::Dec));
+    }
+
+    eLog("[Dag] mint_analysis_log: === TAINTED CHAIN TRANSFERS ===");
+    for (const auto& t : chain_transfers) {
+        bool from_minted = minted_pairs.count({ t.from, t.token }) > 0;
+        bool to_minted   = minted_pairs.count({ t.to,   t.token }) > 0;
+        std::string tag;
+        if (from_minted && !to_minted)
+            tag = "MINT->COLLECTOR";
+        else if (from_minted && to_minted)
+            tag = "MINT->MINT";
+        else
+            tag = "CHAIN";
+        eLog("[Dag] mint_analysis_log: [{}] section={} from={} to={} amount={}",
+             tag, t.section_id, t.from, t.to, t.amount.to_string(NumeralBase::Dec));
+    }
+
+    eLog("[Dag] mint_analysis_log: done. minted_pairs={} abused={} chain_transfers={}",
+         minted.size(), abuse_count, chain_transfers.size());
 }
 
 void Dag::cache_log() {
