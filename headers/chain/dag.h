@@ -30,6 +30,7 @@
 #include "chain/transaction.h"
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
+#include "chain/chain_index.h"
 #include "chain/pack_registry.h"
 
 #include "3rdparty/rustex.h"
@@ -329,6 +330,12 @@ public:
     DagCache &cache();
 
     /**
+     * @brief Persistent transaction index used for wallet/explorer queries
+     *        and fast duplicate hash checks.
+     */
+    ChainIndex &chain_index();
+
+    /**
      * @brief Get the ID of the first saved section
      *
      * @return SectionId The first saved section ID
@@ -624,6 +631,10 @@ private:
 
     // Immutable packed storage for cold sections (10k per pack)
     std::unique_ptr<Pack::Registry> pack_registry_;
+
+    // Persistent tx index (by hash / sender / receiver / token / time).
+    // Full mode: every tx. Light mode: only tx involving local wallets.
+    std::unique_ptr<ChainIndex> chain_index_;
 
     // Lifecycle flags:
     //   started_ — set by start(), cleared by stop(). Guards double-start.

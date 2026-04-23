@@ -31,7 +31,8 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node, this)
-    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
+    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER))
+    , chain_index_(std::make_unique<ChainIndex>(node)) {
     timer_sync_ = new QTimer();
 
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
@@ -241,6 +242,10 @@ TransactionCache &Dag::transaction_cache() {
 
 DagCache &Dag::cache() {
     return cache_;
+}
+
+ChainIndex &Dag::chain_index() {
+    return *chain_index_;
 }
 
 SectionId Dag::first_saved_section() {
@@ -649,6 +654,8 @@ std::optional<bool> Dag::write_section(const Section &section) {
         }
 
         update_range();
+        // Feed the tx index. Done outside the section_mutex_ — ChainIndex has its own lock.
+        if (chain_index_) chain_index_->on_section_written(section);
         try_pack_hot();
         return true;
     } catch (const std::system_error &e) {
@@ -1271,32 +1278,22 @@ void Dag::update_range() {
     }
 }
 
-std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int deep) const {
-    int count = 0;
+std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int /*deep*/) const {
+    // Fast path: O(1) lookup in ChainIndex by hash primary key.
+    // The `deep` parameter is preserved on the public API for callers but is no
+    // longer needed — the whole indexed chain is consulted in constant time.
+    if (chain_index_) {
+        auto hit = chain_index_->find_by_hash(hash);
+        if (!hit.has_value()) return std::nullopt;
 
-    for (SectionId i = current_section_ + 1; i >= first_saved_section_; i--) {
-        auto section = this->read_section(i);
-
-        if (!section.has_value()) {
-            continue;
-        }
-
-        if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
-            continue;
-        }
-
-        for (auto &tx : section->transactions) {
-            if (tx.hash() == hash) {
-                return tx;
-            }
-        }
-
-        count += 1;
-        if (deep != 0 && count > deep) {
-            return std::nullopt;
+        // Rehydrate the full transaction object by reading its section. The index
+        // stores metadata; the actual tx lives in hot/ or a pack.
+        auto section = this->read_section(hit->section_id);
+        if (!section.has_value()) return std::nullopt;
+        for (const auto &tx : section->transactions) {
+            if (tx.hash() == hash) return tx;
         }
     }
-
     return std::nullopt;
 }
 
