@@ -759,6 +759,7 @@ public:
      * @param actor_id
      */
     void tx_list_log(const ActorId &actor_id, bool ignore_reward = false);
+    void mint_analysis_log();
 
     /**
      * @brief cache_log

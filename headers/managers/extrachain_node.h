@@ -159,6 +159,8 @@ public:
     bool create_subscription_template();
     bool create_token_template();
     bool create_token_vector();
+    bool create_token_allocations();
+    void backfill_token_allocations();
     bool create_renames_template();
     //
     DfsFileStatus create_channels_vector();
