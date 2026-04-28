@@ -29,6 +29,7 @@
 #include <sodium/core.h>
 
 #include "chain/dag.h"
+#include "chain/dag_migration.h"
 #include "extrachain_version.h"
 #include "chain/actor.h"
 #include "dfs/dfs_controller.h"
@@ -109,6 +110,24 @@ void ExtraChainNode::process() {
     ThreadPoolBoost::instance(4);
 
     prepare_folders();
+
+    // Auto-migrate legacy hex-shard DAG layout into decimal hot/ + packs/.
+    // No-op when storage is already up to date. Must run before `new Dag(...)`
+    // so the constructor reads range/sections in the new layout.
+    if (DagMigration::needs_migration()) {
+        eLog("[Node] Legacy DAG layout detected — migrating");
+        auto res = DagMigration::migrate([](const DagMigration::Progress &p) {
+            if (p.processed % 10000 == 0 || p.stage == "done") {
+                eLog("[Node] Migration {}: {}/{}", p.stage, p.processed, p.total);
+            }
+        });
+        if (!res.has_value()) {
+            eCritical("[Node] DAG migration failed: error {}", static_cast<int>(res.error()));
+        } else {
+            eSuccess("[Node] DAG migration complete");
+        }
+    }
+
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
     luminance_manager_  = new LuminanceManager(this);
