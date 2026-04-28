@@ -397,7 +397,7 @@ void ExtraChainNode::backfill_token_allocations() {
 
         SectionId start_section = dag_->current_section();
         SectionId section_id    = start_section;
-        SectionId min_section   = SectionId(BigNumber("a05133", NumeralBase::Hex));
+        SectionId min_section   = SectionId(BigNumber::from_hex("a05133"));
         eLog("[Node] token_allocations backfill: starting from section {}", section_id);
 
         while (section_id >= min_section) {
@@ -429,7 +429,7 @@ void ExtraChainNode::backfill_token_allocations() {
 
         for (const auto& [key, amount] : totals) {
             dfs_->dictionary_set_value(network_id, alloc_row->file_id, key,
-                                       amount.to_string(NumeralBase::Dec), network_id);
+                                       amount.to_string(), network_id);
         }
 
         eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());

@@ -1242,7 +1242,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
                     network_id, alloc_row->file_id,
                     fmt::format("{}:{}", targetSender.to_string(), token.to_string()));
                 if (minted_str.has_value() && !minted_str->empty()) {
-                    auto minted_amount = BigNumberFloat::create(*minted_str, NumeralBase::Dec);
+                    auto minted_amount = BigNumberFloat::create(*minted_str);
                     if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
                         return TransactionProveError::SenderBalanceBelowZero;
                     }
@@ -2477,7 +2477,7 @@ void Dag::mint_analysis_log() {
         auto token = TokenId::create(key.substr(sep + 1));
         if (!actor.has_value() || !token.has_value())
             continue;
-        auto parsed = BigNumberFloat::create(val, NumeralBase::Dec);
+        auto parsed = BigNumberFloat::create(val);
         if (!parsed.has_value())
             continue;
         minted[{ actor.value(), token.value() }] = parsed.value();
@@ -2513,7 +2513,7 @@ void Dag::mint_analysis_log() {
     std::vector<MintTx>    mint_txs;
 
     // Scan chain from min_section to current
-    static const SectionId min_section = SectionId(BigNumber("a05133", NumeralBase::Hex));
+    static const SectionId min_section = SectionId(BigNumber::from_hex("a05133"));
     eLog("[Dag] mint_analysis_log: scanning {} .. {}", min_section, current_section_);
 
     SectionId section_id = min_section;
@@ -2591,7 +2591,7 @@ void Dag::mint_analysis_log() {
     eLog("[Dag] mint_analysis_log: === MINT TRANSACTIONS ===");
     for (const auto& m : mint_txs) {
         eLog("[Dag] mint_analysis_log: section={} actor={} token={} amount={}",
-             m.section_id, m.actor, m.token, m.amount.to_string(NumeralBase::Dec));
+             m.section_id, m.actor, m.token, m.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === SUMMARY PER ACTOR+TOKEN ===");
@@ -2609,12 +2609,12 @@ void Dag::mint_analysis_log() {
 
         eLog("[Dag] mint_analysis_log: actor={} token={} minted={} spent={} frozen={} {}{}",
              actor, token,
-             mint_amount.to_string(NumeralBase::Dec),
-             spent_amount.to_string(NumeralBase::Dec),
-             frozen.to_string(NumeralBase::Dec),
+             mint_amount.to_string(),
+             spent_amount.to_string(),
+             frozen.to_string(),
              abused ? "USED_BEFORE_FREEZE " : "",
              overspend > BigNumberFloat(0)
-                 ? fmt::format("OVERSPEND={}", overspend.to_string(NumeralBase::Dec))
+                 ? fmt::format("OVERSPEND={}", overspend.to_string())
                  : "");
     }
 
@@ -2622,7 +2622,7 @@ void Dag::mint_analysis_log() {
     for (const auto& [key, total] : collector_received) {
         const auto& [actor, token] = key;
         eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}",
-             actor, token, total.to_string(NumeralBase::Dec));
+             actor, token, total.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === TAINTED CHAIN TRANSFERS ===");
@@ -2637,7 +2637,7 @@ void Dag::mint_analysis_log() {
         else
             tag = "CHAIN";
         eLog("[Dag] mint_analysis_log: [{}] section={} from={} to={} amount={}",
-             tag, t.section_id, t.from, t.to, t.amount.to_string(NumeralBase::Dec));
+             tag, t.section_id, t.from, t.to, t.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: done. minted_pairs={} abused={} chain_transfers={}",
