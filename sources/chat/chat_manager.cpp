@@ -30,7 +30,12 @@
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
     QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
-        if (this->current_chat_actor_id() != owner_id) { // add my accounts?
+        if (!this->activated_) {
+            return;
+        }
+
+        auto chat_actor_id = this->node->account_controller()->current_profile().chat_actor_id();
+        if (chat_actor_id.is_zero() || chat_actor_id != owner_id) {
             return;
         }
 
@@ -46,20 +51,6 @@ ChatManager::ChatManager(ExtraChainNode* node)
         // emit this->node->chatLoaded(owner_id, file_id);
 
         this->parse_invite(owner_id, dir_row);
-    });
-
-    QObject::connect(node, &ExtraChainNode::ready, [this]() {
-        auto chat_actor_id = this->current_chat_actor_id();
-
-        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(this->node->dfs()->get_db_instance(),
-                                                                        chat_actor_id); // TODO: add where / field
-        if (!dir_rows.has_value()) {
-            return;
-        }
-
-        for (const auto& dir_row : dir_rows.value()) {
-            this->parse_invite(chat_actor_id, dir_row);
-        }
     });
 
     QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
@@ -123,13 +114,55 @@ ChatManager::ChatManager(ExtraChainNode* node)
                      });
 }
 
-ActorId ChatManager::current_chat_actor_id() const {
-    return node->account_controller()->current_profile().chat_actor_id();
+void ChatManager::set_mode(ChatMode mode) {
+    mode_ = mode;
 }
 
-std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> ChatManager::current_chat_actor() const {
-    const auto& profile = node->account_controller()->current_profile();
-    auto        actor   = profile.get_actor(profile.chat_actor_id());
+ChatMode ChatManager::mode() const {
+    return mode_;
+}
+
+bool ChatManager::activated() const {
+    return activated_;
+}
+
+std::expected<void, ChatError> ChatManager::activate() {
+    if (activated_) {
+        return {};
+    }
+    if (mode_ != ChatMode::Enabled) {
+        return std::unexpected(ChatError::Disabled);
+    }
+
+    auto actor = node->account_controller()->chat_actor();
+    if (!actor.has_value()) {
+        return std::unexpected(ChatError::NoChatActor);
+    }
+
+    activated_ = true;
+
+    auto chat_actor_id = actor->get().id();
+    auto dir_rows      = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(node->dfs()->get_db_instance(),
+                                                                          chat_actor_id);
+    if (dir_rows.has_value()) {
+        for (const auto& dir_row : dir_rows.value()) {
+            this->parse_invite(chat_actor_id, dir_row);
+        }
+    }
+
+    return {};
+}
+
+ActorId ChatManager::current_chat_actor_id() {
+    auto actor = current_chat_actor();
+    if (!actor.has_value()) {
+        return ActorId();
+    }
+    return actor->get().id();
+}
+
+std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> ChatManager::current_chat_actor() {
+    auto actor = node->account_controller()->chat_actor();
     if (!actor.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }

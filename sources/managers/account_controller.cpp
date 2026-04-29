@@ -104,6 +104,67 @@ Actor<KeyPrivate> AccountController::create_service(const ActorId               
     return actor;
 }
 
+Actor<KeyPrivate> AccountController::create_actor(const ActorId &profileActor, int seed_index, ActorType type) {
+    Actor<KeyPrivate> actor;
+    actor.generate_from_seed(profile_seed.seed(), seed_index, type);
+
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
+    profile.add_wallet(actor, false);
+    node->actor_index()->store_new_actor(actor.to_public());
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::create_actor(const ActorId     &profileActor,
+                                                  const std::string &seed_label,
+                                                  ActorType          type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
+    profile.add_wallet(actor, false);
+
+    if (!node->actor_index()->exists(actor.id())) {
+        node->actor_index()->store_new_actor(actor.to_public());
+    }
+    return actor;
+}
+
+std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatActorError> AccountController::chat_actor() {
+    if (profile_type_ == ProfileType::Old) {
+        return std::unexpected(ChatActorError::NoSeed);
+    }
+
+    if (current_profile_.is_zero() || profiles_.empty()) {
+        return std::unexpected(ChatActorError::NoProfile);
+    }
+
+    auto &profile = this->profile(current_profile_);
+
+    if (!profile.chat_actor_id().is_zero()) {
+        auto existing = profile.get_actor(profile.chat_actor_id());
+        if (existing.has_value()) {
+            return existing.value();
+        }
+    }
+
+    auto created = create_actor(current_profile_, std::string("chat"), ActorType::User);
+    if (created.empty()) {
+        return std::unexpected(ChatActorError::DerivationFailed);
+    }
+
+    profile.set_chat_actor_id(created.id());
+
+    auto stored = profile.get_actor(created.id());
+    if (!stored.has_value()) {
+        return std::unexpected(ChatActorError::DerivationFailed);
+    }
+    return stored.value();
+}
+
 void AccountController::import_old_profile(const ImportedUser &imported_profile, const std::string &hash) {
     auto              profile = PrivateProfile::import(imported_profile, hash, node);
     Actor<KeyPrivate> actor   = profile.system();

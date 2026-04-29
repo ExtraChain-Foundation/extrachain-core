@@ -248,12 +248,13 @@ void PrivateProfile::load(const std::optional<KeyPass> &key) {
         return;
     }
 
-    this->system_       = profile->system_;
-    this->current_      = profile->system_;
-    this->main_         = profile->main_;
-    this->actors_       = profile->actors_;
-    this->imports_      = profile->imports_;
-    this->wallet_names_ = profile->wallet_names_;
+    this->system_         = profile->system_;
+    this->current_        = profile->system_;
+    this->main_           = profile->main_;
+    this->chat_actor_id_  = profile->chat_actor_id_;
+    this->actors_         = profile->actors_;
+    this->imports_        = profile->imports_;
+    this->wallet_names_   = profile->wallet_names_;
 
     if (profile->creation_date_ == 0) {
         // Version compatibility: 0.15.0

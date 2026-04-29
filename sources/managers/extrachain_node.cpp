@@ -1337,6 +1337,8 @@ void ExtraChainNode::connect_signals() {
     });
 
     connect(actor_index_, &ActorIndex::firstSyncEnded, [this]() {
+        chat_manager_->activate();
+
         dag_->start_check();
 
         for (const auto& [ip, identifier] : identifiers_after_actors_sync_) {

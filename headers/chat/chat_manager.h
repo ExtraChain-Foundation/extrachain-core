@@ -36,7 +36,14 @@ static const std::string CHAT_MY_CHATS = "MyChats";
 class ExtraChainNode;
 
 enum class ChatError {
-    Unknown
+    Unknown,
+    Disabled,
+    NoChatActor
+};
+
+enum class ChatMode {
+    Disabled,
+    Enabled
 };
 
 class EXTRACHAIN_EXPORT ChatManager {
@@ -45,6 +52,12 @@ private:
 
 public:
     ChatManager(ExtraChainNode *node);
+
+    void              set_mode(ChatMode mode);
+    ChatMode          mode() const;
+    bool              activated() const;
+    // Ensures chat actor exists and scans pending invites. Idempotent.
+    std::expected<void, ChatError> activate();
 
     std::expected<Chat::Chat, ChatError> create_chat(bool encryption = true);
     std::expected<Chat::Chat, ChatError> create_myself();
@@ -117,8 +130,10 @@ private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
-    ActorId                               current_chat_actor_id() const;
-    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor() const;
+    ActorId                               current_chat_actor_id();
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
     std::vector<Chat::Chat> chats_;
+    ChatMode                mode_       = ChatMode::Disabled;
+    bool                    activated_  = false;
 };

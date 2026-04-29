@@ -33,6 +33,12 @@ enum class LoadError {
     Multiple
 };
 
+enum class ChatActorError {
+    NoSeed,
+    NoProfile,
+    DerivationFailed
+};
+
 enum class ProfileType {
     Old,
     New
@@ -58,9 +64,15 @@ public:
                                      std::optional<Actor<KeyPrivate>> predefine_actor = std::nullopt);
     Actor<KeyPrivate> create_wallet(const ActorId     &profileActor = ActorId(),
                                     const std::string &wallet_name  = std::string());
+    // Derive actor from profile seed; broadcasts the public part if not already known.
+    Actor<KeyPrivate> create_actor(const ActorId &profileActor, int seed_index, ActorType type);
+    Actor<KeyPrivate> create_actor(const ActorId &profileActor, const std::string &seed_label, ActorType type);
     // Actor<KeyPrivate> create_dapp_master
     Actor<KeyPrivate> create_service(const ActorId                   &profileActor     = ActorId(),
                                      std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
+
+    // Per-profile chat actor; lazy-derived on first call. Fails for old profiles.
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatActorError> chat_actor();
 
     void import_old_profile(const ImportedUser &imported_profile, const std::string &hash);
 
