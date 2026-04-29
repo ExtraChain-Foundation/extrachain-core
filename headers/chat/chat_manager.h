@@ -21,6 +21,7 @@
 
 #include <extrachain_global.h>
 #include <expected>
+#include "chain/actor.h"
 #include "chain/actor_id.h"
 #include "chat/chat.h"
 #include "chat/message.h"
@@ -116,8 +117,8 @@ private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
-
-    ActorId chat_actor_;
+    ActorId                               current_chat_actor_id() const;
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor() const;
 
     std::vector<Chat::Chat> chats_;
 };

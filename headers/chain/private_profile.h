@@ -92,6 +92,13 @@ public:
         return main_;
     }
 
+    // Per-profile actor for chat operations. Currently aliased to main_id while
+    // chat features still use the main identity; will be replaced by a dedicated
+    // chat actor (derived from seed) without touching call sites.
+    ActorId chat_actor_id() const {
+        return main_;
+    }
+
     bool change_current(const ActorId &actorId);
     void add_wallet(const Actor<KeyPrivate> &actor, bool is_save = true);
     bool rename_wallet(const ActorId &actor_id, const std::string &wallet_name);
