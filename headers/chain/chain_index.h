@@ -36,11 +36,9 @@ class Transaction;
 /**
  * @brief Compact representation of a transaction stored in the index.
  *
- * Enough to answer wallet/explorer queries without loading the full section.
  * Amount stays as string to match the wire/storage canonical form (decimal).
  */
 struct ChainIndexEntry {
-    std::string   hash;
     SectionId     section_id;
     std::string   sender;
     std::string   receiver;
@@ -74,9 +72,6 @@ public:
 
     // Called by Dag::write_section. Batches all txs in one SQLite transaction.
     void on_section_written(const Section &s);
-
-    // Fast hash lookup (primary key).
-    std::optional<ChainIndexEntry> find_by_hash(const std::string &hash) const;
 
     // All tx where sender == actor OR receiver == actor, optionally filtered by
     // token, newer-than timestamp filter, newest first. limit caps result size.

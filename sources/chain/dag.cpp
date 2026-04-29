@@ -1046,15 +1046,6 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::WrongHash;
     }
 
-    // Check for duplicate transaction
-    auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
-    if (tx_result.has_value()) {
-        // TODO
-        // if (tx == tx_result.value()) {
-        // }
-        return TransactionProveError::Duplicate;
-    }
-
     // Validate sender
     if (targetSender.is_zero()) {
         return TransactionProveError::SenderZero;
@@ -1304,21 +1295,14 @@ void Dag::update_range() {
     }
 }
 
-std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int /*deep*/) const {
-    // Fast path: O(1) lookup in ChainIndex by hash primary key.
-    // The `deep` parameter is preserved on the public API for callers but is no
-    // longer needed — the whole indexed chain is consulted in constant time.
-    if (chain_index_) {
-        auto hit = chain_index_->find_by_hash(hash);
-        if (!hit.has_value()) return std::nullopt;
-
-        // Rehydrate the full transaction object by reading its section. The index
-        // stores metadata; the actual tx lives in hot/ or a pack.
-        auto section = this->read_section(hit->section_id);
-        if (!section.has_value()) return std::nullopt;
-        for (const auto &tx : section->transactions) {
-            if (tx.hash() == hash) return tx;
-        }
+std::optional<Transaction>
+Dag::find_transaction(const SectionId &section_id, const std::string &hash) const {
+    // Direct read: section is part of the natural identity of a tx, so we
+    // jump straight to its file/pack and scan its small (set-sized) tx list.
+    auto section = this->read_section(section_id);
+    if (!section.has_value()) return std::nullopt;
+    for (const auto &tx : section->transactions) {
+        if (tx.hash() == hash) return tx;
     }
     return std::nullopt;
 }
@@ -1782,8 +1766,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (file_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] File sync completed");
-            // Sync done — pack accumulated hot ranges now. Heavy I/O, but no
-            // sync batch is racing for the next request anymore.
             try_pack_hot();
 
             if (this->status_ != DagStatus::Ready) {
@@ -1801,8 +1783,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 light_requested_ = true;
 #else
                 this->process_cached_transactions();
-                // Server-side completion: no DagLightData round-trip pending,
-                // so we can mark the chain ready and notify UI right away.
                 set_status(DagStatus::Ready);
                 set_sync_status(DagSyncStatus::None);
                 emit node->dagSyncFinish();
@@ -1949,9 +1929,6 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
         light_requested_ = false;
         this->process_cached_transactions();
 
-        // UI completion path: file sync finished earlier, then we waited on
-        // DagLightData to seed balance cache. Only now is the chain truly
-        // usable — flip status and let the UI dismiss the splash.
         set_status(DagStatus::Ready);
         set_sync_status(DagSyncStatus::None);
         emit node->dagSyncFinish();

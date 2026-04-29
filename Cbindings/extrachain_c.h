@@ -205,8 +205,10 @@ EXC_API ExcError exc_dag_set_mode(ExcDagMode mode);
 /* Read a section by ID. Returns JSON string. Caller frees via exc_string_free. */
 EXC_API ExcError exc_dag_read_section(const char* section_id, char** out_json);
 
-/* Search for a transaction by hash. Returns a Transaction handle. */
-EXC_API ExcError exc_dag_search_transaction(const char* hash, ExcHandle* out_tx);
+/* Look up a transaction by (section_id, hash). Returns a Transaction handle. */
+EXC_API ExcError exc_dag_find_transaction(const char* section_id,
+                                          const char* hash,
+                                          ExcHandle*  out_tx);
 
 /* Free a section handle (from exc_dag_read_section if handle-based). */
 EXC_API void exc_section_free(ExcHandle section);

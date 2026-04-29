@@ -315,8 +315,11 @@ EXC_API ExcError exc_dag_read_section(const char* section_id, char** out_json) {
     return ok ? result : EXC_ERR_DISPATCH_FAILED;
 }
 
-EXC_API ExcError exc_dag_search_transaction(const char* hash, ExcHandle* out_tx) {
+EXC_API ExcError exc_dag_find_transaction(const char* section_id,
+                                          const char* hash,
+                                          ExcHandle*  out_tx) {
     EXC_CHECK_NODE();
+    EXC_CHECK_NULL(section_id);
     EXC_CHECK_NULL(hash);
     EXC_CHECK_NULL(out_tx);
 
@@ -324,8 +327,13 @@ EXC_API ExcError exc_dag_search_transaction(const char* hash, ExcHandle* out_tx)
     *out_tx = EXC_INVALID_HANDLE;
 
     bool ok = dispatch_sync([&]() {
-        auto& gs = GlobalState::instance();
-        auto tx = gs.node->dag()->search_duplicate_by_hash(std::string(hash));
+        auto& gs        = GlobalState::instance();
+        auto  sid       = SectionId::create(std::string(section_id));
+        if (!sid.has_value()) {
+            result = EXC_ERR_DAG_TX_NOT_FOUND;
+            return;
+        }
+        auto tx = gs.node->dag()->find_transaction(sid.value(), std::string(hash));
         if (!tx.has_value()) {
             result = EXC_ERR_DAG_TX_NOT_FOUND;
             return;

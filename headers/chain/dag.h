@@ -478,11 +478,13 @@ public:
     /**
      * @brief Search for a transaction by its hash
      *
-     * @param hash The hash to search for
-     * @param deep The maximum number of sections to search back (default: 100)
+     * @param section Section the tx lives in. Required because Transaction::calculate_hash
+     *                mixes section_id into the hash, so each section has its own hash space.
+     * @param hash    Hash within that section.
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 100) const;
+    std::optional<Transaction>
+    find_transaction(const SectionId &section, const std::string &hash) const;
 
     std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
                                                                                 std::uint64_t  latest_timestamp,

@@ -21,7 +21,9 @@
 
 #include <sqlite3.h>
 
+#include <array>
 #include <filesystem>
+#include <unordered_map>
 
 #include "chain/dag.h"
 #include "chain/transaction.h"
@@ -34,29 +36,30 @@ namespace {
 
 constexpr const char *DB_FILENAME = "ChainIndex.db";
 
-// Schema:
-//   tx_index(hash PK, section_id, sender, receiver, token, type, timestamp, amount)
-// Indexes chosen for the two dominant query shapes:
-//   "recent tx for actor (any token)"    -> idx_sender, idx_receiver
-//   "recent tx for actor (given token)"  -> idx_sender_token, idx_receiver_token
-// idx_token helps global token activity feeds.
+// actor/token are integer FKs into small lookup tables. The blob->id mapping
+// is cached in-process so steady-state writes cost one prepared INSERT per tx.
 constexpr const char *SCHEMA_SQL = R"(
+    CREATE TABLE IF NOT EXISTS actors (
+        id    INTEGER PRIMARY KEY,
+        actor BLOB    UNIQUE NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tokens (
+        id    INTEGER PRIMARY KEY,
+        actor BLOB    UNIQUE NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS tx_index (
-        hash       TEXT PRIMARY KEY,
-        section_id INTEGER NOT NULL,
-        sender     TEXT    NOT NULL,
-        receiver   TEXT    NOT NULL,
-        token      TEXT    NOT NULL,
-        type       INTEGER NOT NULL,
-        timestamp  INTEGER NOT NULL,
-        amount     TEXT    NOT NULL
-    ) WITHOUT ROWID;
-    CREATE INDEX IF NOT EXISTS idx_sender          ON tx_index(sender, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_receiver        ON tx_index(receiver, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_token           ON tx_index(token, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_sender_token    ON tx_index(sender, token, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_receiver_token  ON tx_index(receiver, token, timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_section         ON tx_index(section_id);
+        id        INTEGER PRIMARY KEY,
+        section   INTEGER NOT NULL,
+        sender    INTEGER NOT NULL,
+        receiver  INTEGER NOT NULL,
+        token     INTEGER NOT NULL,
+        type      INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        amount    TEXT    NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sender   ON tx_index(sender, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_receiver ON tx_index(receiver, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_section  ON tx_index(section);
 )";
 
 std::uint64_t section_to_u64(const SectionId &id) {
@@ -69,41 +72,97 @@ std::uint64_t section_to_u64(const SectionId &id) {
     }
 }
 
+// Hex string -> raw bytes. Returns empty on malformed input.
+std::vector<std::uint8_t> hex_to_blob(const std::string &hex) {
+    std::vector<std::uint8_t> out;
+    if (hex.size() % 2 != 0) return out;
+    out.reserve(hex.size() / 2);
+    auto nibble = [](char c) -> int {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    };
+    for (std::size_t i = 0; i < hex.size(); i += 2) {
+        int hi = nibble(hex[i]);
+        int lo = nibble(hex[i + 1]);
+        if (hi < 0 || lo < 0) return {};
+        out.push_back(static_cast<std::uint8_t>((hi << 4) | lo));
+    }
+    return out;
+}
+
+std::string blob_to_hex(const void *data, int size) {
+    static constexpr char digits[] = "0123456789abcdef";
+    const auto *p = static_cast<const std::uint8_t *>(data);
+    std::string out;
+    out.resize(size * 2);
+    for (int i = 0; i < size; ++i) {
+        out[i * 2]     = digits[p[i] >> 4];
+        out[i * 2 + 1] = digits[p[i] & 0xF];
+    }
+    return out;
+}
+
+// Caches blob -> rowid for actors/tokens. Used on hot write path so the typical
+// case (actor seen recently) is one map lookup, not a SELECT.
+struct BlobIdCache {
+    struct ByteVecHash {
+        std::size_t operator()(const std::vector<std::uint8_t> &v) const noexcept {
+            std::size_t h = 1469598103934665603ull; // FNV-1a 64
+            for (auto b : v) {
+                h ^= b;
+                h *= 1099511628211ull;
+            }
+            return h;
+        }
+    };
+    std::unordered_map<std::vector<std::uint8_t>, sqlite3_int64, ByteVecHash> map;
+};
+
 } // namespace
 
 struct ChainIndex::Impl {
     ExtraChainNode *node = nullptr;
     sqlite3        *db   = nullptr;
 
-    // Prepared statements reused across writes/reads. Rebind + step + reset.
-    sqlite3_stmt *stmt_insert                = nullptr;
-    sqlite3_stmt *stmt_find_by_hash          = nullptr;
-    sqlite3_stmt *stmt_find_for_actor        = nullptr;
-    sqlite3_stmt *stmt_find_for_actor_token  = nullptr;
-    sqlite3_stmt *stmt_find_sent             = nullptr;
-    sqlite3_stmt *stmt_find_sent_token       = nullptr;
-    sqlite3_stmt *stmt_find_recv             = nullptr;
-    sqlite3_stmt *stmt_find_recv_token       = nullptr;
-    sqlite3_stmt *stmt_row_count             = nullptr;
-    sqlite3_stmt *stmt_last_section          = nullptr;
+    sqlite3_stmt *stmt_insert_tx          = nullptr;
+    sqlite3_stmt *stmt_find_sent          = nullptr;
+    sqlite3_stmt *stmt_find_sent_token    = nullptr;
+    sqlite3_stmt *stmt_find_recv          = nullptr;
+    sqlite3_stmt *stmt_find_recv_token    = nullptr;
+    sqlite3_stmt *stmt_row_count          = nullptr;
+    sqlite3_stmt *stmt_last_section       = nullptr;
+    sqlite3_stmt *stmt_actor_select       = nullptr;
+    sqlite3_stmt *stmt_actor_insert       = nullptr;
+    sqlite3_stmt *stmt_token_select       = nullptr;
+    sqlite3_stmt *stmt_token_insert       = nullptr;
+    sqlite3_stmt *stmt_actor_blob_by_id   = nullptr;
+    sqlite3_stmt *stmt_token_blob_by_id   = nullptr;
 
     mutable std::mutex write_mutex;
+
+    BlobIdCache actor_cache;
+    BlobIdCache token_cache;
 
     ~Impl() {
         auto finalize = [](sqlite3_stmt *&s) {
             if (s) sqlite3_finalize(s);
             s = nullptr;
         };
-        finalize(stmt_insert);
-        finalize(stmt_find_by_hash);
-        finalize(stmt_find_for_actor);
-        finalize(stmt_find_for_actor_token);
+        finalize(stmt_insert_tx);
         finalize(stmt_find_sent);
         finalize(stmt_find_sent_token);
         finalize(stmt_find_recv);
         finalize(stmt_find_recv_token);
         finalize(stmt_row_count);
         finalize(stmt_last_section);
+        finalize(stmt_actor_select);
+        finalize(stmt_actor_insert);
+        finalize(stmt_token_select);
+        finalize(stmt_token_insert);
+        finalize(stmt_actor_blob_by_id);
+        finalize(stmt_token_blob_by_id);
         if (db) sqlite3_close(db);
     }
 
@@ -113,7 +172,7 @@ struct ChainIndex::Impl {
         if (rc != SQLITE_OK) {
             std::string msg = err ? err : "?";
             sqlite3_free(err);
-            eWarning("[ChainIndex] SQL error: {} | while executing: {}", msg, sql);
+            eWarning("[ChainIndex] SQL error: {} | sql: {}", msg, sql);
             return false;
         }
         return true;
@@ -139,61 +198,70 @@ struct ChainIndex::Impl {
             return false;
         }
 
-        // Settings that stay on for normal operation. rebuild_from_disk()
-        // temporarily flips these to unsafe-but-fast and restores at the end.
         exec("PRAGMA journal_mode = WAL");
         exec("PRAGMA synchronous = NORMAL");
         exec("PRAGMA temp_store = MEMORY");
-        exec("PRAGMA cache_size = -32000"); // ~32MB
+        exec("PRAGMA cache_size = -32000");
+
 
         if (!exec(SCHEMA_SQL)) {
             return false;
         }
 
-        // Prepare core statements once; bind/step/reset on every call.
-        stmt_insert = prepare(
-            "INSERT OR REPLACE INTO tx_index"
-            " (hash, section_id, sender, receiver, token, type, timestamp, amount)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        // Prepared statements
+        stmt_insert_tx = prepare(
+            "INSERT INTO tx_index"
+            " (section, sender, receiver, token, type, timestamp, amount)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)");
 
-        stmt_find_by_hash = prepare(
-            "SELECT hash, section_id, sender, receiver, token, type, timestamp, amount"
-            " FROM tx_index WHERE hash = ? LIMIT 1");
+        // Column order in every SELECT below must match row_to_entry().
+        const char *select_cols =
+            "SELECT t.section, sa.actor, ra.actor, tk.actor, t.type, t.timestamp, t.amount"
+            " FROM tx_index t"
+            " JOIN actors sa ON sa.id = t.sender"
+            " JOIN actors ra ON ra.id = t.receiver"
+            " JOIN tokens tk ON tk.id = t.token";
 
-        // actor-only queries use UNION of sender/receiver branches via two statements
-        // plus merge in code; simpler and lets each branch hit its own index cleanly.
-        stmt_find_sent = prepare(
-            "SELECT hash, section_id, sender, receiver, token, type, timestamp, amount"
-            " FROM tx_index WHERE sender = ? AND (? = 0 OR timestamp < ?)"
-            " ORDER BY timestamp DESC LIMIT ?");
-        stmt_find_sent_token = prepare(
-            "SELECT hash, section_id, sender, receiver, token, type, timestamp, amount"
-            " FROM tx_index WHERE sender = ? AND token = ? AND (? = 0 OR timestamp < ?)"
-            " ORDER BY timestamp DESC LIMIT ?");
+        auto build = [&](const char *where) {
+            std::string sql = select_cols;
+            sql += " ";
+            sql += where;
+            return prepare(sql.c_str());
+        };
 
-        stmt_find_recv = prepare(
-            "SELECT hash, section_id, sender, receiver, token, type, timestamp, amount"
-            " FROM tx_index WHERE receiver = ? AND (? = 0 OR timestamp < ?)"
-            " ORDER BY timestamp DESC LIMIT ?");
-        stmt_find_recv_token = prepare(
-            "SELECT hash, section_id, sender, receiver, token, type, timestamp, amount"
-            " FROM tx_index WHERE receiver = ? AND token = ? AND (? = 0 OR timestamp < ?)"
-            " ORDER BY timestamp DESC LIMIT ?");
+        stmt_find_sent = build(
+            "WHERE t.sender = ? AND (? = 0 OR t.timestamp < ?)"
+            " ORDER BY t.timestamp DESC LIMIT ?");
+        stmt_find_sent_token = build(
+            "WHERE t.sender = ? AND t.token = ? AND (? = 0 OR t.timestamp < ?)"
+            " ORDER BY t.timestamp DESC LIMIT ?");
+        stmt_find_recv = build(
+            "WHERE t.receiver = ? AND (? = 0 OR t.timestamp < ?)"
+            " ORDER BY t.timestamp DESC LIMIT ?");
+        stmt_find_recv_token = build(
+            "WHERE t.receiver = ? AND t.token = ? AND (? = 0 OR t.timestamp < ?)"
+            " ORDER BY t.timestamp DESC LIMIT ?");
 
         stmt_row_count    = prepare("SELECT COUNT(*) FROM tx_index");
-        stmt_last_section = prepare("SELECT COALESCE(MAX(section_id), -1) FROM tx_index");
+        stmt_last_section = prepare("SELECT COALESCE(MAX(section), -1) FROM tx_index");
 
-        return stmt_insert && stmt_find_by_hash && stmt_find_sent && stmt_find_sent_token
-            && stmt_find_recv && stmt_find_recv_token && stmt_row_count && stmt_last_section;
+        stmt_actor_select       = prepare("SELECT id FROM actors WHERE actor = ?");
+        stmt_actor_insert       = prepare("INSERT INTO actors(actor) VALUES (?)");
+        stmt_actor_blob_by_id   = prepare("SELECT actor FROM actors WHERE id = ?");
+        stmt_token_select       = prepare("SELECT id FROM tokens WHERE actor = ?");
+        stmt_token_insert       = prepare("INSERT INTO tokens(actor) VALUES (?)");
+        stmt_token_blob_by_id   = prepare("SELECT actor FROM tokens WHERE id = ?");
+
+        return stmt_insert_tx && stmt_find_sent && stmt_find_sent_token
+            && stmt_find_recv && stmt_find_recv_token && stmt_row_count && stmt_last_section
+            && stmt_actor_select && stmt_actor_insert && stmt_token_select && stmt_token_insert
+            && stmt_actor_blob_by_id && stmt_token_blob_by_id;
     }
 
-    // In Light mode, restrict index to tx involving local wallets. In Full mode,
-    // always true — we want to answer arbitrary queries for explorer/peers.
     bool should_index(const Transaction &tx) const {
         if (!node) return true;
         auto *dag = node->dag();
         if (!dag || dag->mode() == DagMode::Full) return true;
-
         auto *ac = node->account_controller();
         if (!ac) return true;
         auto actors = ac->accounts_ids();
@@ -203,69 +271,124 @@ struct ChainIndex::Impl {
         return false;
     }
 
-    static ChainIndexEntry row_to_entry(sqlite3_stmt *s) {
-        ChainIndexEntry e;
-        auto col_text = [&](int i) {
-            const unsigned char *p = sqlite3_column_text(s, i);
-            return p ? std::string(reinterpret_cast<const char *>(p)) : std::string();
-        };
-        e.hash      = col_text(0);
-        e.section_id = SectionId(static_cast<long long>(sqlite3_column_int64(s, 1)));
-        e.sender    = col_text(2);
-        e.receiver  = col_text(3);
-        e.token     = col_text(4);
-        e.type      = sqlite3_column_int(s, 5);
-        e.timestamp = static_cast<std::uint64_t>(sqlite3_column_int64(s, 6));
-        e.amount    = col_text(7);
-        return e;
+    sqlite3_int64 get_or_create_id(BlobIdCache              &cache,
+                                   sqlite3_stmt             *select,
+                                   sqlite3_stmt             *insert,
+                                   const std::vector<std::uint8_t> &blob) {
+        auto it = cache.map.find(blob);
+        if (it != cache.map.end()) return it->second;
+
+        sqlite3_reset(select);
+        sqlite3_bind_blob(select, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
+        if (sqlite3_step(select) == SQLITE_ROW) {
+            sqlite3_int64 id = sqlite3_column_int64(select, 0);
+            cache.map.emplace(blob, id);
+            return id;
+        }
+
+        sqlite3_reset(insert);
+        sqlite3_bind_blob(insert, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
+        if (sqlite3_step(insert) != SQLITE_DONE) {
+            eWarning("[ChainIndex] actor/token insert failed: {}", sqlite3_errmsg(db));
+            return -1;
+        }
+        sqlite3_int64 id = sqlite3_last_insert_rowid(db);
+        cache.map.emplace(blob, id);
+        return id;
     }
 
     void insert_tx(const Transaction &tx, const SectionId &section_id) {
         if (!should_index(tx)) return;
-        auto *s = stmt_insert;
+
+        auto sender_blob   = hex_to_blob(tx.sender().to_string());
+        auto receiver_blob = hex_to_blob(tx.receiver().to_string());
+        auto token_blob    = hex_to_blob(tx.token().to_string());
+        if (sender_blob.empty() || receiver_blob.empty() || token_blob.empty()) {
+            return;
+        }
+
+        auto sender_id   = get_or_create_id(actor_cache, stmt_actor_select, stmt_actor_insert, sender_blob);
+        auto receiver_id = get_or_create_id(actor_cache, stmt_actor_select, stmt_actor_insert, receiver_blob);
+        auto token_id    = get_or_create_id(token_cache, stmt_token_select, stmt_token_insert, token_blob);
+        if (sender_id < 0 || receiver_id < 0 || token_id < 0) return;
+
+        std::string amount = tx.amount().to_string();
+
+        auto *s = stmt_insert_tx;
         sqlite3_reset(s);
-
-        std::string hash     = tx.hash();
-        std::string sender   = tx.sender().to_string();
-        std::string receiver = tx.receiver().to_string();
-        std::string token    = tx.token().to_string();
-        std::string amount   = tx.amount().to_string();
-
-        sqlite3_bind_text(s, 1, hash.c_str(),     -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int64(s, 2, static_cast<sqlite3_int64>(section_to_u64(section_id)));
-        sqlite3_bind_text(s, 3, sender.c_str(),   -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(s, 4, receiver.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(s, 5, token.c_str(),    -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int(s, 6,  static_cast<int>(tx.type()));
-        sqlite3_bind_int64(s, 7, static_cast<sqlite3_int64>(tx.timestamp()));
-        sqlite3_bind_text(s, 8, amount.c_str(),   -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(s, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
+        sqlite3_bind_int64(s, 2, sender_id);
+        sqlite3_bind_int64(s, 3, receiver_id);
+        sqlite3_bind_int64(s, 4, token_id);
+        sqlite3_bind_int  (s, 5, static_cast<int>(tx.type()));
+        sqlite3_bind_int64(s, 6, static_cast<sqlite3_int64>(tx.timestamp()));
+        sqlite3_bind_text (s, 7, amount.c_str(), -1, SQLITE_TRANSIENT);
 
         if (sqlite3_step(s) != SQLITE_DONE) {
-            eWarning("[ChainIndex] insert failed for tx {}: {}", hash, sqlite3_errmsg(db));
+            eWarning("[ChainIndex] insert failed: {}", sqlite3_errmsg(db));
         }
     }
 
-    std::vector<ChainIndexEntry> run_select_one_side(sqlite3_stmt *no_token,
-                                                     sqlite3_stmt *with_token,
-                                                     const std::string &actor,
-                                                     const std::string &token,
-                                                     std::uint64_t      before_ts,
-                                                     int                limit) const {
+    static ChainIndexEntry row_to_entry(sqlite3_stmt *s) {
+        // Column order: section, sender_blob, receiver_blob, token_blob, type,
+        // timestamp, amount. Hash isn't stored — callers fetch it via Dag if needed.
+        ChainIndexEntry e;
+        e.section_id = SectionId(static_cast<long long>(sqlite3_column_int64(s, 0)));
+        e.sender     = blob_to_hex(sqlite3_column_blob(s, 1), sqlite3_column_bytes(s, 1));
+        e.receiver   = blob_to_hex(sqlite3_column_blob(s, 2), sqlite3_column_bytes(s, 2));
+        e.token      = blob_to_hex(sqlite3_column_blob(s, 3), sqlite3_column_bytes(s, 3));
+        e.type       = sqlite3_column_int(s, 4);
+        e.timestamp  = static_cast<std::uint64_t>(sqlite3_column_int64(s, 5));
+        const unsigned char *amt = sqlite3_column_text(s, 6);
+        e.amount     = amt ? reinterpret_cast<const char *>(amt) : "";
+        return e;
+    }
+
+    std::vector<ChainIndexEntry> run_select_one_side(sqlite3_stmt        *no_token,
+                                                     sqlite3_stmt        *with_token,
+                                                     const std::string   &actor_hex,
+                                                     const std::string   &token_hex,
+                                                     std::uint64_t        before_ts,
+                                                     int                  limit) const {
         std::vector<ChainIndexEntry> out;
         out.reserve(limit);
 
-        sqlite3_stmt *s = token.empty() ? no_token : with_token;
+        auto actor_blob = hex_to_blob(actor_hex);
+        if (actor_blob.empty()) return out;
+
+        // Resolve actor blob -> id once. If the actor has never been seen,
+        // there's nothing to return.
+        auto find_id = [this](sqlite3_stmt *select, const std::vector<std::uint8_t> &blob) -> sqlite3_int64 {
+            sqlite3_reset(select);
+            sqlite3_bind_blob(select, 1, blob.data(), static_cast<int>(blob.size()), SQLITE_TRANSIENT);
+            if (sqlite3_step(select) == SQLITE_ROW) return sqlite3_column_int64(select, 0);
+            return -1;
+        };
+
+        auto actor_id = find_id(stmt_actor_select, actor_blob);
+        if (actor_id < 0) return out;
+
+        sqlite3_int64 token_id = -1;
+        if (!token_hex.empty()) {
+            auto token_blob = hex_to_blob(token_hex);
+            if (token_blob.empty()) return out;
+            token_id = find_id(stmt_token_select, token_blob);
+            if (token_id < 0) return out;
+        }
+
+        sqlite3_stmt *s = token_hex.empty() ? no_token : with_token;
         sqlite3_reset(s);
 
         int idx = 1;
-        sqlite3_bind_text(s, idx++, actor.c_str(), -1, SQLITE_TRANSIENT);
-        if (!token.empty()) {
-            sqlite3_bind_text(s, idx++, token.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(s, idx++, actor_id);
+        if (!token_hex.empty()) {
+            sqlite3_bind_int64(s, idx++, token_id);
         }
-        // `(? = 0 OR timestamp < ?)` — two binds for the same ts; 0 means "no bound".
+        // Pattern: (? = 0 OR timestamp < ?) — two binds for the same value,
+        // 0 means "no upper bound".
         sqlite3_bind_int64(s, idx++, static_cast<sqlite3_int64>(before_ts));
         sqlite3_bind_int64(s, idx++, static_cast<sqlite3_int64>(before_ts));
-        sqlite3_bind_int(s, idx++, limit);
+        sqlite3_bind_int  (s, idx++, limit);
 
         while (sqlite3_step(s) == SQLITE_ROW) {
             out.push_back(row_to_entry(s));
@@ -294,19 +417,6 @@ void ChainIndex::on_section_written(const Section &s) {
     impl_->exec("COMMIT");
 }
 
-std::optional<ChainIndexEntry> ChainIndex::find_by_hash(const std::string &hash) const {
-    if (!impl_->db || !impl_->stmt_find_by_hash) return std::nullopt;
-
-    auto *s = impl_->stmt_find_by_hash;
-    sqlite3_reset(s);
-    sqlite3_bind_text(s, 1, hash.c_str(), -1, SQLITE_TRANSIENT);
-
-    if (sqlite3_step(s) == SQLITE_ROW) {
-        return Impl::row_to_entry(s);
-    }
-    return std::nullopt;
-}
-
 std::vector<ChainIndexEntry>
 ChainIndex::find_sent_by(const std::string &actor, const std::string &token,
                          std::uint64_t before_timestamp, int limit) const {
@@ -328,9 +438,6 @@ ChainIndex::find_for_actor(const std::string &actor, const std::string &token,
                            std::uint64_t before_timestamp, int limit) const {
     if (!impl_->db) return {};
 
-    // Two index-scans then merge in memory: each branch hits its own compound index
-    // (sender,timestamp) / (receiver,timestamp), which is faster than a single OR
-    // query that SQLite often can't plan with multiple indexes.
     auto sent = find_sent_by(actor, token, before_timestamp, limit);
     auto recv = find_received_by(actor, token, before_timestamp, limit);
 
@@ -343,11 +450,17 @@ ChainIndex::find_for_actor(const std::string &actor, const std::string &token,
               [](const ChainIndexEntry &a, const ChainIndexEntry &b) {
                   return a.timestamp > b.timestamp;
               });
-    // Deduplicate self-transfers (sender == receiver).
+    // Deduplicate self-transfers (sender == receiver of the same tx appears
+    // in both sent/recv result sets). Match on the natural identity columns.
+    auto same_tx = [](const ChainIndexEntry &a, const ChainIndexEntry &b) {
+        return a.section_id == b.section_id && a.timestamp == b.timestamp
+            && a.sender == b.sender && a.receiver == b.receiver
+            && a.token == b.token && a.type == b.type;
+    };
     std::vector<ChainIndexEntry> out;
     out.reserve(merged.size());
     for (auto &e : merged) {
-        if (!out.empty() && out.back().hash == e.hash) continue;
+        if (!out.empty() && same_tx(out.back(), e)) continue;
         out.push_back(std::move(e));
         if (static_cast<int>(out.size()) >= limit) break;
     }
@@ -364,7 +477,6 @@ void ChainIndex::rebuild_from_disk() {
 
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
 
-    // Bulk-load pragmas. Restore safe ones at the end even on early return.
     impl_->exec("PRAGMA journal_mode = MEMORY");
     impl_->exec("PRAGMA synchronous = OFF");
     struct Restore {
@@ -376,6 +488,11 @@ void ChainIndex::rebuild_from_disk() {
     } restore_on_exit { impl_.get() };
 
     impl_->exec("DELETE FROM tx_index");
+    impl_->exec("DELETE FROM actors");
+    impl_->exec("DELETE FROM tokens");
+    impl_->actor_cache.map.clear();
+    impl_->token_cache.map.clear();
+
     impl_->exec("BEGIN IMMEDIATE");
 
     const SectionId first = dag->first_saved_section();
@@ -391,20 +508,25 @@ void ChainIndex::rebuild_from_disk() {
             if (count % 10000 == 0) {
                 impl_->exec("COMMIT");
                 impl_->exec("BEGIN IMMEDIATE");
-                eLog("[ChainIndex] Rebuild progress: {} tx processed", count);
+                eLog("[ChainIndex] Rebuild progress: {} tx", count);
             }
         }
     }
     impl_->exec("COMMIT");
     impl_->exec("ANALYZE");
 
-    eLog("[ChainIndex] Rebuild done, {} tx", count);
+    eLog("[ChainIndex] Rebuild done, {} tx, {} actors, {} tokens",
+         count, impl_->actor_cache.map.size(), impl_->token_cache.map.size());
 }
 
 void ChainIndex::clear() {
     if (!impl_->db) return;
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
     impl_->exec("DELETE FROM tx_index");
+    impl_->exec("DELETE FROM actors");
+    impl_->exec("DELETE FROM tokens");
+    impl_->actor_cache.map.clear();
+    impl_->token_cache.map.clear();
 }
 
 std::uint64_t ChainIndex::row_count() const {

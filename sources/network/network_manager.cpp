@@ -899,8 +899,6 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
 
     auto serialized      = message_edited.serialize();
     auto full_blob       = serialized + package_data.sign;
-    // Forwarded message: we don't re-sign for legacy; just send the same blob.
-    // Legacy peers will see wire format chosen by the original sender.
     send_message_connections(full_blob, full_blob, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
@@ -991,7 +989,6 @@ void NetworkManager::send_from_cache() {
         const SendMode    send_mode           = send_mode_result.value();
         const std::string receiver_identifier = deserializedList[2];
 
-        // Cached-and-replayed payload: treat canonical and legacy payload as same blob.
         send_message_connections(deserialized_message,
                                  deserialized_message,
                                  message_body,
@@ -1166,7 +1163,6 @@ void NetworkManager::message_received(const std::string &message,
 
             auto serialized = message_edited.serialize();
             auto blob       = serialized + std::string(sign);
-            // Forwarded response reuses existing signed blob — same for legacy peer.
             send_message_connections(blob,
                                      blob,
                                      message_edited,
