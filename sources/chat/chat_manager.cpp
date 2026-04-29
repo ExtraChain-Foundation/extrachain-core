@@ -34,8 +34,11 @@ ChatManager::ChatManager(ExtraChainNode* node)
             return;
         }
 
-        auto chat_actor_id = this->node->account_controller()->current_profile().chat_actor_id();
-        if (chat_actor_id.is_zero() || chat_actor_id != owner_id) {
+        const auto& profile       = this->node->account_controller()->current_profile();
+        auto        chat_actor_id = profile.chat_actor_id();
+        auto        main_id       = profile.main_id();
+        // main is accepted for backward compatibility while peers may still address by main.
+        if (owner_id != chat_actor_id && owner_id != main_id) {
             return;
         }
 
@@ -142,11 +145,16 @@ std::expected<void, ChatError> ChatManager::activate() {
     activated_ = true;
 
     auto chat_actor_id = actor->get().id();
-    auto dir_rows      = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(node->dfs()->get_db_instance(),
-                                                                          chat_actor_id);
-    if (dir_rows.has_value()) {
+    auto main_id       = node->account_controller()->current_profile().main_id();
+    auto db            = node->dfs()->get_db_instance();
+
+    for (const auto& owner_id : { chat_actor_id, main_id }) {
+        auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db, owner_id);
+        if (!dir_rows.has_value()) {
+            continue;
+        }
         for (const auto& dir_row : dir_rows.value()) {
-            this->parse_invite(chat_actor_id, dir_row);
+            this->parse_invite(owner_id, dir_row);
         }
     }
 
@@ -930,12 +938,13 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    const auto& from_id          = dir_row.actor_id;
-    auto        chat_actor_result = current_chat_actor();
-    if (!chat_actor_result.has_value()) {
+    const auto& from_id  = dir_row.actor_id;
+    // Use the recipient actor (owner_id) keypair — invite may be addressed to main or chat actor.
+    auto recipient_result = this->node->account_controller()->current_profile().get_actor(owner_id);
+    if (!recipient_result.has_value()) {
         return false;
     }
-    const auto& chat_actor = chat_actor_result->get();
+    const auto& recipient = recipient_result->get();
 
     auto from_actor_result = this->node->actor_index()->read_actor(from_id);
     if (!from_actor_result.has_value()) {
@@ -943,7 +952,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     }
     auto from_actor = from_actor_result.value();
 
-    auto content = chat_actor.key().decrypt(encrypted.value(), from_actor.key().public_key());
+    auto content = recipient.key().decrypt(encrypted.value(), from_actor.key().public_key());
     if (!content.has_value()) {
         return false;
     }
@@ -968,9 +977,10 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
 
     this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
 
-    add_new_message_joined(chat.owner_id, chat.file_id, chat_actor.id());
+    auto chat_actor_id = current_chat_actor_id();
+    add_new_message_joined(chat.owner_id, chat.file_id, chat_actor_id);
 
-    auto custom = ThothCustom { .ignored = { chat_actor.id() } };
+    auto custom = ThothCustom { .ignored = { chat_actor_id } };
     node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
 
     return true;
