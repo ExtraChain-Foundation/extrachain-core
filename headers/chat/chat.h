@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "chain/actor.h"
 #include "chain/actor_id.h"
 #include "encryption/encryption_tools.h"
 
@@ -38,19 +39,44 @@ namespace Chat {
     BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
 
     struct Chat {
-        std::string id;
-        ActorId     owner_id;
-        std::string file_id;
-        ChatData    chat;
-        KeyBytes    chat_key;
+        std::string                       id;
+        ActorId                           owner_id;
+        std::string                       file_id;
+        ChatData                          chat;
+        KeyBytes                          chat_key;
+        ActorId                           my_per_chat_id;
+        ActorId                           peer_chat_main_id;
+        std::optional<Actor<KeyPublic>>   peer_per_chat;
+        std::optional<Signature>          peer_bind_signature;
     };
-    BOOST_DESCRIBE_STRUCT(Chat, (), (id, chat_key, chat, owner_id, file_id))
+    BOOST_DESCRIBE_STRUCT(Chat,
+                          (),
+                          (id,
+                           owner_id,
+                           file_id,
+                           chat,
+                           chat_key,
+                           my_per_chat_id,
+                           peer_chat_main_id,
+                           peer_per_chat,
+                           peer_bind_signature))
 
     struct ChatInvite {
         ActorId                 owner_id;
         std::string             file_id;
         std::optional<ChatType> chat_type;
         KeyBytes                chat_key;
+        ActorId                 sender_chat_main_id;
+        Actor<KeyPublic>        sender_per_chat;
+        Signature               bind_signature;
     };
-    BOOST_DESCRIBE_STRUCT(ChatInvite, (), (owner_id, file_id, chat_type, chat_key))
+    BOOST_DESCRIBE_STRUCT(ChatInvite,
+                          (),
+                          (owner_id, file_id, chat_type, chat_key, sender_chat_main_id, sender_per_chat, bind_signature))
+
+    struct MessageJoinData {
+        Actor<KeyPublic> per_chat;
+        Signature        bind_signature;
+    };
+    BOOST_DESCRIBE_STRUCT(MessageJoinData, (), (per_chat, bind_signature))
 } // namespace Chat

@@ -129,6 +129,7 @@ public:
 private:
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
+    std::expected<bool, ChatError>        update_chat_in_mychats(const Chat::Chat &chat);
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     ActorId                               current_chat_actor_id();
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();

@@ -240,22 +240,6 @@ bool ExtraChainNode::create_usernames_vector() {
 
 bool ExtraChainNode::create_chat_templates() {
     auto system_actor_id   = account_controller()->system_actor().id();
-    auto my_chats_template = Dfs::CollectionTemplate::create(CHAT_MY_CHATS)
-                                 .value()
-                                 .use_id()
-                                 .add_fields({ Dfs::Field::Json("chat").not_null(),
-                                               Dfs::Field::ActorId("owner_id").not_null(),
-                                               Dfs::Field::String("file_id").not_null(),
-                                               Dfs::Field::String("chat_key").not_null() });
-
-    auto my_chats_result = dfs()->store_template(system_actor_id, my_chats_template);
-    if (!my_chats_result.has_value()) {
-        eCritical("Can't create my chats template, because {}", my_chats_result.error());
-        return false;
-    } else {
-        eLog("My chats template created");
-    }
-
     auto chat_template = Dfs::CollectionTemplate::create("Chat").value().use_id().add_fields(
         { Dfs::Field::Json("message").not_null() });
 
