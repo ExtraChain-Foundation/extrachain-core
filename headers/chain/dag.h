@@ -44,6 +44,12 @@ static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
+// Sections this far behind the tip are still kept hot (one file each) before
+// being sealed into an immutable pack. Covers Light client's 15-section cache
+// lag, control-search backoff (~37), and a buffer for late-arriving sync data
+// or modest reorgs. 200 == 10 control intervals — cheap on disk (~400KB).
+static constexpr int HOT_PACK_LAG = 200;
+
 // find_last_control() walks backwards from the current tip; these caps stop the walk
 // once enough evidence accumulates that no control is ever coming:
 //   - CONTROL_SEARCH_SKIP_LIMIT: sections scanned without finding a control. 37
@@ -176,6 +182,30 @@ struct HashInterval {
     std::string hash;
 };
 BOOST_DESCRIBE_STRUCT(HashInterval, (), (from, to, hash))
+
+// Pack-sync messages (between dag_version >= 100 peers).
+struct PackInfo {
+    std::uint64_t pack_id;
+    SectionId     first_section;
+    SectionId     last_section;
+};
+BOOST_DESCRIBE_STRUCT(PackInfo, (), (pack_id, first_section, last_section))
+
+struct PackList {
+    std::vector<PackInfo> packs;
+};
+BOOST_DESCRIBE_STRUCT(PackList, (), (packs))
+
+struct PackRequest {
+    std::uint64_t pack_id;
+};
+BOOST_DESCRIBE_STRUCT(PackRequest, (), (pack_id))
+
+struct PackData {
+    std::uint64_t pack_id;
+    std::string   bytes; // raw .pack file content
+};
+BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, bytes))
 
 /**
  * @brief Enumeration of chain synchronization states
@@ -524,6 +554,18 @@ public:
     void network_request_file_sections(const SectionId &from, const SectionId &to, const Responder &responder);
     void network_file_sections_response(const std::string &compressed, const Responder &responder);
 
+    // Pack-level sync (peers with dag_version >= 100 only).
+    // Server side: respond to peer's queries about our packs.
+    void network_pack_list_request(const Responder &responder);
+    void network_pack_request(const PackRequest &req, const Responder &responder);
+    // Client side: peer told us what packs it has / sent a pack we asked for.
+    void network_pack_list_response(const PackList &list, const Responder &responder);
+    void network_pack_data_response(const PackData &data, const Responder &responder);
+
+    // Initiate pack-level sync against a single peer (the same one currently
+    // selected by the existing sync flow). No-op for legacy peers.
+    void start_pack_sync(const Responder &responder);
+
     /**
      * @brief Request light mode data from the network
      *
@@ -649,6 +691,18 @@ private:
     // Pack hot sections into an immutable pack when enough have accumulated.
     // Called from write_section when the hot range crosses a pack boundary.
     void try_pack_hot();
+
+    // Pack-sync state: peer's known packs queue. Filled by network_pack_list_response,
+    // drained by issuing DagPackRequest one at a time. Mutex guards the list and
+    // the in_flight flag together because both fields move whenever we ask the
+    // peer for the next pack.
+    std::mutex                pack_sync_mutex_;
+    std::vector<Pack::PackId> pack_sync_pending_;
+    bool                      pack_sync_in_flight_ = false;
+
+    // Pull next pack from pack_sync_pending_ and send DagPackRequest.
+    // Called after each pack is received (or after PackList arrives).
+    void issue_next_pack_request(const Responder &responder);
 
     /**
      * @brief Request sections from the network

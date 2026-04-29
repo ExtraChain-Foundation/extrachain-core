@@ -43,6 +43,16 @@ SafePtr<std::set<SocketService *>> NetworkManager::connections() const {
     return connections_;
 }
 
+std::optional<PeerMeta> NetworkManager::peer_meta_for(const std::string &identifier) const {
+    auto locked = *connections_;
+    for (auto *svc : *locked) {
+        if (svc->identifier().toStdString() == identifier) {
+            return svc->peer_meta();
+        }
+    }
+    return std::nullopt;
+}
+
 bool NetworkManager::server_status(Network::Protocol protocol) const {
     switch (protocol) {
     case Network::Protocol::Udp:
@@ -1775,16 +1785,7 @@ void NetworkManager::message_received(const std::string &message,
             }
 
             node->dag()->network_request_sections(first.value(), last.value(), responder);
-        } else if (status == MessageStatus::Response) {
-            auto txs = MessagePack::deserialize<std::string>(serialized);
-            if (!txs.has_value()) {
-                eWarning("[NetworkManager] {} deserialization failed for dag sync vector", type);
-                break;
-            }
-
-            node->dag()->network_request_sections_response(txs.value(), responder);
         }
-
         break;
     }
 
@@ -1813,6 +1814,44 @@ void NetworkManager::message_received(const std::string &message,
             node->dag()->network_file_sections_response(data.value(), responder);
         }
 
+        break;
+    }
+
+    case MessageType::DagPackList: {
+        if (status == MessageStatus::Request) {
+            node->dag()->network_pack_list_request(responder);
+        } else if (status == MessageStatus::Response) {
+            auto list = MessagePack::deserialize<PackList>(serialized);
+            if (!list.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed", type);
+                break;
+            }
+            node->dag()->network_pack_list_response(list.value(), responder);
+        }
+        break;
+    }
+
+    case MessageType::DagPackRequest: {
+        if (status == MessageStatus::Request) {
+            auto req = MessagePack::deserialize<PackRequest>(serialized);
+            if (!req.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed", type);
+                break;
+            }
+            node->dag()->network_pack_request(req.value(), responder);
+        }
+        break;
+    }
+
+    case MessageType::DagPackData: {
+        if (status == MessageStatus::Response) {
+            auto data = MessagePack::deserialize<PackData>(serialized);
+            if (!data.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed", type);
+                break;
+            }
+            node->dag()->network_pack_data_response(data.value(), responder);
+        }
         break;
     }
 

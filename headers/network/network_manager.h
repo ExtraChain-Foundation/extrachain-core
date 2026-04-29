@@ -322,6 +322,11 @@ private:
 public:
     bool is_first_node(const std::string& identifier); // detect for safety
     SafePtr<std::set<SocketService*>> connections() const;
+
+    // Look up an active connection's peer_meta by its node identifier (the
+    // string carried by Responder). Returns nullopt when the peer is not
+    // currently connected — caller should treat that as "legacy".
+    std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
 

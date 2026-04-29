@@ -82,6 +82,15 @@ public:
 
     const std::filesystem::path &dir() const;
 
+    // Read the raw on-disk bytes of a pack — used by network sync to ship the
+    // file as-is. Returns nullopt if the pack is unknown or unreadable.
+    std::optional<std::string> read_raw(PackId id) const;
+
+    // Atomically install a pack received from a peer. Validates by opening it
+    // (Pack::Reader::open: magic + version + bounds + Blake3 footer checksum).
+    // Existing pack with same id is overwritten.
+    std::expected<void, Error> install_raw(PackId id, std::string_view bytes);
+
 private:
     struct PackMeta {
         PackId    id;

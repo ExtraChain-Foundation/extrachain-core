@@ -270,4 +270,78 @@ const std::filesystem::path &Registry::dir() const {
     return dir_;
 }
 
+std::optional<std::string> Registry::read_raw(PackId id) const {
+    auto path = pack_path(id);
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) return std::nullopt;
+
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    if (!f) return std::nullopt;
+    auto size = f.tellg();
+    if (size < 0) return std::nullopt;
+    f.seekg(0);
+    std::string out;
+    out.resize(static_cast<std::size_t>(size));
+    if (!f.read(out.data(), static_cast<std::streamsize>(out.size()))) {
+        return std::nullopt;
+    }
+    return out;
+}
+
+std::expected<void, Error> Registry::install_raw(PackId id, std::string_view bytes) {
+    if (bytes.empty()) return std::unexpected(Error::EmptyInput);
+
+    auto target = pack_path(id);
+    auto tmp    = target;
+    tmp += ".incoming";
+
+    {
+        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
+        if (!f) return std::unexpected(Error::WriteFailed);
+        f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (!f) return std::unexpected(Error::WriteFailed);
+    }
+
+    // Validate by opening; reject corrupt payloads before swapping in.
+    auto check = Reader::open(tmp);
+    if (!check.has_value()) {
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        return std::unexpected(check.error());
+    }
+    if (check->id() != id) {
+        std::error_code ec;
+        std::filesystem::remove(tmp, ec);
+        return std::unexpected(Error::InvalidFormat);
+    }
+
+    PackMeta meta { .id = id, .first = check->first_section(), .last = check->last_section() };
+
+    // Drop any cached reader for this id before overwriting the file (mmap on
+    // some platforms keeps a hold on the path).
+    {
+        std::lock_guard cache_lock(cache_mutex_);
+        readers_.erase(id);
+        lru_.remove(id);
+    }
+
+    std::error_code ec;
+    std::filesystem::rename(tmp, target, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return std::unexpected(Error::WriteFailed);
+    }
+
+    {
+        std::unique_lock lock(meta_mutex_);
+        meta_.erase(std::remove_if(meta_.begin(), meta_.end(),
+                                    [&](const PackMeta &m) { return m.id == id; }),
+                    meta_.end());
+        meta_.push_back(meta);
+        std::sort(meta_.begin(), meta_.end(),
+                  [](const PackMeta &a, const PackMeta &b) { return a.first < b.first; });
+    }
+    return {};
+}
+
 } // namespace Pack

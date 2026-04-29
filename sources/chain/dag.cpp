@@ -130,6 +130,11 @@ Dag::Dag(ExtraChainNode *node)
 
     eLog("[Dag] Started. Mode: {}", mode_);
 
+    // After previous runs the hot/ folder may contain full pack ranges that
+    // never got packed (sync was killed mid-flight, or earlier versions
+    // didn't pack out-of-order completions). Sweep them on startup.
+    try_pack_hot();
+
     // Automatically start so existing callers get the previous default lifecycle.
     // Callers that want explicit control can stop()/start() around migration etc.
     start();
@@ -1755,6 +1760,17 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             if (section_data.section_id > current_section_) {
                 this->set_current_section(section_data.section_id);
             }
+
+            // Sync writes raw bytes via Utils::write_file_content — bypassing
+            // Dag::write_section. Feed ChainIndex manually so wallet/explorer
+            // queries stay accurate.
+            if (chain_index_) {
+                auto deser = Json::deserialize<Section>(section_data.file_bytes);
+                if (deser.has_value()) {
+                    deser->id = section_data.section_id;
+                    chain_index_->on_section_written(*deser);
+                }
+            }
         }
 
         update_range();
@@ -1766,6 +1782,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (file_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] File sync completed");
+            // Sync done — pack accumulated hot ranges now. Heavy I/O, but no
+            // sync batch is racing for the next request anymore.
+            try_pack_hot();
 
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
@@ -1782,6 +1801,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 light_requested_ = true;
 #else
                 this->process_cached_transactions();
+                // Server-side completion: no DagLightData round-trip pending,
+                // so we can mark the chain ready and notify UI right away.
+                set_status(DagStatus::Ready);
+                set_sync_status(DagSyncStatus::None);
+                emit node->dagSyncFinish();
 #endif
             }
             return;
@@ -1924,6 +1948,13 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
         light_requested_ = false;
         this->process_cached_transactions();
+
+        // UI completion path: file sync finished earlier, then we waited on
+        // DagLightData to seed balance cache. Only now is the chain truly
+        // usable — flip status and let the UI dismiss the splash.
+        set_status(DagStatus::Ready);
+        set_sync_status(DagSyncStatus::None);
+        emit node->dagSyncFinish();
         // start check hash
         // TIMER_END(network_response_light)
     });
@@ -2178,6 +2209,16 @@ void Dag::handle_sync_request() {
     eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
+        // If the chosen peer speaks the new pack-sync protocol, fetch packed
+        // history wholesale (1 round-trip per 10k sections) before falling back
+        // to per-section sync for hot tail. Legacy peers skip this branch.
+        auto peer_id = responder.identifiers().empty()
+                           ? std::string()
+                           : *responder.identifiers().begin();
+        auto meta    = node->network()->peer_meta_for(peer_id);
+        if (meta.has_value() && meta->supports_pack_sync()) {
+            start_pack_sync(responder);
+        }
         request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
@@ -2304,60 +2345,185 @@ void Dag::clear_dag() {
 #endif
 }
 
+// ---- Pack-level sync (peers with dag_version >= 100) ------------------------
+
+void Dag::network_pack_list_request(const Responder &responder) {
+    if (!pack_registry_) return;
+
+    PackList list;
+    auto     ids = pack_registry_->known_packs();
+    list.packs.reserve(ids.size());
+    for (auto pid : ids) {
+        // Cheap path: meta is already in memory after rescan(); we re-open just
+        // to read first/last sections. Reader cache amortises this.
+        auto reader = Pack::Reader::open(
+            pack_registry_->dir() / (std::to_string(pid) + ".pack"));
+        if (!reader.has_value()) continue;
+        list.packs.push_back(PackInfo {
+            .pack_id       = pid,
+            .first_section = reader->first_section(),
+            .last_section  = reader->last_section(),
+        });
+    }
+
+    node->network()->send_message(list, MessageType::DagPackList,
+                                  SendMode::Focused, MessageStatus::Response, responder);
+}
+
+void Dag::network_pack_request(const PackRequest &req, const Responder &responder) {
+    if (!pack_registry_) return;
+
+    auto bytes = pack_registry_->read_raw(req.pack_id);
+    if (!bytes.has_value()) {
+        eWarning("[Dag] Pack {} requested but missing locally", req.pack_id);
+        return; // peer will time out / move on
+    }
+
+    PackData out { .pack_id = req.pack_id, .bytes = std::move(*bytes) };
+    node->network()->send_message(out, MessageType::DagPackData,
+                                  SendMode::Focused, MessageStatus::Response, responder);
+}
+
+void Dag::start_pack_sync(const Responder &responder) {
+    // Ask the same peer the section sync flow already chose for the pack list.
+    node->network()->send_message(PackList {}, MessageType::DagPackList,
+                                  SendMode::Focused, MessageStatus::Request, responder);
+}
+
+void Dag::network_pack_list_response(const PackList &list, const Responder &responder) {
+    if (!pack_registry_) return;
+
+    auto local_ids = pack_registry_->known_packs();
+    std::sort(local_ids.begin(), local_ids.end());
+
+    std::vector<Pack::PackId> missing;
+    missing.reserve(list.packs.size());
+    for (const auto &p : list.packs) {
+        if (!std::binary_search(local_ids.begin(), local_ids.end(), p.pack_id)) {
+            missing.push_back(p.pack_id);
+        }
+    }
+    std::sort(missing.begin(), missing.end()); // ascending — sync history forward
+
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_pending_ = std::move(missing);
+        pack_sync_in_flight_ = false;
+    }
+
+    eLog("[Dag] Pack sync: {} packs missing locally", pack_sync_pending_.size());
+    issue_next_pack_request(responder);
+}
+
+void Dag::issue_next_pack_request(const Responder &responder) {
+    Pack::PackId next_id;
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        if (pack_sync_in_flight_) return;
+        if (pack_sync_pending_.empty()) {
+            eLog("[Dag] Pack sync: all packs received");
+            return;
+        }
+        next_id = pack_sync_pending_.front();
+        pack_sync_pending_.erase(pack_sync_pending_.begin());
+        pack_sync_in_flight_ = true;
+    }
+
+    PackRequest req { .pack_id = next_id };
+    node->network()->send_message(req, MessageType::DagPackRequest,
+                                  SendMode::Focused, MessageStatus::Request, responder);
+}
+
+void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
+    if (!pack_registry_) return;
+
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_in_flight_ = false;
+    }
+
+    auto res = pack_registry_->install_raw(data.pack_id, data.bytes);
+    if (!res.has_value()) {
+        eWarning("[Dag] Pack {} install failed: error {} (size {})",
+                 data.pack_id, static_cast<int>(res.error()), data.bytes.size());
+        // Skip this pack and move on; peer-switching is a TODO.
+    } else {
+        eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.bytes.size());
+    }
+
+    issue_next_pack_request(responder);
+}
+
+// -----------------------------------------------------------------------------
+
 void Dag::try_pack_hot() {
     if (!pack_registry_) return;
 
-    // Candidate pack: the pack index whose boundary we most recently crossed.
-    // We look one pack behind the current section so in-flight writes stay hot.
+    // Sync delivers sections out-of-order in batches; packing must be tried for
+    // every pack range that's been completed in hot/, not just the most recent
+    // one. We iterate from pack 0 upwards and pack each range whose 10k files
+    // are all present and that isn't already on disk.
     auto section_size = Config::DataStorage::SECTION_SIZE;
-    if (current_section_ < section_size) return;
+    SectionId lag(HOT_PACK_LAG);
+    // We pack [N*size .. N*size+size-1] only after `current` is HOT_PACK_LAG
+    // sections past pack_last, so reorgs and out-of-order delivery can still
+    // mutate the trailing window without rewriting an immutable pack.
+    if (current_section_ < section_size + lag) return;
 
-    SectionId candidate_pack_idx = (current_section_ / section_size) - SectionId(1);
-    if (candidate_pack_idx < SectionId(0)) return;
+    SectionId max_pack_idx = ((current_section_ - lag) / section_size) - SectionId(1);
+    if (max_pack_idx < SectionId(0)) return;
 
-    // Skip if already packed
-    if (pack_registry_->find_pack_for_section(candidate_pack_idx * section_size).has_value()) {
-        return;
+    for (SectionId pack_idx = SectionId(0); pack_idx <= max_pack_idx; pack_idx = pack_idx + 1) {
+        SectionId pack_first = pack_idx * section_size;
+
+        if (pack_registry_->find_pack_for_section(pack_first).has_value()) {
+            continue; // already packed
+        }
+
+        SectionId pack_last = pack_first + section_size - 1;
+
+        // Gather all section files in this range. Missing file == empty section
+        // (sync skips sections with no transactions). With HOT_PACK_LAG already
+        // guarding the moment, every id in this range has been "passed by" sync
+        // — so absence is an empty section, not pending data.
+        std::map<SectionId, std::string> sections;
+        const std::string empty_serialized = Json::serialize(Section { .id = SectionId(0) });
+        for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+            auto p   = this->file_path(s);
+            auto fsp = FsPath::create(p);
+            if (fsp.has_value() && fsp->exists()) {
+                auto content = Utils::read_file_content(fsp.value());
+                if (content.has_value()) {
+                    sections.emplace(s, std::string(content->begin(), content->end()));
+                    continue;
+                }
+            }
+            // Missing or unreadable -> empty placeholder section.
+            sections.emplace(s, empty_serialized);
+        }
+
+        Pack::PackId pid;
+        {
+            auto candidate_int = pack_idx.to_int();
+            if (!candidate_int.has_value() || *candidate_int < 0) continue;
+            pid = static_cast<Pack::PackId>(*candidate_int);
+        }
+
+        auto res = pack_registry_->create_pack(pid, sections);
+        if (!res.has_value()) {
+            eWarning("[Dag] Failed to pack sections {}..{} (error {})",
+                     pack_first, pack_last, static_cast<int>(res.error()));
+            continue;
+        }
+
+        // Remove hot files that are now safely packed.
+        for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+            std::error_code ec;
+            std::filesystem::remove(this->file_path(s), ec);
+        }
+
+        eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
     }
-
-    SectionId pack_first = candidate_pack_idx * section_size;
-    SectionId pack_last  = pack_first + section_size - 1;
-
-    // Gather all required hot section files. If any is missing, bail — we pack
-    // only complete, immutable ranges.
-    std::map<SectionId, std::string> sections;
-    for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
-        auto p   = this->file_path(s);
-        auto fsp = FsPath::create(p);
-        if (!fsp.has_value() || !fsp->exists()) return;
-
-        auto content = Utils::read_file_content(fsp.value());
-        if (!content.has_value()) return;
-
-        sections.emplace(s, std::string(content->begin(), content->end()));
-    }
-
-    Pack::PackId pid;
-    {
-        auto candidate_int = candidate_pack_idx.to_int();
-        if (!candidate_int.has_value() || *candidate_int < 0) return;
-        pid = static_cast<Pack::PackId>(*candidate_int);
-    }
-
-    auto res = pack_registry_->create_pack(pid, sections);
-    if (!res.has_value()) {
-        eWarning("[Dag] Failed to pack sections {}..{} (error {})",
-                 pack_first, pack_last, static_cast<int>(res.error()));
-        return;
-    }
-
-    // Remove hot files that are now safely packed.
-    for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
-        std::error_code ec;
-        std::filesystem::remove(this->file_path(s), ec);
-    }
-
-    eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
 }
 
 void Dag::remove_sections(const SectionId &from) {
