@@ -84,16 +84,22 @@ enum class Force {
 constexpr int CURRENT_DAG_VERSION = 100;
 constexpr int CURRENT_DFS_VERSION = 100;
 
+enum class ChainIndexMode {
+    Disabled,
+    Enabled
+};
+
 struct ExtraChainSettings {
-    std::optional<std::string> first_node;
-    std::optional<DagMode>     dag_mode;
-    std::optional<DfsMode>     dfs_mode;
-    std::optional<std::string> node_identifier;
-    std::optional<int>         dag_version;
-    std::optional<int>         dfs_version;
+    std::optional<std::string>   first_node;
+    std::optional<DagMode>       dag_mode;
+    std::optional<DfsMode>       dfs_mode;
+    std::optional<std::string>   node_identifier;
+    std::optional<int>           dag_version;
+    std::optional<int>           dfs_version;
+    std::optional<ChainIndexMode> chain_index_mode;
 };
 BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (),
-                      (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version))
+                      (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
 
 class ByteArray {
 public:

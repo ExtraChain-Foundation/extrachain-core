@@ -70,7 +70,8 @@ public:
     ChainIndex(const ChainIndex &)            = delete;
     ChainIndex &operator=(const ChainIndex &) = delete;
 
-    // Called by Dag::write_section. Batches all txs in one SQLite transaction.
+    // Called by Dag::write_section. Replaces rows for the section and batches all txs
+    // in one SQLite transaction, so replays do not duplicate query results.
     void on_section_written(const Section &s);
 
     // All tx where sender == actor OR receiver == actor, optionally filtered by

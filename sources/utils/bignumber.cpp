@@ -19,6 +19,7 @@
 
 #include "utils/bignumber.h"
 
+#include <algorithm>
 #include <exception>
 #include <sstream>
 
@@ -286,6 +287,36 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
     }
 
     try {
+        if (bigNumber.empty()) {
+            return BigNumber(0);
+        }
+
+        std::string trimmed = bigNumber;
+        bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+        if (is_negative) trimmed = trimmed.substr(1);
+        if (trimmed.empty()) {
+            return std::unexpected(BigNumberError::InvalidNumber);
+        }
+
+        auto all_digits = [](const std::string &s) {
+            return std::all_of(s.begin(), s.end(), [](char c) {
+                return c >= '0' && c <= '9';
+            });
+        };
+        auto all_hex = [](const std::string &s) {
+            return std::all_of(s.begin(), s.end(), [](char c) {
+                return (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            });
+        };
+
+        if (is_hex_string(bigNumber)) {
+            if (!all_hex(trimmed)) return std::unexpected(BigNumberError::InvalidNumber);
+            return from_hex(bigNumber);
+        }
+
+        if (!all_digits(trimmed)) return std::unexpected(BigNumberError::InvalidNumber);
         return BigNumber(bigNumber);
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);

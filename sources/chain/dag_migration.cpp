@@ -100,15 +100,13 @@ bool looks_like_hex_shard_dir(const fs::path &p) {
 // A legacy section filename is the section id encoded in hex (no ".json" suffix).
 std::optional<SectionId> parse_legacy_section_filename(const std::string &name) {
     if (name.empty()) return std::nullopt;
-    // Accept both hex and plain decimal — a node mid-migration can have either.
-    if (BigNumber::is_hex_string(name)) {
-        return BigNumber::from_hex(name);
-    }
-    // decimal
     for (char c : name) {
-        if (c < '0' || c > '9') return std::nullopt;
+        bool hex = (c >= '0' && c <= '9')
+            || (c >= 'a' && c <= 'f')
+            || (c >= 'A' && c <= 'F');
+        if (!hex) return std::nullopt;
     }
-    return BigNumber(name);
+    return BigNumber::from_hex(name);
 }
 
 // Rewrite a JSON section payload: only replaces top-level "control" hash and
@@ -322,8 +320,6 @@ std::expected<void, Error> migrate_balance_cache() {
         auto it = row.find("balance");
         if (it == row.end()) continue;
         const std::string &balance_str = it->second;
-        if (!BigNumber::is_hex_string(balance_str)) continue;
-
         auto decimal = BigNumberFloat::from_hex(balance_str).to_string();
 
         auto actor_it = row.find("actor_id");
@@ -356,8 +352,7 @@ std::expected<void, Error> migrate_range_file() {
 
     auto normalize = [](const std::string &v) {
         if (v.empty()) return std::string("0");
-        if (BigNumber::is_hex_string(v)) return BigNumber::from_hex(v).to_string();
-        return v;
+        return BigNumber::from_hex(v).to_string();
     };
 
     SectionRange decimal {

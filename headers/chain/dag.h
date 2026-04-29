@@ -363,7 +363,9 @@ public:
      * @brief Persistent transaction index used for wallet/explorer queries
      *        and fast duplicate hash checks.
      */
-    ChainIndex &chain_index();
+    ChainIndex *chain_index();
+    const ChainIndex *chain_index() const;
+    bool chain_index_enabled() const;
 
     /**
      * @brief Get the ID of the first saved section
@@ -679,6 +681,7 @@ private:
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
     std::unique_ptr<ChainIndex> chain_index_;
+    bool                        chain_index_enabled_ = false;
 
     // Lifecycle flags:
     //   started_ — set by start(), cleared by stop(). Guards double-start.
@@ -701,6 +704,7 @@ private:
     std::mutex                pack_sync_mutex_;
     std::vector<Pack::PackId> pack_sync_pending_;
     bool                      pack_sync_in_flight_ = false;
+    bool                      pack_sync_installed_any_ = false;
 
     // Pull next pack from pack_sync_pending_ and send DagPackRequest.
     // Called after each pack is received (or after PackList arrives).

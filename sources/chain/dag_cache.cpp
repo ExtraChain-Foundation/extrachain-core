@@ -832,4 +832,3 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
     }
     return actors;
 }
-

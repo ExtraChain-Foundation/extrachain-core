@@ -32,8 +32,7 @@ Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
     , cache_(node, this)
-    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER))
-    , chain_index_(std::make_unique<ChainIndex>(node)) {
+    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     timer_sync_ = new QTimer();
 
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
@@ -55,6 +54,20 @@ Dag::Dag(ExtraChainNode *node)
 #else
         set_mode(DagMode::Full);
 #endif
+    }
+
+    // ChainIndex defaults to enabled on Full nodes and disabled on Light;
+    // an explicit chain_index_mode setting overrides this.
+    if (settings.chain_index_mode.has_value()) {
+        chain_index_enabled_ = (*settings.chain_index_mode == ChainIndexMode::Enabled);
+    } else {
+        chain_index_enabled_ = (mode_ == DagMode::Full);
+    }
+    if (chain_index_enabled_) {
+        chain_index_ = std::make_unique<ChainIndex>(node);
+        eLog("[Dag] ChainIndex enabled");
+    } else {
+        eLog("[Dag] ChainIndex disabled");
     }
 
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
@@ -250,8 +263,16 @@ DagCache &Dag::cache() {
     return cache_;
 }
 
-ChainIndex &Dag::chain_index() {
-    return *chain_index_;
+ChainIndex *Dag::chain_index() {
+    return chain_index_.get();
+}
+
+const ChainIndex *Dag::chain_index() const {
+    return chain_index_.get();
+}
+
+bool Dag::chain_index_enabled() const {
+    return chain_index_enabled_;
 }
 
 SectionId Dag::first_saved_section() {
@@ -661,7 +682,7 @@ std::optional<bool> Dag::write_section(const Section &section) {
 
         update_range();
         // Feed the tx index. Done outside the section_mutex_ — ChainIndex has its own lock.
-        if (chain_index_) chain_index_->on_section_written(section);
+        if (chain_index_enabled_ && chain_index_) chain_index_->on_section_written(section);
         try_pack_hot();
         return true;
     } catch (const std::system_error &e) {
@@ -1748,7 +1769,7 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             // Sync writes raw bytes via Utils::write_file_content — bypassing
             // Dag::write_section. Feed ChainIndex manually so wallet/explorer
             // queries stay accurate.
-            if (chain_index_) {
+            if (chain_index_enabled_ && chain_index_) {
                 auto deser = Json::deserialize<Section>(section_data.file_bytes);
                 if (deser.has_value()) {
                     deser->id = section_data.section_id;
@@ -2317,6 +2338,7 @@ void Dag::clear_dag() {
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
     if (pack_registry_) pack_registry_->rescan();
+    if (chain_index_enabled_ && chain_index_) chain_index_->clear();
 
     eLog("[Dag] Cleared");
 #endif
@@ -2386,6 +2408,7 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         pack_sync_pending_ = std::move(missing);
         pack_sync_in_flight_ = false;
+        pack_sync_installed_any_ = false;
     }
 
     eLog("[Dag] Pack sync: {} packs missing locally", pack_sync_pending_.size());
@@ -2394,17 +2417,30 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
 
 void Dag::issue_next_pack_request(const Responder &responder) {
     Pack::PackId next_id;
+    bool has_next = false;
+    bool rebuild_index = false;
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         if (pack_sync_in_flight_) return;
         if (pack_sync_pending_.empty()) {
             eLog("[Dag] Pack sync: all packs received");
-            return;
+            if (pack_sync_installed_any_ && chain_index_enabled_ && chain_index_) {
+                pack_sync_installed_any_ = false;
+                rebuild_index = true;
+            }
+        } else {
+            next_id = pack_sync_pending_.front();
+            pack_sync_pending_.erase(pack_sync_pending_.begin());
+            pack_sync_in_flight_ = true;
+            has_next = true;
         }
-        next_id = pack_sync_pending_.front();
-        pack_sync_pending_.erase(pack_sync_pending_.begin());
-        pack_sync_in_flight_ = true;
     }
+
+    if (rebuild_index) {
+        chain_index_->rebuild_from_disk();
+        return;
+    }
+    if (!has_next) return;
 
     PackRequest req { .pack_id = next_id };
     node->network()->send_message(req, MessageType::DagPackRequest,
@@ -2425,6 +2461,10 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
                  data.pack_id, static_cast<int>(res.error()), data.bytes.size());
         // Skip this pack and move on; peer-switching is a TODO.
     } else {
+        {
+            std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+            pack_sync_installed_any_ = true;
+        }
         eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.bytes.size());
     }
 

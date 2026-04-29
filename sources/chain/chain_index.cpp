@@ -127,6 +127,7 @@ struct ChainIndex::Impl {
     sqlite3        *db   = nullptr;
 
     sqlite3_stmt *stmt_insert_tx          = nullptr;
+    sqlite3_stmt *stmt_delete_section     = nullptr;
     sqlite3_stmt *stmt_find_sent          = nullptr;
     sqlite3_stmt *stmt_find_sent_token    = nullptr;
     sqlite3_stmt *stmt_find_recv          = nullptr;
@@ -151,6 +152,7 @@ struct ChainIndex::Impl {
             s = nullptr;
         };
         finalize(stmt_insert_tx);
+        finalize(stmt_delete_section);
         finalize(stmt_find_sent);
         finalize(stmt_find_sent_token);
         finalize(stmt_find_recv);
@@ -213,6 +215,7 @@ struct ChainIndex::Impl {
             "INSERT INTO tx_index"
             " (section, sender, receiver, token, type, timestamp, amount)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)");
+        stmt_delete_section = prepare("DELETE FROM tx_index WHERE section = ?");
 
         // Column order in every SELECT below must match row_to_entry().
         const char *select_cols =
@@ -252,7 +255,7 @@ struct ChainIndex::Impl {
         stmt_token_insert       = prepare("INSERT INTO tokens(actor) VALUES (?)");
         stmt_token_blob_by_id   = prepare("SELECT actor FROM tokens WHERE id = ?");
 
-        return stmt_insert_tx && stmt_find_sent && stmt_find_sent_token
+        return stmt_insert_tx && stmt_delete_section && stmt_find_sent && stmt_find_sent_token
             && stmt_find_recv && stmt_find_recv_token && stmt_row_count && stmt_last_section
             && stmt_actor_select && stmt_actor_insert && stmt_token_select && stmt_token_insert
             && stmt_actor_blob_by_id && stmt_token_blob_by_id;
@@ -411,6 +414,12 @@ void ChainIndex::on_section_written(const Section &s) {
 
     std::lock_guard<std::mutex> lock(impl_->write_mutex);
     impl_->exec("BEGIN IMMEDIATE");
+    auto section = static_cast<sqlite3_int64>(section_to_u64(s.id));
+    sqlite3_reset(impl_->stmt_delete_section);
+    sqlite3_bind_int64(impl_->stmt_delete_section, 1, section);
+    if (sqlite3_step(impl_->stmt_delete_section) != SQLITE_DONE) {
+        eWarning("[ChainIndex] section cleanup failed: {}", sqlite3_errmsg(impl_->db));
+    }
     for (const auto &tx : s.transactions) {
         impl_->insert_tx(tx, s.id);
     }
