@@ -75,19 +75,21 @@ ChatManager::ChatManager(ExtraChainNode* node)
                          for (auto& chat : chats_) {
                              if ((chat.owner_id == owner_id || chat.chat.peer_id == owner_id)
                                  && chat.file_id == dir_row.file_id) {
-                                 auto securiry_key = Dfs::DataSecurityKey { .key = chat.chat_key };
-                                 bool encryption   = true;
+                                 bool encryption = chat.chat_key.has_value();
                                  if (chat.chat.chat_type.has_value()
                                      && chat.chat.chat_type == Chat::ChatType::Channel) {
                                      encryption = false;
                                  }
 
-                                 auto message_row =
-                                     this->node->dfs()->read_vector_row(owner_id,
-                                                                        dir_row.file_id,
-                                                                        row["id"],
-                                                                        encryption ? securiry_key
-                                                                                   : Dfs::DataSecurityData());
+                                 Dfs::DataSecurityData security;
+                                 if (encryption) {
+                                     security = Dfs::DataSecurityKey { .key = chat.chat_key.value() };
+                                 }
+
+                                 auto message_row = this->node->dfs()->read_vector_row(owner_id,
+                                                                                        dir_row.file_id,
+                                                                                        row["id"],
+                                                                                        security);
                                  if (!message_row.has_value()) {
                                      return;
                                  }
@@ -102,12 +104,13 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                  // Capture peer's per_chat from Join message if not yet known.
                                  if (message->message.type == Chat::MessageType::Join
                                      && !chat.peer_per_chat.has_value()
+                                     && chat.peer_chat_main_id.has_value()
                                      && message->message.data.has_value()) {
                                      auto join = Json::deserialize<Chat::MessageJoinData>(
                                          message->message.data.value());
                                      if (join.has_value()) {
                                          auto peer_main = this->node->actor_index()->read_actor(
-                                             chat.peer_chat_main_id);
+                                             chat.peer_chat_main_id.value());
                                          if (peer_main.has_value()) {
                                              auto bind_data =
                                                  ByteArray(join->per_chat.key().public_key()).toBytes();
@@ -239,7 +242,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     auto chat = Chat::Chat { .chat_key       = key,
                              .my_per_chat_id = per_chat.id() };
 
-    auto security_key = Dfs::DataSecurityKey { .key = chat.chat_key };
+    auto security_key = Dfs::DataSecurityKey { .key = chat.chat_key.value() };
     auto store_chat_res =
         encryption ? node->dfs()->store_vector(per_chat.id(),
                                                per_chat.id(),
@@ -310,16 +313,17 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     }
     const auto& chat_main = chat_main_result->get();
 
+    if (!chat.my_per_chat_id.has_value() || !chat.chat_key.has_value()
+        || !chat.peer_chat_main_id.has_value()) {
+        return chat;
+    }
+
     auto per_chat_actor_result =
-        node->account_controller()->current_profile().get_actor(chat.my_per_chat_id);
+        node->account_controller()->current_profile().get_actor(chat.my_per_chat_id.value());
     if (!per_chat_actor_result.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
     const auto& per_chat = per_chat_actor_result->get();
-
-    if (chat.peer_chat_main_id.is_zero()) {
-        return chat;
-    }
 
     auto bind_data      = ByteArray(per_chat.key().public_key()).toBytes();
     auto bind_signature = chat_main.key().sign(bind_data);
@@ -330,21 +334,21 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
     auto invite = Chat::ChatInvite { .owner_id            = chat.owner_id,
                                      .file_id             = chat.file_id,
                                      .chat_type           = chat.chat.chat_type,
-                                     .chat_key            = chat.chat_key,
+                                     .chat_key            = chat.chat_key.value(),
                                      .sender_chat_main_id = chat_main.id(),
                                      .sender_per_chat     = per_chat.to_public(),
                                      .bind_signature      = bind_signature.value() };
 
     auto json = Json::serialize(invite);
     auto res =
-        node->dfs()->store_data_as_file(chat.peer_chat_main_id,
+        node->dfs()->store_data_as_file(chat.peer_chat_main_id.value(),
                                         chat_main.id(),
                                         ByteArray(json).toBytes(),
                                         CHAT_DAPP_INVITE_FOLDER,
                                         fmt::format("From_{}", chat_main.id()),
                                         Dfs::DataSecurity::Actor,
                                         Dfs::DataSecurityActor { .sender_id   = chat_main.id(),
-                                                                 .receiver_id = chat.peer_chat_main_id });
+                                                                 .receiver_id = chat.peer_chat_main_id.value() });
 
     if (!res.has_value()) {
         eCritical("[ChatManager] Invite error: {}", res.error());
@@ -381,7 +385,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
     chat.chat_key = Cryptography::keygen();
 
     // Per-channel actor — derived from seed with chat_key as label, used only for derivation.
-    auto label    = Utils::to_hex(ByteArray(chat.chat_key).toBytes());
+    auto label    = Utils::to_hex(ByteArray(chat.chat_key.value()).toBytes());
     auto per_chat = node->account_controller()->create_actor(ActorId(), label, ActorType::User);
     if (per_chat.empty()) {
         return std::unexpected(ChatError::Unknown);
@@ -477,7 +481,7 @@ bool ChatManager::set_channel_name(const Chat::Chat &chat, const std::string &na
         return false;
     }
 
-    auto author_id = chat.my_per_chat_id.is_zero() ? current_chat_actor_id() : chat.my_per_chat_id;
+    auto author_id = chat.my_per_chat_id.has_value() ? chat.my_per_chat_id.value() : current_chat_actor_id();
     return node->dfs()->dictionary_set_value(chat.owner_id, meta_row->file_id, "name", name, author_id);
 }
 
@@ -518,8 +522,8 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         }
 
         // Restore per-chat keypair only if I am a participant who can sign in this chat.
-        if (!chat->my_per_chat_id.is_zero()) {
-            auto label = Utils::to_hex(ByteArray(chat->chat_key).toBytes());
+        if (chat.value().my_per_chat_id.has_value() && chat.value().chat_key.has_value()) {
+            auto label = Utils::to_hex(ByteArray(chat.value().chat_key.value()).toBytes());
             node->account_controller()->restore_actor(ActorId(), label, ActorType::User);
         }
 
@@ -541,11 +545,15 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto security_key = quick ? Dfs::DataSecurityData() : Dfs::DataSecurityKey { .key = chat->chat_key };
-
-    bool encryption = true;
-    if (!quick && chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
+    bool encryption = !quick && chat.value().chat_key.has_value();
+    if (!quick && chat.value().chat.chat_type.has_value()
+        && chat.value().chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
+    }
+
+    Dfs::DataSecurityData security_key;
+    if (encryption) {
+        security_key = Dfs::DataSecurityKey { .key = chat.value().chat_key.value() };
     }
 
     auto db_rows = node->dfs()->read_vector_rows(owner_id,
@@ -582,10 +590,14 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
-    bool encryption   = true;
-    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
+    bool encryption = chat.value().chat_key.has_value();
+    if (chat.value().chat.chat_type.has_value() && chat.value().chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
+    }
+
+    Dfs::DataSecurityData security_key;
+    if (encryption) {
+        security_key = Dfs::DataSecurityKey { .key = chat.value().chat_key.value() };
     }
 
     constexpr int batch_size = 10;
@@ -646,23 +658,22 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto signer_id = chat->my_per_chat_id.is_zero() ? current_chat_actor_id() : chat->my_per_chat_id;
+    auto signer_id = chat.value().my_per_chat_id.has_value() ? chat.value().my_per_chat_id.value()
+                                                              : current_chat_actor_id();
 
-    bool encryption = true;
-    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
+    bool encryption = chat.value().chat_key.has_value();
+    if (chat.value().chat.chat_type.has_value() && chat.value().chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
-        if (chat->owner_id != signer_id) {
+        if (chat.value().owner_id != signer_id) {
             return std::unexpected(ChatError::Unknown);
         }
     }
 
-    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
-    auto res          = node->dfs()->add_vector_row(owner_id,
-                                           file_id,
-                                           message,
-                                           signer_id,
-                                           encryption ? security_key : Dfs::DataSecurityData(),
-                                           true);
+    Dfs::DataSecurityData security_key;
+    if (encryption) {
+        security_key = Dfs::DataSecurityKey { .key = chat.value().chat_key.value() };
+    }
+    auto res = node->dfs()->add_vector_row(owner_id, file_id, message, signer_id, security_key, true);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
@@ -769,12 +780,13 @@ std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owne
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto signer_id = chat->my_per_chat_id.is_zero() ? current_chat_actor_id() : chat->my_per_chat_id;
+    auto signer_id = chat.value().my_per_chat_id.has_value() ? chat.value().my_per_chat_id.value()
+                                                              : current_chat_actor_id();
 
-    bool encryption = true;
-    if (chat->chat.chat_type.has_value() && chat->chat.chat_type == Chat::ChatType::Channel) {
+    bool encryption = chat.value().chat_key.has_value();
+    if (chat.value().chat.chat_type.has_value() && chat.value().chat.chat_type == Chat::ChatType::Channel) {
         encryption = false;
-        if (chat->owner_id != signer_id) {
+        if (chat.value().owner_id != signer_id) {
             return std::unexpected(ChatError::Unknown);
         }
     }
@@ -826,12 +838,11 @@ std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owne
     auto message_data = Chat::MessageData { .type = msg_type, .data = new_data, .original_timestamp = original_timestamp };
     auto message      = Chat::Message { .id = message_id, .message = message_data };
 
-    auto security_key = Dfs::DataSecurityKey { .key = chat->chat_key };
-    auto res          = node->dfs()->update_vector_row(owner_id,
-                                              file_id,
-                                              message,
-                                              signer_id,
-                                              encryption ? security_key : Dfs::DataSecurityData());
+    Dfs::DataSecurityData security_key;
+    if (encryption) {
+        security_key = Dfs::DataSecurityKey { .key = chat.value().chat_key.value() };
+    }
+    auto res = node->dfs()->update_vector_row(owner_id, file_id, message, signer_id, security_key);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);
@@ -843,10 +854,14 @@ std::expected<bool, ChatError> ChatManager::edit_message(const ActorId&     owne
 std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     owner_id,
                                                            const std::string& file_id,
                                                            const std::string& message_id) {
-    auto chat      = get_chat(owner_id, file_id);
-    auto signer_id = (chat.has_value() && !chat->my_per_chat_id.is_zero()) ? chat->my_per_chat_id
-                                                                            : current_chat_actor_id();
-    auto res       = node->dfs()->remove_vector_row(owner_id, file_id, message_id, signer_id);
+    auto chat = get_chat(owner_id, file_id);
+    ActorId signer_id;
+    if (chat.has_value() && chat.value().my_per_chat_id.has_value()) {
+        signer_id = chat.value().my_per_chat_id.value();
+    } else {
+        signer_id = current_chat_actor_id();
+    }
+    auto res = node->dfs()->remove_vector_row(owner_id, file_id, message_id, signer_id);
 
     if (!res) {
         return std::unexpected(ChatError::Unknown);

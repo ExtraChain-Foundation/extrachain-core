@@ -43,9 +43,9 @@ namespace Chat {
         ActorId                           owner_id;
         std::string                       file_id;
         ChatData                          chat;
-        KeyBytes                          chat_key;
-        ActorId                           my_per_chat_id;
-        ActorId                           peer_chat_main_id;
+        std::optional<KeyBytes>           chat_key;
+        std::optional<ActorId>            my_per_chat_id;
+        std::optional<ActorId>            peer_chat_main_id;
         std::optional<Actor<KeyPublic>>   peer_per_chat;
         std::optional<Signature>          peer_bind_signature;
     };
