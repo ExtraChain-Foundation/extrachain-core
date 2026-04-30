@@ -127,23 +127,16 @@ Actor<KeyPrivate> AccountController::create_actor(const ActorId     &profileActo
                                                   ActorType          type) {
     Actor<KeyPrivate> actor;
     if (profile_type_ == ProfileType::Old) {
-        eWarning("[AccountController] create_actor(label={}): old profile, refusing", seed_label);
         return actor;
     }
 
     actor.generate_from_seed(profile_seed.seed(), seed_label, type);
-    eLog("[AccountController] create_actor(label={}): derived id={}", seed_label, actor.id());
 
     auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
     profile.add_wallet(actor, false);
 
-    bool exists = node->actor_index()->exists(actor.id());
-    eLog("[AccountController] create_actor: exists_in_index={} for id={}", exists, actor.id());
-    if (!exists) {
-        auto store_res = node->actor_index()->store_new_actor(actor.to_public());
-        eLog("[AccountController] create_actor: store_new_actor success={} for id={}",
-             store_res.has_value(),
-             actor.id());
+    if (!node->actor_index()->exists(actor.id())) {
+        node->actor_index()->store_new_actor(actor.to_public());
     }
     return actor;
 }

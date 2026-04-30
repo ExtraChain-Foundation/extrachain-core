@@ -208,7 +208,6 @@ std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> ChatMa
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     KeyBytes   key           = Cryptography::keygen();
     const auto chat_actor_id = current_chat_actor_id();
-    eLog("[Chat] create_chat: chat_main_id={}", chat_actor_id);
 
     auto db_instance = node->dfs()->get_db_instance();
     auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, chat_actor_id);
@@ -232,16 +231,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
 
     // Per-chat actor — derived from seed with chat_key as label, recoverable from seed phrase.
     auto chat_key_label = Utils::to_hex(ByteArray(key).toBytes());
-    eLog("[Chat] create_chat: deriving per_chat with label={}", chat_key_label);
-
     auto per_chat = node->account_controller()->create_actor(ActorId(), chat_key_label, ActorType::User);
     if (per_chat.empty()) {
-        eWarning("[Chat] create_chat: per_chat is empty after create_actor");
         return std::unexpected(ChatError::Unknown);
     }
-    eLog("[Chat] create_chat: per_chat.id={}, exists_in_index={}",
-         per_chat.id(),
-         node->actor_index()->exists(per_chat.id()));
 
     auto chat = Chat::Chat { .chat_key       = key,
                              .my_per_chat_id = per_chat.id() };
@@ -265,16 +258,11 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
                                                Dfs::DataSecurity::Public);
 
     if (!store_chat_res.has_value()) {
-        eWarning("[Chat] create_chat: store_vector failed");
         return std::unexpected(ChatError::Unknown);
     }
 
     chat.owner_id = store_chat_res->actor_id;
     chat.file_id  = store_chat_res->file_id;
-    eLog("[Chat] create_chat: store_vector returned actor_id={}, owner_id={}, file_id={}",
-         store_chat_res->actor_id,
-         store_chat_res->owner_id,
-         store_chat_res->file_id);
 
     return chat;
 }
@@ -389,16 +377,24 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         return std::unexpected(ChatError::Unknown);
     }
 
-    auto channel_hash = node->dfs()->create_file_id_from(
-        fmt::format("{}{}{}", name, Utils::current_date_ms(), chat_actor_id.to_string())).substr(0, 10);
-    auto channel_name = fmt::format("Channel-{}", channel_hash);
-
     auto chat     = Chat::Chat {};
     chat.chat_key = Cryptography::keygen();
 
-    // Create channel vector (public)
-    auto store_res = node->dfs()->store_vector(chat_actor_id,
-                                               chat_actor_id,
+    // Per-channel actor — derived from seed with chat_key as label, used only for derivation.
+    auto label    = Utils::to_hex(ByteArray(chat.chat_key).toBytes());
+    auto per_chat = node->account_controller()->create_actor(ActorId(), label, ActorType::User);
+    if (per_chat.empty()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+    chat.my_per_chat_id = per_chat.id();
+
+    auto channel_hash = node->dfs()->create_file_id_from(
+        fmt::format("{}{}{}", name, Utils::current_date_ms(), per_chat.id().to_string())).substr(0, 10);
+    auto channel_name = fmt::format("Channel-{}", channel_hash);
+
+    // Create channel vector (public, owned by per-channel actor)
+    auto store_res = node->dfs()->store_vector(per_chat.id(),
+                                               per_chat.id(),
                                                channel_name,
                                                network_id,
                                                search_result->file_id,
@@ -413,9 +409,9 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
 
     // Create metadata dictionary (public, same naming + "-meta")
     auto meta_name = fmt::format("{}-meta", channel_name);
-    auto dict_res  = node->dfs()->store_dictionary(chat_actor_id, chat_actor_id, meta_name);
+    auto dict_res  = node->dfs()->store_dictionary(per_chat.id(), per_chat.id(), meta_name);
     if (dict_res.has_value() && !name.empty()) {
-        node->dfs()->dictionary_set_value(chat_actor_id, dict_res->file_id, "name", name, chat_actor_id);
+        node->dfs()->dictionary_set_value(per_chat.id(), dict_res->file_id, "name", name, per_chat.id());
     }
 
     // TODO: public channels list — needs name field in vector entry
@@ -481,7 +477,7 @@ bool ChatManager::set_channel_name(const Chat::Chat &chat, const std::string &na
         return false;
     }
 
-    auto author_id = current_chat_actor_id();
+    auto author_id = chat.my_per_chat_id.is_zero() ? current_chat_actor_id() : chat.my_per_chat_id;
     return node->dfs()->dictionary_set_value(chat.owner_id, meta_row->file_id, "name", name, author_id);
 }
 
@@ -521,9 +517,11 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
             continue;
         }
 
-        // Restore per-chat keypair into profile.actors_ for DFS signing/verification.
-        auto label = Utils::to_hex(ByteArray(chat->chat_key).toBytes());
-        node->account_controller()->restore_actor(ActorId(), label, ActorType::User);
+        // Restore per-chat keypair only if I am a participant who can sign in this chat.
+        if (!chat->my_per_chat_id.is_zero()) {
+            auto label = Utils::to_hex(ByteArray(chat->chat_key).toBytes());
+            node->account_controller()->restore_actor(ActorId(), label, ActorType::User);
+        }
 
         chats.push_back(chat.value());
 
