@@ -92,16 +92,6 @@ public:
         return main_;
     }
 
-    // Zero until created via AccountController::chat_actor().
-    ActorId chat_actor_id() const {
-        return chat_actor_id_;
-    }
-
-    void set_chat_actor_id(const ActorId &actor_id) {
-        chat_actor_id_ = actor_id;
-        save();
-    }
-
     bool change_current(const ActorId &actorId);
     void add_wallet(const Actor<KeyPrivate> &actor, bool is_save = true);
     bool rename_wallet(const ActorId &actor_id, const std::string &wallet_name);
@@ -132,7 +122,6 @@ private:
     ActorId                                  system_;
     ActorId                                  main_;
     ActorId                                  current_;
-    ActorId                                  chat_actor_id_;
     std::string                              hash_;
     std::vector<Actor<KeyPrivate>>           actors_;
     std::vector<Actor<KeyPrivate>>           imports_;
@@ -142,12 +131,11 @@ private:
 
     ExtraChainNode *node;
 
-    BOOST_DESCRIBE_CLASS(
-        PrivateProfile,
-        (),
-        (),
-        (),
-        (system_, main_, chat_actor_id_, actors_, imports_, wallet_names_, creation_date_, modified_date_))
+    BOOST_DESCRIBE_CLASS(PrivateProfile,
+                         (),
+                         (),
+                         (),
+                         (system_, main_, actors_, imports_, wallet_names_, creation_date_, modified_date_))
 };
 
 class SeedProfile {

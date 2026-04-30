@@ -67,6 +67,8 @@ public:
     // Derive actor from profile seed; broadcasts the public part if not already known.
     Actor<KeyPrivate> create_actor(const ActorId &profileActor, int seed_index, ActorType type);
     Actor<KeyPrivate> create_actor(const ActorId &profileActor, const std::string &seed_label, ActorType type);
+    // Re-derive an actor from seed+label and add to profile.actors_ without broadcast.
+    Actor<KeyPrivate> restore_actor(const ActorId &profileActor, const std::string &seed_label, ActorType type);
     // Actor<KeyPrivate> create_dapp_master
     Actor<KeyPrivate> create_service(const ActorId                   &profileActor     = ActorId(),
                                      std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);

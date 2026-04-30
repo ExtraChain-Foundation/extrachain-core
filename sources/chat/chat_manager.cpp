@@ -34,9 +34,8 @@ ChatManager::ChatManager(ExtraChainNode* node)
             return;
         }
 
-        const auto& profile       = this->node->account_controller()->current_profile();
-        auto        chat_actor_id = profile.chat_actor_id();
-        auto        main_id       = profile.main_id();
+        auto chat_actor_id = this->current_chat_actor_id();
+        auto main_id       = this->node->account_controller()->current_profile().main_id();
         // main is accepted for backward compatibility while peers may still address by main.
         if (owner_id != chat_actor_id && owner_id != main_id) {
             return;
@@ -165,9 +164,15 @@ std::expected<void, ChatError> ChatManager::activate() {
         return std::unexpected(ChatError::NoChatActor);
     }
 
-    activated_ = true;
-
     auto chat_actor_id = actor->get().id();
+
+    // Broadcast chat_main to actor_index if not yet known (first activation in network).
+    if (!node->actor_index()->exists(chat_actor_id)) {
+        node->actor_index()->store_new_actor(actor->get().to_public());
+        eLog("[Chat] activate: broadcast chat_main {}", chat_actor_id);
+    }
+
+    activated_ = true;
     auto main_id       = node->account_controller()->current_profile().main_id();
     auto db            = node->dfs()->get_db_instance();
 
@@ -203,6 +208,7 @@ std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> ChatMa
 std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
     KeyBytes   key           = Cryptography::keygen();
     const auto chat_actor_id = current_chat_actor_id();
+    eLog("[Chat] create_chat: chat_main_id={}", chat_actor_id);
 
     auto db_instance = node->dfs()->get_db_instance();
     auto rows        = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, chat_actor_id);
@@ -224,12 +230,18 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
         return std::unexpected(ChatError::Unknown);
     }
 
-    // Per-chat actor — random keypair, DFS vector owner, signs my messages here.
-    Actor<KeyPrivate> per_chat;
-    per_chat.create(ActorType::User);
-    auto& profile = node->account_controller()->profile(node->account_controller()->current_profile().system_id());
-    profile.add_wallet(per_chat, false);
-    node->actor_index()->store_new_actor(per_chat.to_public());
+    // Per-chat actor — derived from seed with chat_key as label, recoverable from seed phrase.
+    auto chat_key_label = Utils::to_hex(ByteArray(key).toBytes());
+    eLog("[Chat] create_chat: deriving per_chat with label={}", chat_key_label);
+
+    auto per_chat = node->account_controller()->create_actor(ActorId(), chat_key_label, ActorType::User);
+    if (per_chat.empty()) {
+        eWarning("[Chat] create_chat: per_chat is empty after create_actor");
+        return std::unexpected(ChatError::Unknown);
+    }
+    eLog("[Chat] create_chat: per_chat.id={}, exists_in_index={}",
+         per_chat.id(),
+         node->actor_index()->exists(per_chat.id()));
 
     auto chat = Chat::Chat { .chat_key       = key,
                              .my_per_chat_id = per_chat.id() };
@@ -253,11 +265,16 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_chat(bool encryption) {
                                                Dfs::DataSecurity::Public);
 
     if (!store_chat_res.has_value()) {
+        eWarning("[Chat] create_chat: store_vector failed");
         return std::unexpected(ChatError::Unknown);
     }
 
     chat.owner_id = store_chat_res->actor_id;
     chat.file_id  = store_chat_res->file_id;
+    eLog("[Chat] create_chat: store_vector returned actor_id={}, owner_id={}, file_id={}",
+         store_chat_res->actor_id,
+         store_chat_res->owner_id,
+         store_chat_res->file_id);
 
     return chat;
 }
@@ -503,6 +520,10 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         if (!chat.has_value()) {
             continue;
         }
+
+        // Restore per-chat keypair into profile.actors_ for DFS signing/verification.
+        auto label = Utils::to_hex(ByteArray(chat->chat_key).toBytes());
+        node->account_controller()->restore_actor(ActorId(), label, ActorType::User);
 
         chats.push_back(chat.value());
 
@@ -848,7 +869,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
 
     auto store_chats_res = node->dfs()->store_dictionary(chat_actor_id,
                                                           chat_actor_id,
-                                                          CHAT_MY_CHATS,
+                                                          CHAT_MY_CHATS_INFO,
                                                           Dfs::DataSecurity::Self,
                                                           security_actor);
 
@@ -893,7 +914,7 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
         }
 
         auto name = ByteArray(name_result.value()).toString();
-        if (name == CHAT_MY_CHATS) {
+        if (name == CHAT_MY_CHATS_INFO) {
             my_chats = row;
             break;
         }
@@ -1024,12 +1045,12 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    // Create my per_chat actor for this chat.
-    Actor<KeyPrivate> my_per_chat;
-    my_per_chat.create(ActorType::User);
-    auto& profile = node->account_controller()->profile(node->account_controller()->current_profile().system_id());
-    profile.add_wallet(my_per_chat, false);
-    node->actor_index()->store_new_actor(my_per_chat.to_public());
+    // Create my per_chat actor — derived from seed with chat_key as label.
+    auto my_per_chat = node->account_controller()->create_actor(
+        ActorId(), Utils::to_hex(ByteArray(chat_invite->chat_key).toBytes()), ActorType::User);
+    if (my_per_chat.empty()) {
+        return false;
+    }
 
     auto chat =
         Chat::Chat { .id                  = "",
