@@ -32,6 +32,7 @@ static const std::string CHAT_DAPP_FOLDER        = ":DApp:Chat";
 static const std::string CHAT_DAPP_INVITE_FOLDER = ":DApp:Chat:Invite";
 
 static const std::string CHAT_MY_CHATS_INFO = "MyChatsInfo";
+static const std::string CHAT_PROFILE       = "ChatProfile";
 
 class ExtraChainNode;
 
@@ -39,6 +40,12 @@ enum class ChatError {
     Unknown,
     Disabled,
     NoChatActor
+};
+
+enum class ChatProfileError {
+    NoProfile,  // ChatProfile dictionary не знайдено для chat_main_id
+    NoEntry,    // dictionary є, але запис відсутній
+    Invalid     // запис є, але не парситься
 };
 
 enum class ChatMode {
@@ -63,6 +70,17 @@ public:
     std::expected<Chat::Chat, ChatError> create_myself();
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
+
+    bool set_chat_profile_name(const std::string &name);
+    bool set_chat_profile_bio(const std::string &bio);
+    bool set_chat_profile_avatar(const Chat::ChatProfileAvatar &avatar);
+    std::expected<Chat::ChatProfileAvatar, ChatError> upload_chat_profile_avatar(
+        const std::filesystem::path &full_path,
+        const std::filesystem::path &mini_path,
+        const std::string           &blur_hash);
+    std::expected<std::string, ChatProfileError>             read_chat_profile_name(const ActorId &chat_main_id);
+    std::expected<std::string, ChatProfileError>             read_chat_profile_bio(const ActorId &chat_main_id);
+    std::expected<Chat::ChatProfileAvatar, ChatProfileError> read_chat_profile_avatar(const ActorId &chat_main_id);
 
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
     std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
@@ -133,6 +151,9 @@ private:
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
     ActorId                               current_chat_actor_id();
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
+
+    std::expected<Dfs::DirRow, ChatError> create_chat_profile();
+    std::optional<Dfs::DirRow>            find_chat_profile_row(const ActorId &chat_main_id);
 
     std::vector<Chat::Chat> chats_;
     ChatMode                mode_       = ChatMode::Disabled;

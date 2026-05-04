@@ -79,4 +79,12 @@ namespace Chat {
         Signature        bind_signature;
     };
     BOOST_DESCRIBE_STRUCT(MessageJoinData, (), (per_chat, bind_signature))
+
+    // UI prepares full (~1024px) and mini (~192px) images.
+    struct ChatProfileAvatar {
+        std::string full_id;
+        std::string mini_id;
+        std::string blur_hash;
+    };
+    BOOST_DESCRIBE_STRUCT(ChatProfileAvatar, (), (full_id, mini_id, blur_hash))
 } // namespace Chat
