@@ -33,6 +33,7 @@ static const std::string CHAT_DAPP_INVITE_FOLDER = ":DApp:Chat:Invite";
 
 static const std::string CHAT_MY_CHATS_INFO = "MyChatsInfo";
 static const std::string CHAT_PROFILE       = "ChatProfile";
+static const std::string CHAT_FOLDERS       = "ChatFolders";
 
 class ExtraChainNode;
 
@@ -81,6 +82,11 @@ public:
     std::expected<std::string, ChatProfileError>             read_chat_profile_name(const ActorId &chat_main_id);
     std::expected<std::string, ChatProfileError>             read_chat_profile_bio(const ActorId &chat_main_id);
     std::expected<Chat::ChatProfileAvatar, ChatProfileError> read_chat_profile_avatar(const ActorId &chat_main_id);
+
+    std::expected<Chat::ChatFolder, ChatError>              create_chat_folder(const std::string &name);
+    bool                                                     update_chat_folder(const Chat::ChatFolder &folder);
+    bool                                                     remove_chat_folder(const std::string &folder_id);
+    std::expected<std::vector<Chat::ChatFolder>, ChatError> read_chat_folders();
 
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
     std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
@@ -154,6 +160,8 @@ private:
 
     std::expected<Dfs::DirRow, ChatError> create_chat_profile();
     std::optional<Dfs::DirRow>            find_chat_profile_row(const ActorId &chat_main_id);
+    std::expected<Dfs::DirRow, ChatError> create_chat_folders();
+    std::optional<Dfs::DirRow>            find_chat_folders_row();
 
     std::vector<Chat::Chat> chats_;
     ChatMode                mode_       = ChatMode::Disabled;

@@ -763,7 +763,7 @@ void NetworkManager::send_message_connections(const std::string &serialized_mess
             bool res = !package.nodes_identifiers_to_ignore.contains(socket_identifier);
 
             if (res) {
-                // eTemp("[VPN] brocast further to socket: {}", socket_identifier);
+                // eTemp("[Network] Broadcast further to socket: {}", socket_identifier);
             }
             return res;
         }

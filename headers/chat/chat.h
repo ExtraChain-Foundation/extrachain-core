@@ -87,4 +87,17 @@ namespace Chat {
         std::string blur_hash;
     };
     BOOST_DESCRIBE_STRUCT(ChatProfileAvatar, (), (full_id, mini_id, blur_hash))
+
+    struct ChatFolder {
+        std::string                                id;
+        std::string                                name;
+        std::optional<std::string>                 emoji;
+        std::vector<std::string>                   chat_ids;
+        std::optional<std::vector<ActorId>>        include_chat_main_ids;
+        std::optional<std::vector<ChatType>>       include_types;
+        int                                        order = 0;
+    };
+    BOOST_DESCRIBE_STRUCT(ChatFolder,
+                          (),
+                          (id, name, emoji, chat_ids, include_chat_main_ids, include_types, order))
 } // namespace Chat
