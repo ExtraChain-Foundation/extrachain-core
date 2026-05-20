@@ -40,11 +40,14 @@ bool AutologinHash::load() {
 }
 
 void AutologinHash::save(const std::string& hash) {
-#ifdef QT_DEBUG
+    // QT_DEBUG: original behaviour (dev iteration skips credential prompt).
+    // RACCOON_OPENWRT: needed so procd can respawn the headless node
+    // without web-UI re-login.  Desktop release builds opt out.
+#if defined(QT_DEBUG) || defined(RACCOON_OPENWRT)
     auto  hash_bytes = QByteArray::fromStdString(hash);
     QFile file(".auth_hash");
 
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hash_bytes) > 0) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
         eFatal("[Autologin Hash] Can't write to auth hash file");
         return;
     }
