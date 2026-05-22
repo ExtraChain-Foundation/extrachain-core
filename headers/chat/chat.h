@@ -23,6 +23,23 @@
 #include "chain/actor_id.h"
 #include "encryption/encryption_tools.h"
 
+enum class ChatError {
+    Unknown,
+    Disabled,
+    NoChatActor
+};
+
+enum class ChatProfileError {
+    NoProfile,
+    NoEntry,
+    Invalid
+};
+
+enum class ChatMode {
+    Disabled,
+    Enabled
+};
+
 namespace Chat {
     enum ChatType {
         Dialogue,
@@ -93,11 +110,23 @@ namespace Chat {
         std::string                                name;
         std::optional<std::string>                 emoji;
         std::vector<std::string>                   chat_ids;
+        std::vector<std::string>                   pinned_chat_ids;
         std::optional<std::vector<ActorId>>        include_chat_main_ids;
         std::optional<std::vector<ChatType>>       include_types;
+        std::optional<bool>                        unread_only;
+        std::optional<bool>                        muted;
         int                                        order = 0;
     };
     BOOST_DESCRIBE_STRUCT(ChatFolder,
                           (),
-                          (id, name, emoji, chat_ids, include_chat_main_ids, include_types, order))
+                          (id,
+                           name,
+                           emoji,
+                           chat_ids,
+                           pinned_chat_ids,
+                           include_chat_main_ids,
+                           include_types,
+                           unread_only,
+                           muted,
+                           order))
 } // namespace Chat
