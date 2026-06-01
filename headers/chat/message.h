@@ -40,8 +40,9 @@ namespace Chat {
         std::optional<MessageType>  type;
         std::optional<std::string>  data, reply_id;
         std::optional<std::uint64_t> original_timestamp;
+        std::optional<bool>          deleted_for_me;
     };
-    BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data, reply_id, original_timestamp))
+    BOOST_DESCRIBE_STRUCT(MessageData, (), (type, data, reply_id, original_timestamp, deleted_for_me))
 
     struct Message {
         std::string   id;

@@ -111,6 +111,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_folders.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
@@ -163,6 +164,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_folders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     )
 

@@ -177,7 +177,7 @@ std::expected<void, ChatError> ChatManager::activate() {
 
     activated_ = true;
 
-    create_chat_profile();
+    profile_.ensure_storage_row();
 
     auto main_id = node->account_controller()->current_profile().main_id();
     auto db      = node->dfs()->get_db_instance();
@@ -874,6 +874,63 @@ std::expected<bool, ChatError> ChatManager::remove_message(const ActorId&     ow
     return res;
 }
 
+std::expected<bool, ChatError> ChatManager::delete_for_me(const ActorId&     owner_id,
+                                                          const std::string& file_id,
+                                                          const std::string& message_id) {
+    auto chat = get_chat(owner_id, file_id);
+    if (!chat.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto signer_id = chat.value().my_per_chat_id.has_value() ? chat.value().my_per_chat_id.value()
+                                                              : current_chat_actor_id();
+
+    auto messages = read_chat_messages(owner_id, file_id);
+    if (!messages.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    Chat::Message original;
+    bool          found = false;
+    for (const auto& msg : messages.value()) {
+        if (msg.id == message_id) {
+            original = msg;
+            found    = true;
+            break;
+        }
+    }
+    if (!found) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    if (original.actor != signer_id) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    bool encryption = chat.value().chat_key.has_value();
+    if (chat.value().chat.chat_type.has_value() && chat.value().chat.chat_type == Chat::ChatType::Channel) {
+        encryption = false;
+    }
+
+    Chat::MessageData updated_data    = original.message;
+    updated_data.deleted_for_me       = true;
+
+    Chat::Message updated { .id        = message_id,
+                            .timestamp = original.timestamp,
+                            .actor     = original.actor,
+                            .message   = updated_data };
+
+    Dfs::DataSecurityData security_key;
+    if (encryption) {
+        security_key = Dfs::DataSecurityKey { .key = chat.value().chat_key.value() };
+    }
+    auto res = node->dfs()->update_vector_row(owner_id, file_id, updated, signer_id, security_key);
+    if (!res) {
+        return std::unexpected(ChatError::Unknown);
+    }
+    return res;
+}
+
 std::expected<Dfs::DirRow, ChatError> ChatManager::create_mychats() {
     auto my_chats_result = this->read_my_chats_row();
     if (my_chats_result.has_value()) {
@@ -994,141 +1051,6 @@ std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::C
         return std::unexpected(ChatError::Unknown);
     }
     return res;
-}
-
-std::expected<Dfs::DirRow, ChatError> ChatManager::create_chat_profile() {
-    auto existing = find_chat_profile_row(current_chat_actor_id());
-    if (existing.has_value()) {
-        return existing.value();
-    }
-
-    auto chat_actor_id = current_chat_actor_id();
-    auto store_res = node->dfs()->store_dictionary(chat_actor_id, chat_actor_id, CHAT_PROFILE);
-    if (!store_res.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-    return store_res.value();
-}
-
-std::optional<Dfs::DirRow> ChatManager::find_chat_profile_row(const ActorId& chat_main_id) {
-    if (chat_main_id.is_zero()) {
-        return std::nullopt;
-    }
-    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(),
-                                                                chat_main_id,
-                                                                CHAT_PROFILE,
-                                                                "name");
-    if (!row.has_value()) {
-        return std::nullopt;
-    }
-    return row.value();
-}
-
-bool ChatManager::set_chat_profile_name(const std::string& name) {
-    auto profile_row = create_chat_profile();
-    if (!profile_row.has_value()) {
-        return false;
-    }
-    auto chat_actor_id = current_chat_actor_id();
-    return node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, "name", name, chat_actor_id);
-}
-
-bool ChatManager::set_chat_profile_bio(const std::string& bio) {
-    auto profile_row = create_chat_profile();
-    if (!profile_row.has_value()) {
-        return false;
-    }
-    auto chat_actor_id = current_chat_actor_id();
-    return node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, "bio", bio, chat_actor_id);
-}
-
-bool ChatManager::set_chat_profile_avatar(const Chat::ChatProfileAvatar& avatar) {
-    auto profile_row = create_chat_profile();
-    if (!profile_row.has_value()) {
-        return false;
-    }
-    auto chat_actor_id = current_chat_actor_id();
-    auto json          = Json::serialize(avatar);
-    return node->dfs()->dictionary_set_value(chat_actor_id, profile_row->file_id, "avatar", json, chat_actor_id);
-}
-
-std::expected<Chat::ChatProfileAvatar, ChatError> ChatManager::upload_chat_profile_avatar(
-    const std::filesystem::path& full_path,
-    const std::filesystem::path& mini_path,
-    const std::string&           blur_hash) {
-    auto chat_actor_id = current_chat_actor_id();
-
-    auto full_name = fmt::format("avatar-{}", Utils::generate_random_hex(8));
-    auto mini_name = fmt::format("avatar-mini-{}", Utils::generate_random_hex(8));
-
-    auto full_res = node->dfs()->store_file(chat_actor_id,
-                                             chat_actor_id,
-                                             full_path,
-                                             CHAT_DAPP_FOLDER,
-                                             full_name,
-                                             Dfs::DataSecurity::Public);
-    if (!full_res.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    auto mini_res = node->dfs()->store_file(chat_actor_id,
-                                             chat_actor_id,
-                                             mini_path,
-                                             CHAT_DAPP_FOLDER,
-                                             mini_name,
-                                             Dfs::DataSecurity::Public);
-    if (!mini_res.has_value()) {
-        return std::unexpected(ChatError::Unknown);
-    }
-
-    Chat::ChatProfileAvatar avatar { .full_id   = full_res->file_id,
-                                     .mini_id   = mini_res->file_id,
-                                     .blur_hash = blur_hash };
-    if (!set_chat_profile_avatar(avatar)) {
-        return std::unexpected(ChatError::Unknown);
-    }
-    return avatar;
-}
-
-std::expected<std::string, ChatProfileError> ChatManager::read_chat_profile_name(const ActorId& chat_main_id) {
-    auto row = find_chat_profile_row(chat_main_id);
-    if (!row.has_value()) {
-        return std::unexpected(ChatProfileError::NoProfile);
-    }
-    auto value = node->dfs()->read_dictionary(chat_main_id, row->file_id, "name");
-    if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
-    }
-    return value.value();
-}
-
-std::expected<std::string, ChatProfileError> ChatManager::read_chat_profile_bio(const ActorId& chat_main_id) {
-    auto row = find_chat_profile_row(chat_main_id);
-    if (!row.has_value()) {
-        return std::unexpected(ChatProfileError::NoProfile);
-    }
-    auto value = node->dfs()->read_dictionary(chat_main_id, row->file_id, "bio");
-    if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
-    }
-    return value.value();
-}
-
-std::expected<Chat::ChatProfileAvatar, ChatProfileError> ChatManager::read_chat_profile_avatar(
-    const ActorId& chat_main_id) {
-    auto row = find_chat_profile_row(chat_main_id);
-    if (!row.has_value()) {
-        return std::unexpected(ChatProfileError::NoProfile);
-    }
-    auto value = node->dfs()->read_dictionary(chat_main_id, row->file_id, "avatar");
-    if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
-    }
-    auto avatar = Json::deserialize<Chat::ChatProfileAvatar>(value.value());
-    if (!avatar.has_value()) {
-        return std::unexpected(ChatProfileError::Invalid);
-    }
-    return avatar.value();
 }
 
 std::optional<Chat::Chat> ChatManager::get_chat(const ActorId& owner_id, const std::string& file_id) {

@@ -25,6 +25,7 @@
 #include "chain/actor_id.h"
 #include "chat/chat.h"
 #include "chat/chat_folders.h"
+#include "chat/chat_profile.h"
 #include "chat/message.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dfs_vector.h"
@@ -56,17 +57,7 @@ public:
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 
-    bool set_chat_profile_name(const std::string &name);
-    bool set_chat_profile_bio(const std::string &bio);
-    bool set_chat_profile_avatar(const Chat::ChatProfileAvatar &avatar);
-    std::expected<Chat::ChatProfileAvatar, ChatError> upload_chat_profile_avatar(
-        const std::filesystem::path &full_path,
-        const std::filesystem::path &mini_path,
-        const std::string           &blur_hash);
-    std::expected<std::string, ChatProfileError>             read_chat_profile_name(const ActorId &chat_main_id);
-    std::expected<std::string, ChatProfileError>             read_chat_profile_bio(const ActorId &chat_main_id);
-    std::expected<Chat::ChatProfileAvatar, ChatProfileError> read_chat_profile_avatar(const ActorId &chat_main_id);
-
+    ChatProfile &profile() { return profile_; }
     ChatFolders &folders() { return folders_; }
 
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
@@ -127,6 +118,10 @@ public:
                                                   const std::string &file_id,
                                                   const std::string &message_id);
 
+    std::expected<bool, ChatError> delete_for_me(const ActorId     &owner_id,
+                                                  const std::string &file_id,
+                                                  const std::string &message_id);
+
     std::optional<Chat::Chat> get_chat(const ActorId &owner_id, const std::string &file_id);
 
     void update_dfs_files();
@@ -139,13 +134,12 @@ private:
     ActorId                               current_chat_actor_id();
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
-    std::expected<Dfs::DirRow, ChatError> create_chat_profile();
-    std::optional<Dfs::DirRow>            find_chat_profile_row(const ActorId &chat_main_id);
-
     std::vector<Chat::Chat> chats_;
     ChatMode                mode_       = ChatMode::Disabled;
     bool                    activated_  = false;
+    ChatProfile             profile_ { this };
     ChatFolders             folders_ { this };
 
     friend class ChatFolders;
+    friend class ChatProfile;
 };
