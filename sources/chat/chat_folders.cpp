@@ -247,6 +247,15 @@ std::vector<std::string> ChatFolders::chat_ids(const std::string& folder_id) {
     return folder->chat_ids;
 }
 
+std::vector<std::string> ChatFolders::pinned_ids(const std::string& folder_id) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return {};
+    }
+    return folder->pinned_chat_ids;
+}
+
 bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) {
     load_if_needed();
 

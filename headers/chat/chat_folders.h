@@ -49,6 +49,8 @@ public:
     bool set_chats(const std::string &folder_id, const std::vector<std::string> &chat_keys);
     // Chat keys that belong to a folder (empty if the folder is missing).
     std::vector<std::string> chat_ids(const std::string &folder_id);
+    // Pinned chat keys of a folder (empty if the folder is missing).
+    std::vector<std::string> pinned_ids(const std::string &folder_id);
 
     // Persists folder ordering: each id gets order = its index in the list.
     bool set_order(const std::vector<std::string> &ordered_folder_ids);
