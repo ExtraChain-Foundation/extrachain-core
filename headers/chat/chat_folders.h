@@ -50,6 +50,9 @@ public:
     // Chat keys that belong to a folder (empty if the folder is missing).
     std::vector<std::string> chat_ids(const std::string &folder_id);
 
+    // Persists folder ordering: each id gets order = its index in the list.
+    bool set_order(const std::vector<std::string> &ordered_folder_ids);
+
     bool add_chat(const std::string &folder_id, const std::string &chat_key);
     bool remove_chat(const std::string &folder_id, const std::string &chat_key);
 

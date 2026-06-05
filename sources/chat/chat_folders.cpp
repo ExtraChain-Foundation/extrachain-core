@@ -148,9 +148,11 @@ bool ChatFolders::save(const Chat::ChatFolder& folder) {
         *existing = folder;
     } else {
         cache_.push_back(folder);
-        std::sort(cache_.begin(), cache_.end(),
-                  [](const Chat::ChatFolder& a, const Chat::ChatFolder& b) { return a.order < b.order; });
     }
+    // Always keep the cache ordered by `order`: updating an existing folder may
+    // change its order (e.g. set_order), so re-sort in both branches.
+    std::sort(cache_.begin(), cache_.end(),
+              [](const Chat::ChatFolder& a, const Chat::ChatFolder& b) { return a.order < b.order; });
     return true;
 }
 
@@ -165,7 +167,13 @@ Chat::ChatFolder* ChatFolders::find_in_cache(const std::string& folder_id) {
 
 std::expected<Chat::ChatFolder, ChatError> ChatFolders::create(const std::string& name) {
     load_if_needed();
-    Chat::ChatFolder folder { .id = Utils::generate_random_hex(6), .name = name };
+    // New folder goes to the end: order = max(order) + 1. Without this every
+    // folder would keep the default order 0 and the list order would be unstable.
+    int next_order = 0;
+    for (const auto& f : cache_) {
+        next_order = std::max(next_order, f.order + 1);
+    }
+    Chat::ChatFolder folder { .id = Utils::generate_random_hex(6), .name = name, .order = next_order };
     if (!save(folder)) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -237,6 +245,34 @@ std::vector<std::string> ChatFolders::chat_ids(const std::string& folder_id) {
         return {};
     }
     return folder->chat_ids;
+}
+
+bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) {
+    load_if_needed();
+
+    // Snapshot the target order first. We must NOT hold pointers into cache_
+    // across save(), because save() re-sorts cache_ and would invalidate them.
+    std::vector<Chat::ChatFolder> to_write;
+    for (std::size_t i = 0; i < ordered_folder_ids.size(); ++i) {
+        auto* folder = find_in_cache(ordered_folder_ids[i]);
+        if (!folder) {
+            continue;
+        }
+        if (folder->order == static_cast<int>(i)) {
+            continue; // already in place
+        }
+        Chat::ChatFolder updated = *folder;
+        updated.order            = static_cast<int>(i);
+        to_write.push_back(updated);
+    }
+
+    bool all_ok = true;
+    for (const auto& folder : to_write) {
+        if (!save(folder)) {
+            all_ok = false;
+        }
+    }
+    return all_ok;
 }
 
 bool ChatFolders::add_chat(const std::string& folder_id, const std::string& chat_key) {
