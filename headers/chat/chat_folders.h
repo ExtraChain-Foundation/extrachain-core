@@ -40,6 +40,16 @@ public:
     bool                                       update(const Chat::ChatFolder &folder);
     bool                                       remove(const std::string &folder_id);
 
+    bool set_name(const std::string &folder_id, const std::string &name);
+    // Empty color clears the color (color -> nullopt).
+    bool set_color(const std::string &folder_id, const std::string &color);
+
+    // Replaces the whole chat set of a folder. Pinned ids that are no longer
+    // part of the folder are dropped to keep chat_ids/pinned_chat_ids consistent.
+    bool set_chats(const std::string &folder_id, const std::vector<std::string> &chat_keys);
+    // Chat keys that belong to a folder (empty if the folder is missing).
+    std::vector<std::string> chat_ids(const std::string &folder_id);
+
     bool add_chat(const std::string &folder_id, const std::string &chat_key);
     bool remove_chat(const std::string &folder_id, const std::string &chat_key);
 

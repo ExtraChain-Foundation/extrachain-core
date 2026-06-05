@@ -115,6 +115,7 @@ namespace Chat {
         std::optional<std::vector<ChatType>>       include_types;
         std::optional<bool>                        unread_only;
         std::optional<bool>                        muted;
+        std::optional<std::string>                 color;
         int                                        order = 0;
     };
     BOOST_DESCRIBE_STRUCT(ChatFolder,
@@ -128,5 +129,6 @@ namespace Chat {
                            include_types,
                            unread_only,
                            muted,
+                           color,
                            order))
 } // namespace Chat

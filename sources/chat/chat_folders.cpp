@@ -193,6 +193,52 @@ bool ChatFolders::remove(const std::string& folder_id) {
     return true;
 }
 
+bool ChatFolders::set_name(const std::string& folder_id, const std::string& name) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return false;
+    }
+    Chat::ChatFolder updated = *folder;
+    updated.name             = name;
+    return save(updated);
+}
+
+bool ChatFolders::set_color(const std::string& folder_id, const std::string& color) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return false;
+    }
+    Chat::ChatFolder updated = *folder;
+    updated.color            = color.empty() ? std::nullopt : std::optional<std::string>(color);
+    return save(updated);
+}
+
+bool ChatFolders::set_chats(const std::string& folder_id, const std::vector<std::string>& chat_keys) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return false;
+    }
+    Chat::ChatFolder updated = *folder;
+    updated.chat_ids         = chat_keys;
+    // Keep pinned_chat_ids a subset of chat_ids.
+    std::erase_if(updated.pinned_chat_ids, [&](const std::string& p) {
+        return std::find(updated.chat_ids.begin(), updated.chat_ids.end(), p) == updated.chat_ids.end();
+    });
+    return save(updated);
+}
+
+std::vector<std::string> ChatFolders::chat_ids(const std::string& folder_id) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return {};
+    }
+    return folder->chat_ids;
+}
+
 bool ChatFolders::add_chat(const std::string& folder_id, const std::string& chat_key) {
     load_if_needed();
     auto* folder = find_in_cache(folder_id);
