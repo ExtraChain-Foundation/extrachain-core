@@ -256,6 +256,60 @@ std::vector<std::string> ChatFolders::pinned_ids(const std::string& folder_id) {
     return folder->pinned_chat_ids;
 }
 
+bool ChatFolders::set_types(const std::string& folder_id, const std::vector<int>& types) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return false;
+    }
+    Chat::ChatFolder updated = *folder;
+    if (types.empty()) {
+        updated.include_types = std::nullopt;
+    } else {
+        std::vector<Chat::ChatType> ct;
+        ct.reserve(types.size());
+        for (int t : types) {
+            ct.push_back(static_cast<Chat::ChatType>(t));
+        }
+        updated.include_types = ct;
+    }
+    return save(updated);
+}
+
+std::vector<int> ChatFolders::types(const std::string& folder_id) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder || !folder->include_types.has_value()) {
+        return {};
+    }
+    std::vector<int> out;
+    out.reserve(folder->include_types->size());
+    for (auto t : folder->include_types.value()) {
+        out.push_back(static_cast<int>(t));
+    }
+    return out;
+}
+
+bool ChatFolders::set_excluded(const std::string& folder_id, const std::vector<std::string>& chat_keys) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return false;
+    }
+    Chat::ChatFolder updated = *folder;
+    updated.excluded_chat_ids = chat_keys;
+    return save(updated);
+}
+
+std::vector<std::string> ChatFolders::excluded_ids(const std::string& folder_id) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return {};
+    }
+    return folder->excluded_chat_ids;
+}
+
 bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) {
     load_if_needed();
 

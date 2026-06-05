@@ -113,6 +113,9 @@ namespace Chat {
         std::vector<std::string>                   pinned_chat_ids;
         std::optional<std::vector<ActorId>>        include_chat_main_ids;
         std::optional<std::vector<ChatType>>       include_types;
+        // Chat keys explicitly excluded from the folder (exceptions). Override
+        // both include_types and chat_ids.
+        std::vector<std::string>                   excluded_chat_ids;
         std::optional<bool>                        unread_only;
         std::optional<bool>                        muted;
         std::optional<std::string>                 color;
@@ -127,6 +130,7 @@ namespace Chat {
                            pinned_chat_ids,
                            include_chat_main_ids,
                            include_types,
+                           excluded_chat_ids,
                            unread_only,
                            muted,
                            color,

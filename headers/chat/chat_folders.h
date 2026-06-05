@@ -52,6 +52,14 @@ public:
     // Pinned chat keys of a folder (empty if the folder is missing).
     std::vector<std::string> pinned_ids(const std::string &folder_id);
 
+    // Auto-include chat types (Chat::ChatType values). Empty list clears it.
+    bool set_types(const std::string &folder_id, const std::vector<int> &types);
+    std::vector<int> types(const std::string &folder_id);
+
+    // Excluded chat keys (exceptions): override include_types and chat_ids.
+    bool set_excluded(const std::string &folder_id, const std::vector<std::string> &chat_keys);
+    std::vector<std::string> excluded_ids(const std::string &folder_id);
+
     // Persists folder ordering: each id gets order = its index in the list.
     bool set_order(const std::vector<std::string> &ordered_folder_ids);
 
