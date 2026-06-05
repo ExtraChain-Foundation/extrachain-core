@@ -60,6 +60,11 @@ public:
     bool set_excluded(const std::string &folder_id, const std::vector<std::string> &chat_keys);
     std::vector<std::string> excluded_ids(const std::string &folder_id);
 
+    // Resolves the full membership of a folder over the current chats:
+    //   (chats of include_types) UNION (explicit chat_ids) MINUS (excluded_chat_ids).
+    // chatKey is "<owner_id>:<file_id>". Returns the matching chatKeys.
+    std::vector<std::string> chats_in_folder(const std::string &folder_id);
+
     // Persists folder ordering: each id gets order = its index in the list.
     bool set_order(const std::vector<std::string> &ordered_folder_ids);
 

@@ -310,6 +310,39 @@ std::vector<std::string> ChatFolders::excluded_ids(const std::string& folder_id)
     return folder->excluded_chat_ids;
 }
 
+std::vector<std::string> ChatFolders::chats_in_folder(const std::string& folder_id) {
+    load_if_needed();
+    auto* folder = find_in_cache(folder_id);
+    if (!folder) {
+        return {};
+    }
+
+    auto explicit_ids = std::unordered_set<std::string>(folder->chat_ids.begin(), folder->chat_ids.end());
+    auto excluded     = std::unordered_set<std::string>(folder->excluded_chat_ids.begin(),
+                                                    folder->excluded_chat_ids.end());
+    std::unordered_set<int> types;
+    if (folder->include_types.has_value()) {
+        for (auto t : folder->include_types.value()) {
+            types.insert(static_cast<int>(t));
+        }
+    }
+
+    std::vector<std::string> result;
+    for (const auto& chat : owner_->chats_) {
+        const std::string chatKey = chat.owner_id.to_string() + ":" + chat.file_id;
+        if (excluded.contains(chatKey)) {
+            continue;
+        }
+        const bool byId   = explicit_ids.contains(chatKey);
+        const bool byType = chat.chat.chat_type.has_value()
+                            && types.contains(static_cast<int>(chat.chat.chat_type.value()));
+        if (byId || byType) {
+            result.push_back(chatKey);
+        }
+    }
+    return result;
+}
+
 bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) {
     load_if_needed();
 
