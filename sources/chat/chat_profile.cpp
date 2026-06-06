@@ -91,6 +91,8 @@ std::expected<Chat::ChatProfileAvatar, ChatError> ChatProfile::upload_avatar(
     const std::string&           blur_hash) {
     auto chat_actor_id = owner_->current_chat_actor_id();
 
+    auto previous = read_avatar(chat_actor_id);
+
     auto full_name = fmt::format("avatar-{}", Utils::generate_random_hex(8));
     auto mini_name = fmt::format("avatar-mini-{}", Utils::generate_random_hex(8));
 
@@ -111,6 +113,17 @@ std::expected<Chat::ChatProfileAvatar, ChatError> ChatProfile::upload_avatar(
                                      .blur_hash = blur_hash };
     if (!set_avatar(avatar)) {
         return std::unexpected(ChatError::Unknown);
+    }
+
+    // Remove old avatar files after the dictionary points at the new ones.
+    if (previous.has_value()) {
+        const auto& old = previous.value();
+        if (!old.full_id.empty() && old.full_id != avatar.full_id) {
+            owner_->node->dfs()->remove_stored_file(chat_actor_id, old.full_id);
+        }
+        if (!old.mini_id.empty() && old.mini_id != avatar.mini_id) {
+            owner_->node->dfs()->remove_stored_file(chat_actor_id, old.mini_id);
+        }
     }
     return avatar;
 }
