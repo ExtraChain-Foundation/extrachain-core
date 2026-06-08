@@ -203,6 +203,10 @@ ActorId ChatManager::current_chat_actor_id() {
     return actor->get().id();
 }
 
+ActorId ChatManager::my_chat_main_id() {
+    return current_chat_actor_id();
+}
+
 std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> ChatManager::current_chat_actor() {
     auto actor = node->account_controller()->chat_actor();
     if (!actor.has_value()) {

@@ -60,6 +60,8 @@ public:
     ChatProfile &profile() { return profile_; }
     ChatFolders &folders() { return folders_; }
 
+    ActorId my_chat_main_id();
+
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
     std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
     std::optional<std::string>           get_channel_name(const Chat::Chat &chat);
