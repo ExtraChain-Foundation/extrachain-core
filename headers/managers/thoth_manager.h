@@ -41,7 +41,14 @@ struct ThothInfo {
     std::string       token;
     std::set<ActorId> ignored;
 
-    auto operator<=>(const ThothInfo&) const = default;
+    bool operator==(const ThothInfo&) const = default;
+    bool operator<(const ThothInfo& other) const {
+        if (os != other.os)
+            return os < other.os;
+        if (token != other.token)
+            return token < other.token;
+        return ignored < other.ignored;
+    }
 };
 BOOST_DESCRIBE_STRUCT(ThothInfo, (), (os, token, ignored))
 
