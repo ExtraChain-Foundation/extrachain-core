@@ -425,38 +425,61 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         node->dfs()->dictionary_set_value(per_chat.id(), dict_res->file_id, "name", name, per_chat.id());
     }
 
-    // TODO: public channels list — needs name field in vector entry
-    // auto channels_status = node->create_channels_vector();
-    // if (channels_status == DfsFileStatus::CantCreate) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
-    //
-    // const auto system_actor_id = node->account_controller()->system_actor().id();
-    // auto channels_row =
-    //     Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
-    //                                                                       system_actor_id,
-    //                                                                       Dfs::Basic::TEMPLATE_VECTOR,
-    //                                                                       ExtraChainNode::CHANNELS_VECTOR_NAME);
-    // if (!channels_row.has_value()) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
-    //
-    // auto channel_declared = node->dfs()->add_file_id(network_id,
-    //                                                  channels_row->owner_id,
-    //                                                  channels_row->file_id,
-    //                                                  chat.owner_id,
-    //                                                  chat.file_id,
-    //                                                  main_actor_id,
-    //                                                  0,
-    //                                                  Dfs::FileIdState::Without);
-    // if (!channel_declared.has_value()) {
-    //     return std::unexpected(ChatError::Unknown);
-    // }
+    // Publish to the public Channels vector so peers can discover and subscribe.
+    publish_channel(chat, name);
 
     insert_chat_to_mychats(chat);
     add_new_message_created(chat.owner_id, chat.file_id);
 
     return chat;
+}
+
+bool ChatManager::publish_channel(const Chat::Chat &chat, const std::string &name) {
+    auto network_id  = node->actor_index()->network_id();
+    auto db_instance = node->dfs()->get_db_instance();
+    auto channels_row =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_VECTOR,
+                                                                          ExtraChainNode::CHANNELS_VECTOR_NAME);
+    if (!channels_row.has_value()) {
+        return false;
+    }
+
+    auto signer_id = chat.my_per_chat_id.has_value() ? chat.my_per_chat_id.value() : current_chat_actor_id();
+    return node->dfs()->add_vector_row(channels_row->owner_id,
+                                       channels_row->file_id,
+                                       { { "name", name },
+                                         { "owner_id", chat.owner_id.to_string() },
+                                         { "file_id", chat.file_id } },
+                                       signer_id);
+}
+
+std::expected<std::vector<Chat::ChannelInfo>, ChatError> ChatManager::read_channels() {
+    auto network_id  = node->actor_index()->network_id();
+    auto db_instance = node->dfs()->get_db_instance();
+    auto channels_row =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(db_instance,
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_VECTOR,
+                                                                          ExtraChainNode::CHANNELS_VECTOR_NAME);
+    if (!channels_row.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto rows = node->dfs()->read_vector_rows(channels_row->owner_id, channels_row->file_id);
+    if (!rows.has_value()) {
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    std::vector<Chat::ChannelInfo> channels;
+    for (auto &row : rows.value()) {
+        channels.push_back(Chat::ChannelInfo { .owner_id = ActorId(row["owner_id"]),
+                                               .file_id  = row["file_id"],
+                                               .name     = row.count("name") ? row["name"] : "" });
+    }
+
+    return channels;
 }
 
 std::optional<std::string> ChatManager::get_channel_name(const Chat::Chat &chat) {

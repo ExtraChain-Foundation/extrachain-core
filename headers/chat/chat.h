@@ -97,6 +97,13 @@ namespace Chat {
     };
     BOOST_DESCRIBE_STRUCT(MessageJoinData, (), (per_chat, bind_signature))
 
+    struct ChannelInfo {
+        ActorId     owner_id;
+        std::string file_id;
+        std::string name;
+    };
+    BOOST_DESCRIBE_STRUCT(ChannelInfo, (), (owner_id, file_id, name))
+
     // UI prepares full (~1024px) and mini (~192px) images.
     struct ChatProfileAvatar {
         std::string full_id;

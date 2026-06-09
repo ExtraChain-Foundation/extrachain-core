@@ -564,7 +564,21 @@ DfsFileStatus ExtraChainNode::create_channels_vector() {
         return DfsFileStatus::Existed;
     }
 
-    if (!create_file_id_vector(CHANNELS_VECTOR_NAME, Dfs::FileIdState::Without)) {
+    auto vector_template = Dfs::CollectionTemplate::create(CHANNELS_VECTOR_NAME)
+                               .value()
+                               .add_fields({ Dfs::Field::String("name"),
+                                             Dfs::Field::String("owner_id").not_null(),
+                                             Dfs::Field::String("file_id").unique().not_null() });
+
+    auto template_res = dfs()->store_template(system_id, vector_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create channels template, because {}", template_res.error());
+        return DfsFileStatus::CantCreate;
+    }
+
+    auto vec_res =
+        dfs()->store_vector(system_id, system_id, CHANNELS_VECTOR_NAME, template_res->actor_id, template_res->file_id);
+    if (!vec_res.has_value()) {
         return DfsFileStatus::CantCreate;
     }
 

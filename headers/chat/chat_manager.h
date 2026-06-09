@@ -64,6 +64,7 @@ public:
 
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
     std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
+    std::expected<std::vector<Chat::ChannelInfo>, ChatError> read_channels();
     std::optional<std::string>           get_channel_name(const Chat::Chat &chat);
     bool                                 set_channel_name(const Chat::Chat &chat, const std::string &name);
 
@@ -129,6 +130,7 @@ public:
     void update_dfs_files();
 
 private:
+    bool                                  publish_channel(const Chat::Chat &chat, const std::string &name);
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
     std::expected<bool, ChatError>        update_chat_in_mychats(const Chat::Chat &chat);
