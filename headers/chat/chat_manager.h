@@ -131,6 +131,7 @@ public:
 
 private:
     bool                                  publish_channel(const Chat::Chat &chat, const std::string &name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> channels_vector_row();
     std::expected<Dfs::DirRow, ChatError> create_mychats();
     std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
     std::expected<bool, ChatError>        update_chat_in_mychats(const Chat::Chat &chat);
@@ -141,6 +142,7 @@ private:
     std::vector<Chat::Chat> chats_;
     ChatMode                mode_       = ChatMode::Disabled;
     bool                    activated_  = false;
+    Dfs::DirRow             my_chats_row_;
     ChatProfile             profile_ { this };
     ChatFolders             folders_ { this };
 

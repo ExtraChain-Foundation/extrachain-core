@@ -114,6 +114,10 @@ Actor<KeyPrivate> AccountController::create_service(const ActorId               
 
 Actor<KeyPrivate> AccountController::create_actor(const ActorId &profileActor, int seed_index, ActorType type) {
     Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
     actor.generate_from_seed(profile_seed.seed(), seed_index, type);
 
     auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
@@ -163,13 +167,10 @@ std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatActorError> A
         return std::unexpected(ChatActorError::NoProfile);
     }
 
-    // For Old profiles chat features fall back to main identity.
+    // Chat identity is strictly chat_main: never fall back to main, it must
+    // stay hidden from chat peers. Old profiles have no seed, so no chat.
     if (profile_type_ == ProfileType::Old) {
-        auto main = this->profile(current_profile_).main();
-        if (!main.has_value()) {
-            return std::unexpected(ChatActorError::NoProfile);
-        }
-        return main.value();
+        return std::unexpected(ChatActorError::NoSeed);
     }
 
     if (profile_seed.actors().size() <= 2) {

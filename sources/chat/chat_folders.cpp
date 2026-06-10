@@ -49,7 +49,10 @@ std::expected<Dfs::DirRow, ChatError> ChatFolders::ensure_storage_row() {
     if (existing.has_value()) {
         return existing.value();
     }
-    auto chat_actor_id  = owner_->current_chat_actor_id();
+    auto chat_actor_id = owner_->current_chat_actor_id();
+    if (chat_actor_id.is_zero()) {
+        return std::unexpected(ChatError::NoChatActor);
+    }
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_id };
     auto store_res      = owner_->node->dfs()->store_dictionary(chat_actor_id,
                                                            chat_actor_id,

@@ -26,7 +26,9 @@
 enum class ChatError {
     Unknown,
     Disabled,
-    NoChatActor
+    NoChatActor,
+    NotAllowed,
+    NoChannelsVector
 };
 
 enum class ChatProfileError {

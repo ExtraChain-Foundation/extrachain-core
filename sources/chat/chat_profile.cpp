@@ -33,7 +33,10 @@ std::expected<Dfs::DirRow, ChatError> ChatProfile::ensure_storage_row() {
         return existing.value();
     }
     auto chat_actor_id = owner_->current_chat_actor_id();
-    auto store_res     = owner_->node->dfs()->store_dictionary(chat_actor_id, chat_actor_id, CHAT_PROFILE);
+    if (chat_actor_id.is_zero()) {
+        return std::unexpected(ChatError::NoChatActor);
+    }
+    auto store_res = owner_->node->dfs()->store_dictionary(chat_actor_id, chat_actor_id, CHAT_PROFILE);
     if (!store_res.has_value()) {
         return std::unexpected(ChatError::Unknown);
     }
@@ -90,6 +93,9 @@ std::expected<Chat::ChatProfileAvatar, ChatError> ChatProfile::upload_avatar(
     const std::filesystem::path& mini_path,
     const std::string&           blur_hash) {
     auto chat_actor_id = owner_->current_chat_actor_id();
+    if (chat_actor_id.is_zero()) {
+        return std::unexpected(ChatError::NoChatActor);
+    }
 
     auto previous = read_avatar(chat_actor_id);
 
