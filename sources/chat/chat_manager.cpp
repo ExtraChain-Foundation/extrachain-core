@@ -343,17 +343,20 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
                                      .bind_signature      = bind_signature.value() };
 
     auto json = Json::serialize(invite);
+    // Temporary privacy fix: sign/encrypt the invite file with the per-chat actor,
+    // not chat_main. The replicated DirRow then shows author = anonymous per-chat
+    // actor instead of chat_main, hiding the sender↔receiver edge in the graph.
+    // The payload still carries sender_chat_main_id, so the recipient learns who
+    // wrote (verified by the bind signature). TODO (todo.md): use a separate
+    // throwaway invite-actor distinct from the chat vector owner.
     auto res =
         node->dfs()->store_data_as_file(chat.peer_chat_main_id.value(),
-                                        chat_main.id(),
+                                        per_chat.id(),
                                         ByteArray(json).toBytes(),
                                         CHAT_DAPP_INVITE_FOLDER,
-                                        // Random name: "From_<id>" would expose who invited whom
-                                        // in plaintext dir metadata; sender id is inside the
-                                        // encrypted payload.
                                         fmt::format("Invite_{}", Utils::generate_random_hex(8)),
                                         Dfs::DataSecurity::Actor,
-                                        Dfs::DataSecurityActor { .sender_id   = chat_main.id(),
+                                        Dfs::DataSecurityActor { .sender_id   = per_chat.id(),
                                                                  .receiver_id = chat.peer_chat_main_id.value() });
 
     if (!res.has_value()) {
@@ -1145,14 +1148,21 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    // DFS file author must match the chat_main claimed in the invite.
-    if (dir_row.actor_id != chat_invite->sender_chat_main_id) {
+    // The invite file is signed/encrypted by the sender's per-chat actor (privacy:
+    // keeps chat_main out of the replicated DirRow). So the DFS author must match
+    // the per_chat claimed in the payload, not chat_main.
+    if (dir_row.actor_id != chat_invite->sender_per_chat.id()) {
         return false;
     }
 
-    // Verify per_chat ↔ chat_main bind.
+    // Verify per_chat ↔ chat_main bind. The bind is signed by chat_main, so resolve
+    // the claimed chat_main from the actor index (from_actor is now the per_chat).
+    auto sender_chat_main = this->node->actor_index()->read_actor(chat_invite->sender_chat_main_id);
+    if (!sender_chat_main.has_value()) {
+        return false;
+    }
     auto bind_data = ByteArray(chat_invite->sender_per_chat.key().public_key()).toBytes();
-    auto verify    = from_actor.key().verify(bind_data, chat_invite->bind_signature);
+    auto verify    = sender_chat_main->key().verify(bind_data, chat_invite->bind_signature);
     if (!verify.has_value() || !verify.value()) {
         return false;
     }
