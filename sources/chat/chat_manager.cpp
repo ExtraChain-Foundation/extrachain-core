@@ -47,9 +47,6 @@ ChatManager::ChatManager(ExtraChainNode* node)
             }
         }
 
-        // load my chats
-        // emit this->node->chatLoaded(owner_id, file_id);
-
         this->parse_invite(owner_id, dir_row);
     });
 
@@ -343,12 +340,9 @@ std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat)
                                      .bind_signature      = bind_signature.value() };
 
     auto json = Json::serialize(invite);
-    // Temporary privacy fix: sign/encrypt the invite file with the per-chat actor,
-    // not chat_main. The replicated DirRow then shows author = anonymous per-chat
-    // actor instead of chat_main, hiding the sender↔receiver edge in the graph.
-    // The payload still carries sender_chat_main_id, so the recipient learns who
-    // wrote (verified by the bind signature). TODO (todo.md): use a separate
-    // throwaway invite-actor distinct from the chat vector owner.
+    // Privacy: sign/encrypt with per-chat actor so the replicated DirRow author is
+    // anonymous, not chat_main. Sender chat_main stays inside the payload. TODO
+    // (todo.md): use a throwaway invite-actor distinct from the chat vector owner.
     auto res =
         node->dfs()->store_data_as_file(chat.peer_chat_main_id.value(),
                                         per_chat.id(),
@@ -379,8 +373,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         return std::unexpected(ChatError::Unknown);
     }
 
-    // Refuse to create a channel until the public Channels vector is synced,
-    // otherwise the channel would silently never appear in the public list.
+    // Without the synced Channels vector the channel would never appear publicly.
     if (!channels_vector_row().has_value()) {
         return std::unexpected(ChatError::NoChannelsVector);
     }
@@ -483,8 +476,7 @@ std::expected<std::vector<Chat::ChannelInfo>, ChatError> ChatManager::read_chann
 
     std::vector<Chat::ChannelInfo> channels;
     for (auto &row : rows.value()) {
-        // Row signatures are verified by DFS on add; only the channel owner
-        // may list its channel, otherwise anyone could spoof entries.
+        // Only the channel owner may list it (signature already verified by DFS).
         if (row.count("actor") && row["actor"] != row["owner_id"]) {
             continue;
         }
@@ -720,10 +712,7 @@ std::expected<bool, ChatError> ChatManager::add_new_message(const ActorId&      
         return std::unexpected(ChatError::Unknown);
     }
 
-    // TODO: send full correct
-    // message.actor     = node->accountController()->currentProfile().main_id();
-    // message.timestamp = Utils::current_date_ms();
-    // emit node->messageAdded(owner_id, file_id, message);
+    // TODO: emit messageAdded locally so the sender sees its own message before sync.
     return res;
 }
 
@@ -737,7 +726,6 @@ std::expected<bool, ChatError> ChatManager::add_new_message_text(const ActorId& 
 
     auto message_data = Chat::MessageData { .data = text, .reply_id = message_text.reply_id };
     message_data.type = Chat::MessageType::Text;
-    // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     // TODO: with id exists check
     return add_new_message(owner_id, file_id, message);
@@ -772,7 +760,6 @@ std::expected<bool, ChatError> ChatManager::add_gif_message(const ActorId&      
                                                             const std::string&       file_id,
                                                             const Chat::MessageText& message_text) {
     auto message_data = Chat::MessageData { .type = Chat::MessageType::Gif, .data = message_text.text };
-    // auto message_data_json = Json::serialize(message_data);
     auto message = Chat::Message { .id = Utils::generate_random_hex(6), .message = message_data };
     // TODO: with id exists check
     return add_new_message(owner_id, file_id, message);
@@ -920,8 +907,7 @@ std::expected<bool, ChatError> ChatManager::delete_for_me(const ActorId&     own
         return std::unexpected(ChatError::Unknown);
     }
 
-    // Channels allow only full removal: posts are public, "hidden for me only"
-    // makes no sense for the owner and is not available to subscribers.
+    // Channels allow only full removal: posts are public, "hide for me" is moot.
     if (chat.value().chat.chat_type.has_value() && chat.value().chat.chat_type == Chat::ChatType::Channel) {
         return std::unexpected(ChatError::NotAllowed);
     }
@@ -1148,15 +1134,13 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    // The invite file is signed/encrypted by the sender's per-chat actor (privacy:
-    // keeps chat_main out of the replicated DirRow). So the DFS author must match
+    // Invite is signed by the sender's per-chat actor, so the DFS author must match
     // the per_chat claimed in the payload, not chat_main.
     if (dir_row.actor_id != chat_invite->sender_per_chat.id()) {
         return false;
     }
 
-    // Verify per_chat ↔ chat_main bind. The bind is signed by chat_main, so resolve
-    // the claimed chat_main from the actor index (from_actor is now the per_chat).
+    // Verify per_chat ↔ chat_main bind: signed by chat_main, resolved from actor index.
     auto sender_chat_main = this->node->actor_index()->read_actor(chat_invite->sender_chat_main_id);
     if (!sender_chat_main.has_value()) {
         return false;

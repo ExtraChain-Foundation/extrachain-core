@@ -53,7 +53,7 @@ namespace Chat {
     struct ChatData {
         std::optional<ChatType> chat_type;
         std::optional<ActorId>  peer_id;
-        // std::optional<std::vector<ActorId>> peers_id;
+        // std::optional<std::vector<ActorId>> peers_id; // TODO: group chats
     };
     BOOST_DESCRIBE_STRUCT(ChatData, (), (peer_id, chat_type))
 
@@ -122,8 +122,7 @@ namespace Chat {
         std::vector<std::string>                   pinned_chat_ids;
         std::optional<std::vector<ActorId>>        include_chat_main_ids;
         std::optional<std::vector<ChatType>>       include_types;
-        // Chat keys explicitly excluded from the folder (exceptions). Override
-        // both include_types and chat_ids.
+        // Chat keys excluded from the folder; override include_types and chat_ids.
         std::vector<std::string>                   excluded_chat_ids;
         std::optional<bool>                        unread_only;
         std::optional<bool>                        muted;

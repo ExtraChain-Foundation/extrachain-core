@@ -44,8 +44,7 @@ public:
     // Empty color clears the color (color -> nullopt).
     bool set_color(const std::string &folder_id, const std::string &color);
 
-    // Replaces the whole chat set of a folder. Pinned ids that are no longer
-    // part of the folder are dropped to keep chat_ids/pinned_chat_ids consistent.
+    // Replaces the folder's chat set; pinned ids no longer in it are dropped.
     bool set_chats(const std::string &folder_id, const std::vector<std::string> &chat_keys);
     // Chat keys that belong to a folder (empty if the folder is missing).
     std::vector<std::string> chat_ids(const std::string &folder_id);
@@ -60,9 +59,7 @@ public:
     bool set_excluded(const std::string &folder_id, const std::vector<std::string> &chat_keys);
     std::vector<std::string> excluded_ids(const std::string &folder_id);
 
-    // Resolves the full membership of a folder over the current chats:
-    //   (chats of include_types) UNION (explicit chat_ids) MINUS (excluded_chat_ids).
-    // chatKey is "<owner_id>:<file_id>". Returns the matching chatKeys.
+    // Membership = (include_types ∪ chat_ids) − excluded_chat_ids. chatKey = "owner:file".
     std::vector<std::string> chats_in_folder(const std::string &folder_id);
 
     // Persists folder ordering: each id gets order = its index in the list.

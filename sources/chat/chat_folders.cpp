@@ -152,8 +152,7 @@ bool ChatFolders::save(const Chat::ChatFolder& folder) {
     } else {
         cache_.push_back(folder);
     }
-    // Always keep the cache ordered by `order`: updating an existing folder may
-    // change its order (e.g. set_order), so re-sort in both branches.
+    // Keep cache ordered by `order`: an update may change it (e.g. set_order).
     std::sort(cache_.begin(), cache_.end(),
               [](const Chat::ChatFolder& a, const Chat::ChatFolder& b) { return a.order < b.order; });
     return true;
@@ -170,8 +169,7 @@ Chat::ChatFolder* ChatFolders::find_in_cache(const std::string& folder_id) {
 
 std::expected<Chat::ChatFolder, ChatError> ChatFolders::create(const std::string& name) {
     load_if_needed();
-    // New folder goes to the end: order = max(order) + 1. Without this every
-    // folder would keep the default order 0 and the list order would be unstable.
+    // New folder goes to the end: order = max(order) + 1 (else all stay at 0).
     int next_order = 0;
     for (const auto& f : cache_) {
         next_order = std::max(next_order, f.order + 1);
@@ -349,8 +347,7 @@ std::vector<std::string> ChatFolders::chats_in_folder(const std::string& folder_
 bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) {
     load_if_needed();
 
-    // Snapshot the target order first. We must NOT hold pointers into cache_
-    // across save(), because save() re-sorts cache_ and would invalidate them.
+    // Snapshot first: save() re-sorts cache_ and would invalidate pointers into it.
     std::vector<Chat::ChatFolder> to_write;
     for (std::size_t i = 0; i < ordered_folder_ids.size(); ++i) {
         auto* folder = find_in_cache(ordered_folder_ids[i]);
