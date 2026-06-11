@@ -41,6 +41,22 @@ enum class Mode {
 Mode get_mode();
 void set_mode(Mode m);
 
+// The format to use on the network wire during the legacy-interop transition.
+//
+// While ANY pre-decimal peer may still be on the network we must speak hex on
+// the wire, because a broadcast/relayed message is a single signed blob that
+// passes through nodes which cannot transcode it, and legacy peers can only
+// parse hex. So senders serialise payloads in Legacy(hex) and receivers parse
+// them in Legacy(hex) — one symmetric, hop-independent format.
+//
+// On-disk storage stays Canonical(decimal) regardless (see DagMigration).
+// Flip this to Mode::Canonical once the whole network advertises
+// dag_version >= CURRENT_DAG_VERSION and legacy peers are gone; at that point
+// the per-peer PeerMeta machinery can drive a graceful per-link switch.
+constexpr Mode wire() {
+    return Mode::Legacy;
+}
+
 class Scope {
 public:
     explicit Scope(Mode m) : prev_(get_mode()) { set_mode(m); }

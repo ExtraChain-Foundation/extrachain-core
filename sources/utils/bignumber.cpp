@@ -36,13 +36,15 @@ BigNumber::BigNumber(const std::string &bigNumber) {
     if (bigNumber == "inf")
         eFatal("BigNumber: infinity");
     try {
+        // Strict decimal: the canonical string form is decimal everywhere on disk
+        // and on the wire (Canonical mode). Hex is ambiguous (e.g. "100" is both
+        // a decimal and a hex value), so it must never be content-sniffed here —
+        // use from_hex() explicitly, or decode under WireFormat::Mode::Legacy.
         if (bigNumber.empty()) {
             this->m_data = cpp_int(0);
-        } else if (is_hex_string(bigNumber)) {
-            *this = from_hex(bigNumber);
         } else {
-            std::string trimmed = bigNumber;
-            bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+            std::string trimmed     = bigNumber;
+            bool        is_negative = !trimmed.empty() && trimmed[0] == '-';
             if (is_negative) trimmed = trimmed.substr(1);
             trimmed.erase(0, trimmed.find_first_not_of('0'));
             if (trimmed.empty()) trimmed = "0";
@@ -291,32 +293,19 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
             return BigNumber(0);
         }
 
-        std::string trimmed = bigNumber;
-        bool is_negative = !trimmed.empty() && trimmed[0] == '-';
+        // Strict decimal validation. Hex inputs must go through from_hex()
+        // explicitly — never sniffed (see the constructor for why).
+        std::string trimmed     = bigNumber;
+        bool        is_negative = !trimmed.empty() && trimmed[0] == '-';
         if (is_negative) trimmed = trimmed.substr(1);
         if (trimmed.empty()) {
             return std::unexpected(BigNumberError::InvalidNumber);
         }
 
-        auto all_digits = [](const std::string &s) {
-            return std::all_of(s.begin(), s.end(), [](char c) {
-                return c >= '0' && c <= '9';
-            });
-        };
-        auto all_hex = [](const std::string &s) {
-            return std::all_of(s.begin(), s.end(), [](char c) {
-                return (c >= '0' && c <= '9')
-                    || (c >= 'a' && c <= 'f')
-                    || (c >= 'A' && c <= 'F');
-            });
-        };
-
-        if (is_hex_string(bigNumber)) {
-            if (!all_hex(trimmed)) return std::unexpected(BigNumberError::InvalidNumber);
-            return from_hex(bigNumber);
-        }
-
-        if (!all_digits(trimmed)) return std::unexpected(BigNumberError::InvalidNumber);
+        bool all_digits = std::all_of(trimmed.begin(), trimmed.end(), [](char c) {
+            return c >= '0' && c <= '9';
+        });
+        if (!all_digits) return std::unexpected(BigNumberError::InvalidNumber);
         return BigNumber(bigNumber);
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
@@ -384,13 +373,15 @@ bool BigNumber::operator==(const int &other) const {
 
 namespace magic {
     std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-        return value.to_string();
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string()
+                                                                    : value.to_string();
     }
 
     BigNumber custom_magic<BigNumber>::write(const std::string &value) {
-        if (BigNumber::is_hex_string(value)) {
-            return BigNumber::from_hex(value);
-        }
-        return BigNumber(value);
+        // Format is decided by the active WireFormat scope, never sniffed from
+        // content. Legacy (pre-decimal) peers and the migration reader set
+        // Mode::Legacy; everything else is canonical decimal.
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? BigNumber::from_hex(value)
+                                                                    : BigNumber(value);
     }
 } // namespace magic

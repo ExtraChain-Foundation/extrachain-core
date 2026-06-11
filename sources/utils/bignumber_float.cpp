@@ -32,30 +32,16 @@
     #define UPDATE_DEBUG()
 #endif
 
-static bool looks_like_hex_float(const std::string &str) {
-    if (str.empty()) return false;
-    size_t start = 0;
-    if (str[0] == '-') start = 1;
-    for (size_t i = start; i < str.size(); i++) {
-        char c = str[i];
-        if (c == '.') continue;
-        if ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-            return true;
-        }
-    }
-    return false;
-}
-
 BigNumberFloat::BigNumberFloat()
     : m_data(0) {
 }
 
 BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat) {
     try {
+        // Strict decimal — never sniff hex from content (it is ambiguous).
+        // Hex inputs go through from_hex() or a WireFormat::Mode::Legacy scope.
         if (bigNumberFloat.empty()) {
             this->m_data = cpp_dec_float_exc(0);
-        } else if (looks_like_hex_float(bigNumberFloat)) {
-            *this = from_hex(bigNumberFloat);
         } else {
             this->m_data = cpp_dec_float_exc(bigNumberFloat);
         }
@@ -349,10 +335,13 @@ bool BigNumberFloat::operator!=(const BigNumberFloat &other) const {
 
 namespace magic {
     std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
-        return value.to_string();
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string()
+                                                                    : value.to_string();
     }
 
     BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {
-        return BigNumberFloat(value);
+        // Format is decided by the active WireFormat scope, never sniffed.
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? BigNumberFloat::from_hex(value)
+                                                                    : BigNumberFloat(value);
     }
 } // namespace magic

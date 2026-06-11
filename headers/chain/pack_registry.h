@@ -80,6 +80,16 @@ public:
     };
     std::optional<Range> coverage() const;
 
+    // Id + section range of every known pack, straight from in-memory metadata
+    // (populated by rescan()/create_pack()/install_raw()). Cheap — no file I/O,
+    // so callers building a pack list don't re-open and re-checksum every file.
+    struct Span {
+        PackId    id;
+        SectionId first;
+        SectionId last;
+    };
+    std::vector<Span> spans() const;
+
     const std::filesystem::path &dir() const;
 
     // Read the raw on-disk bytes of a pack — used by network sync to ship the

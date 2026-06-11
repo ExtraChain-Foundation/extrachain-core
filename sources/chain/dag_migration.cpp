@@ -27,6 +27,7 @@
 
 #include "chain/dag.h" // for SectionRange
 #include "chain/pack.h"
+#include "network/wire_format.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
 #include "utils/db_connector.h"
@@ -109,15 +110,29 @@ std::optional<SectionId> parse_legacy_section_filename(const std::string &name) 
     return BigNumber::from_hex(name);
 }
 
-// Rewrite a JSON section payload: only replaces top-level "control" hash and
-// nested transaction amounts if they look hex. Everything else stays as-is
-// to preserve the exact byte sequence used for signature verification.
+// Convert a legacy (hex-encoded) section JSON payload into the canonical
+// (decimal) form: deserialize the numeric fields as hex, then re-serialize them
+// as decimal. Hash/signature/control are plain strings and survive untouched, so
+// signatures still verify via Transaction::calculate_hash_hex() (which recomputes
+// the legacy hex hash from the now-decimal in-memory values).
 //
-// NOTE: we do NOT touch transaction amounts here — Transaction::verify()
-// handles hex fallback on its own via calculate_hash_hex(). Leave the JSON
-// strings as-produced so hashes stay stable.
-std::string convert_section_payload(std::string payload) {
-    return payload;
+// If the payload can't be parsed (unexpected legacy format), the original bytes
+// are returned unchanged and the caller is warned — never silently dropped.
+std::string convert_section_payload(const std::string &payload, const SectionId &sid, bool &ok) {
+    std::optional<Section> deser;
+    {
+        WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+        auto              parsed = Json::deserialize<Section>(payload);
+        if (parsed.has_value()) deser = std::move(parsed.value());
+    }
+    if (!deser.has_value()) {
+        ok = false;
+        return payload;
+    }
+    deser->id = sid;
+    ok        = true;
+    WireFormat::Scope canonical(WireFormat::Mode::Canonical);
+    return Json::serialize(*deser);
 }
 
 std::expected<void, Error>
@@ -182,9 +197,15 @@ migrate_sections(ProgressCallback on_progress) {
         std::string decimal_name = sid.to_string();
         fs::path    dest = fs::path(ChainConst::DAG_HOT_FOLDER) / decimal_name;
 
+        bool        converted = false;
+        std::string out_payload = convert_section_payload(content, sid, converted);
+        if (!converted) {
+            eWarning("[Migration] Section {} could not be parsed; kept verbatim", decimal_name);
+        }
+
         std::ofstream out(dest, std::ios::binary | std::ios::trunc);
         if (!out) return std::unexpected(Error::WriteFailed);
-        out << convert_section_payload(content);
+        out << out_payload;
         out.close();
         if (!out) return std::unexpected(Error::WriteFailed);
 

@@ -1217,6 +1217,27 @@ void NetworkManager::message_received(const std::string &message,
         node->luminance_manager()->increment(node_id);
     }
 
+    // Inner payloads arrive in the wire format (hex during the legacy-interop
+    // transition). Parse every per-type MessagePack::deserialize below under
+    // that scope so BigNumber/BigNumberFloat decode correctly regardless of hop.
+    // Responses generated inside the switch go through send_message(), which
+    // forces its own scope, so leaving this active across the switch is safe.
+    WireFormat::Scope wire_scope(WireFormat::wire());
+
+    // Lifecycle gate: drop Dag network traffic (types 30..45) while the Dag is
+    // stopped, so handlers don't race against shutdown/migration. Enforced once
+    // here at the dispatch layer instead of per-handler.
+    {
+        auto type_val = std::to_underlying(type);
+        if (type_val >= std::to_underlying(MessageType::DagTransaction)
+            && type_val <= std::to_underlying(MessageType::DagPackData)) {
+            auto *dag = node->dag();
+            if (dag && !dag->is_accepting_messages()) {
+                return;
+            }
+        }
+    }
+
     // try {
     switch (type) {
     case MessageType::Custom: {

@@ -112,7 +112,10 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        *this           = BigNumberFloat(num);
+        // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
+        // never the content. Legacy peers send hex; canonical peers send decimal.
+        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num)
+                                                                     : BigNumberFloat(num);
     }
 };
 

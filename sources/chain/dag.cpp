@@ -28,6 +28,11 @@
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
 static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 
+// Upper bound on live transactions parked in the pending set while sync runs.
+// They are replayed once sync completes; the cap stops a flood from growing
+// memory without bound during a long sync.
+static constexpr std::size_t MAX_CACHED_TXS = 100000;
+
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
@@ -364,13 +369,20 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
         */
 
-        if (/* !sync_timeout && */ status_ != DagStatus::Ready) {
-            if (mode_ == DagMode::Light || light_requested_) {
-                this->add_to_cached_tx(transaction);
-            }
-        }
-
         if (status_ != DagStatus::Ready) {
+            // A live transaction arriving mid-sync would otherwise be lost — the
+            // peer we sync from may not have it in a sealed section yet. Park it
+            // in the pending set (a cheap, deduplicated insert — no prove/save on
+            // the sync path) and replay it via process_cached_transactions() once
+            // sync finishes. Capped so a flood during a long sync can't grow
+            // memory without bound (the per-sender rate limit above also helps).
+            if (cached_txs_size() < MAX_CACHED_TXS) {
+                this->add_to_cached_tx(transaction);
+            } else {
+                eWarning("[Dag] Pending tx cache full ({}), dropping {} during sync",
+                         MAX_CACHED_TXS, transaction.hash());
+            }
+
             // Update sync target if transaction section is ahead but within reasonable range
             if (transaction.section() > sync_last_index_
                 && transaction.section() <= sync_last_index_ + 15) {
@@ -616,6 +628,10 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     try {
         std::shared_lock<std::shared_mutex> lock(section_mutex_);
 
+        // On-disk sections are always canonical (decimal), regardless of any
+        // wire-format scope a network handler may have left active on this thread.
+        WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
         // Hot path: per-section file
         auto p    = this->file_path(section_id);
         auto path = FsPath::create(p);
@@ -663,6 +679,10 @@ std::optional<bool> Dag::write_section(const Section &section) {
         {
             std::unique_lock<std::shared_mutex> lock(section_mutex_);
 
+            // Persist sections in canonical (decimal) form regardless of any
+            // wire-format scope left active by a network handler on this thread.
+            WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
             auto folder = this->file_folder(section.id);
             if (!std::filesystem::exists(folder)) {
                 std::filesystem::create_directories(folder);
@@ -681,8 +701,13 @@ std::optional<bool> Dag::write_section(const Section &section) {
         }
 
         update_range();
-        // Feed the tx index. Done outside the section_mutex_ — ChainIndex has its own lock.
-        if (chain_index_enabled_ && chain_index_) chain_index_->on_section_written(section);
+        // Feed the tx index for live writes only. During sync we skip it — the
+        // index is rebuilt in bulk once sync completes, so per-section SQLite
+        // writes here would be pure wasted work on the sync hot path.
+        if (status_ != DagStatus::Sync && chain_index_enabled_ && chain_index_) {
+            chain_index_->on_section_written(section);
+        }
+        // try_pack_hot() is a no-op during sync (it checks status_ itself).
         try_pack_hot();
         return true;
     } catch (const std::system_error &e) {
@@ -1766,16 +1791,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 this->set_current_section(section_data.section_id);
             }
 
-            // Sync writes raw bytes via Utils::write_file_content — bypassing
-            // Dag::write_section. Feed ChainIndex manually so wallet/explorer
-            // queries stay accurate.
-            if (chain_index_enabled_ && chain_index_) {
-                auto deser = Json::deserialize<Section>(section_data.file_bytes);
-                if (deser.has_value()) {
-                    deser->id = section_data.section_id;
-                    chain_index_->on_section_written(*deser);
-                }
-            }
+            // ChainIndex is intentionally NOT fed per-section here: during sync
+            // that would be thousands of wasted SQLite writes. It is rebuilt once
+            // in bulk when sync completes (see below).
         }
 
         update_range();
@@ -1787,7 +1805,6 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         if (file_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] File sync completed");
-            try_pack_hot();
 
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
@@ -1808,6 +1825,14 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 set_sync_status(DagSyncStatus::None);
                 emit node->dagSyncFinish();
 #endif
+            }
+
+            // Sync is done — now do the deferred bookkeeping once: seal the cold
+            // tail into packs and bulk-rebuild the tx index off the network thread.
+            try_pack_hot();
+            if (chain_index_enabled_ && chain_index_) {
+                auto *index = chain_index_.get();
+                ThreadPoolBoost::instance_dag_sync()->post([index]() { index->rebuild_from_disk(); });
             }
             return;
         }
@@ -2197,9 +2222,10 @@ void Dag::handle_sync_request() {
     if (current_section_exists && current_section_ >= sync_last_index_) {
         eLog("[Dag] Not need sync");
 
-        set_status(DagStatus::Ready);
-        set_sync_status(DagSyncStatus::None);
+        // Drain any transactions parked while we were deciding whether to sync,
+        // then go Ready (process_cached_transactions sets Ready + sync None).
         check_status_ = DagSyncStatus::None;
+        this->process_cached_transactions();
         // start_check();
         return;
     }
@@ -2350,18 +2376,13 @@ void Dag::network_pack_list_request(const Responder &responder) {
     if (!pack_registry_) return;
 
     PackList list;
-    auto     ids = pack_registry_->known_packs();
-    list.packs.reserve(ids.size());
-    for (auto pid : ids) {
-        // Cheap path: meta is already in memory after rescan(); we re-open just
-        // to read first/last sections. Reader cache amortises this.
-        auto reader = Pack::Reader::open(
-            pack_registry_->dir() / (std::to_string(pid) + ".pack"));
-        if (!reader.has_value()) continue;
+    auto     spans = pack_registry_->spans(); // in-memory metadata, no file I/O
+    list.packs.reserve(spans.size());
+    for (const auto &s : spans) {
         list.packs.push_back(PackInfo {
-            .pack_id       = pid,
-            .first_section = reader->first_section(),
-            .last_section  = reader->last_section(),
+            .pack_id       = s.id,
+            .first_section = s.first,
+            .last_section  = s.last,
         });
     }
 
@@ -2437,7 +2458,9 @@ void Dag::issue_next_pack_request(const Responder &responder) {
     }
 
     if (rebuild_index) {
-        chain_index_->rebuild_from_disk();
+        // Heavy disk + decompress + SQLite work — never on the network thread.
+        auto *index = chain_index_.get();
+        ThreadPoolBoost::instance_dag_sync()->post([index]() { index->rebuild_from_disk(); });
         return;
     }
     if (!has_next) return;
@@ -2476,6 +2499,13 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
 void Dag::try_pack_hot() {
     if (!pack_registry_) return;
 
+    // Sealing a pack is irreversible. Never do it while a sync is in flight:
+    // set_current_section() only moves forward, so a high section arriving first
+    // can push current_section_ ahead of sections that are still downloading, and
+    // we'd seal their slots as empty. Packing only the at-rest cold tail (status
+    // Ready, or at startup before any sync starts) avoids that race.
+    if (status_ == DagStatus::Sync) return;
+
     // Sync delivers sections out-of-order in batches; packing must be tried for
     // every pack range that's been completed in hot/, not just the most recent
     // one. We iterate from pack 0 upwards and pack each range whose 10k files
@@ -2490,6 +2520,10 @@ void Dag::try_pack_hot() {
     SectionId max_pack_idx = ((current_section_ - lag) / section_size) - SectionId(1);
     if (max_pack_idx < SectionId(0)) return;
 
+    // On-disk pack payloads are canonical (decimal) — the empty placeholder and
+    // any re-read content must not pick up an ambient wire (hex) scope.
+    WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
     for (SectionId pack_idx = SectionId(0); pack_idx <= max_pack_idx; pack_idx = pack_idx + 1) {
         SectionId pack_first = pack_idx * section_size;
 
@@ -2498,6 +2532,16 @@ void Dag::try_pack_hot() {
         }
 
         SectionId pack_last = pack_first + section_size - 1;
+
+        // A genuinely-empty section legitimately has no hot file. But a section
+        // missing because it hasn't been downloaded yet must NOT be sealed as
+        // empty — that would silently corrupt control hashes and fork the node.
+        // We only treat absence as "empty" for ranges that sit entirely above
+        // first_saved_section_ (i.e. fully within our synced history). A range
+        // that dips below first_saved_section_ is incompletely synced; skip it.
+        if (first_saved_section_ != SectionId(-1) && pack_first < first_saved_section_) {
+            continue;
+        }
 
         // Gather all section files in this range. Missing file == empty section
         // (sync skips sections with no transactions). With HOT_PACK_LAG already

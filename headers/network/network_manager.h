@@ -445,10 +445,18 @@ public:
             return "";
         }
 
-        auto data_serialized = MessagePack::serialize(data);
-        // Also serialize a legacy-wire variant for pre-decimal peers.
-        // Same payload, but BigNumber/BigNumberFloat come out as hex strings
-        // so old nodes parse them with their own BigNumber(const string&).
+        // Serialize the payload in the current wire format (see WireFormat::wire()).
+        // Forced via an explicit scope so it never depends on whatever ambient
+        // scope a receive handler may have left active on this thread.
+        std::string data_serialized;
+        {
+            WireFormat::Scope scope(WireFormat::wire());
+            data_serialized = MessagePack::serialize(data);
+        }
+        // A legacy-wire (hex) variant for pre-decimal peers. While wire() is
+        // Legacy this is byte-identical to the above; once wire() flips to
+        // Canonical, this stays hex so send_message_connections can still pick
+        // it per-peer for any remaining legacy links.
         std::string data_serialized_legacy;
         {
             WireFormat::Scope scope(WireFormat::Mode::Legacy);

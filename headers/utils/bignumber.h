@@ -135,11 +135,9 @@ public:
 
     void msgpack_unpack(msgpack::object const &msgpack_o) {
         std::string num = msgpack_o.as<std::string>();
-        if (is_hex_string(num)) {
-            *this = from_hex(num);
-        } else {
-            *this = BigNumber(num);
-        }
+        // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
+        // never the content. Legacy peers send hex; canonical peers send decimal.
+        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumber(num);
     }
 };
 

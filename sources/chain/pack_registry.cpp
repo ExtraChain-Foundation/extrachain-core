@@ -260,6 +260,14 @@ std::vector<PackId> Registry::known_packs() const {
     return ids;
 }
 
+std::vector<Registry::Span> Registry::spans() const {
+    std::shared_lock  lock(meta_mutex_);
+    std::vector<Span> out;
+    out.reserve(meta_.size());
+    for (const auto &m : meta_) out.push_back(Span { .id = m.id, .first = m.first, .last = m.last });
+    return out;
+}
+
 std::optional<Registry::Range> Registry::coverage() const {
     std::shared_lock lock(meta_mutex_);
     if (meta_.empty()) return std::nullopt;

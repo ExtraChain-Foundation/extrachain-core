@@ -221,9 +221,9 @@ set(bip3x_BUILD_C_BINDINGS OFF CACHE BOOL "")
 set(bip3x_BUILD_TESTS OFF CACHE BOOL "")
 set(bip3x_USE_OPENSSL_RANDOM OFF CACHE BOOL "")
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
+add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x ${CMAKE_CURRENT_BINARY_DIR}/bip3x)
 
-target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../extrachain-3rdparty/bip3x/include)
+target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../extrachain-3rdparty/bip3x/include)
 
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets

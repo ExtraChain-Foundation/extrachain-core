@@ -115,14 +115,16 @@ private slots:
         QVERIFY(!BigNumber::is_hex_string(""));
         QVERIFY(!BigNumber::is_hex_string("-"));
 
-        // from_hex explicit
+        // from_hex explicit — hex is decoded only when asked for explicitly.
         QCOMPARE(BigNumber::from_hex("ff").to_string(), std::string("255"));
         QCOMPARE(BigNumber::from_hex("100").to_string(), std::string("256"));
         QCOMPARE(BigNumber::from_hex("-ff").to_string(), std::string("-255"));
 
-        // Constructor auto-detects hex
-        QCOMPARE(BigNumber("ff").to_string(), std::string("255"));
-        QCOMPARE(BigNumber("100").to_string(), std::string("100")); // no hex letters -> decimal
+        // The string constructor is strict decimal — it never sniffs hex (that
+        // was ambiguous: "100" is both a decimal and a hex value). So an all-digit
+        // string is always decimal, and "100" stays 100.
+        QCOMPARE(BigNumber("100").to_string(), std::string("100"));
+        QCOMPARE(BigNumber("255").to_string(), std::string("255"));
     }
 
     void bigNumberHexWriteRead() {
