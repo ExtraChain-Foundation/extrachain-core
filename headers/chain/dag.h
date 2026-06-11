@@ -474,8 +474,9 @@ public:
      *
      * Updates the persistent storage with the current first section,
      * last section, and last cached section IDs.
+     * @param allow_lower_first Permit a lower `first` than on disk (e.g. installing cold packs extends history backwards).
      */
-    void update_range();
+    void update_range(bool allow_lower_first = false);
 
     /**
      * @brief Search for a transaction by its hash

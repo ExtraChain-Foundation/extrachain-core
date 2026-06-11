@@ -1302,7 +1302,7 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
     emit node->dagTxSended(transaction.section(), transaction.hash());
 }
 
-void Dag::update_range() {
+void Dag::update_range(bool allow_lower_first) {
     try {
         std::lock_guard<std::mutex> lock(range_mutex_);
 
@@ -1316,7 +1316,7 @@ void Dag::update_range() {
 
             if (existing.has_value()) {
                 auto existing_first = SectionId::create(existing->first);
-                if (existing_first.has_value() && existing_first.value() != SectionId(-1)
+                if (!allow_lower_first && existing_first.has_value() && existing_first.value() != SectionId(-1)
                     && new_first != SectionId(-1) && new_first < existing_first.value()) {
                     eLog("[Dag] update_range blocked: new first {} < existing {}", new_first, existing_first.value());
                     return;
@@ -2405,9 +2405,10 @@ void Dag::network_pack_request(const PackRequest &req, const Responder &responde
 }
 
 void Dag::start_pack_sync(const Responder &responder) {
-    // Ask the same peer the section sync flow already chose for the pack list.
+    // Fresh message id: the core dedups Requests by message_id, so reusing the shared sync responder's id gets dropped.
     node->network()->send_message(PackList {}, MessageType::DagPackList,
-                                  SendMode::Focused, MessageStatus::Request, responder);
+                                  SendMode::Focused, MessageStatus::Request,
+                                  responder.with_new_message_id());
 }
 
 void Dag::network_pack_list_response(const PackList &list, const Responder &responder) {
@@ -2440,11 +2441,13 @@ void Dag::issue_next_pack_request(const Responder &responder) {
     Pack::PackId next_id;
     bool has_next = false;
     bool rebuild_index = false;
+    bool finished = false;
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         if (pack_sync_in_flight_) return;
         if (pack_sync_pending_.empty()) {
             eLog("[Dag] Pack sync: all packs received");
+            finished = true;
             if (pack_sync_installed_any_ && chain_index_enabled_ && chain_index_) {
                 pack_sync_installed_any_ = false;
                 rebuild_index = true;
@@ -2457,6 +2460,18 @@ void Dag::issue_next_pack_request(const Responder &responder) {
         }
     }
 
+    if (finished) {
+        // Installed packs extend history backwards, so pull first_saved_section_ down to their coverage.
+        if (pack_registry_) {
+            if (auto cov = pack_registry_->coverage(); cov.has_value()) {
+                if (first_saved_section_ == SectionId(-1) || cov->first < first_saved_section_) {
+                    first_saved_section_ = cov->first;
+                }
+            }
+        }
+        update_range(/*allow_lower_first*/ true);
+    }
+
     if (rebuild_index) {
         // Heavy disk + decompress + SQLite work — never on the network thread.
         auto *index = chain_index_.get();
@@ -2465,9 +2480,11 @@ void Dag::issue_next_pack_request(const Responder &responder) {
     }
     if (!has_next) return;
 
+    // Fresh message id per pack request: the core dedups Requests by message_id, dropping reuses of the sync responder's id.
     PackRequest req { .pack_id = next_id };
     node->network()->send_message(req, MessageType::DagPackRequest,
-                                  SendMode::Focused, MessageStatus::Request, responder);
+                                  SendMode::Focused, MessageStatus::Request,
+                                  responder.with_new_message_id());
 }
 
 void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
