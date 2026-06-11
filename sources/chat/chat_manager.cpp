@@ -52,7 +52,8 @@ ChatManager::ChatManager(ExtraChainNode* node)
 
     QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
         for (const auto& chat : std::as_const(chats_)) {
-            if (chat.owner_id != owner_id && chat.file_id != dir_row.file_id) {
+            if ((chat.owner_id != owner_id && chat.chat.peer_id != owner_id)
+                || chat.file_id != dir_row.file_id) {
                 continue;
             }
 
@@ -300,7 +301,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     invite(chat.value());
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
-    auto custom = ThothCustom { .ignored = { chat->owner_id } };
+    auto custom = ThothCustom { .ignored = { current_chat_actor_id() } };
     node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
 
     return chat;
