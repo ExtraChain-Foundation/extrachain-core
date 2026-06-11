@@ -44,7 +44,12 @@ Dag::Dag(ExtraChainNode *node)
     }
 
     if (!settings.dag_mode.has_value()) {
-#ifdef IS_APP_UI_CLIENT
+#if defined(IS_APP_UI_CLIENT) || defined(RACCOON_OPENWRT)
+        // OpenWrt routers (small CPU + small disk overlay) default to
+        // Light so a fresh device doesn't immediately start downloading
+        // 12M sections of Full DAG data.  User opts into mining via
+        // the wallet page; the choice persists in ExtraChainSettings
+        // so it survives node restarts (procd respawn, OTA, reboot).
         set_mode(DagMode::Light);
 #else
         set_mode(DagMode::Full);
