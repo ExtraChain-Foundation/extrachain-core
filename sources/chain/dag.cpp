@@ -1824,6 +1824,19 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 set_status(DagStatus::Ready);
                 set_sync_status(DagSyncStatus::None);
                 emit node->dagSyncFinish();
+
+                // Pull the peer's prebuilt cache instead of rebuilding it locally,
+                // when the peer supports it and our cache lags the chain.
+                {
+                    auto peer_id = responder.identifiers().empty()
+                                       ? std::string()
+                                       : *responder.identifiers().begin();
+                    auto meta    = node->network()->peer_meta_for(peer_id);
+                    if (meta.has_value() && meta->supports_pack_sync()
+                        && cache_.section() < current_section_) {
+                        request_cache_snapshot(responder);
+                    }
+                }
 #endif
             }
 
@@ -2233,17 +2246,18 @@ void Dag::handle_sync_request() {
     eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        // If the chosen peer speaks the new pack-sync protocol, fetch packed
-        // history wholesale (1 round-trip per 10k sections) before falling back
-        // to per-section sync for hot tail. Legacy peers skip this branch.
+        // Pack-capable peer: fetch cold history wholesale, then file-sync only the
+        // hot tail once pack-sync finishes (see issue_next_pack_request) so the
+        // two paths never overlap. Legacy peers fall straight through to file-sync.
         auto peer_id = responder.identifiers().empty()
                            ? std::string()
                            : *responder.identifiers().begin();
         auto meta    = node->network()->peer_meta_for(peer_id);
         if (meta.has_value() && meta->supports_pack_sync()) {
             start_pack_sync(responder);
+        } else {
+            request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
         }
-        request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -2462,14 +2476,24 @@ void Dag::issue_next_pack_request(const Responder &responder) {
 
     if (finished) {
         // Installed packs extend history backwards, so pull first_saved_section_ down to their coverage.
+        SectionId tail_from = current_section_ + 1;
         if (pack_registry_) {
             if (auto cov = pack_registry_->coverage(); cov.has_value()) {
                 if (first_saved_section_ == SectionId(-1) || cov->first < first_saved_section_) {
                     first_saved_section_ = cov->first;
                 }
+                // File-sync starts past the last packed section so it never re-pulls cold history.
+                if (cov->last + 1 > tail_from) {
+                    tail_from = cov->last + 1;
+                }
             }
         }
         update_range(/*allow_lower_first*/ true);
+
+        // Cold history is in place; now pull the hot tail per-section.
+        if (mode_ == DagMode::Full && tail_from <= sync_last_index_) {
+            request_file_sections(tail_from, std::min(sync_last_index_, tail_from + SYNC_SECTIONS_BATCH), responder);
+        }
     }
 
     if (rebuild_index) {
@@ -2509,6 +2533,78 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
     }
 
     issue_next_pack_request(responder);
+}
+
+// ---- Balance-cache snapshot (peers with dag_version >= 100) ------------------
+
+void Dag::network_cache_snapshot_request(const Responder &responder) {
+    if (mode_ != DagMode::Full) return;
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
+        auto [section, balances] = cache_.read_cached_balances();
+
+        CacheSnapshot snapshot;
+        snapshot.section = section;
+        snapshot.balances.reserve(balances.size());
+        for (const auto &[key, balance] : balances) {
+            snapshot.balances.push_back(CacheBalanceRow {
+                .actor_id = key.first.to_string(),
+                .token_id = key.second.to_string(),
+                .balance  = balance.to_string(),
+            });
+        }
+
+        // Wire format for the section id field; balances are already plain strings.
+        WireFormat::Scope wire_scope(WireFormat::wire());
+        auto ser      = MessagePack::serialize(snapshot);
+        auto compress = qCompress(QByteArray::fromStdString(ser));
+        responder.send_response(compress.toStdString(), MessageType::DagCacheSnapshotData,
+                                SendMode::Focused, MessageStatus::Response);
+    });
+}
+
+void Dag::network_cache_snapshot_response(const std::string &compressed, const Responder &responder) {
+    if (mode_ != DagMode::Full) return;
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed]() {
+        auto raw = qUncompress(QByteArray::fromStdString(compressed));
+        WireFormat::Scope wire_scope(WireFormat::wire());
+        auto snapshot = MessagePack::deserialize<CacheSnapshot>(raw.toStdString());
+        if (!snapshot.has_value()) {
+            eWarning("[Dag] Cache snapshot: failed to deserialize");
+            return;
+        }
+
+        // Ignore a snapshot not ahead of our cache (peer may be mid-rebuild).
+        if (snapshot->section <= cache_.section()) {
+            eLog("[Dag] Cache snapshot {} not ahead of local {}, ignoring",
+                 snapshot->section, cache_.section());
+            return;
+        }
+
+        Balances balances;
+        for (const auto &row : snapshot->balances) {
+            auto actor_id = ActorId::create(row.actor_id);
+            auto token_id = TokenId::create(row.token_id);
+            auto balance  = BigNumberFloat::create(row.balance);
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        }
+
+        cache_.write_cached_balances(balances, snapshot->section);
+        update_range();
+        eLog("[Dag] Installed cache snapshot at section {} ({} balances)",
+             snapshot->section, balances.size());
+    });
+}
+
+void Dag::request_cache_snapshot(const Responder &responder) {
+    if (mode_ != DagMode::Full) return;
+    node->network()->send_message(true, MessageType::DagCacheSnapshotRequest,
+                                  SendMode::Focused, MessageStatus::Request,
+                                  responder.with_new_message_id());
 }
 
 // -----------------------------------------------------------------------------

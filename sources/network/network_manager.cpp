@@ -1224,13 +1224,13 @@ void NetworkManager::message_received(const std::string &message,
     // forces its own scope, so leaving this active across the switch is safe.
     WireFormat::Scope wire_scope(WireFormat::wire());
 
-    // Lifecycle gate: drop Dag network traffic (types 30..45) while the Dag is
+    // Lifecycle gate: drop Dag network traffic (types 30..47) while the Dag is
     // stopped, so handlers don't race against shutdown/migration. Enforced once
     // here at the dispatch layer instead of per-handler.
     {
         auto type_val = std::to_underlying(type);
         if (type_val >= std::to_underlying(MessageType::DagTransaction)
-            && type_val <= std::to_underlying(MessageType::DagPackData)) {
+            && type_val <= std::to_underlying(MessageType::DagCacheSnapshotData)) {
             auto *dag = node->dag();
             if (dag && !dag->is_accepting_messages()) {
                 return;
@@ -1868,6 +1868,25 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
             node->dag()->network_pack_data_response(data.value(), responder);
+        }
+        break;
+    }
+
+    case MessageType::DagCacheSnapshotRequest: {
+        if (status == MessageStatus::Request) {
+            node->dag()->network_cache_snapshot_request(responder);
+        }
+        break;
+    }
+
+    case MessageType::DagCacheSnapshotData: {
+        if (status == MessageStatus::Response) {
+            auto data = MessagePack::deserialize<std::string>(serialized);
+            if (!data.has_value()) {
+                eWarning("[NetworkManager] {} deserialization failed", type);
+                break;
+            }
+            node->dag()->network_cache_snapshot_response(data.value(), responder);
         }
         break;
     }

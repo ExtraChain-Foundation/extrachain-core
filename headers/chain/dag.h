@@ -207,6 +207,21 @@ struct PackData {
 };
 BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, bytes))
 
+// Prebuilt balance cache handed over whole so the receiver skips replaying cold
+// history. Trusted in the single-creator topology (same source as the packs).
+struct CacheBalanceRow {
+    std::string actor_id;
+    std::string token_id;
+    std::string balance;
+};
+BOOST_DESCRIBE_STRUCT(CacheBalanceRow, (), (actor_id, token_id, balance))
+
+struct CacheSnapshot {
+    SectionId                    section; // cached_section the balances are valid at
+    std::vector<CacheBalanceRow> balances;
+};
+BOOST_DESCRIBE_STRUCT(CacheSnapshot, (), (section, balances))
+
 /**
  * @brief Enumeration of chain synchronization states
  */
@@ -570,6 +585,14 @@ public:
     // Initiate pack-level sync against a single peer (the same one currently
     // selected by the existing sync flow). No-op for legacy peers.
     void start_pack_sync(const Responder &responder);
+
+    // Balance-cache snapshot transfer (peers with dag_version >= 100 only).
+    // Server side: hand over our prebuilt balance cache.
+    void network_cache_snapshot_request(const Responder &responder);
+    // Client side: install a received snapshot instead of rebuilding locally.
+    void network_cache_snapshot_response(const std::string &compressed, const Responder &responder);
+    // Ask the sync peer for its cache snapshot (called once file-sync completes).
+    void request_cache_snapshot(const Responder &responder);
 
     /**
      * @brief Request light mode data from the network
