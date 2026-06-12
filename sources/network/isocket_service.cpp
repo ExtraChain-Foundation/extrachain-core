@@ -94,12 +94,16 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
     dfs_mode_socket_ = handshake.dfs_mode;
 
     peer_meta_ = PeerMeta {
-        .version     = handshake.version,
-        .dag_version = handshake.dag_version,
-        .dfs_version = std::nullopt,
-        .dfs_mode    = handshake.dfs_mode,
+        .version      = handshake.version,
+        .node_version = handshake.node_version,
+        .dag_version  = handshake.dag_version,
+        .dfs_version  = std::nullopt,
+        .dfs_mode     = handshake.dfs_mode,
     };
 
+    if (peer_meta_.node_version.has_value()) {
+        eLog("[Socket] Peer node_version: {}", *peer_meta_.node_version);
+    }
     if (peer_meta_.dag_version.has_value()) {
         eLog("[Socket] Peer dag_version: {}", *peer_meta_.dag_version);
     } else {
@@ -254,7 +258,8 @@ QByteArray SocketService::generate_first_message() {
                            .is_constant  = is_constant_.load(),
                            .socket_mode  = mode_,
                            .dfs_mode     = node->dfs()->mode(),
-                           .dag_version  = CURRENT_DAG_VERSION };
+                           .dag_version  = CURRENT_DAG_VERSION,
+                           .node_version = extrachain_node_version };
 
     {
         auto connections_locked = *node->network()->connections();

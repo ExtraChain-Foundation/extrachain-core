@@ -33,18 +33,19 @@
  * handlers should never branch on raw version numbers directly.
  */
 struct PeerMeta {
-    std::string        version;       // wire protocol version string, e.g. "0.25.0"
-    std::optional<int> dag_version;   // storage schema; nullopt = pre-versioning peer
-    std::optional<int> dfs_version;   // placeholder, filled once DFS adds the field
-    DfsMode            dfs_mode = DfsMode::Full;
+    std::string                version;      // frozen 0.25.0 protocol-compat anchor
+    std::optional<std::string> node_version; // real release version, e.g. "0.26.0"; nullopt = pre-0.26 peer
+    std::optional<int>         dag_version;  // storage schema; nullopt = pre-versioning peer
+    std::optional<int>         dfs_version;  // placeholder, filled once DFS adds the field
+    DfsMode                    dfs_mode = DfsMode::Full;
     // socket_mode lives on SocketService itself — not duplicated here to avoid
     // dragging the Qt-heavy isocket_service.h into every handler that reads PeerMeta.
 
     // Capability predicates — defined next to the data so handlers don't
     // encode version arithmetic in ad-hoc checks.
 
-    // Peer runs a pre-decimal, pre-pack dag. Send numeric fields in legacy hex
-    // form and expect legacy message layouts in return.
+    // TEMPORARY 0.26 legacy compat: pre-0.26 peer (no pack-sync/snapshots, hex
+    // wire) drives the file-sync fallback. Always false once all nodes >= 0.26.
     bool is_legacy_dag() const {
         return !dag_version.has_value() || *dag_version < CURRENT_DAG_VERSION;
     }
@@ -52,5 +53,10 @@ struct PeerMeta {
     // Peer understands whole-pack transfer messages (Phase 13).
     bool supports_pack_sync() const {
         return dag_version.value_or(0) >= CURRENT_DAG_VERSION;
+    }
+
+    // Peer advertised a real release version (>= 0.26); pre-0.26 peers omit it.
+    bool is_new_node() const {
+        return node_version.has_value();
     }
 };

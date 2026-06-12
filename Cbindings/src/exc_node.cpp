@@ -147,8 +147,8 @@ EXC_API bool exc_is_initialized(void) {
 
 EXC_API const char* exc_version(void) {
     if (!s_version) {
-        /* extrachain_version is a static std::string in extrachain_version.h */
-        s_version = extrachain_version.c_str();
+        /* Real release version; extrachain_version is only a handshake compat anchor */
+        s_version = extrachain_node_version.c_str();
     }
     return s_version;
 }

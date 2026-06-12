@@ -954,7 +954,7 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
 
     const auto& current_profile = account_controller_->current_profile();
 
-    auto imported_user = ImportedUser { .version       = extrachain_version,
+    auto imported_user = ImportedUser { .version       = extrachain_node_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
                                         .main          = current_profile.main()->get().id(),

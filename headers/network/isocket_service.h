@@ -59,7 +59,7 @@ public:
 
     struct HandshakeMessage {
         std::string          network_id;
-        std::string          version;
+        std::string          version; // frozen 0.25.0 protocol-compat anchor for the strict version check
         std::string          identifier;
         int                  socket_type = 0; // compability
         std::string          your_ip;
@@ -71,7 +71,10 @@ public:
         // Storage schema version. Optional so legacy peers (who don't send it)
         // parse cleanly — JSON serialization drops absent optionals entirely.
         // Present + >= 100 = peer understands decimal wire format and pack sync.
-        std::optional<int>   dag_version;
+        std::optional<int>         dag_version;
+        // Real release version (e.g. "0.26.0"). Optional so pre-0.26 peers parse
+        // cleanly; not version-checked, only a signal that the peer is >= 0.26.
+        std::optional<std::string> node_version;
     };
 
     enum class Priority {
@@ -176,7 +179,7 @@ protected:
 BOOST_DESCRIBE_STRUCT(
     SocketService::HandshakeMessage,
     (),
-    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode, dag_version))
+    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode, dag_version, node_version))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 
