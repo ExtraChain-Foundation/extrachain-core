@@ -41,7 +41,7 @@ enum class Mode {
 Mode get_mode();
 void set_mode(Mode m);
 
-// The format to use on the network wire during the legacy-interop transition.
+// TEMPORARY 0.26 legacy compat: hex on the wire until all nodes are >= 0.26.
 //
 // While ANY pre-decimal peer may still be on the network we must speak hex on
 // the wire, because a broadcast/relayed message is a single signed blob that

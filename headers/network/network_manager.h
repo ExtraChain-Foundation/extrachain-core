@@ -453,10 +453,8 @@ public:
             WireFormat::Scope scope(WireFormat::wire());
             data_serialized = MessagePack::serialize(data);
         }
-        // A legacy-wire (hex) variant for pre-decimal peers. While wire() is
-        // Legacy this is byte-identical to the above; once wire() flips to
-        // Canonical, this stays hex so send_message_connections can still pick
-        // it per-peer for any remaining legacy links.
+        // TEMPORARY 0.26 legacy compat: hex variant for pre-0.26 peers, picked
+        // per-peer by send_message_connections. Drop with the wire() shim.
         std::string data_serialized_legacy;
         {
             WireFormat::Scope scope(WireFormat::Mode::Legacy);
