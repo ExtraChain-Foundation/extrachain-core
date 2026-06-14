@@ -1814,13 +1814,20 @@ void NetworkManager::message_received(const std::string &message,
                 break;
             }
 
-            auto first = BigNumber::create(range->first);
-            auto last  = BigNumber::create(range->last);
-            if (!first.has_value() || !last.has_value()) {
-                break;
+            // SectionRange ids are wire-format strings (hex during the legacy
+            // transition), matching how request_file_sections encodes them.
+            bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
+            if (wire_hex) {
+                node->dag()->network_request_file_sections(
+                    BigNumber::from_hex(range->first), BigNumber::from_hex(range->last), responder);
+            } else {
+                auto first = BigNumber::create(range->first);
+                auto last  = BigNumber::create(range->last);
+                if (!first.has_value() || !last.has_value()) {
+                    break;
+                }
+                node->dag()->network_request_file_sections(first.value(), last.value(), responder);
             }
-
-            node->dag()->network_request_file_sections(first.value(), last.value(), responder);
         } else if (status == MessageStatus::Response) {
             auto data = MessagePack::deserialize<std::string>(serialized);
             if (!data.has_value()) {

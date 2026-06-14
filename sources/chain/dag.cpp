@@ -1708,30 +1708,38 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         return;
     }
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder]() {
+    // Pick the section file format the peer stores on disk: legacy peers expect
+    // hex-serialized sections, post-0.26 peers decimal. A legacy peer has no
+    // PeerMeta entry or advertises a pre-0.26 dag, so default to hex when unknown.
+    auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta    = node->network()->peer_meta_for(peer_id);
+    bool peer_legacy = !meta.has_value() || meta->is_legacy_dag();
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder, peer_legacy]() {
         std::vector<SectionFileData> sections;
 
         for (SectionId i = from; i <= to; i++) {
-            auto p    = this->file_path(i);
-            auto path = FsPath::create(p);
-            if (!path.has_value() || !path->exists()) {
+            // read_section falls back to packs, so cold (packed) history is served
+            // to file-sync peers that can't speak pack-sync. file_bytes is the
+            // peer's on-disk section format: legacy stores hex, post-0.26 decimal.
+            auto section = this->read_section(i);
+            if (!section.has_value()) {
                 continue;
             }
 
-            auto content = Utils::read_file_content(path.value());
-            if (!content.has_value()) {
-                continue;
-            }
-
-            auto &bytes = content.value();
+            WireFormat::Scope disk_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
             sections.push_back(SectionFileData {
                 .section_id = i,
-                .file_bytes = std::string(bytes.begin(), bytes.end())
+                .file_bytes = Json::serialize(section.value())
             });
         }
 
         auto file_sync = FileSectionsSync { .to = to, .sections = sections, .last_section = current_section_ };
 
+        // The message envelope (section ids in SectionFileData/FileSectionsSync)
+        // travels in the wire format, symmetric with the request and response
+        // decode, independent of the peer's on-disk file_bytes format above.
+        WireFormat::Scope wire_scope(WireFormat::wire());
         auto ser      = MessagePack::serialize(file_sync);
         auto compress = qCompress(QByteArray::fromStdString(ser));
         responder.send_response(compress.toStdString(),
@@ -1744,11 +1752,21 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
     emit node->dagTimerStop();
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
+    // A legacy server sends section file_bytes in hex; our disk is canonical
+    // (decimal), so such sections need re-serializing before they're written.
+    auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta    = node->network()->peer_meta_for(peer_id);
+    bool peer_legacy = meta.has_value() && meta->is_legacy_dag();
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder, peer_legacy]() {
         if (mode_ == DagMode::Light) {
             eLog("[Dag] Skip file sections response: light mode");
             return;
         }
+
+        // Runs on a worker thread, so the dispatch-layer wire scope doesn't apply
+        // here — set it explicitly so section ids decode in the wire format.
+        WireFormat::Scope wire_scope(WireFormat::wire());
 
         const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
@@ -1775,7 +1793,19 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 continue;
             }
 
-            Utils::write_file_content(path.value(), section_data.file_bytes);
+            std::string disk_bytes = section_data.file_bytes;
+            if (peer_legacy) {
+                // Normalize hex section bytes from a legacy peer into our canonical
+                // (decimal) on-disk format, so later read_section parses them.
+                WireFormat::Scope legacy_scope(WireFormat::Mode::Legacy);
+                auto              section = Json::deserialize<Section>(section_data.file_bytes);
+                if (section.has_value()) {
+                    WireFormat::Scope canon_scope(WireFormat::Mode::Canonical);
+                    disk_bytes = Json::serialize(section.value());
+                }
+            }
+
+            Utils::write_file_content(path.value(), disk_bytes);
         }
 
         if (mode_ == DagMode::Light) {
@@ -1862,7 +1892,14 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
         return;
     }
 
-    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
+    // SectionRange carries ids as bare strings outside the BigNumber wire path,
+    // so encode them in the wire format (hex during the legacy transition) to
+    // match what legacy peers send and parse. Decode mirrors this in the handler.
+    bool wire_hex      = WireFormat::wire() == WireFormat::Mode::Legacy;
+    auto encode        = [wire_hex](const SectionId &s) {
+        return wire_hex ? s.to_hex_string() : s.to_string();
+    };
+    auto range         = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
