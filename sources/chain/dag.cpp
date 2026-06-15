@@ -79,6 +79,10 @@ Dag::Dag(ExtraChainNode *node)
         eLog("[Dag] ChainIndex disabled");
     }
 
+    // Control index is always available — control lookups are on the sync hot
+    // path regardless of ChainIndex mode.
+    control_index_ = std::make_unique<ControlIndex>(node);
+
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
     if (file.open(QFile::ReadOnly)) {
         auto last_id_content = file.readAll();
@@ -711,6 +715,16 @@ std::optional<bool> Dag::write_section(const Section &section) {
         if (status_ != DagStatus::Sync && chain_index_enabled_ && chain_index_) {
             chain_index_->on_section_written(section);
         }
+        // Keep the control index in step with the section's control field. Only
+        // control-bearing sections touch it, so this is cheap even during sync,
+        // where control hashes are read back for verification.
+        if (control_index_) {
+            if (section.control.has_value()) {
+                control_index_->put(section.id, section.control.value());
+            } else {
+                control_index_->erase(section.id);
+            }
+        }
         // try_pack_hot() is a no-op during sync (it checks status_ itself).
         try_pack_hot();
         return true;
@@ -770,6 +784,7 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         return std::nullopt;
     }
 
+    if (control_index_) control_index_->put(section_id, hash);
     return WriteResult::Write;
 }
 
@@ -793,6 +808,7 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
         return std::nullopt;
     }
 
+    if (control_index_) control_index_->erase(section_id);
     return WriteResult::Write;
 }
 
@@ -887,6 +903,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Invalidate control if section had one - transactions changed
     if (section->control.has_value()) {
         section->control = std::nullopt;
+        if (control_index_) control_index_->erase(section->id);
     }
 
     // Check if cache needs updating
@@ -975,6 +992,7 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         // Invalidate control if section changed (new transactions added)
         if (changed && section.control.has_value()) {
             section.control = std::nullopt;
+            if (control_index_) control_index_->erase(section.id);
         }
 
         set_current_section(section_id);
@@ -2420,6 +2438,7 @@ void Dag::clear_dag() {
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
     if (pack_registry_) pack_registry_->rescan();
     if (chain_index_enabled_ && chain_index_) chain_index_->clear();
+    if (control_index_) control_index_->clear();
 
     eLog("[Dag] Cleared");
 #endif
@@ -3178,6 +3197,21 @@ BigNumberFloat Dag::sum_all_rewards() {
     return total_rewards;
 }
 
+void Dag::ensure_control_index() {
+    if (control_index_ready_.load()) return;
+    if (!control_index_) {
+        control_index_ready_.store(true);
+        return;
+    }
+    // First control lookup on a cold index: populate it once from disk. Guard
+    // against re-entry while one caller is building (others fall back to scan).
+    bool expected = false;
+    if (!control_index_ready_.compare_exchange_strong(expected, true)) return;
+    if (current_section_ > SectionId(0) && control_index_->row_count() == 0) {
+        control_index_->rebuild_from_dag();
+    }
+}
+
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
     // `skips`: sections scanned since we last saw a control-aligned slot.
     // `missing_aligned`: control-aligned slots with no section file at all.
@@ -3186,6 +3220,25 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
     // consensus behaviour, but keep the variable as a guard-rail for future tuning.
     int skips           = 0;
     int missing_aligned = 0;
+
+    // Lazy one-time population: the index may be cold (fresh file, or built before
+    // the chain range was loaded). Build it on first use so the fast path works
+    // regardless of init order. Cheap once warm (flag short-circuits).
+    ensure_control_index();
+
+    // Fast path: the control index answers the common "highest control <= from"
+    // query in O(1) instead of walking and decompressing section frames. Only
+    // for the normal (skip-limited) call; disable_break has special section-0
+    // semantics handled by the scan below. The result must be within the kept
+    // range; otherwise fall through to the authoritative scan.
+    if (!disable_break && control_index_) {
+        SectionId top = from < SectionId(0) ? current_section_ : from;
+        if (auto hit = control_index_->last_at_or_below(top); hit.has_value()) {
+            if (hit->first >= first_saved_section_ && hit->first <= top) {
+                return DagControl { .section_id = hit->first, .control = hit->second };
+            }
+        }
+    }
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
@@ -3233,6 +3286,15 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
 }
 
 std::optional<DagControl> Dag::read_control(const SectionId &section_id) {
+    ensure_control_index();
+    // Fast path: the control index answers without reading/decompressing a section.
+    if (control_index_) {
+        if (auto h = control_index_->get(section_id); h.has_value()) {
+            return DagControl { .section_id = section_id, .control = h.value() };
+        }
+    }
+
+    // Fallback: read from the section (index cold/missing). Backfill the index.
     auto section = read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
@@ -3242,6 +3304,7 @@ std::optional<DagControl> Dag::read_control(const SectionId &section_id) {
         return std::nullopt;
     }
 
+    if (control_index_) control_index_->put(section_id, section->control.value());
     return DagControl { .section_id = section_id, .control = section->control.value() };
 }
 

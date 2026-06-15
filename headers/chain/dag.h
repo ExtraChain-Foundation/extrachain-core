@@ -31,6 +31,7 @@
 #include "chain/transaction_cache.h"
 #include "chain/dag_cache.h"
 #include "chain/chain_index.h"
+#include "chain/control_index.h"
 #include "chain/pack_registry.h"
 
 #include "3rdparty/rustex.h"
@@ -709,6 +710,18 @@ private:
     // Full mode: every tx. Light mode: only tx involving local wallets.
     std::unique_ptr<ChainIndex> chain_index_;
     bool                        chain_index_enabled_ = false;
+
+    // Read-side accelerator for control hashes (section_id -> hash). Always on:
+    // control lookups are on the sync hot path. Rebuildable, not consensus.
+    std::unique_ptr<ControlIndex> control_index_;
+    // Set once the control index has been populated for the loaded chain, so the
+    // one-time lazy rebuild (first control lookup on a cold index) runs only once.
+    std::atomic_bool control_index_ready_ = false;
+
+    // Populate the control index from disk on first use if it is cold. Idempotent
+    // and cheap once warm. Called from control lookups so it is independent of
+    // construction/load order.
+    void ensure_control_index();
 
     // Lifecycle flags:
     //   started_ — set by start(), cleared by stop(). Guards double-start.
