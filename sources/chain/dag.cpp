@@ -28,6 +28,10 @@
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
 static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 
+// Pack files are shipped in fixed-size chunks so neither side holds a whole pack
+// in memory and large packs stay well under the socket buffer limit.
+static constexpr std::size_t PACK_SYNC_CHUNK = 256 * 1024;
+
 // Upper bound on live transactions parked in the pending set while sync runs.
 // They are replayed once sync completes; the cap stops a flood from growing
 // memory without bound during a long sync.
@@ -2444,13 +2448,24 @@ void Dag::network_pack_list_request(const Responder &responder) {
 void Dag::network_pack_request(const PackRequest &req, const Responder &responder) {
     if (!pack_registry_) return;
 
-    auto bytes = pack_registry_->read_raw(req.pack_id);
-    if (!bytes.has_value()) {
+    auto total = pack_registry_->pack_byte_size(req.pack_id);
+    if (!total.has_value()) {
         eWarning("[Dag] Pack {} requested but missing locally", req.pack_id);
         return; // peer will time out / move on
     }
 
-    PackData out { .pack_id = req.pack_id, .bytes = std::move(*bytes) };
+    auto chunk = pack_registry_->read_chunk(req.pack_id, req.offset, PACK_SYNC_CHUNK);
+    if (!chunk.has_value()) {
+        eWarning("[Dag] Pack {} chunk at {} read failed", req.pack_id, req.offset);
+        return;
+    }
+
+    PackData out {
+        .pack_id    = req.pack_id,
+        .offset     = req.offset,
+        .total_size = *total,
+        .bytes      = std::move(*chunk),
+    };
     node->network()->send_message(out, MessageType::DagPackData,
                                   SendMode::Focused, MessageStatus::Response, responder);
 }
@@ -2507,6 +2522,8 @@ void Dag::issue_next_pack_request(const Responder &responder) {
             next_id = pack_sync_pending_.front();
             pack_sync_pending_.erase(pack_sync_pending_.begin());
             pack_sync_in_flight_ = true;
+            pack_sync_current_id_ = next_id;
+            pack_sync_offset_     = 0; // start the new pack from its first chunk
             has_next = true;
         }
     }
@@ -2542,7 +2559,7 @@ void Dag::issue_next_pack_request(const Responder &responder) {
     if (!has_next) return;
 
     // Fresh message id per pack request: the core dedups Requests by message_id, dropping reuses of the sync responder's id.
-    PackRequest req { .pack_id = next_id };
+    PackRequest req { .pack_id = next_id, .offset = 0 };
     node->network()->send_message(req, MessageType::DagPackRequest,
                                   SendMode::Focused, MessageStatus::Request,
                                   responder.with_new_message_id());
@@ -2551,23 +2568,42 @@ void Dag::issue_next_pack_request(const Responder &responder) {
 void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
     if (!pack_registry_) return;
 
-    {
-        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-        pack_sync_in_flight_ = false;
-    }
+    std::uint64_t next_offset = data.offset + data.bytes.size();
+    bool          is_last     = next_offset >= data.total_size;
 
-    auto res = pack_registry_->install_raw(data.pack_id, data.bytes);
+    auto res = pack_registry_->install_chunk(data.pack_id, data.offset, data.bytes, is_last);
     if (!res.has_value()) {
-        eWarning("[Dag] Pack {} install failed: error {} (size {})",
-                 data.pack_id, static_cast<int>(res.error()), data.bytes.size());
-        // Skip this pack and move on; peer-switching is a TODO.
-    } else {
+        eWarning("[Dag] Pack {} chunk at {} install failed: error {}",
+                 data.pack_id, data.offset, static_cast<int>(res.error()));
+        // Abort this pack; clear in_flight so the next pack can proceed.
         {
             std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-            pack_sync_installed_any_ = true;
+            pack_sync_in_flight_ = false;
         }
-        eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.bytes.size());
+        issue_next_pack_request(responder);
+        return;
     }
+
+    if (!is_last) {
+        // Request the next chunk of the same pack; memory stays bounded.
+        {
+            std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+            pack_sync_offset_ = next_offset;
+        }
+        PackRequest req { .pack_id = data.pack_id, .offset = next_offset };
+        node->network()->send_message(req, MessageType::DagPackRequest,
+                                      SendMode::Focused, MessageStatus::Request,
+                                      responder.with_new_message_id());
+        return;
+    }
+
+    // Pack fully received and installed.
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_in_flight_     = false;
+        pack_sync_installed_any_ = true;
+    }
+    eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.total_size);
 
     issue_next_pack_request(responder);
 }

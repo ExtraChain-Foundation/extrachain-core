@@ -198,14 +198,17 @@ BOOST_DESCRIBE_STRUCT(PackList, (), (packs))
 
 struct PackRequest {
     std::uint64_t pack_id;
+    std::uint64_t offset = 0; // byte offset of the requested chunk
 };
-BOOST_DESCRIBE_STRUCT(PackRequest, (), (pack_id))
+BOOST_DESCRIBE_STRUCT(PackRequest, (), (pack_id, offset))
 
 struct PackData {
     std::uint64_t pack_id;
-    std::string   bytes; // raw .pack file content
+    std::uint64_t offset     = 0; // byte offset of this chunk in the pack
+    std::uint64_t total_size = 0; // full pack size, so the receiver knows the end
+    std::string   bytes;          // one chunk of the .pack file
 };
-BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, bytes))
+BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, offset, total_size, bytes))
 
 // Prebuilt balance cache handed over whole so the receiver skips replaying cold
 // history. Trusted in the single-creator topology (same source as the packs).
@@ -729,6 +732,10 @@ private:
     std::vector<Pack::PackId> pack_sync_pending_;
     bool                      pack_sync_in_flight_ = false;
     bool                      pack_sync_installed_any_ = false;
+    // Chunked transfer of the pack currently being pulled: which pack and the
+    // next byte offset to request, so memory stays bounded to one chunk.
+    Pack::PackId              pack_sync_current_id_ = 0;
+    std::uint64_t             pack_sync_offset_     = 0;
 
     // Pull next pack from pack_sync_pending_ and send DagPackRequest.
     // Called after each pack is received (or after PackList arrives).

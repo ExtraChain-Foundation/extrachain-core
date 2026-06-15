@@ -299,8 +299,7 @@ std::optional<std::string> Registry::read_raw(PackId id) const {
 std::expected<void, Error> Registry::install_raw(PackId id, std::string_view bytes) {
     if (bytes.empty()) return std::unexpected(Error::EmptyInput);
 
-    auto target = pack_path(id);
-    auto tmp    = target;
+    auto tmp = pack_path(id);
     tmp += ".incoming";
 
     {
@@ -310,6 +309,10 @@ std::expected<void, Error> Registry::install_raw(PackId id, std::string_view byt
         if (!f) return std::unexpected(Error::WriteFailed);
     }
 
+    return finalize_incoming(id, tmp);
+}
+
+std::expected<void, Error> Registry::finalize_incoming(PackId id, const std::filesystem::path &tmp) {
     // Validate by opening; reject corrupt payloads before swapping in.
     auto check = Reader::open(tmp);
     if (!check.has_value()) {
@@ -334,7 +337,7 @@ std::expected<void, Error> Registry::install_raw(PackId id, std::string_view byt
     }
 
     std::error_code ec;
-    std::filesystem::rename(tmp, target, ec);
+    std::filesystem::rename(tmp, pack_path(id), ec);
     if (ec) {
         std::filesystem::remove(tmp, ec);
         return std::unexpected(Error::WriteFailed);
@@ -350,6 +353,51 @@ std::expected<void, Error> Registry::install_raw(PackId id, std::string_view byt
                   [](const PackMeta &a, const PackMeta &b) { return a.first < b.first; });
     }
     return {};
+}
+
+std::optional<std::uint64_t> Registry::pack_byte_size(PackId id) const {
+    std::error_code ec;
+    auto size = std::filesystem::file_size(pack_path(id), ec);
+    if (ec) return std::nullopt;
+    return size;
+}
+
+std::optional<std::string> Registry::read_chunk(PackId id, std::uint64_t offset, std::size_t len) const {
+    std::ifstream f(pack_path(id), std::ios::binary);
+    if (!f) return std::nullopt;
+    f.seekg(static_cast<std::streamoff>(offset));
+    if (!f) return std::nullopt;
+    std::string out;
+    out.resize(len);
+    f.read(out.data(), static_cast<std::streamsize>(len));
+    out.resize(static_cast<std::size_t>(f.gcount())); // short read at EOF is fine
+    return out;
+}
+
+std::expected<void, Error> Registry::install_chunk(PackId id, std::uint64_t offset, std::string_view bytes, bool is_last) {
+    auto tmp = pack_path(id);
+    tmp += ".incoming";
+
+    // First chunk (offset 0) truncates any stale partial; later chunks append at
+    // their offset. Memory stays bounded to one chunk — nothing is accumulated.
+    std::ios::openmode mode = std::ios::binary | std::ios::in | std::ios::out;
+    if (offset == 0) mode = std::ios::binary | std::ios::out | std::ios::trunc;
+
+    {
+        std::fstream f(tmp, mode);
+        if (!f && offset == 0) return std::unexpected(Error::WriteFailed);
+        if (!f) {
+            // file must already exist for a non-zero offset
+            return std::unexpected(Error::WriteFailed);
+        }
+        f.seekp(static_cast<std::streamoff>(offset));
+        if (!f) return std::unexpected(Error::WriteFailed);
+        f.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+        if (!f) return std::unexpected(Error::WriteFailed);
+    }
+
+    if (!is_last) return {};
+    return finalize_incoming(id, tmp);
 }
 
 } // namespace Pack

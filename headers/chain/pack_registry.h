@@ -101,6 +101,19 @@ public:
     // Existing pack with same id is overwritten.
     std::expected<void, Error> install_raw(PackId id, std::string_view bytes);
 
+    // Byte size of a pack file on disk, or nullopt if unknown/unreadable.
+    std::optional<std::uint64_t> pack_byte_size(PackId id) const;
+
+    // Read a slice of a pack file [offset, offset+len) without loading the whole
+    // file — keeps pack sync memory bounded to one chunk. Returns the bytes read
+    // (may be shorter than len at EOF), or nullopt on error.
+    std::optional<std::string> read_chunk(PackId id, std::uint64_t offset, std::size_t len) const;
+
+    // Streaming install: append a received chunk to the pack's .incoming file at
+    // offset. When is_last is set, the completed file is validated and atomically
+    // swapped in (same checks as install_raw). Keeps memory bounded to one chunk.
+    std::expected<void, Error> install_chunk(PackId id, std::uint64_t offset, std::string_view bytes, bool is_last);
+
 private:
     struct PackMeta {
         PackId    id;
@@ -126,6 +139,10 @@ private:
     void    evict_if_needed_locked();
 
     std::filesystem::path pack_path(PackId id) const;
+
+    // Validate a completed .incoming file for id and atomically swap it into
+    // place, updating meta_. Removes the temp file on any failure.
+    std::expected<void, Error> finalize_incoming(PackId id, const std::filesystem::path &tmp);
 
     static std::optional<PackId> parse_pack_filename(const std::filesystem::path &p);
 };
