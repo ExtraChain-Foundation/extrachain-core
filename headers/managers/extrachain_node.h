@@ -24,6 +24,8 @@
 #include <expected>
 #include <atomic>
 
+class QThread;
+
 #include <QCoreApplication>
 #include <QMap>
 #include <QObject>
