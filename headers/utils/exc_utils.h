@@ -624,6 +624,11 @@ namespace Utils {
     EXTRACHAIN_EXPORT std::string calculate_hash(const std::string &data,
                                                  HashAlgorithm      hash_algorithm = HashAlgorithm::Blake3);
 
+    // Hash a raw byte range without materializing a std::string first (used on
+    // the pack read path, where the buffer is large and copying it is wasteful).
+    EXTRACHAIN_EXPORT std::string calculate_hash_bytes(const char *data, std::size_t size,
+                                                       HashAlgorithm hash_algorithm = HashAlgorithm::Blake3);
+
     namespace detail {
         template <typename T>
         void update_hasher(blake3_hasher &hasher, const T &value) {

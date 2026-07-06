@@ -118,6 +118,10 @@ private:
     std::uint64_t              timestamp_;  ///< Creation timestamp
     std::set<std::string>      prev_hashs_; ///< Previous transaction hashes
 
+    // Shared preimage for calculate_hash()/calculate_hash_hex(); hex=true encodes
+    // section/amount in the legacy hex form. Single source so the two can't desync.
+    std::string hash_preimage(bool hex) const;
+
 public:
     /**
      * @brief Default constructor - creates empty transaction

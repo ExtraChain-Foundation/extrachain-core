@@ -58,12 +58,12 @@
     #include "preconfig.h"
 #endif
 
-std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
+std::string Utils::calculate_hash_bytes(const char *data, std::size_t size, HashAlgorithm hash_algorithm) {
     switch (hash_algorithm) {
     case HashAlgorithm::Blake3: {
         blake3_hasher hasher;
         blake3_hasher_init(&hasher);
-        blake3_hasher_update(&hasher, data.data(), data.size());
+        blake3_hasher_update(&hasher, data, size);
 
         uint8_t hash[BLAKE3_OUT_LEN];
         blake3_hasher_finalize(&hasher, hash, BLAKE3_OUT_LEN);
@@ -73,6 +73,10 @@ std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_al
     default:
         eFatal("Unknown hash algorithm");
     }
+}
+
+std::string Utils::calculate_hash(const std::string &data, HashAlgorithm hash_algorithm) {
+    return calculate_hash_bytes(data.data(), data.size(), hash_algorithm);
 }
 
 // SERIALIZATION //

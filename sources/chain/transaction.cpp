@@ -93,33 +93,31 @@ void Transaction::set_token(const ActorId &value) {
     token_ = value;
 }
 
-std::string Transaction::calculate_hash() const {
+std::string Transaction::hash_preimage(bool hex) const {
+    // Canonical (decimal) and legacy (hex) preimages differ only in how section
+    // and amount are encoded; everything else must stay identical so that a
+    // change here can't desync the two hashes. hex form = legacy peer compat.
+    // TODO: + amount.size() meta.size() + prev_hashs_.size(); meta max 255 in prove + section size?
     auto hashData =
-        section_.to_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-        + receiver_.to_string() + token_.to_string() + amount_.to_string()
-        + std::to_string(timestamp_)
-        + (meta_.has_value() ? meta_.value() : ""); // TODO: + amount.size() meta.size() + prev_hashs_.size()
-                                                    // TODO: meta max 255 in prove + section size?
-
-    for (const auto &prev_hash : prev_hashs_) {
-        hashData += prev_hash;
-    }
-
-    return Utils::calculate_hash(hashData);
-}
-
-std::string Transaction::calculate_hash_hex() const {
-    auto hashData =
-        section_.to_hex_string() + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-        + receiver_.to_string() + token_.to_string() + amount_.to_hex_string()
+        (hex ? section_.to_hex_string() : section_.to_string())
+        + std::to_string(std::to_underlying(type_)) + sender_.to_string()
+        + receiver_.to_string() + token_.to_string()
+        + (hex ? amount_.to_hex_string() : amount_.to_string())
         + std::to_string(timestamp_)
         + (meta_.has_value() ? meta_.value() : "");
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;
     }
+    return hashData;
+}
 
-    return Utils::calculate_hash(hashData);
+std::string Transaction::calculate_hash() const {
+    return Utils::calculate_hash(hash_preimage(false));
+}
+
+std::string Transaction::calculate_hash_hex() const {
+    return Utils::calculate_hash(hash_preimage(true));
 }
 
 void Transaction::update_hash() {
