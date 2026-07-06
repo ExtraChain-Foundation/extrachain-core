@@ -173,7 +173,9 @@ std::expected<void, ChatError> ChatManager::activate() {
 
     activated_ = true;
 
-    profile_.ensure_storage_row();
+    // No eager profile row here: on a restored account the network's ChatProfile
+    // arrives with the dirs sync later, and creating one now makes a duplicate.
+    // set_name/set_bio/set_avatar create the row lazily when actually writing.
 
     auto db       = node->dfs()->get_db_instance();
     auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db, chat_actor_id);

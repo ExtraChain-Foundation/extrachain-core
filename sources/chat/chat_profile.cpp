@@ -54,12 +54,17 @@ std::optional<Dfs::DirRow> ChatProfile::find_storage_row(const ActorId& chat_mai
     if (!rows.has_value()) {
         return std::nullopt;
     }
+    // Ready rows are readable locally, so they win; among equals — the freshest
+    auto rank = [](const Dfs::DirRow& row) {
+        return row.state == Dfs::FileState::Ready ? 1 : 0;
+    };
     std::optional<Dfs::DirRow> best;
     for (const auto& row : rows.value()) {
         if (row.name != CHAT_PROFILE || row.state == Dfs::FileState::Removed) {
             continue;
         }
-        if (!best.has_value() || row.last_modified > best->last_modified) {
+        if (!best.has_value() || rank(row) > rank(*best)
+            || (rank(row) == rank(*best) && row.last_modified > best->last_modified)) {
             best = row;
         }
     }
