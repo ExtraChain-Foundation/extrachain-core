@@ -1,0 +1,201 @@
+/*
+ * ExtraChain Core
+ * Copyright (C) 2025 ExtraChain Foundation <official@extrachain.io>
+ *
+ * This library is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+// Real pack-sync transfer over a generated data set, without sockets.
+//
+//   ./extrachain-sync-check <server-data-dir> [client-dir]
+//
+// The server dir is a node working directory produced by extrachain-gen-sections
+// (it contains dag/packs). This drives the exact code the network uses:
+//   server: Registry::spans()  -> what network_pack_list_request answers
+//           Registry::read_raw -> what network_pack_request ships
+//   client: Registry::install_raw -> what network_pack_data_response stores
+// then verifies every packed section reads back byte-identically on the client.
+
+#include <QByteArray>
+
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <vector>
+
+#include "chain/dag.h" // SectionFileData / FileSectionsSync
+#include "chain/pack.h"
+#include "chain/pack_registry.h"
+#include "utils/bignumber.h"
+#include "utils/exc_utils.h" // MessagePack
+
+namespace {
+
+std::string read_file(const std::filesystem::path &p) {
+    std::ifstream f(p, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(f)), {});
+}
+
+// Verify the hot-tail sync transform on every loose section file: pack them into
+// the real FileSectionsSync wire form (MessagePack + qCompress), reverse it
+// (qUncompress + deserialize), write the recovered bytes to the client, and
+// confirm each file is byte-identical to the source. Returns mismatch count.
+std::uint64_t verify_hot_tail(const std::filesystem::path &server_hot,
+                              const std::filesystem::path &client_hot,
+                              std::uint64_t &checked) {
+    std::error_code ec;
+    std::filesystem::create_directories(client_hot, ec);
+
+    FileSectionsSync sync;
+    std::vector<std::filesystem::path> names;
+    for (auto &e : std::filesystem::directory_iterator(server_hot, ec)) {
+        if (!e.is_regular_file()) continue;
+        SectionFileData sfd;
+        sfd.section_id = SectionId(e.path().filename().string());
+        sfd.file_bytes = read_file(e.path());
+        sync.sections.push_back(std::move(sfd));
+        names.push_back(e.path());
+    }
+
+    // Real wire transform: serialize -> compress -> (network) -> decompress -> deserialize.
+    auto ser        = MessagePack::serialize(sync);
+    auto compressed = qCompress(QByteArray::fromStdString(ser));
+    auto restored   = qUncompress(compressed);
+    auto back       = MessagePack::deserialize<FileSectionsSync>(restored.toStdString());
+
+    std::uint64_t mism = 0;
+    if (!back.has_value()) {
+        std::printf("[SyncCheck] hot tail: deserialize FAILED\n");
+        return sync.sections.size();
+    }
+
+    for (const auto &sfd : back->sections) {
+        // Client writes the bytes verbatim, exactly like network_file_sections_response.
+        auto dest = client_hot / sfd.section_id.to_string();
+        std::ofstream o(dest, std::ios::binary | std::ios::trunc);
+        o.write(sfd.file_bytes.data(), static_cast<std::streamsize>(sfd.file_bytes.size()));
+        o.close();
+
+        auto src_path = server_hot / sfd.section_id.to_string();
+        if (read_file(dest) != read_file(src_path)) ++mism;
+        ++checked;
+    }
+    return mism;
+}
+
+} // namespace
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        std::printf("usage: %s <server-data-dir> [client-dir]\n", argv[0]);
+        return 64;
+    }
+    std::filesystem::path server_packs = std::filesystem::path(argv[1]) / "dag" / "packs";
+    std::filesystem::path client_packs =
+        (argc > 2) ? std::filesystem::path(argv[2]) : std::filesystem::temp_directory_path() / "exc_synccheck_client";
+
+    std::error_code ec;
+    if (!std::filesystem::exists(server_packs, ec)) {
+        std::printf("[SyncCheck] no packs at %s\n", server_packs.string().c_str());
+        return 1;
+    }
+    std::filesystem::remove_all(client_packs, ec);
+
+    Pack::Registry server(server_packs);
+    server.rescan();
+    Pack::Registry client(client_packs);
+
+    auto spans = server.spans(); // network_pack_list_request payload
+    std::printf("[SyncCheck] server has %zu packs\n", spans.size());
+    if (spans.empty()) {
+        std::printf("[SyncCheck] nothing to sync (no sealed packs)\n");
+        return 1;
+    }
+
+    auto t0 = std::chrono::steady_clock::now();
+
+    // Transfer + install each pack exactly as the network path does.
+    std::size_t   installed   = 0;
+    std::uint64_t bytes_moved = 0;
+    for (const auto &s : spans) {
+        auto raw = server.read_raw(s.id); // network_pack_request
+        if (!raw.has_value()) {
+            std::printf("[SyncCheck] FAIL: server read_raw(%llu) failed\n",
+                        static_cast<unsigned long long>(s.id));
+            return 2;
+        }
+        bytes_moved += raw->size();
+        auto inst = client.install_raw(s.id, *raw); // network_pack_data_response
+        if (!inst.has_value()) {
+            std::printf("[SyncCheck] FAIL: client install_raw(%llu) rejected (error %d)\n",
+                        static_cast<unsigned long long>(s.id), static_cast<int>(inst.error()));
+            return 2;
+        }
+        ++installed;
+    }
+
+    // Verify: every packed section reads back identically on the client.
+    auto cov = client.coverage();
+    if (!cov.has_value()) {
+        std::printf("[SyncCheck] FAIL: client coverage empty after install\n");
+        return 2;
+    }
+
+    std::uint64_t first = std::stoull(cov->first.to_string());
+    std::uint64_t last  = std::stoull(cov->last.to_string());
+    std::uint64_t checked = 0, mismatched = 0;
+    for (std::uint64_t sid = first; sid <= last; ++sid) {
+        auto srv = server.read_section(SectionId(static_cast<long long>(sid)));
+        auto cli = client.read_section(SectionId(static_cast<long long>(sid)));
+        if (!cli.has_value() || cli != srv) {
+            if (mismatched < 5) {
+                std::printf("[SyncCheck] mismatch at section %llu\n",
+                            static_cast<unsigned long long>(sid));
+            }
+            ++mismatched;
+        }
+        ++checked;
+    }
+
+    // Hot tail: the loose section files above the packed range are transferred by
+    // file-sync, not packs. Verify that path too so the whole chain is covered.
+    std::filesystem::path server_hot = std::filesystem::path(argv[1]) / "dag" / "hot";
+    std::uint64_t         hot_checked = 0, hot_mismatched = 0;
+    if (std::filesystem::exists(server_hot, ec)) {
+        hot_mismatched = verify_hot_tail(server_hot, client_packs.parent_path() / "hot", hot_checked);
+        mismatched += hot_mismatched;
+    }
+
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::steady_clock::now() - t0)
+                  .count();
+
+    std::printf("[SyncCheck] installed %zu packs (%.1f MB), verified %llu packed sections [%llu..%llu]\n",
+                installed, bytes_moved / 1048576.0,
+                static_cast<unsigned long long>(checked),
+                static_cast<unsigned long long>(first),
+                static_cast<unsigned long long>(last));
+    std::printf("[SyncCheck] hot tail: verified %llu sections, mismatches %llu\n",
+                static_cast<unsigned long long>(hot_checked),
+                static_cast<unsigned long long>(hot_mismatched));
+    std::printf("[SyncCheck] total mismatches %llu, in %lld ms\n",
+                static_cast<unsigned long long>(mismatched), static_cast<long long>(ms));
+    std::printf("[SyncCheck] %s\n", mismatched == 0 ? "PASS — synced data matches the source"
+                                                    : "FAIL — synced data diverged");
+    std::fflush(stdout);
+    return mismatched == 0 ? 0 : 3;
+}
