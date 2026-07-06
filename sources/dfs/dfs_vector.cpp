@@ -157,7 +157,10 @@ std::expected<DfsVector, DfsVectorError> DfsVector::create(ExtraChainNode       
     }
 
     DbConnector db(dfs_vector.file_path_);
-    db.open();
+    if (!db.open()) {
+        eWarning("[DfsVector] Can't open vector db {}", dfs_vector.file_path_.string());
+        return std::unexpected(DfsVectorError::Unknown);
+    }
     auto res_create = db.create_table(schema.value());
     db.close();
 
@@ -390,7 +393,10 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
     schema->set_table_name("Vector");
 
     DbConnector db(file_path_);
-    db.open();
+    if (!db.open()) {
+        eWarning("[DfsVector] Can't open vector db {}, package will be retried", file_path_.string());
+        return false;
+    }
     db.create_table(schema.value());
 
     for (const auto &db_row : dfs_vector_content.content) {
