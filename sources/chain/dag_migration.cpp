@@ -57,6 +57,17 @@ struct Checkpoint {
 };
 BOOST_DESCRIBE_STRUCT(Checkpoint, (), (last_section_done, stage))
 
+// Section id as a full 64-bit value. SectionId::to_int() is a 32-bit int, so
+// going through it would truncate ids past 2^31 and corrupt the resume point;
+// parse the decimal string directly instead.
+std::uint64_t section_to_u64(const SectionId &id) {
+    try {
+        return std::stoull(id.to_string());
+    } catch (...) {
+        return 0;
+    }
+}
+
 fs::path checkpoint_path() {
     return fs::path(ChainConst::DAG_FOLDER) / "migration.progress";
 }
@@ -82,31 +93,29 @@ void remove_checkpoint() {
     fs::remove(checkpoint_path(), ec);
 }
 
-// Detect whether a directory name is a hex (shard) rather than decimal.
-// Old layout used hex-named shard folders; new uses "hot"/"packs"/"cache".
-bool looks_like_hex_shard_dir(const fs::path &p) {
-    if (!fs::is_directory(p)) return false;
-    auto name = p.filename().string();
-    if (name == "hot" || name == "packs" || name == "cache") return false;
-    if (name.empty()) return false;
-    // decimal-only: not interesting either way, but treat as maybe-legacy
-    // We accept names that are either pure hex digits or decimal.
-    for (char c : name) {
+// Non-empty string of only hex digits (both shard-dir and section-filename
+// detection below rely on the same predicate).
+bool is_all_hex(const std::string &s) {
+    if (s.empty()) return false;
+    for (char c : s) {
         bool hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
         if (!hex) return false;
     }
     return true;
 }
 
+// Detect whether a directory name is a hex (shard) rather than decimal.
+// Old layout used hex-named shard folders; new uses "hot"/"packs"/"cache".
+bool looks_like_hex_shard_dir(const fs::path &p) {
+    if (!fs::is_directory(p)) return false;
+    auto name = p.filename().string();
+    if (name == "hot" || name == "packs" || name == "cache") return false;
+    return is_all_hex(name);
+}
+
 // A legacy section filename is the section id encoded in hex (no ".json" suffix).
 std::optional<SectionId> parse_legacy_section_filename(const std::string &name) {
-    if (name.empty()) return std::nullopt;
-    for (char c : name) {
-        bool hex = (c >= '0' && c <= '9')
-            || (c >= 'a' && c <= 'f')
-            || (c >= 'A' && c <= 'F');
-        if (!hex) return std::nullopt;
-    }
+    if (!is_all_hex(name)) return std::nullopt;
     return BigNumber::from_hex(name);
 }
 
@@ -220,9 +229,8 @@ migrate_sections(ProgressCallback on_progress) {
         // Checkpoint every 1000 sections
         if (done % 1000 == 0) {
             Checkpoint ncp {
-                .last_section_done = static_cast<std::uint64_t>(
-                    sid.to_int().value_or(static_cast<int>(std::stoull(sid.to_string())))),
-                .stage = "sections",
+                .last_section_done = section_to_u64(sid),
+                .stage             = "sections",
             };
             if (!write_checkpoint(ncp)) {
                 return std::unexpected(Error::CheckpointFailed);
