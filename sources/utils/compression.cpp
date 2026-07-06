@@ -23,6 +23,12 @@
 
 namespace Compression {
 
+// ZSTD_getFrameContentSize reads the advertised size straight from the frame
+// header, which is attacker-controlled for packs received over the network. Cap
+// it so a few-byte frame claiming a huge size can't trigger a giant allocation
+// (OOM DoS). No legitimate frame (<= a handful of sections) approaches this.
+constexpr unsigned long long MAX_DECOMPRESSED_SIZE = 256ull * 1024 * 1024;
+
 std::expected<std::string, Error>
 compress(std::string_view data, std::string_view dict, int level) {
     size_t bound = ZSTD_compressBound(data.size());
@@ -56,7 +62,8 @@ decompress(std::string_view data, std::string_view dict) {
     // Query the decompressed size from the frame header
     unsigned long long decompressed_size = ZSTD_getFrameContentSize(data.data(), data.size());
     if (decompressed_size == ZSTD_CONTENTSIZE_ERROR
-        || decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN) {
+        || decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN
+        || decompressed_size > MAX_DECOMPRESSED_SIZE) {
         return std::unexpected(Error::InvalidInput);
     }
 
@@ -159,7 +166,8 @@ std::expected<std::string, Error> Context::decompress_frame(std::string_view dat
 
     unsigned long long decompressed_size = ZSTD_getFrameContentSize(data.data(), data.size());
     if (decompressed_size == ZSTD_CONTENTSIZE_ERROR
-        || decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN) {
+        || decompressed_size == ZSTD_CONTENTSIZE_UNKNOWN
+        || decompressed_size > MAX_DECOMPRESSED_SIZE) {
         return std::unexpected(Error::InvalidInput);
     }
 

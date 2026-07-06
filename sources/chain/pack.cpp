@@ -142,7 +142,8 @@ bool verify_consecutive(const std::map<SectionId, std::string> &sections,
 }
 
 std::string compute_checksum(const char *data, std::size_t size) {
-    return Utils::calculate_hash(std::string(data, size));
+    // Hash in place — avoids copying the whole pack (minus footer) on every open.
+    return Utils::calculate_hash_bytes(data, size);
 }
 
 std::optional<std::string>
@@ -189,9 +190,17 @@ struct Reader::Impl {
         if (header.version != FORMAT_VERSION) return false;
 
         auto end = buffer.size();
-        if (header.dict_offset + header.dict_size > end) return false;
-        if (header.data_offset + header.data_size > end) return false;
-        if (header.frame_index_offset + header.frame_index_size > end) return false;
+        // A pack can arrive from an untrusted peer, so header fields are hostile.
+        // Compare as (limit - offset) to avoid the offset+size sum wrapping past
+        // 2^64 and passing a naive `offset + size > end` check.
+        auto fits = [end](std::uint64_t offset, std::uint64_t size) {
+            return offset <= end && size <= end - offset;
+        };
+        if (!fits(header.dict_offset, header.dict_size)) return false;
+        if (!fits(header.data_offset, header.data_size)) return false;
+        if (!fits(header.frame_index_offset, header.frame_index_size)) return false;
+        // frame_count * sizeof(FrameEntry) must not overflow before comparison.
+        if (header.frame_count > header.frame_index_size / sizeof(FrameEntry)) return false;
         if (header.frame_index_size != header.frame_count * sizeof(FrameEntry)) return false;
 
         if (end < FOOTER_SIZE) return false;
@@ -235,6 +244,11 @@ struct Reader::Impl {
     std::optional<std::string> decompress_frame(std::size_t frame_idx) const {
         if (frame_idx >= frame_index.size()) return std::nullopt;
         const auto &fe = frame_index[frame_idx];
+        // fe.offset/fe.size are attacker-controlled on an untrusted pack; keep the
+        // frame window inside the validated data region (offset+size within data_size).
+        if (fe.offset > header.data_size || fe.size > header.data_size - fe.offset) {
+            return std::nullopt;
+        }
         std::string_view frame_data(data_ptr() + header.data_offset + fe.offset, fe.size);
         auto out = ctx->decompress_frame(frame_data);
         if (!out.has_value()) return std::nullopt;
