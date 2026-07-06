@@ -1114,6 +1114,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::WrongHash;
     }
 
+    // Reject replays: the hash commits to the section, so a valid tx can only
+    // live in its own section — a matching hash already stored there is a dup.
+    if (find_transaction(tx.section(), tx.hash()).has_value()) {
+        return TransactionProveError::Duplicate;
+    }
+
     // Validate sender
     if (targetSender.is_zero()) {
         return TransactionProveError::SenderZero;
@@ -3203,13 +3209,17 @@ void Dag::ensure_control_index() {
         control_index_ready_.store(true);
         return;
     }
-    // First control lookup on a cold index: populate it once from disk. Guard
-    // against re-entry while one caller is building (others fall back to scan).
-    bool expected = false;
-    if (!control_index_ready_.compare_exchange_strong(expected, true)) return;
-    if (current_section_ > SectionId(0) && control_index_->row_count() == 0) {
+    // Nothing to populate yet (chain not loaded) — do NOT latch ready, so a later
+    // call still rebuilds once the chain is present.
+    if (current_section_ <= SectionId(0)) {
+        return;
+    }
+    // First control lookup with a chain present: populate the index once from disk
+    // if it is cold, then latch ready so this runs only once.
+    if (control_index_->row_count() == 0) {
         control_index_->rebuild_from_dag();
     }
+    control_index_ready_.store(true);
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
