@@ -15,6 +15,20 @@
 - `failed_ips_` — IPs banned forever, never cleared (logic bug)
 - UPnP — `makeTunnel` commented out, v2 connector hardcodes port 8080, need to wire up `ws_port`
 
+## Dag file-sync wire format
+- Asymmetric `peer_legacy` default when `PeerMeta` is absent (race right after
+  connect, `peer_meta_for` returns nullopt — documented in `peer_meta.h`):
+  - server `Dag::network_request_file_sections` (`dag.cpp` ~1720):
+    `!meta.has_value() || is_legacy_dag()` → treats unknown as **legacy (hex)**
+  - receiver `Dag::network_file_sections_response` (`dag.cpp` ~1763):
+    `meta.has_value() && is_legacy_dag()` → treats unknown as **canonical (decimal)**
+  If meta is missing on the receiver side only, the server ships hex `file_bytes`,
+  the receiver skips normalization and writes hex onto a decimal-expecting disk;
+  later `read_section` (Canonical) mis-parses `"100"` as `0x100` → corrupted
+  balances/sections. Fix: decide the on-disk format from a single source of truth
+  (carry it in the response payload, or block file-sync until PeerMeta is known),
+  so both sides agree. Deferred — needs care around legacy-peer compat regression.
+
 ---
 
 # TODO: Security
