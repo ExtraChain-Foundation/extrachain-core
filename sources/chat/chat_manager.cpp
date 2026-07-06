@@ -1110,45 +1110,58 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
 
     auto encrypted = Dfs::Tables::DirsFile::ActorSpace::get_file_content(owner_id, dir_row.file_id);
     if (!encrypted.has_value()) {
+        eWarning("[Chat] parse_invite {}: no file content", dir_row.file_id);
         return false;
     }
 
     const auto& from_id  = dir_row.actor_id;
     auto recipient_result = this->node->account_controller()->current_profile().get_actor(owner_id);
     if (!recipient_result.has_value()) {
+        eWarning("[Chat] parse_invite {}: recipient {} not in profile", dir_row.file_id, owner_id);
         return false;
     }
     const auto& recipient = recipient_result->get();
 
     auto from_actor_result = this->node->actor_index()->read_actor(from_id);
     if (!from_actor_result.has_value()) {
+        eWarning("[Chat] parse_invite {}: sender {} not in actor index", dir_row.file_id, from_id);
         return false;
     }
     auto from_actor = from_actor_result.value();
 
     auto content = recipient.key().decrypt(encrypted.value(), from_actor.key().public_key());
     if (!content.has_value()) {
+        eWarning("[Chat] parse_invite {}: decrypt failed (from {})", dir_row.file_id, from_id);
         return false;
     }
     auto chat_invite = Json::deserialize<Chat::ChatInvite>(content.value());
     if (!chat_invite.has_value()) {
+        eWarning("[Chat] parse_invite {}: deserialize failed", dir_row.file_id);
         return false;
     }
 
     // Invite is signed by the sender's per-chat actor, so the DFS author must match
     // the per_chat claimed in the payload, not chat_main.
     if (dir_row.actor_id != chat_invite->sender_per_chat.id()) {
+        eWarning("[Chat] parse_invite {}: author {} != payload per_chat {}",
+                 dir_row.file_id,
+                 dir_row.actor_id,
+                 chat_invite->sender_per_chat.id());
         return false;
     }
 
     // Verify per_chat ↔ chat_main bind: signed by chat_main, resolved from actor index.
     auto sender_chat_main = this->node->actor_index()->read_actor(chat_invite->sender_chat_main_id);
     if (!sender_chat_main.has_value()) {
+        eWarning("[Chat] parse_invite {}: sender chat_main {} not in actor index",
+                 dir_row.file_id,
+                 chat_invite->sender_chat_main_id);
         return false;
     }
     auto bind_data = ByteArray(chat_invite->sender_per_chat.key().public_key()).toBytes();
     auto verify    = sender_chat_main->key().verify(bind_data, chat_invite->bind_signature);
     if (!verify.has_value() || !verify.value()) {
+        eWarning("[Chat] parse_invite {}: bind signature verify failed", dir_row.file_id);
         return false;
     }
 
@@ -1156,6 +1169,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto my_per_chat = node->account_controller()->create_actor(
         ActorId(), Utils::to_hex(ByteArray(chat_invite->chat_key).toBytes()), ActorType::User);
     if (my_per_chat.empty()) {
+        eWarning("[Chat] parse_invite {}: create per_chat actor failed", dir_row.file_id);
         return false;
     }
 
