@@ -47,14 +47,23 @@ std::optional<Dfs::DirRow> ChatProfile::find_storage_row(const ActorId& chat_mai
     if (chat_main_id.is_zero()) {
         return std::nullopt;
     }
-    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(owner_->node->dfs()->get_db_instance(),
-                                                                chat_main_id,
-                                                                CHAT_PROFILE,
-                                                                "name");
-    if (!row.has_value()) {
+    // Duplicates happen (local ensure + network sync): pick the freshest row,
+    // otherwise reads land on a stale/empty profile copy
+    auto rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(owner_->node->dfs()->get_db_instance(),
+                                                                chat_main_id);
+    if (!rows.has_value()) {
         return std::nullopt;
     }
-    return row.value();
+    std::optional<Dfs::DirRow> best;
+    for (const auto& row : rows.value()) {
+        if (row.name != CHAT_PROFILE || row.state == Dfs::FileState::Removed) {
+            continue;
+        }
+        if (!best.has_value() || row.last_modified > best->last_modified) {
+            best = row;
+        }
+    }
+    return best;
 }
 
 bool ChatProfile::set_name(const std::string& name) {
