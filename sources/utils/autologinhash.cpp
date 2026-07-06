@@ -23,7 +23,21 @@
 
 #include "utils/exc_logs.h"
 
+bool AutologinHash::enabled_ = false;
+
+void AutologinHash::set_enabled(bool enabled) {
+    enabled_ = enabled;
+}
+
+bool AutologinHash::is_enabled() {
+    return enabled_;
+}
+
 bool AutologinHash::load() {
+    if (!enabled_) {
+        return false;
+    }
+
     if (!QFile::exists(".auth_hash")) {
         return false;
     }
@@ -40,11 +54,14 @@ bool AutologinHash::load() {
 }
 
 void AutologinHash::save(const std::string& hash) {
-#ifdef QT_DEBUG
+    if (!enabled_) {
+        return;
+    }
+
     auto  hash_bytes = QByteArray::fromStdString(hash);
     QFile file(".auth_hash");
 
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate) && file.write(hash_bytes) > 0) {
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
         eFatal("[Autologin Hash] Can't write to auth hash file");
         return;
     }
@@ -53,7 +70,6 @@ void AutologinHash::save(const std::string& hash) {
     file.close();
 
     hash_ = hash;
-#endif
 }
 
 const std::string& AutologinHash::hash() const {

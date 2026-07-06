@@ -21,10 +21,14 @@
 
 #include <string>
 
-// for debug mode
-
+// Persists the autologin hash to `.auth_hash` for unattended restarts. Off by
+// default: it stores an unencrypted credential on disk, so a caller must opt in
+// via set_enabled(true) (e.g. a headless/daemon deployment that needs it).
 class AutologinHash {
 public:
+    static void set_enabled(bool enabled);
+    static bool is_enabled();
+
     bool               load();
     void               save(const std::string &key);
     const std::string &hash() const;
@@ -32,5 +36,6 @@ public:
     static bool is_available();
 
 private:
+    static bool enabled_;
     std::string hash_;
 };
