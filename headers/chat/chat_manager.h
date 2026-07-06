@@ -140,7 +140,7 @@ private:
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
     std::vector<Chat::Chat> chats_;
-    ChatMode                mode_       = ChatMode::Disabled;
+    ChatMode                mode_       = ChatMode::Enabled;
     bool                    activated_  = false;
     Dfs::DirRow             my_chats_row_;
     ChatProfile             profile_ { this };
