@@ -43,13 +43,16 @@ class SimpleConsole : public QObject {
     Q_OBJECT
 
 public:
-    // Single function to start the console
-    static SimpleConsole* start(std::function<void(const std::string&)> commandHandler) {
+    // Single function to start the console.
+    // interactive == false starts a headless mode (no terminal, no input thread) —
+    // suitable for running under Docker or as a daemon without a controlling tty.
+    static SimpleConsole* start(std::function<void(const std::string&)> commandHandler,
+                                bool interactive = true) {
         static SimpleConsole* instance = nullptr;
         if (!instance) {
             instance                   = new SimpleConsole();
             instance->m_commandHandler = commandHandler;
-            instance->init();
+            instance->init(interactive);
         }
         return instance;
     }
@@ -81,7 +84,9 @@ public:
 
     ~SimpleConsole() {
         m_running = false;
-        restoreTerminal();
+        if (m_interactive) {
+            restoreTerminal();
+        }
         if (m_inputThread.joinable()) {
             m_inputThread.join();
         }
@@ -95,11 +100,26 @@ private:
         return instance;
     }
 
-    void init() {
+    void init(bool interactive) {
+        connect(this, &SimpleConsole::commandEntered, this, &SimpleConsole::handleCommand, Qt::QueuedConnection);
+
+#ifndef _WIN32
+        // No controlling terminal (e.g. Docker without -it): never enter interactive
+        // mode, otherwise read(STDIN_FILENO) busy-loops on EOF and join() hangs on exit.
+        if (interactive && !isatty(STDIN_FILENO)) {
+            interactive = false;
+        }
+#endif
+
+        m_interactive = interactive;
+        if (!m_interactive) {
+            // Headless / daemon mode: rely solely on the Qt event loop and OS signals.
+            return;
+        }
+
         setupTerminal();
         m_running     = true;
         m_inputThread = std::thread(&SimpleConsole::inputLoop, this);
-        connect(this, &SimpleConsole::commandEntered, this, &SimpleConsole::handleCommand, Qt::QueuedConnection);
         printf("> ");
         fflush(stdout);
     }
@@ -199,6 +219,7 @@ private slots:
 private:
     std::thread                             m_inputThread;
     std::atomic<bool>                       m_running { false };
+    bool                                    m_interactive { true };
     QMutex                                  m_mutex;
     std::string                             m_currentInput;
     size_t                                  m_cursorPos = 0;
