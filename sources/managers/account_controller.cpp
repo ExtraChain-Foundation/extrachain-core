@@ -463,8 +463,18 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
 }
 
 std::vector<std::string> AccountController::seed_mnemonic() {
-    auto seed     = profile_seed.seed();
+    auto seed = profile_seed.seed();
+    if (Utils::is_container_empty(seed)) {
+        eWarning("[Accounts] Can't export seed mnemonic: profile seed is empty");
+        return {};
+    }
+
     auto mnemonic = Cryptography::create_mnemonic(seed);
+    if (mnemonic.size() != 24) {
+        eWarning("[Accounts] Can't export seed mnemonic: unexpected word count {}", mnemonic.size());
+        return {};
+    }
+
     return mnemonic;
 }
 

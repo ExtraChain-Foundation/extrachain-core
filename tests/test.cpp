@@ -18,8 +18,11 @@
  */
 
 #include "managers/extrachain_node.h"
+#include "managers/account_controller.h"
+#include "encryption/encryption_tools.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
+#include <sstream>
 
 class Test : public QObject {
     Q_OBJECT
@@ -48,6 +51,36 @@ private slots:
         auto decrypted2 = actor2.key()->decrypt(encrypted2, actor1.key()->publicKey());
 
         QCOMPARE(decrypted, decrypted2);
+    }
+
+    void mnemonicRoundTrip() {
+        MasterSeed seed;
+        for (std::size_t i = 0; i < seed.size(); ++i) {
+            seed[i] = static_cast<std::uint8_t>(i + 1);
+        }
+
+        const auto mnemonic = Cryptography::create_mnemonic(seed);
+        QCOMPARE(mnemonic.size(), std::size_t(24));
+
+        std::ostringstream phrase;
+        for (std::size_t i = 0; i < mnemonic.size(); ++i) {
+            if (i != 0) {
+                phrase << ' ';
+            }
+            phrase << mnemonic[i];
+        }
+
+        const auto phraseText = phrase.str();
+        QVERIFY(Cryptography::validate_mnemonic(phraseText));
+
+        const auto restored = Cryptography::restore_seed_from_mnemonic(phraseText);
+        QVERIFY(restored.has_value());
+        QVERIFY(restored.value() == seed);
+    }
+
+    void defaultProfileDoesNotExportMnemonic() {
+        AccountController accounts(nullptr);
+        QVERIFY(accounts.seed_mnemonic().empty());
     }
 
     //    auto key1 =
