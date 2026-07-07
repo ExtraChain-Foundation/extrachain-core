@@ -287,6 +287,10 @@ void ThothManager::set_ios_token(const std::string& token) {
     ios_token_ = token;
 }
 
+void ThothManager::set_device_token(const std::string& token) {
+    ios_token_ = token;
+}
+
 std::string ThothManager::read_username(const ActorId& actor_id) {
     if (actor_id.is_zero()) {
         return "";

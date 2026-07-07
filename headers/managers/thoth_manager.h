@@ -88,6 +88,9 @@ public:
     bool send_to_service(const ThothInfo& info, const std::string& username);
 
     void        set_ios_token(const std::string& token);
+    // Platform-neutral alias: stores the device push token (APNS on iOS, FCM on Android).
+    // The platform is distinguished by the "os" field in ThothData, not by this setter.
+    void        set_device_token(const std::string& token);
     std::string read_username(const ActorId& actor_id);
 
 private:
