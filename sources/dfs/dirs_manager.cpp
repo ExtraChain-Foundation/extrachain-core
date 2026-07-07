@@ -294,6 +294,20 @@ void DirsManager::network_response_dir_rows(
                     continue;
                 }
 
+                // Vector/Dictionary newer on the network (messages, profiles,
+                // deletions missed while offline): re-request it. The peer answers
+                // with a content package merged over the local db by signed rows,
+                // so local-only rows survive and no delete is needed.
+                if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
+                    && row.state == Dfs::FileState::Ready) {
+                    auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
+                    if (local.has_value() && row.last_modified > local->last_modified) {
+                        eLog("[DirsSync] Vector {}/{} stale (net {} > local {}), re-requesting",
+                             owner_id, row.file_id, row.last_modified, local->last_modified);
+                        node->dfs()->request_file(owner_id, row.file_id);
+                    }
+                }
+
                 if (row.state == Dfs::FileState::Removed) {
                     if (row.type == Dfs::FileType::File && file_path->exists()) {
                         node->dfs()->remove_local_file(owner_id, row.file_id);
