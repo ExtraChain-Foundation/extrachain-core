@@ -74,6 +74,7 @@ public:
 
 private:
     std::expected<Dfs::DirRow, ChatError> ensure_storage_row();
+    std::vector<Dfs::DirRow>              storage_rows();
     std::optional<Dfs::DirRow>            find_storage_row();
     bool                                  save(const Chat::ChatFolder &folder);
     Chat::ChatFolder                     *find_in_cache(const std::string &folder_id);

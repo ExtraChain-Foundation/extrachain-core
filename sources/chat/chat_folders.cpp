@@ -65,23 +65,26 @@ std::expected<Dfs::DirRow, ChatError> ChatFolders::ensure_storage_row() {
     return store_res.value();
 }
 
-std::optional<Dfs::DirRow> ChatFolders::find_storage_row() {
+// All ChatFolders copies, best-first: each device may have created its own file
+// (ensure+sync race), so reads must merge and writes go to the freshest copy.
+std::vector<Dfs::DirRow> ChatFolders::storage_rows() {
+    std::vector<Dfs::DirRow> out;
     auto chat_actor_id = owner_->current_chat_actor_id();
     if (chat_actor_id.is_zero()) {
-        return std::nullopt;
+        return out;
     }
     auto rows =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(owner_->node->dfs()->get_db_instance(), chat_actor_id);
     if (!rows.has_value()) {
-        return std::nullopt;
+        return out;
     }
     auto chat_actor_result = owner_->current_chat_actor();
     if (!chat_actor_result.has_value()) {
-        return std::nullopt;
+        return out;
     }
     const auto& chat_actor = chat_actor_result->get();
     for (const auto& row : rows.value()) {
-        if (row.folder != Dfs::Basic::TEMPLATE_DICTIONARY) {
+        if (row.folder != Dfs::Basic::TEMPLATE_DICTIONARY || row.state == Dfs::FileState::Removed) {
             continue;
         }
         auto from_base64 = Utils::from_base64(row.name);
@@ -92,38 +95,60 @@ std::optional<Dfs::DirRow> ChatFolders::find_storage_row() {
         if (!name_result.has_value()) {
             continue;
         }
-        auto name = ByteArray(name_result.value()).toString();
-        if (name == CHAT_FOLDERS) {
-            return row;
+        if (ByteArray(name_result.value()).toString() == CHAT_FOLDERS) {
+            out.push_back(row);
         }
     }
-    return std::nullopt;
+    auto rank = [](const Dfs::DirRow& row) {
+        return row.state == Dfs::FileState::Ready ? 1 : 0;
+    };
+    std::sort(out.begin(), out.end(), [&](const Dfs::DirRow& a, const Dfs::DirRow& b) {
+        if (rank(a) != rank(b))
+            return rank(a) > rank(b);
+        return a.last_modified > b.last_modified;
+    });
+    return out;
+}
+
+std::optional<Dfs::DirRow> ChatFolders::find_storage_row() {
+    auto rows = storage_rows();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return rows.front();
 }
 
 bool ChatFolders::load_if_needed() {
     if (loaded_) {
         return true;
     }
-    auto folder_row = find_storage_row();
-    if (!folder_row.has_value()) {
+    auto storage = storage_rows();
+    if (storage.empty()) {
         loaded_ = true;
         return true;
     }
     auto chat_actor_id  = owner_->current_chat_actor_id();
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_id };
-    auto rows = owner_->node->dfs()->read_dictionary_rows(chat_actor_id, folder_row->file_id, security_actor);
-    if (!rows.has_value()) {
-        loaded_ = true;
-        return true;
-    }
     cache_.clear();
-    cache_.reserve(rows->size());
-    for (const auto& [key, value] : rows.value()) {
-        auto folder = Json::deserialize<Chat::ChatFolder>(value);
-        if (!folder.has_value()) {
+    // Freshest copy wins per folder id; older copies only fill missing ids.
+    std::set<std::string> seen;
+    for (const auto& folder_row : storage) {
+        auto rows = owner_->node->dfs()->read_dictionary_rows(chat_actor_id, folder_row.file_id,
+                                                              security_actor);
+        if (!rows.has_value()) {
             continue;
         }
-        cache_.push_back(folder.value());
+        for (const auto& [key, value] : rows.value()) {
+            if (seen.contains(key)) {
+                continue;
+            }
+            auto folder = Json::deserialize<Chat::ChatFolder>(value);
+            if (!folder.has_value()) {
+                continue;
+            }
+            seen.insert(key);
+            cache_.push_back(folder.value());
+        }
     }
     std::sort(cache_.begin(), cache_.end(),
               [](const Chat::ChatFolder& a, const Chat::ChatFolder& b) { return a.order < b.order; });
