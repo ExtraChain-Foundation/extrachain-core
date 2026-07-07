@@ -566,6 +566,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
             node->account_controller()->restore_actor(ActorId(), label, ActorType::User);
         }
 
+        mark_chat_priority(chat.value());
         chats.push_back(chat.value());
     }
 
@@ -1065,6 +1066,7 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
         return std::unexpected(ChatError::Unknown);
     }
 
+    mark_chat_priority(chat_new);
     chats_.push_back(chat_new);
     emit node->chatAdded(chat_new);
 
@@ -1091,6 +1093,13 @@ std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::C
         return std::unexpected(ChatError::Unknown);
     }
     return res;
+}
+
+void ChatManager::mark_chat_priority(const Chat::Chat& chat) {
+    node->dfs()->add_priority_file_link({ chat.owner_id, chat.file_id });
+    if (chat.peer_chat_main_id.has_value()) {
+        node->dfs()->add_priority_actor(chat.peer_chat_main_id.value());
+    }
 }
 
 std::optional<Chat::Chat> ChatManager::get_chat(const ActorId& owner_id, const std::string& file_id) {

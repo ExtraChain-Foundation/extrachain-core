@@ -131,6 +131,9 @@ public:
     void update_dfs_files();
 
 private:
+    // Chat vector + peer chat_main go into the DFS priority set so the download
+    // queue keeps exactly our interests fresh (messages, profiles, avatars).
+    void                                  mark_chat_priority(const Chat::Chat &chat);
     bool                                  publish_channel(const Chat::Chat &chat, const std::string &name);
     std::expected<Dfs::DirRow, Dfs::DfsError> channels_vector_row();
     std::expected<Dfs::DirRow, ChatError> create_mychats();

@@ -19,7 +19,6 @@
 
 #include "dfs/dirs_manager.h"
 
-#include "chat/chat_manager.h"
 
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
@@ -294,17 +293,15 @@ void DirsManager::network_response_dir_rows(
                     continue;
                 }
 
-                // Vector/Dictionary newer on the network (messages, profiles,
-                // deletions missed while offline): re-request it. The peer answers
-                // with a content package merged over the local db by signed rows,
-                // so local-only rows survive and no delete is needed.
+                // Vector/Dictionary newer on the network: route into the download
+                // queue, which admits it only for priority actors/files (or Full
+                // mode). The peer answers with a content package merged over the
+                // local db by signed rows, so local-only rows survive.
                 if ((row.type == Dfs::FileType::Vector || row.type == Dfs::FileType::Dictionary)
                     && row.state == Dfs::FileState::Ready) {
                     auto local = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(db_, owner_id, row.file_id);
                     if (local.has_value() && row.last_modified > local->last_modified) {
-                        eLog("[DirsSync] Vector {}/{} stale (net {} > local {}), re-requesting",
-                             owner_id, row.file_id, row.last_modified, local->last_modified);
-                        node->dfs()->request_file(owner_id, row.file_id);
+                        dir_rows_todo.push_back(row);
                     }
                 }
 
@@ -344,21 +341,6 @@ void DirsManager::network_response_dir_rows(
 
             if (!node_enabled.load()) {
                 return;
-            }
-
-            if (owner_id == node->network_id() || owner_id == ActorId(CHAT_SERVICE_ACTOR)) {
-                auto rows = dir_rows;
-                for (auto it = rows.begin(); it != rows.end();) {
-                    if (it->name == "Usernames") {
-                        node->dfs()->request_file(owner_id, it->file_id);
-                        it = rows.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-
-                node->dfs()->download_manager().add_to_queue(owner_id, rows, *responder.identifiers().begin());
-                continue;
             }
 
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
