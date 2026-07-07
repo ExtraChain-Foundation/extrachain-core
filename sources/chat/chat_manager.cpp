@@ -641,6 +641,10 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
     std::uint64_t best_ts = 0;
     bool found_non_edited = false;
 
+    // "Delete for me" hides the message only on the author's side (same rule as UI).
+    auto my_id = chat.value().my_per_chat_id.has_value() ? chat.value().my_per_chat_id.value()
+                                                         : current_chat_actor_id();
+
     for (int offset = 0; offset < 100; offset += batch_size) {
         auto query   = fmt::format("where status = '1' ORDER by timestamp DESC LIMIT {} OFFSET {}", batch_size, offset);
         auto db_rows = node->dfs()->read_vector_rows(owner_id, file_id, query,
@@ -655,6 +659,10 @@ std::expected<Chat::Message, ChatError> ChatManager::read_last_message(const Act
 
             auto message = Utils::from_dbrow<Chat::Message>(db_row);
             if (!message.has_value()) {
+                continue;
+            }
+
+            if (message->message.deleted_for_me.value_or(false) && message->actor == my_id) {
                 continue;
             }
 
