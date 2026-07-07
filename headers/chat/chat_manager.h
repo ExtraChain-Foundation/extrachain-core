@@ -36,6 +36,7 @@ static const std::string CHAT_DAPP_INVITE_FOLDER = ":DApp:Chat:Invite";
 static const std::string CHAT_MY_CHATS_INFO = "MyChatsInfo";
 static const std::string CHAT_PROFILE       = "ChatProfile";
 static const std::string CHAT_FOLDERS       = "ChatFolders";
+static const std::string CHAT_SERVICE_ACTOR = "46710a2d823c23db9fc2ac01e0f84212a8128373";
 
 class ExtraChainNode;
 

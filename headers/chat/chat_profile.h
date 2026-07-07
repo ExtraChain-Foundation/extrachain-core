@@ -38,6 +38,8 @@ public:
                                                                      const std::filesystem::path &mini_path,
                                                                      const std::string           &blur_hash);
 
+    std::expected<std::string, ChatProfileError>             read_entry(const ActorId     &chat_main_id,
+                                                                         const std::string &key);
     std::expected<std::string, ChatProfileError>             read_name(const ActorId &chat_main_id);
     std::expected<std::string, ChatProfileError>             read_bio(const ActorId &chat_main_id);
     std::expected<Chat::ChatProfileAvatar, ChatProfileError> read_avatar(const ActorId &chat_main_id);

@@ -446,7 +446,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
 std::expected<Dfs::DirRow, Dfs::DfsError> ChatManager::channels_vector_row() {
     return Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
         node->dfs()->get_db_instance(),
-        node->actor_index()->network_id(),
+        ActorId(CHAT_SERVICE_ACTOR),
         Dfs::Basic::TEMPLATE_VECTOR,
         ExtraChainNode::CHANNELS_VECTOR_NAME);
 }

@@ -19,6 +19,8 @@
 
 #include "dfs/dirs_manager.h"
 
+#include "chat/chat_manager.h"
+
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 #include "dfs/dfs_controller.h"
@@ -330,7 +332,7 @@ void DirsManager::network_response_dir_rows(
                 return;
             }
 
-            if (owner_id == node->network_id()) {
+            if (owner_id == node->network_id() || owner_id == ActorId(CHAT_SERVICE_ACTOR)) {
                 auto rows = dir_rows;
                 for (auto it = rows.begin(); it != rows.end();) {
                     if (it->name == "Usernames") {

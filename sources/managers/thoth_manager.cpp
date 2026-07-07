@@ -19,6 +19,8 @@
 
 #include "managers/thoth_manager.h"
 
+#include "chat/chat_manager.h"
+
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 
@@ -290,10 +292,11 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
         return "";
     }
 
+    const auto usernames_actor = ActorId(CHAT_SERVICE_ACTOR);
     if (usernames_file_id_.empty()) {
         auto search_result =
             Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                              node->network_id(),
+                                                                              usernames_actor,
                                                                               Dfs::Basic::TEMPLATE_VECTOR,
                                                                               "Usernames");
 
@@ -308,7 +311,7 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
         }
     }
 
-    auto row = node->dfs()->read_vector_row(node->network_id(), usernames_file_id_, actor_id.to_string());
+    auto row = node->dfs()->read_vector_row(usernames_actor, usernames_file_id_, actor_id.to_string());
     if (!row.has_value()) {
         return "";
     }

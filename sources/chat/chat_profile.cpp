@@ -43,6 +43,34 @@ std::expected<Dfs::DirRow, ChatError> ChatProfile::ensure_storage_row() {
     return store_res.value();
 }
 
+// All ChatProfile copies, best-first: profiles got fragmented across duplicates,
+// so reads must fall through older copies for missing keys
+static std::vector<Dfs::DirRow> profile_storage_rows(ExtraChainNode* node, const ActorId& chat_main_id) {
+    std::vector<Dfs::DirRow> out;
+    if (chat_main_id.is_zero()) {
+        return out;
+    }
+    auto rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(node->dfs()->get_db_instance(),
+                                                                chat_main_id);
+    if (!rows.has_value()) {
+        return out;
+    }
+    for (const auto& row : rows.value()) {
+        if (row.name == CHAT_PROFILE && row.state != Dfs::FileState::Removed) {
+            out.push_back(row);
+        }
+    }
+    auto rank = [](const Dfs::DirRow& row) {
+        return row.state == Dfs::FileState::Ready ? 1 : 0;
+    };
+    std::sort(out.begin(), out.end(), [&](const Dfs::DirRow& a, const Dfs::DirRow& b) {
+        if (rank(a) != rank(b))
+            return rank(a) > rank(b);
+        return a.last_modified > b.last_modified;
+    });
+    return out;
+}
+
 std::optional<Dfs::DirRow> ChatProfile::find_storage_row(const ActorId& chat_main_id) {
     if (chat_main_id.is_zero()) {
         return std::nullopt;
@@ -148,38 +176,33 @@ std::expected<Chat::ChatProfileAvatar, ChatError> ChatProfile::upload_avatar(
     return avatar;
 }
 
-std::expected<std::string, ChatProfileError> ChatProfile::read_name(const ActorId& chat_main_id) {
-    auto row = find_storage_row(chat_main_id);
-    if (!row.has_value()) {
+std::expected<std::string, ChatProfileError> ChatProfile::read_entry(const ActorId&     chat_main_id,
+                                                                     const std::string& key) {
+    auto rows = profile_storage_rows(owner_->node, chat_main_id);
+    if (rows.empty()) {
         return std::unexpected(ChatProfileError::NoProfile);
     }
-    auto value = owner_->node->dfs()->read_dictionary(chat_main_id, row->file_id, "name");
-    if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
+    for (const auto& row : rows) {
+        auto value = owner_->node->dfs()->read_dictionary(chat_main_id, row.file_id, key);
+        if (value.has_value()) {
+            return value.value();
+        }
     }
-    return value.value();
+    return std::unexpected(ChatProfileError::NoEntry);
+}
+
+std::expected<std::string, ChatProfileError> ChatProfile::read_name(const ActorId& chat_main_id) {
+    return read_entry(chat_main_id, "name");
 }
 
 std::expected<std::string, ChatProfileError> ChatProfile::read_bio(const ActorId& chat_main_id) {
-    auto row = find_storage_row(chat_main_id);
-    if (!row.has_value()) {
-        return std::unexpected(ChatProfileError::NoProfile);
-    }
-    auto value = owner_->node->dfs()->read_dictionary(chat_main_id, row->file_id, "bio");
-    if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
-    }
-    return value.value();
+    return read_entry(chat_main_id, "bio");
 }
 
 std::expected<Chat::ChatProfileAvatar, ChatProfileError> ChatProfile::read_avatar(const ActorId& chat_main_id) {
-    auto row = find_storage_row(chat_main_id);
-    if (!row.has_value()) {
-        return std::unexpected(ChatProfileError::NoProfile);
-    }
-    auto value = owner_->node->dfs()->read_dictionary(chat_main_id, row->file_id, "avatar");
+    auto value = read_entry(chat_main_id, "avatar");
     if (!value.has_value()) {
-        return std::unexpected(ChatProfileError::NoEntry);
+        return std::unexpected(value.error());
     }
     auto avatar = Json::deserialize<Chat::ChatProfileAvatar>(value.value());
     if (!avatar.has_value()) {
