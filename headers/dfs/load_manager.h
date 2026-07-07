@@ -50,6 +50,7 @@ struct LoadInfo {
     std::chrono::system_clock::time_point last_fragment_received {};
 
     bool notify_neighbours;
+    bool forced { false };
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -114,6 +115,7 @@ private:
 
     static constexpr int  MAX_ATTEMPTS             = 10;
     static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
+    static constexpr int  MAX_FORCED_DOWNLOADS     = 4;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
