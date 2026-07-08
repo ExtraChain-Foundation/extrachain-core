@@ -154,16 +154,12 @@ private:
     void remove_thoth_info(const std::string& id);
     bool thoth_record_exists(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
 
-    // Removes this device's own Thoth rows (actor == system_actor) that carry the given token,
-    // across every chat. Used on token refresh so the stale token stops receiving pushes.
-    void remove_own_records_with_token(const std::string& token);
+    // This device's previous tokens. Their rows are purged on every flush (idempotent),
+    // which also heals rows resurrected by an offline peer's stale vector copy.
+    // Persisted to <dataDir>/.thoth_device_token together with the current token.
+    std::set<std::string> retired_tokens_;
 
-    // Stale token whose rows couldn't be removed yet (Thoth vector not ready);
-    // retried on the next flush_pending_records().
-    std::string pending_remove_token_;
-
-    // Last token persisted to <dataDir>/.thoth_device_token, so a token change across
-    // process restarts still removes the previous token's rows.
-    void        persist_device_token(const std::string& token);
-    std::string load_persisted_device_token();
+    void persist_device_tokens();
+    void load_persisted_device_tokens();
+    void purge_retired_token_rows();
 };
