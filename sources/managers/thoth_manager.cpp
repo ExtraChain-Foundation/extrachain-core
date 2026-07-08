@@ -544,7 +544,6 @@ std::string ThothManager::load_persisted_device_token() {
 // Called by ChatManager::read_chats() with the freshly-read chat list (so the data is
 // guaranteed ready — no signal/timing races). Registers the current token for every chat.
 // add_thoth_record() dedupes, so already-registered chats won't get duplicates.
-// No-op in the base (0.25/thoth); the chat branch supplies the chats.
 void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
     if (ios_token_.empty()) {
         return;

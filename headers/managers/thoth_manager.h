@@ -166,5 +166,4 @@ private:
     // Removes this device's own Thoth rows (actor == system_actor) that carry the given token,
     // across every chat. Used on token refresh so the stale token stops receiving pushes.
     void remove_own_records_with_token(const std::string& token);
-
 };
