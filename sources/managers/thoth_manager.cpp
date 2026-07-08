@@ -454,6 +454,7 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
                                                                : fmt::format("Message from @{}", username) };
 
     QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
+    eLog("Thoth local push POST {} token={} body={}", url.toString().toStdString(), info.token, service_message.body);
     QNetworkReply* reply = m_networkManager->post(request, data);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
