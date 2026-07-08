@@ -26,6 +26,10 @@
 
 class QNetworkAccessManager;
 
+namespace Chat {
+struct Chat;
+}
+
 struct ThothData {
     std::string   id;
     std::uint64_t timestamp = 0;
@@ -93,6 +97,10 @@ public:
     void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
     void network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
 
+    // Registers the current token for every chat in the given (already-ready) list.
+    // Called by ChatManager::read_chats(). No-op in the base (0.25/thoth).
+    void reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats);
+
     void start();
     void stop();
 
@@ -124,6 +132,11 @@ private:
     std::string ios_token_;
     // #endif
 
+    // Guard against reconcile spam: chatsLoaded() can fire repeatedly. We only redo the
+    // per-chat token registration when the token or the chat count actually changed.
+    std::string reconciled_token_;
+    std::size_t reconciled_chats_count_ = 0;
+
 signals:
     void sendSuccess(const QString& response);
     void sendFailed(const QString& error);
@@ -145,7 +158,12 @@ private:
     // across every chat. Used on token refresh so the stale token stops receiving pushes.
     void remove_own_records_with_token(const std::string& token);
 
-    // Re-registers the new token for every chat after a token change. No-op in the base
-    // (0.25/thoth); the chat branch implements it via read_chats() + per-chat identity.
-    void reconcile_chats_after_token_change();
+    // Stale token whose rows couldn't be removed yet (Thoth vector not ready);
+    // retried on the next flush_pending_records().
+    std::string pending_remove_token_;
+
+    // Last token persisted to <dataDir>/.thoth_device_token, so a token change across
+    // process restarts still removes the previous token's rows.
+    void        persist_device_token(const std::string& token);
+    std::string load_persisted_device_token();
 };
