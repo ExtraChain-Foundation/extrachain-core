@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cstdlib>
+#include <atomic>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -116,6 +117,8 @@ private:
 
     std::uint64_t m_totalDfsSize = 0;
 
+    std::atomic_uint64_t staged_startup_response_count_ { 0 };
+
 public:
     explicit DfsController(ExtraChainNode *node);
     ~DfsController();
@@ -189,6 +192,14 @@ public:
 
     DfsMode mode() const {
         return dfs_mode_;
+    }
+
+    std::uint64_t staged_startup_response_count() const {
+        return staged_startup_response_count_.load(std::memory_order_relaxed);
+    }
+
+    void mark_startup_sync_response() {
+        staged_startup_response_count_.fetch_add(1, std::memory_order_relaxed);
     }
 
     void set_mode(DfsMode mode) {
@@ -518,6 +529,7 @@ private:
     std::set<std::pair<ActorId, std::string>>    files_waiting_;
 
     void check_all_files(std::string identifier);
+    std::vector<ActorId> startup_sync_actors() const;
 
     // for store_vector and store_dictionary
     std::expected<Dfs::DirRow, Dfs::DfsError> store_vector_impl(
