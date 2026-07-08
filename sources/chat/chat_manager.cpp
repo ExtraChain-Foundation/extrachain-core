@@ -382,6 +382,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorI
     }
 
     node->dfs()->request_file(owner_id, file_id);
+
+    auto custom = ThothCustom { .ignored = { node->account_controller()->current_profile().main_id() } };
+    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
+
     return chat;
 }
 

@@ -22,6 +22,8 @@
 #include "chain/actor_id.h"
 #include "dfs/dfs_utils.h"
 
+#include <vector>
+
 class QNetworkAccessManager;
 
 struct ThothData {
@@ -37,13 +39,14 @@ struct ThothData {
 BOOST_DESCRIBE_STRUCT(ThothData, (), (id, timestamp, actor, owner, file_id, os, token, custom))
 
 struct ThothInfo {
+    std::string       id;
     std::string       os;
     std::string       token;
     std::set<ActorId> ignored;
 
     auto operator<=>(const ThothInfo&) const = default;
 };
-BOOST_DESCRIBE_STRUCT(ThothInfo, (), (os, token, ignored))
+BOOST_DESCRIBE_STRUCT(ThothInfo, (), (id, os, token, ignored))
 
 struct ThothCustom {
     std::set<ActorId> ignored;
@@ -61,6 +64,18 @@ class ExtraChainNode;
 
 enum class ThothType {
     ChatMessage
+};
+
+struct ThothPendingRecord {
+    ActorId     owner_id;
+    std::string file_id;
+    std::string custom;
+};
+
+enum class ThothAddResult {
+    Success,
+    Retry,
+    Failed
 };
 
 class ThothManager : public QObject {
@@ -87,6 +102,9 @@ public:
 
     bool send_to_service(const ThothInfo& info, const std::string& username);
 
+    // Platform-neutral alias: stores the device push token (APNS on iOS, FCM on Android).
+    // The platform is distinguished by the "os" field in ThothData, not by this setter.
+    void        set_device_token(const std::string& token);
     void        set_ios_token(const std::string& token);
     std::string read_username(const ActorId& actor_id);
 
@@ -100,6 +118,7 @@ private:
     std::string                                  file_id_;
     std::map<Dfs::FileLink, std::set<ThothInfo>> infos_;
     std::string                                  usernames_file_id_;
+    std::vector<ThothPendingRecord>              pending_records_;
 
     // #ifdef Q_OS_IOS
     std::string ios_token_;
@@ -111,4 +130,22 @@ signals:
 
 private:
     QNetworkAccessManager* m_networkManager;
+
+    void enqueue_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
+    ThothAddResult try_add_thoth_record(const ActorId&     owner_id,
+                                        const std::string& file_id,
+                                        const std::string& custom,
+                                        bool               check_existing = true);
+    void flush_pending_records();
+    void apply_thoth_row(const DbRow& row);
+    void remove_thoth_info(const std::string& id);
+    bool thoth_record_exists(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
+
+    // Removes this device's own Thoth rows (actor == system_actor) that carry the given token,
+    // across every chat. Used on token refresh so the stale token stops receiving pushes.
+    void remove_own_records_with_token(const std::string& token);
+
+    // Re-registers the new token for every chat after a token change. No-op in the base
+    // (0.25/thoth); the chat branch implements it via read_chats() + per-chat identity.
+    void reconcile_chats_after_token_change();
 };

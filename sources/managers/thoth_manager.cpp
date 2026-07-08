@@ -19,11 +19,30 @@
 
 #include "managers/thoth_manager.h"
 
+#include "chat/chat_manager.h"
+
+#include <algorithm>
+#include <optional>
+#include <set>
+#include <tuple>
+#include <utility>
+
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
+
+namespace {
+using ThothRecordKey = std::tuple<std::string, std::string, std::string, std::string>;
+
+ThothRecordKey make_thoth_record_key(const ActorId&     owner_id,
+                                     const std::string& file_id,
+                                     const std::string& token,
+                                     const std::string& custom) {
+    return { owner_id.to_string(), file_id, token, custom };
+}
+}
 
 ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
     : node(node)
@@ -33,7 +52,10 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
                      &DfsController::waitDownloaded,
                      [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
                          if (owner_id == node->network_id() && dir_row.name == "Thoth" /* && vector */) {
+                             this->owner_id_ = node->network_id();
+                             this->file_id_  = dir_row.file_id;
                              this->read_all(!enabled_);
+                             this->flush_pending_records();
                          }
                      });
 
@@ -41,9 +63,8 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
         if (owner_id == node->network_id() && dir_row.name == "Thoth") {
             this->owner_id_ = node->network_id();
             this->file_id_  = dir_row.file_id;
-            if (enabled_) {
-                this->read_all(!enabled_);
-            }
+            this->read_all(!enabled_);
+            this->flush_pending_records();
         }
     });
 }
@@ -51,7 +72,9 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
 void ThothManager::start() {
     enabled_ = true;
     // TODO: add downloaded file
-    this->read_all(false);
+    if (this->read_all(false)) {
+        this->flush_pending_records();
+    }
 }
 
 void ThothManager::stop() {
@@ -113,8 +136,8 @@ bool ThothManager::read_all(bool is_my) {
     }
 
     if (file_row->state != Dfs::FileState::Ready) {
-        node->dfs()->add_to_waiting_file(owner_id_, file_id_);
-        node->dfs()->request_file(owner_id_, file_id_);
+        node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
+        node->dfs()->request_file(node->network_id(), file_row->file_id);
         return false;
     }
 
@@ -138,15 +161,12 @@ bool ThothManager::read_all(bool is_my) {
         return false;
     }
 
+    if (!is_my) {
+        infos_.clear();
+    }
+
     for (const auto& row : *rows) {
-        auto file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
-        auto custom     = Json::deserialize<ThothCustom>(row.at("custom"));
-        auto thoth_info = ThothInfo { .os      = row.at("os"),
-                                      .token   = row.at("token"),
-                                      .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
-        // eLog("Loaded --------- : {}", thoth_info);
-        // eLog("Loaded --------- : {}", file_link);
-        infos_[file_link].insert(thoth_info);
+        apply_thoth_row(row);
     }
 
     return true;
@@ -155,14 +175,43 @@ bool ThothManager::read_all(bool is_my) {
 bool ThothManager::add_thoth_record(const ActorId&     owner_id,
                                     const std::string& file_id,
                                     const std::string& custom) {
+    auto add_result = try_add_thoth_record(owner_id, file_id, custom);
+    if (add_result == ThothAddResult::Success) {
+        return true;
+    }
+
+    if (add_result == ThothAddResult::Retry) {
+        enqueue_thoth_record(owner_id, file_id, custom);
+    }
+    return false;
+}
+
+void ThothManager::enqueue_thoth_record(const ActorId&     owner_id,
+                                        const std::string& file_id,
+                                        const std::string& custom) {
+    auto it = std::find_if(pending_records_.begin(),
+                           pending_records_.end(),
+                           [&owner_id, &file_id, &custom](const ThothPendingRecord& record) {
+                               return record.owner_id == owner_id && record.file_id == file_id
+                                   && record.custom == custom;
+                           });
+    if (it == pending_records_.end()) {
+        pending_records_.push_back({ .owner_id = owner_id, .file_id = file_id, .custom = custom });
+    }
+}
+
+ThothAddResult ThothManager::try_add_thoth_record(const ActorId&     owner_id,
+                                                  const std::string& file_id,
+                                                  const std::string& custom,
+                                                  bool               check_existing) {
     if (ios_token_.empty()) {
-        return false;
+        return ThothAddResult::Retry;
     }
 
     auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
     if (!file_row.has_value()) {
         // TODO: wait for exists
-        return false;
+        return ThothAddResult::Retry;
     }
 
     owner_id_ = node->network_id();
@@ -171,13 +220,16 @@ bool ThothManager::add_thoth_record(const ActorId&     owner_id,
     if (file_row->state != Dfs::FileState::Ready) {
         node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
         node->dfs()->request_file(node->network_id(), file_row->file_id);
-        return false;
+        return ThothAddResult::Retry;
     }
 
     // auto main_id   = account_controller_->current_profile().main_id();
     auto system_id = node->account_controller()->system_actor().id();
 
     // check db file, queue
+    if (check_existing && thoth_record_exists(owner_id, file_id, custom)) {
+        return ThothAddResult::Success;
+    }
 
     auto thoth_data = ThothData { .id        = Utils::generate_random_hex(6),
                                   .timestamp = 0,
@@ -198,10 +250,97 @@ bool ThothManager::add_thoth_record(const ActorId&     owner_id,
     auto res = node->dfs()->add_vector_row(node->network_id(), file_id_, thoth_data, system_id, security_key);
 
     if (!res) {
+        return ThothAddResult::Failed;
+    }
+
+    return ThothAddResult::Success;
+}
+
+bool ThothManager::thoth_record_exists(const ActorId&     owner_id,
+                                       const std::string& file_id,
+                                       const std::string& custom) {
+    if (file_id_.empty() || ios_token_.empty()) {
         return false;
     }
 
-    return res;
+    auto system_id    = node->account_controller()->system_actor().id();
+    auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+    auto rows         = node->dfs()->read_vector_rows(node->network_id(),
+                                              file_id_,
+                                              fmt::format("where status = '1' AND actor = '{}'", system_id),
+                                              security_key);
+    if (!rows.has_value()) {
+        return false;
+    }
+
+    for (const auto& row : *rows) {
+        auto owner_it  = row.find("owner");
+        auto file_it   = row.find("file_id");
+        auto token_it  = row.find("token");
+        auto custom_it = row.find("custom");
+        if (owner_it == row.end() || file_it == row.end() || token_it == row.end() || custom_it == row.end()) {
+            continue;
+        }
+
+        if (make_thoth_record_key(ActorId(owner_it->second), file_it->second, token_it->second, custom_it->second)
+            == make_thoth_record_key(owner_id, file_id, ios_token_, custom)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void ThothManager::flush_pending_records() {
+    if (pending_records_.empty()) {
+        return;
+    }
+
+    auto records = std::move(pending_records_);
+    pending_records_.clear();
+
+    std::optional<std::set<ThothRecordKey>> existing_records;
+    if (!file_id_.empty() && !ios_token_.empty()) {
+        auto system_id    = node->account_controller()->system_actor().id();
+        auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+        auto rows         = node->dfs()->read_vector_rows(node->network_id(),
+                                                  file_id_,
+                                                  fmt::format("where status = '1' AND actor = '{}'", system_id),
+                                                  security_key);
+        if (rows.has_value()) {
+            existing_records = std::set<ThothRecordKey> {};
+            for (const auto& row : *rows) {
+                auto owner_it  = row.find("owner");
+                auto file_it   = row.find("file_id");
+                auto token_it  = row.find("token");
+                auto custom_it = row.find("custom");
+                if (owner_it == row.end() || file_it == row.end() || token_it == row.end()
+                    || custom_it == row.end()) {
+                    continue;
+                }
+
+                existing_records->insert(
+                    make_thoth_record_key(ActorId(owner_it->second), file_it->second, token_it->second, custom_it->second));
+            }
+        }
+    }
+
+    for (const auto& record : records) {
+        auto record_key = make_thoth_record_key(record.owner_id, record.file_id, ios_token_, record.custom);
+        if (existing_records.has_value() && existing_records->contains(record_key)) {
+            continue;
+        }
+
+        auto result = try_add_thoth_record(record.owner_id,
+                                           record.file_id,
+                                           record.custom,
+                                           !existing_records.has_value());
+        if (result == ThothAddResult::Success && existing_records.has_value()) {
+            existing_records->insert(record_key);
+        } else if (result == ThothAddResult::Retry) {
+            enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
+        }
+    }
 }
 
 void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
@@ -211,6 +350,12 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
 
     if (node->network_id() == owner_id_ && file_id == file_id_) {
         this->network_thoth_record(owner_id_, file_id_, row);
+        return;
+    }
+
+    auto status_it = row.find("status");
+    if (status_it == row.end() || status_it->second != "1") {
+        return;
     }
 
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
@@ -218,9 +363,13 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
         return;
     }
 
+    std::set<std::string> sent_tokens;
     for (const auto& el : std::as_const(infos_[file_link])) {
         auto actor_id = ActorId(row.at("actor"));
         if (el.ignored.contains(actor_id)) {
+            continue;
+        }
+        if (!sent_tokens.insert(el.token).second) {
             continue;
         }
 
@@ -230,27 +379,67 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
 }
 
 void ThothManager::network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
+    auto id_it = row.find("id");
+    if (id_it == row.end()) {
+        return;
+    }
+
+    auto status_it = row.find("status");
+    if (status_it != row.end() && status_it->second == "0") {
+        remove_thoth_info(id_it->second);
+        return;
+    }
 
     auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(), .receiver_id = node->network_id() };
     auto rows         = node->dfs()->read_vector_rows(owner_id_,
                                               file_id_,
-                                              fmt::format("where status = '1' AND id = '{}'", row.at("id")),
+                                              fmt::format("where status = '1' AND id = '{}'", id_it->second),
                                               security_key);
     if (!rows.has_value()) {
         return;
     }
 
     if (rows->empty()) {
+        remove_thoth_info(id_it->second);
         return;
     }
 
-    auto file_link =
-        Dfs::FileLink { .owner_id = ActorId(rows->at(0).at("owner")), .file_id = rows->at(0).at("file_id") };
-    auto custom     = Json::deserialize<ThothCustom>(rows->at(0).at("custom"));
-    auto thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
-                                  .token   = rows->at(0).at("token"),
+    apply_thoth_row(rows->at(0));
+}
+
+void ThothManager::apply_thoth_row(const DbRow& row) {
+    auto id_it = row.find("id");
+    if (id_it == row.end()) {
+        return;
+    }
+
+    remove_thoth_info(id_it->second);
+
+    auto file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
+    auto custom     = Json::deserialize<ThothCustom>(row.at("custom"));
+    auto thoth_info = ThothInfo { .id      = id_it->second,
+                                  .os      = row.at("os"),
+                                  .token   = row.at("token"),
                                   .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
     infos_[file_link].insert(thoth_info);
+}
+
+void ThothManager::remove_thoth_info(const std::string& id) {
+    for (auto info_it = infos_.begin(); info_it != infos_.end();) {
+        for (auto thoth_it = info_it->second.begin(); thoth_it != info_it->second.end();) {
+            if (thoth_it->id == id) {
+                thoth_it = info_it->second.erase(thoth_it);
+            } else {
+                ++thoth_it;
+            }
+        }
+
+        if (info_it->second.empty()) {
+            info_it = infos_.erase(info_it);
+        } else {
+            ++info_it;
+        }
+    }
 }
 
 bool ThothManager::send_to_service(const ThothInfo& info, const std::string& username) {
@@ -265,6 +454,7 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
                                                                : fmt::format("Message from @{}", username) };
 
     QByteArray     data  = QByteArray::fromStdString(Json::serialize(service_message));
+    eLog("Thoth local push POST {} token={} body={}", url.toString().toStdString(), info.token, service_message.body);
     QNetworkReply* reply = m_networkManager->post(request, data);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
@@ -281,8 +471,69 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
     return true;
 }
 
+void ThothManager::set_device_token(const std::string& token) {
+    if (token.empty()) {
+        return;
+    }
+
+    // Same token as before: nothing changed, avoid re-registering.
+    if (token == ios_token_) {
+        flush_pending_records();
+        return;
+    }
+
+    // Token changed: drop this device's rows carrying the OLD token so it stops
+    // getting pushes, then register the new token for all my chats below.
+    std::string old_token = ios_token_;
+    ios_token_            = token;
+
+    if (!old_token.empty()) {
+        remove_own_records_with_token(old_token);
+    }
+
+    // Re-registration of the new token across all my chats (reconcile) lives in the
+    // chat branch, where read_chats()/per-chat identity exist.
+    reconcile_chats_after_token_change();
+
+    flush_pending_records();
+}
+
+// Base (0.25/thoth) has no chat enumeration API; the chat branch overrides this
+// to walk read_chats() and re-register the new token for every chat.
+void ThothManager::reconcile_chats_after_token_change() {
+}
+
+void ThothManager::remove_own_records_with_token(const std::string& token) {
+    if (token.empty() || file_id_.empty()) {
+        return;
+    }
+
+    auto system_id    = node->account_controller()->system_actor().id();
+    auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+    auto rows         = node->dfs()->read_vector_rows(node->network_id(),
+                                              file_id_,
+                                              fmt::format("where status = '1' AND actor = '{}'", system_id),
+                                              security_key);
+    if (!rows.has_value()) {
+        return;
+    }
+
+    for (const auto& row : *rows) {
+        auto id_it    = row.find("id");
+        auto token_it = row.find("token");
+        if (id_it == row.end() || token_it == row.end()) {
+            continue;
+        }
+        if (token_it->second != token) {
+            continue;
+        }
+
+        node->dfs()->remove_vector_row(node->network_id(), file_id_, id_it->second, system_id);
+    }
+}
+
 void ThothManager::set_ios_token(const std::string& token) {
-    ios_token_ = token;
+    set_device_token(token);
 }
 
 std::string ThothManager::read_username(const ActorId& actor_id) {

@@ -1736,10 +1736,10 @@ void DfsController::network_vector_add(const ActorId &owner_id, const std::strin
         // dirs_manager_.update_dirs(owner_id, dir_row.last_modified);
         if (row.at("status") == "1") {
             emit vectorRowAdded(owner_id, dir_row, row);
-            node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
         } else {
             emit vectorRowRemoved(owner_id, dir_row, row);
         }
+        node->thoth_manager()->dfs_vector_add_check(owner_id, file_id, row);
     }
 }
 
