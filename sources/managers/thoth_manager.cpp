@@ -556,11 +556,10 @@ void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& cha
     reconciled_chats_count_ = chats.size();
 
     for (const auto& chat : chats) {
-        // Ignore my own per-chat identity so I don't push myself.
-        auto ignored = chat.my_per_chat_id.has_value()
-                         ? std::set<ActorId> { chat.my_per_chat_id.value() }
-                         : std::set<ActorId> {};
-        auto custom = Json::serialize(ThothCustom { .ignored = std::move(ignored) });
+        // Ignore my own per-chat identity so I don't push myself; fall back to the chat
+        // main id exactly like create_dialogue/subscribe_channel so dedup keys match.
+        auto my_id  = chat.my_per_chat_id.value_or(node->chat_manager()->my_chat_main_id());
+        auto custom = Json::serialize(ThothCustom { .ignored = std::set<ActorId> { my_id } });
         add_thoth_record(chat.owner_id, chat.file_id, custom);
     }
 }
