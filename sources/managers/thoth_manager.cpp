@@ -429,6 +429,12 @@ void ThothManager::apply_thoth_row(const DbRow& row) {
                                   .os      = row.at("os"),
                                   .token   = row.at("token"),
                                   .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
+    eLog("[Thoth] cache row id={} os={} token={} chat={}/{}",
+         thoth_info.id,
+         thoth_info.os,
+         thoth_info.token,
+         file_link.owner_id,
+         file_link.file_id);
     infos_[file_link].insert(thoth_info);
 }
 
@@ -436,6 +442,7 @@ void ThothManager::remove_thoth_info(const std::string& id) {
     for (auto info_it = infos_.begin(); info_it != infos_.end();) {
         for (auto thoth_it = info_it->second.begin(); thoth_it != info_it->second.end();) {
             if (thoth_it->id == id) {
+                eLog("[Thoth] uncache row id={} token={}", thoth_it->id, thoth_it->token);
                 thoth_it = info_it->second.erase(thoth_it);
             } else {
                 ++thoth_it;
