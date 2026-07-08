@@ -606,8 +606,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
 
     chats_ = chats;
 
-    // The chat list is now ready: (re)register my push token for every chat.
-    // Guarded + deduped inside, so frequent read_chats() calls don't spam.
+    // Chat list is ready: (re)register my push token per chat (guarded + deduped inside).
     node->thoth_manager()->reconcile_tokens_for_chats(chats);
 
     return chats;

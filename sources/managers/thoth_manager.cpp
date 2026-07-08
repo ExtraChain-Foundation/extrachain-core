@@ -429,12 +429,6 @@ void ThothManager::apply_thoth_row(const DbRow& row) {
                                   .os      = row.at("os"),
                                   .token   = row.at("token"),
                                   .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
-    eLog("[Thoth] cache row id={} os={} token={} chat={}/{}",
-         thoth_info.id,
-         thoth_info.os,
-         thoth_info.token,
-         file_link.owner_id,
-         file_link.file_id);
     infos_[file_link].insert(thoth_info);
 }
 
@@ -442,7 +436,6 @@ void ThothManager::remove_thoth_info(const std::string& id) {
     for (auto info_it = infos_.begin(); info_it != infos_.end();) {
         for (auto thoth_it = info_it->second.begin(); thoth_it != info_it->second.end();) {
             if (thoth_it->id == id) {
-                eLog("[Thoth] uncache row id={} token={}", thoth_it->id, thoth_it->token);
                 thoth_it = info_it->second.erase(thoth_it);
             } else {
                 ++thoth_it;
@@ -492,8 +485,7 @@ void ThothManager::set_device_token(const std::string& token) {
     }
 
     if (ios_token_.empty()) {
-        // Fresh process: recover this device's token history from disk so a token
-        // change across restarts still removes the stale rows.
+        // Fresh process: recover this device's token history from disk.
         load_persisted_device_tokens();
     }
 
@@ -504,8 +496,7 @@ void ThothManager::set_device_token(const std::string& token) {
         return;
     }
 
-    // Token changed: retire the old token. Its rows are purged on every flush — not just
-    // once — because an offline peer's stale vector copy can resurrect removed rows.
+    // Token changed: retire the old one; its rows are purged on every flush (see purge).
     if (!ios_token_.empty()) {
         retired_tokens_.insert(ios_token_);
     }
@@ -513,19 +504,14 @@ void ThothManager::set_device_token(const std::string& token) {
     retired_tokens_.erase(token);
     persist_device_tokens();
 
-    // The per-chat re-registration is driven by ChatManager::read_chats(), which calls
-    // reconcile_tokens_for_chats() once the chat list is actually ready. Here we just
-    // reset the guard so the next read_chats() re-registers under the new token.
+    // Reset the guard so the next read_chats() re-registers under the new token.
     reconciled_token_.clear();
     reconciled_chats_count_ = 0;
 
     flush_pending_records();
 }
 
-// The node's working directory is the data dir (see prepare_folders), so a relative
-// path lands next to the profile data. First line = current token, following lines =
-// this device's retired tokens (kept so their rows can be re-purged if an offline
-// peer's stale vector copy resurrects them).
+// Cwd is the data dir; line 1 = current token, rest = this device's retired tokens.
 void ThothManager::persist_device_tokens() {
     QFile file(".thoth_device_token");
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -553,50 +539,39 @@ void ThothManager::load_persisted_device_tokens() {
     }
 }
 
-// Called by ChatManager::read_chats() with the freshly-read chat list (so the data is
-// guaranteed ready — no signal/timing races). Registers the current token for every chat.
-// add_thoth_record() dedupes, so already-registered chats won't get duplicates.
+// Called by read_chats() with a ready chat list; registers the token per chat (deduped).
 void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
     if (ios_token_.empty()) {
         return;
     }
 
-    // We're logged in with the chat list ready: retry anything deferred from before
-    // login (stale-token removal, queued registrations).
+    // Logged in and chats ready: retry anything deferred from before login.
     flush_pending_records();
 
-    // Anti-spam: read_chats() is called often. Skip the whole per-chat pass when neither
-    // the token nor the chat count changed since last time, so a quiet re-read does no
-    // vector reads and issues no broadcasts.
+    // Anti-spam: skip when neither the token nor the chat count changed.
     if (ios_token_ == reconciled_token_ && chats.size() == reconciled_chats_count_) {
         return;
     }
     reconciled_token_       = ios_token_;
     reconciled_chats_count_ = chats.size();
 
-    eLog("[Thoth] reconcile: token={}, chats={}", ios_token_, chats.size());
     for (const auto& chat : chats) {
-        // Ignore my own per-chat identity so I don't push myself, matching how
-        // create_dialogue/parse_invite register the record.
+        // Ignore my own per-chat identity so I don't push myself.
         auto ignored = chat.my_per_chat_id.has_value()
                          ? std::set<ActorId> { chat.my_per_chat_id.value() }
                          : std::set<ActorId> {};
         auto custom = Json::serialize(ThothCustom { .ignored = std::move(ignored) });
-        bool res    = add_thoth_record(chat.owner_id, chat.file_id, custom);
-        eLog("[Thoth] reconcile add owner={} file={} -> {}", chat.owner_id, chat.file_id, res);
+        add_thoth_record(chat.owner_id, chat.file_id, custom);
     }
 }
 
-// Removes this device's own rows (actor == system_actor) that carry any RETIRED token.
-// Runs on every flush: removal is idempotent, and repeating it heals rows resurrected
-// by an offline peer's stale vector copy. Other devices of the same user are safe —
-// their tokens are never in this device's retired set.
+// Idempotently removes own rows carrying retired tokens (also heals resurrected rows).
 void ThothManager::purge_retired_token_rows() {
     if (retired_tokens_.empty()) {
         return;
     }
 
-    // Called as early as nodeInitialised: no profile yet -> system_actor() would abort.
+    // No profile yet (pre-login): system_actor() would abort.
     if (node->account_controller()->empty()) {
         return;
     }
@@ -604,8 +579,8 @@ void ThothManager::purge_retired_token_rows() {
     if (file_id_.empty()) {
         auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
         if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
-            // Thoth vector not ready locally: the next flush retries.
-            return;
+            return; // not Ready locally: next flush retries
+
         }
         owner_id_ = node->network_id();
         file_id_  = file_row->file_id;
