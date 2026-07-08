@@ -120,7 +120,7 @@ Dag::Dag(ExtraChainNode *node)
         node->actor_index()->set_network_id(network_id);
     }
 
-    if (mode_ == DagMode::Light) {
+    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1)) {
         clear_dag();
         cache_.reset_db();
         cache_.init_db();

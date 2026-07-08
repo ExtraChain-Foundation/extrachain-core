@@ -105,8 +105,9 @@ void ExtraChainNode::process() {
         QCoreApplication::exit(-1000);
     }
 
-    ThreadPoolBoost::instance_dfs(4);
-    ThreadPoolBoost::instance(4);
+    const size_t default_threads = is_client_application_ ? 2 : 4;
+    ThreadPoolBoost::instance_dfs(default_threads);
+    ThreadPoolBoost::instance(default_threads);
 
     prepare_folders();
     actor_index_        = new ActorIndex(this);
@@ -129,11 +130,15 @@ void ExtraChainNode::process() {
 
     timer_reward_ = new QTimer(this);
     connect(timer_reward_, &QTimer::timeout, this, &ExtraChainNode::timer_reward_request);
-    timer_reward_->start(MINING_TIMER_TICK);
+    if (!is_client_application_) {
+        timer_reward_->start(MINING_TIMER_TICK);
+    }
 
     timer_info_ = new QTimer(this);
     connect(timer_info_, &QTimer::timeout, this, &ExtraChainNode::timer_info_print);
-    timer_info_->start(10000);
+    if (!is_client_application_) {
+        timer_info_->start(10000);
+    }
 
     timer_luminance_ = new QTimer(this);
     connect(timer_luminance_, &QTimer::timeout, this, &ExtraChainNode::timer_luminance_autoremove);
