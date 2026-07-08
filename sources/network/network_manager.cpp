@@ -61,22 +61,12 @@ void NetworkManager::connect_network() {
         return;
     }
 
-    if (this->check_port_sync(QString::fromStdString(first_nodes_[0]),
-                              Network::Protocol::WebSocket,
-                              false,
-                              true)) {
-        eLog("[Network] Reconnect to first node (priority) {}", first_nodes_[0]);
-        this->save_first_node(first_nodes_[0]);
-        emit this->connect_to_node(QString::fromStdString(first_nodes_[0]), Network::Protocol::WebSocket);
-        return;
-    }
-
-    if (first_nodes_.size() > 1 && Utils::vector_contains(first_nodes_, first_node_)) {
-        QString second_node = QString::fromStdString(first_nodes_[1]);
-        if (this->check_port_sync(second_node, Network::Protocol::WebSocket, false, true)) {
-            eLog("[Network] Reconnect to second node (fallback) {}", second_node.toStdString());
-            this->save_first_node(second_node.toStdString());
-            emit this->connect_to_node(second_node, Network::Protocol::WebSocket);
+    for (const auto &node_address : first_nodes_) {
+        QString node = QString::fromStdString(node_address);
+        if (this->check_port_sync(node, Network::Protocol::WebSocket, false, true)) {
+            eLog("[Network] Reconnect to first node candidate {}", node_address);
+            this->save_first_node(node_address);
+            emit this->connect_to_node(node, Network::Protocol::WebSocket);
             return;
         }
     }
@@ -1448,11 +1438,18 @@ void NetworkManager::message_received(const std::string &message,
 
     case MessageType::DfsTempSyncAll: {
         auto res = MessagePack::deserialize<bool>(serialized);
-        if (!res.has_value()) {
+        if (res.has_value()) {
+            node->dfs()->dirs_manager().network_request_all(responder);
             break;
         }
 
-        node->dfs()->dirs_manager().network_request_all(responder);
+        auto actors_result = MessagePack::deserialize<std::vector<ActorId>>(serialized);
+        if (!actors_result.has_value()) {
+            eWarning("[NetworkManager] {} deserialization failed for startup DFS sync request", type);
+            break;
+        }
+
+        node->dfs()->dirs_manager().network_request_all(responder, actors_result.value());
         break;
     }
 

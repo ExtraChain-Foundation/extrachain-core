@@ -264,6 +264,10 @@ void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpac
 void DirsManager::network_response_dir_rows(
     const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
     const Responder&                                                responder) {
+    if (!response_data.empty()) {
+        node->dfs()->mark_startup_sync_response();
+    }
+
     ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
         for (auto& [owner_id, dir_rows] : response_data) {
             // eTemp("~~~~~~~~~~~~~~~~ {}", dir_rows);
@@ -361,21 +365,57 @@ void DirsManager::temp_sync_all(const std::string& identifier) {
                                   responder);
 }
 
-void DirsManager::network_request_all(const Responder& responder) {
-    ThreadPoolBoost::instance_dfs()->post([this, responder] {
-        auto actors = node->actor_index()->read_all_actors_ids();
+void DirsManager::temp_sync_actors(const std::string& identifier, const std::vector<ActorId>& actors) {
+    if (actors.empty()) {
+        eLog("[Dfs] Staged startup sync skipped: no actors for {}", identifier);
+        return;
+    }
+
+    Responder responder(nullptr);
+    responder.add_identifier(identifier);
+    node->network()->send_message(actors,
+                                  MessageType::DfsTempSyncAll,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
+}
+
+void DirsManager::network_request_all(const Responder& responder, const std::vector<ActorId>& requested_actors) {
+    ThreadPoolBoost::instance_dfs()->post([this, responder, requested_actors] {
+        std::vector<ActorId> actors;
 
         auto network_id = node->actor_index()->network_id();
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
-        std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-            return actor == network_id || actor == raccoon_id;
-        });
 
-        actors.insert(actors.begin(), network_id);
-        actors.insert(actors.begin(), raccoon_id);
+        if (requested_actors.empty()) {
+            actors = node->actor_index()->read_all_actors_ids();
+            std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+                return actor == network_id || actor == raccoon_id;
+            });
+
+            actors.insert(actors.begin(), network_id);
+            actors.insert(actors.begin(), raccoon_id);
+            eLog("[Dfs] Full startup sync request: actors={}", actors.size());
+        } else {
+            std::set<ActorId> unique_actors;
+            unique_actors.insert(network_id);
+            unique_actors.insert(raccoon_id);
+
+            for (const auto& actor : requested_actors) {
+                if (!actor.is_zero()) {
+                    unique_actors.insert(actor);
+                }
+            }
+
+            actors.assign(unique_actors.begin(), unique_actors.end());
+            eLog("[Dfs] Staged startup sync request: requested={}, actors={}",
+                 requested_actors.size(),
+                 actors.size());
+        }
 
         std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data;
         response_data.reserve(actors.size());
+        std::size_t rows_count = 0;
 
         for (const auto& actor : actors) {
             auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_, actor, 0);
@@ -383,6 +423,7 @@ void DirsManager::network_request_all(const Responder& responder) {
             if (!dir_rows.has_value() || dir_rows->empty())
                 continue;
 
+            rows_count += dir_rows->size();
             response_data.emplace_back(actor, dir_rows.value());
 
             // QThread::msleep(3);
@@ -396,6 +437,7 @@ void DirsManager::network_request_all(const Responder& responder) {
                                 MessageType::DfsSyncDirRows,
                                 SendMode::Focused,
                                 MessageStatus::Response);
+        eLog("[Dfs] Startup sync response: actors={}, rows={}", response_data.size(), rows_count);
     });
 }
 
