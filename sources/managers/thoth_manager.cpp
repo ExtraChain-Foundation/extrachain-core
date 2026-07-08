@@ -27,6 +27,7 @@
 #include <tuple>
 #include <utility>
 
+#include <QFile>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 
@@ -67,6 +68,7 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
             this->flush_pending_records();
         }
     });
+
 }
 
 void ThothManager::start() {
@@ -292,6 +294,17 @@ bool ThothManager::thoth_record_exists(const ActorId&     owner_id,
 }
 
 void ThothManager::flush_pending_records() {
+    if (node->account_controller()->empty()) {
+        return;
+    }
+
+    if (!pending_remove_token_.empty()) {
+        auto stale = std::move(pending_remove_token_);
+        pending_remove_token_.clear();
+        eLog("[Thoth] retry stale-token removal: {}", stale);
+        remove_own_records_with_token(stale);
+    }
+
     if (pending_records_.empty()) {
         return;
     }
@@ -476,8 +489,18 @@ void ThothManager::set_device_token(const std::string& token) {
         return;
     }
 
+    if (ios_token_.empty()) {
+        // Fresh process: recover the previously registered token from disk so a token
+        // change across restarts still removes the stale rows.
+        auto persisted = load_persisted_device_token();
+        if (!persisted.empty() && persisted != token) {
+            ios_token_ = persisted;
+        }
+    }
+
     // Same token as before: nothing changed, avoid re-registering.
     if (token == ios_token_) {
+        persist_device_token(token);
         flush_pending_records();
         return;
     }
@@ -486,41 +509,93 @@ void ThothManager::set_device_token(const std::string& token) {
     // getting pushes, then register the new token for all my chats below.
     std::string old_token = ios_token_;
     ios_token_            = token;
+    persist_device_token(token);
 
     if (!old_token.empty()) {
         remove_own_records_with_token(old_token);
     }
 
-    // Re-registration of the new token across all my chats (reconcile) lives in the
-    // chat branch, where read_chats()/per-chat identity exist.
-    reconcile_chats_after_token_change();
+    // The per-chat re-registration is driven by ChatManager::read_chats(), which calls
+    // reconcile_tokens_for_chats() once the chat list is actually ready. Here we just
+    // reset the guard so the next read_chats() re-registers under the new token.
+    reconciled_token_.clear();
+    reconciled_chats_count_ = 0;
 
     flush_pending_records();
 }
 
-// Re-registers the new token for every chat I'm in. add_thoth_record() dedupes,
-// so chats that already have my new token won't get duplicates; the rest queue
-// as pending and flush once Thoth is Ready.
-void ThothManager::reconcile_chats_after_token_change() {
-    auto chats = node->chat_manager()->read_chats();
-    if (!chats.has_value()) {
+// The node's working directory is the data dir (see prepare_folders), so a relative
+// path lands next to the profile data.
+void ThothManager::persist_device_token(const std::string& token) {
+    QFile file(".thoth_device_token");
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(token.data(), qint64(token.size()));
+    }
+}
+
+std::string ThothManager::load_persisted_device_token() {
+    QFile file(".thoth_device_token");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    return file.readAll().toStdString();
+}
+
+// Called by ChatManager::read_chats() with the freshly-read chat list (so the data is
+// guaranteed ready — no signal/timing races). Registers the current token for every chat.
+// add_thoth_record() dedupes, so already-registered chats won't get duplicates.
+// No-op in the base (0.25/thoth); the chat branch supplies the chats.
+void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
+    if (ios_token_.empty()) {
         return;
     }
 
-    for (const auto& chat : *chats) {
+    // We're logged in with the chat list ready: retry anything deferred from before
+    // login (stale-token removal, queued registrations).
+    flush_pending_records();
+
+    // Anti-spam: read_chats() is called often. Skip the whole per-chat pass when neither
+    // the token nor the chat count changed since last time, so a quiet re-read does no
+    // vector reads and issues no broadcasts.
+    if (ios_token_ == reconciled_token_ && chats.size() == reconciled_chats_count_) {
+        return;
+    }
+    reconciled_token_       = ios_token_;
+    reconciled_chats_count_ = chats.size();
+
+    eLog("[Thoth] reconcile: token={}, chats={}", ios_token_, chats.size());
+    for (const auto& chat : chats) {
         // Ignore my own per-chat identity so I don't push myself, matching how
         // create_dialogue/parse_invite register the record.
         auto ignored = chat.my_per_chat_id.has_value()
                          ? std::set<ActorId> { chat.my_per_chat_id.value() }
                          : std::set<ActorId> {};
         auto custom = Json::serialize(ThothCustom { .ignored = std::move(ignored) });
-        add_thoth_record(chat.owner_id, chat.file_id, custom);
+        bool res    = add_thoth_record(chat.owner_id, chat.file_id, custom);
+        eLog("[Thoth] reconcile add owner={} file={} -> {}", chat.owner_id, chat.file_id, res);
     }
 }
 
 void ThothManager::remove_own_records_with_token(const std::string& token) {
-    if (token.empty() || file_id_.empty()) {
+    if (token.empty()) {
         return;
+    }
+
+    // Called as early as nodeInitialised: no profile yet -> system_actor() would abort.
+    if (node->account_controller()->empty()) {
+        pending_remove_token_ = token;
+        return;
+    }
+
+    if (file_id_.empty()) {
+        auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
+        if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
+            // Thoth vector not ready yet: retry on the next flush_pending_records().
+            pending_remove_token_ = token;
+            return;
+        }
+        owner_id_ = node->network_id();
+        file_id_  = file_row->file_id;
     }
 
     auto system_id    = node->account_controller()->system_actor().id();
@@ -530,6 +605,7 @@ void ThothManager::remove_own_records_with_token(const std::string& token) {
                                               fmt::format("where status = '1' AND actor = '{}'", system_id),
                                               security_key);
     if (!rows.has_value()) {
+        pending_remove_token_ = token;
         return;
     }
 
@@ -543,6 +619,7 @@ void ThothManager::remove_own_records_with_token(const std::string& token) {
             continue;
         }
 
+        eLog("[Thoth] remove stale token row id={} token={}", id_it->second, token);
         node->dfs()->remove_vector_row(node->network_id(), file_id_, id_it->second, system_id);
     }
 }
