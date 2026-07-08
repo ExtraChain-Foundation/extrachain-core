@@ -32,6 +32,8 @@
 
 #include "utils/thread_pool_boost.h"
 
+#include <QTimer>
+
 DfsController::DfsController(ExtraChainNode *node)
     : QObject(node)
     , node(node)
@@ -2483,6 +2485,9 @@ void DfsController::check_all_files(std::string identifier) {
     for (const auto &dir : dirs.value()) {
         bool is_full   = node->dfs()->mode() == DfsMode::Full;
         bool need_load = is_full || node->dfs()->is_priority(dir.actor_id);
+        if (!need_load) {
+            continue;
+        }
 
         const auto dir_rows = Dfs::Tables::DirsFile::ActorSpace::get_dir_rows(db_instance, dir.actor_id);
         if (!dir_rows.has_value()) {
@@ -2553,13 +2558,59 @@ void DfsController::check_all_files(std::string identifier) {
     // }
 }
 
+std::vector<ActorId> DfsController::startup_sync_actors() const {
+    std::set<ActorId> actors;
+
+    actors.insert(node->network_id());
+    actors.insert(priority_actors_.begin(), priority_actors_.end());
+
+    for (const auto& actor_id : node->account_controller()->accounts_ids()) {
+        actors.insert(actor_id);
+    }
+
+    for (const auto& file_link : priority_file_link_) {
+        actors.insert(file_link.owner_id);
+    }
+
+    std::erase_if(actors, [](const ActorId& actor_id) {
+        return actor_id.is_zero();
+    });
+
+    return { actors.begin(), actors.end() };
+}
+
 void DfsController::sync(const std::string &identifier) {
     static std::once_flag check_flag;
     ThreadPoolBoost::instance_dfs()->post([this, identifier]() {
         std::call_once(check_flag, [this, &identifier]() {
             check_all_files(identifier);
         });
-        dirs_manager_.temp_sync_all(identifier);
+
+        if (mode() == DfsMode::Full) {
+            dirs_manager_.temp_sync_all(identifier);
+            return;
+        }
+
+        auto actors = startup_sync_actors();
+        const auto responses_before = staged_startup_response_count();
+
+        eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
+        dirs_manager_.temp_sync_actors(identifier, actors);
+
+        QTimer::singleShot(15000, node, [this, identifier, responses_before]() {
+            ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
+                if (mode() != DfsMode::Light) {
+                    return;
+                }
+
+                if (staged_startup_response_count() != responses_before) {
+                    return;
+                }
+
+                eWarning("[Dfs] Staged startup sync fallback to full sync: identifier={}", identifier);
+                dirs_manager_.temp_sync_all(identifier);
+            });
+        });
     });
 }
 

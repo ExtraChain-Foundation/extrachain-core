@@ -282,7 +282,8 @@ private:
 #ifdef QT_DEBUG
         {
             "57.128.191.73", // test node 1
-            "57.128.191.74"  // test node 2
+            "57.128.191.74", // test node 2
+            "57.128.200.221" // test node 3
         };
 #else
         {

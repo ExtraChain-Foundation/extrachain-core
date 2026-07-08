@@ -60,7 +60,8 @@ public:
 
     // temp
     void temp_sync_all(const std::string& identifier);
-    void network_request_all(const Responder& responder);
+    void temp_sync_actors(const std::string& identifier, const std::vector<ActorId>& actors);
+    void network_request_all(const Responder& responder, const std::vector<ActorId>& requested_actors = {});
 
     std::shared_ptr<DbConnector> get_db_instance();
 
