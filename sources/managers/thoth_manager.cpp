@@ -298,12 +298,7 @@ void ThothManager::flush_pending_records() {
         return;
     }
 
-    if (!pending_remove_token_.empty()) {
-        auto stale = std::move(pending_remove_token_);
-        pending_remove_token_.clear();
-        eLog("[Thoth] retry stale-token removal: {}", stale);
-        remove_own_records_with_token(stale);
-    }
+    purge_retired_token_rows();
 
     if (pending_records_.empty()) {
         return;
@@ -490,30 +485,26 @@ void ThothManager::set_device_token(const std::string& token) {
     }
 
     if (ios_token_.empty()) {
-        // Fresh process: recover the previously registered token from disk so a token
+        // Fresh process: recover this device's token history from disk so a token
         // change across restarts still removes the stale rows.
-        auto persisted = load_persisted_device_token();
-        if (!persisted.empty() && persisted != token) {
-            ios_token_ = persisted;
-        }
+        load_persisted_device_tokens();
     }
 
     // Same token as before: nothing changed, avoid re-registering.
     if (token == ios_token_) {
-        persist_device_token(token);
+        persist_device_tokens();
         flush_pending_records();
         return;
     }
 
-    // Token changed: drop this device's rows carrying the OLD token so it stops
-    // getting pushes, then register the new token for all my chats below.
-    std::string old_token = ios_token_;
-    ios_token_            = token;
-    persist_device_token(token);
-
-    if (!old_token.empty()) {
-        remove_own_records_with_token(old_token);
+    // Token changed: retire the old token. Its rows are purged on every flush — not just
+    // once — because an offline peer's stale vector copy can resurrect removed rows.
+    if (!ios_token_.empty()) {
+        retired_tokens_.insert(ios_token_);
     }
+    ios_token_ = token;
+    retired_tokens_.erase(token);
+    persist_device_tokens();
 
     // The per-chat re-registration is driven by ChatManager::read_chats(), which calls
     // reconcile_tokens_for_chats() once the chat list is actually ready. Here we just
@@ -525,20 +516,34 @@ void ThothManager::set_device_token(const std::string& token) {
 }
 
 // The node's working directory is the data dir (see prepare_folders), so a relative
-// path lands next to the profile data.
-void ThothManager::persist_device_token(const std::string& token) {
+// path lands next to the profile data. First line = current token, following lines =
+// this device's retired tokens (kept so their rows can be re-purged if an offline
+// peer's stale vector copy resurrects them).
+void ThothManager::persist_device_tokens() {
     QFile file(".thoth_device_token");
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        file.write(token.data(), qint64(token.size()));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
     }
+    std::string data = ios_token_;
+    for (const auto& retired : retired_tokens_) {
+        data += "\n" + retired;
+    }
+    file.write(data.data(), qint64(data.size()));
 }
 
-std::string ThothManager::load_persisted_device_token() {
+void ThothManager::load_persisted_device_tokens() {
     QFile file(".thoth_device_token");
     if (!file.open(QIODevice::ReadOnly)) {
-        return {};
+        return;
     }
-    return file.readAll().toStdString();
+    auto lines = QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts);
+    if (lines.isEmpty()) {
+        return;
+    }
+    ios_token_ = lines.first().toStdString();
+    for (int i = 1; i < lines.size(); ++i) {
+        retired_tokens_.insert(lines.at(i).toStdString());
+    }
 }
 
 // Called by ChatManager::read_chats() with the freshly-read chat list (so the data is
@@ -575,22 +580,24 @@ void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& cha
     }
 }
 
-void ThothManager::remove_own_records_with_token(const std::string& token) {
-    if (token.empty()) {
+// Removes this device's own rows (actor == system_actor) that carry any RETIRED token.
+// Runs on every flush: removal is idempotent, and repeating it heals rows resurrected
+// by an offline peer's stale vector copy. Other devices of the same user are safe —
+// their tokens are never in this device's retired set.
+void ThothManager::purge_retired_token_rows() {
+    if (retired_tokens_.empty()) {
         return;
     }
 
     // Called as early as nodeInitialised: no profile yet -> system_actor() would abort.
     if (node->account_controller()->empty()) {
-        pending_remove_token_ = token;
         return;
     }
 
     if (file_id_.empty()) {
         auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
         if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
-            // Thoth vector not ready yet: retry on the next flush_pending_records().
-            pending_remove_token_ = token;
+            // Thoth vector not ready locally: the next flush retries.
             return;
         }
         owner_id_ = node->network_id();
@@ -604,7 +611,6 @@ void ThothManager::remove_own_records_with_token(const std::string& token) {
                                               fmt::format("where status = '1' AND actor = '{}'", system_id),
                                               security_key);
     if (!rows.has_value()) {
-        pending_remove_token_ = token;
         return;
     }
 
@@ -614,11 +620,11 @@ void ThothManager::remove_own_records_with_token(const std::string& token) {
         if (id_it == row.end() || token_it == row.end()) {
             continue;
         }
-        if (token_it->second != token) {
+        if (!retired_tokens_.contains(token_it->second)) {
             continue;
         }
 
-        eLog("[Thoth] remove stale token row id={} token={}", id_it->second, token);
+        eLog("[Thoth] remove stale token row id={} token={}", id_it->second, token_it->second);
         node->dfs()->remove_vector_row(node->network_id(), file_id_, id_it->second, system_id);
     }
 }
