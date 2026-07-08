@@ -97,8 +97,7 @@ public:
     void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
     void network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
 
-    // Registers the current token for every chat in the given (already-ready) list.
-    // Called by ChatManager::read_chats(). No-op in the base (0.25/thoth).
+    // Registers the token for every chat in the list; called by ChatManager::read_chats().
     void reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats);
 
     void start();
@@ -132,8 +131,7 @@ private:
     std::string ios_token_;
     // #endif
 
-    // Guard against reconcile spam: chatsLoaded() can fire repeatedly. We only redo the
-    // per-chat token registration when the token or the chat count actually changed.
+    // Reconcile anti-spam guard: redo only when the token or the chat count changed.
     std::string reconciled_token_;
     std::size_t reconciled_chats_count_ = 0;
 
@@ -154,9 +152,7 @@ private:
     void remove_thoth_info(const std::string& id);
     bool thoth_record_exists(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
 
-    // This device's previous tokens. Their rows are purged on every flush (idempotent),
-    // which also heals rows resurrected by an offline peer's stale vector copy.
-    // Persisted to <dataDir>/.thoth_device_token together with the current token.
+    // This device's previous tokens; their rows are purged on every flush (idempotent).
     std::set<std::string> retired_tokens_;
 
     void persist_device_tokens();
