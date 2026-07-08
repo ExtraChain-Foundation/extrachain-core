@@ -27,6 +27,18 @@
 #include "chain/actor_index.h"
 #include "managers/thoth_manager.h"
 
+#include <set>
+
+namespace {
+bool is_valid_chat_link(const Chat::Chat& chat) {
+    return !chat.owner_id.is_zero() && !chat.file_id.empty();
+}
+
+bool same_chat_link(const Chat::Chat& lhs, const Chat::Chat& rhs) {
+    return lhs.owner_id == rhs.owner_id && lhs.file_id == rhs.file_id;
+}
+} // namespace
+
 ChatManager::ChatManager(ExtraChainNode* node)
     : node(node) {
     QObject::connect(node->dfs(), &DfsController::downloaded, [this](ActorId owner_id, Dfs::DirRow dir_row) {
@@ -303,7 +315,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) 
     invite(chat.value());
     add_new_message_invite(chat->owner_id, chat->file_id, with);
 
-    auto custom = ThothCustom { .ignored = { current_chat_actor_id() } };
+    auto custom = ThothCustom { .ignored = { chat->my_per_chat_id.value_or(current_chat_actor_id()) } };
     node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
 
     return chat;
@@ -535,6 +547,10 @@ std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorI
     }
 
     node->dfs()->request_file(owner_id, file_id);
+
+    auto custom = ThothCustom { .ignored = { current_chat_actor_id() } };
+    node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
+
     return chat;
 }
 
@@ -553,10 +569,28 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
 
     std::vector<Chat::Chat> chats;
     chats.reserve(rows->size());
+    std::set<std::pair<std::string, std::string>> seen_chat_links;
 
     for (const auto& [key, value] : rows.value()) {
         auto chat = Json::deserialize<Chat::Chat>(value);
         if (!chat.has_value()) {
+            continue;
+        }
+
+        if (!is_valid_chat_link(chat.value())) {
+            eWarning("[Chat] Skip invalid chat row: key={}, owner={}, file={}",
+                     key,
+                     chat->owner_id,
+                     chat->file_id);
+            continue;
+        }
+
+        auto chat_link = std::make_pair(chat->owner_id.to_string(), chat->file_id);
+        if (!seen_chat_links.insert(chat_link).second) {
+            eWarning("[Chat] Skip duplicate chat row: key={}, owner={}, file={}",
+                     key,
+                     chat->owner_id,
+                     chat->file_id);
             continue;
         }
 
@@ -1042,7 +1076,17 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
 }
 
 std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::Chat& chat) {
-    // TODO: checks if chat exists
+    if (!is_valid_chat_link(chat)) {
+        eWarning("[Chat] Refuse to insert invalid chat row: owner={}, file={}", chat.owner_id, chat.file_id);
+        return std::unexpected(ChatError::Unknown);
+    }
+
+    auto existing_cached = std::find_if(chats_.cbegin(), chats_.cend(), [&chat](const auto& current) {
+        return same_chat_link(current, chat);
+    });
+    if (existing_cached != chats_.cend()) {
+        return true;
+    }
 
     auto my_chats = this->read_my_chats_row();
     if (!my_chats.has_value()) {
@@ -1053,11 +1097,24 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
         my_chats = my_chats_result;
     }
 
+    auto security_actor = Dfs::DataSecuritySelf { .my_actor = current_chat_actor_id() };
+    auto rows = node->dfs()->read_dictionary_rows(my_chats->actor_id, my_chats->file_id, security_actor);
+    if (rows.has_value()) {
+        for (const auto& [key, value] : rows.value()) {
+            auto existing = Json::deserialize<Chat::Chat>(value);
+            if (existing.has_value() && is_valid_chat_link(existing.value())
+                && same_chat_link(existing.value(), chat)) {
+                chats_.push_back(existing.value());
+                mark_chat_priority(existing.value());
+                return true;
+            }
+        }
+    }
+
     auto chat_new = chat;
     chat_new.id   = Utils::generate_random_hex(6);
 
     auto chat_actor_id  = current_chat_actor_id();
-    auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_id };
     auto value          = Json::serialize(chat_new);
     auto res = node->dfs()->dictionary_set_value(chat_actor_id, my_chats->file_id, chat_new.id, value,
                                                   chat_actor_id, security_actor);
@@ -1079,7 +1136,11 @@ std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::C
         return std::unexpected(ChatError::Unknown);
     }
 
-    if (chat.id.empty()) {
+    if (chat.id.empty() || !is_valid_chat_link(chat)) {
+        eWarning("[Chat] Refuse to update invalid chat row: id={}, owner={}, file={}",
+                 chat.id,
+                 chat.owner_id,
+                 chat.file_id);
         return std::unexpected(ChatError::Unknown);
     }
 
@@ -1230,7 +1291,7 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         }
     }
 
-    auto custom = ThothCustom { .ignored = { current_chat_actor_id() } };
+    auto custom = ThothCustom { .ignored = { chat.my_per_chat_id.value_or(current_chat_actor_id()) } };
     node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
 
     return true;

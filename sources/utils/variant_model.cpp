@@ -123,6 +123,12 @@ void VariantModel::appends(const QVariantList &variants) {
 }
 
 void VariantModel::insert(int i, const QVariantMap &variant) {
+    // Clamp: inserting past the end makes QList backfill empty maps → ghost rows.
+    if (i < 0)
+        i = 0;
+    else if (i > m_datas.length())
+        i = m_datas.length();
+
     beginInsertRows(QModelIndex(), i, i);
     m_datas.insert(i, variant);
     setCount(m_datas.length());
@@ -133,6 +139,11 @@ void VariantModel::inserts(int i, const QVariantList &variants) {
     if (variants.empty()) {
         return;
     }
+
+    if (i < 0)
+        i = 0;
+    else if (i > m_datas.length())
+        i = m_datas.length();
 
     beginInsertRows(QModelIndex(), i, i + variants.length() - 1);
 
