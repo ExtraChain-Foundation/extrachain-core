@@ -1328,9 +1328,17 @@ void DfsController::download_waiting_files() {
 }
 
 void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
-    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
+    // First request goes out immediately, retries at most every 30s per file.
+    const auto now = std::chrono::steady_clock::now();
+    auto       it  = request_file_times_.find(file_link);
+    if (it != request_file_times_.end() && now - it->second < std::chrono::seconds(30)) {
+        return;
+    }
+    request_file_times_[file_link] = now;
+
+    eLog("[Dfs] Request file: {} / {}", owner_id, file_id);
     forces_files_.insert(file_link);
 
     this->node->network()->send_message(file_link,

@@ -574,6 +574,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     for (const auto& [key, value] : rows.value()) {
         auto chat = Json::deserialize<Chat::Chat>(value);
         if (!chat.has_value()) {
+            eWarning("[Chat] Skip undeserializable chat row: key={}, value={}", key, value);
             continue;
         }
 

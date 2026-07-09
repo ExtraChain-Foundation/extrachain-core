@@ -217,6 +217,11 @@ public:
 
     std::set<Dfs::FileLink> forces_files_;
 
+    // Throttle for request_file: read paths (read_template, avatars, chat vectors)
+    // re-request a missing file on EVERY failed read; without this the client spams
+    // the network several times per second for files the node can't serve.
+    std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_file_times_;
+
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(
         const ActorId               &owner_id,
         const ActorId               &author_id,
