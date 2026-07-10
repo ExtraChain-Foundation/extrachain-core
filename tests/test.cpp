@@ -210,6 +210,20 @@ private slots:
         QCOMPARE(persisted->invite_pending, created->invite_pending);
     }
 
+    void targetedActorRefreshReportsNoActivePeers() {
+        QVERIFY(node != nullptr);
+
+        Actor<KeyPrivate> actor;
+        actor.create(ActorType::User);
+
+        QVERIFY(!node->dfs()->refresh_actors({ actor.id(), actor.id(), ActorId() }));
+    }
+
+    void vectorRowRebroadcastReportsNoActivePeers() {
+        QVERIFY(node != nullptr);
+        QVERIFY(!node->dfs()->rebroadcast_vector_row(ActorId(), "missing", "missing"));
+    }
+
     void blocks() {
         //        Block a;
         //        Block b;
