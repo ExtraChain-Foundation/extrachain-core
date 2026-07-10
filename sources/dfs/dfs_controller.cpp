@@ -40,6 +40,10 @@ DfsController::DfsController(ExtraChainNode *node)
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
 
+    // Дефолтний ранг завантаження raccoon-актора (вектори і файли) — 1.
+    // Chat/main-актори реєструються в ExtraChainNode::start(), network — у download_rank.
+    set_download_rank(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"), 1, 1);
+
     refresh_calculate();
     // loadBytesLimit();
     eLog("[Dfs] Started. Current size: {}, available: {}", m_sizeTaken, bytesAvailable());
@@ -1327,6 +1331,60 @@ void DfsController::download_waiting_files() {
     }
 }
 
+int DfsController::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_row) const {
+    // Векторний клас = самі БД (Vector/Dictionary/Collection) + їхні шаблони
+    // (тип File у :CollectionTemplate — без шаблону вектор не читається).
+    // Класифікація по folder НЕ підходить: вкладення чатів лежать у :DApp:Chat:*.
+    const bool is_vector =
+        dir_row.type == Dfs::FileType::Vector || dir_row.type == Dfs::FileType::Dictionary
+        || dir_row.type == Dfs::FileType::Collection
+        || (dir_row.folder.has_value() && dir_row.folder.value() == Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
+
+    // Винятки за іменем (owner+name) — найвищий пріоритет у реєстрі: дозволяють
+    // демотнути конкретний вектор (напр. Usernames мережі) з критичного шляху.
+    if (auto it = download_rank_name_overrides_.find({ owner_id, dir_row.name });
+        it != download_rank_name_overrides_.end()) {
+        return it->second;
+    }
+
+    // Реєстр рангів (raccoon — з конструктора, chat/main-актори — з
+    // ExtraChainNode::start(), кастомні — set_download_rank з застосунку).
+    if (auto it = download_rank_overrides_.find(owner_id); it != download_rank_overrides_.end()) {
+        const int rank = is_vector ? it->second.first : it->second.second;
+        if (rank >= 0) {
+            return rank;
+        }
+    }
+
+    if (owner_id == node->network_id() && is_vector) {
+        return 0;
+    }
+    return is_vector ? RANK_OTHER_VECTORS : RANK_FILES;
+}
+
+// Прямий запит повного вмісту вектора (DfsFileRequest → пір відповідає
+// DfsVectorContent-пакетом): handle_package відновлює і БД, і .vector-компаньйон.
+// Використовується для ремонту векторів із загубленим шаблоном (read_template).
+void DfsController::request_vector_content(const ActorId &owner_id, const std::string &file_id) {
+    auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
+
+    const auto now = std::chrono::steady_clock::now();
+    auto       it  = request_vector_times_.find(file_link);
+    if (it != request_vector_times_.end() && now - it->second < std::chrono::seconds(30)) {
+        return;
+    }
+    request_vector_times_[file_link] = now;
+
+    eLog("[Dfs] Request vector content: {} / {}", owner_id, file_id);
+    Dfs::FileLinkFragment request;
+    request.file_link = file_link;
+    request.fragment_numbers.emplace(1);
+    node->network()->send_message(request,
+                                  MessageType::DfsFileRequest,
+                                  SendMode::Neighbours,
+                                  MessageStatus::NoStatus);
+}
+
 void DfsController::request_file(const ActorId &owner_id, const std::string &file_id) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
@@ -1345,6 +1403,14 @@ void DfsController::request_file(const ActorId &owner_id, const std::string &fil
                                         MessageType::DfsFileState,
                                         SendMode::Neighbours,
                                         MessageStatus::Request);
+
+    // Не чекаємо state-відповіді (старі ноди мовчать, якщо файла не мають):
+    // кладемо в чергу форсовано — LoadManager сам додає всіх сусідів як
+    // кандидатів і пробингом (ContinueUpload) знаходить власника файла.
+    auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
+    if (row.has_value()) {
+        load_manager_.add_to_queue(owner_id, row.value(), std::string {}, false);
+    }
 }
 
 std::expected<Dfs::DirRow, Dfs::DfsError> DfsController::read_file_status_self(const std::string &dfs_name) {
@@ -1702,14 +1768,23 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
 void DfsController::network_response_content_vector(
     const Dfs::Packets::DfsVectorContentPackage &dfs_vector_content) { // check hash
     ThreadPoolBoost::instance_dfs()->post([this, dfs_vector_content] {
+        eLog("[Dfs] Vector content package: {} / {}", dfs_vector_content.owner_id, dfs_vector_content.file_id);
         auto dfs_vector_result = make_vector(dfs_vector_content.owner_id, dfs_vector_content.file_id, true);
         if (!dfs_vector_result.has_value()) {
+            eWarning("[Dfs] Vector content package: make_vector failed for {} / {}",
+                     dfs_vector_content.owner_id,
+                     dfs_vector_content.file_id);
             return;
         }
 
         auto &[dir_row, dfs_vector] = dfs_vector_result.value();
 
         bool res_handle = dfs_vector.handle_package(dfs_vector_content);
+        if (!res_handle) {
+            eWarning("[Dfs] Vector content package: handle failed for {} / {}",
+                     dfs_vector_content.owner_id,
+                     dfs_vector_content.file_id);
+        }
 
         Dfs::FileLinkFragment file_link_fragment;
         file_link_fragment.file_link =
@@ -1791,6 +1866,8 @@ void DfsController::network_response_file_state(const Dfs::Packets::FileState &d
     auto dir_row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(),
                                                                   data.owner_id,
                                                                   data.file_id);
+
+    eLog("[Dfs] File state response: {}/{} state={}", data.owner_id, data.file_id, data.state);
 
     if (!dir_row.has_value()) {
         return;
@@ -2605,7 +2682,9 @@ void DfsController::sync(const std::string &identifier) {
         eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
         dirs_manager_.temp_sync_actors(identifier, actors);
 
-        QTimer::singleShot(15000, node, [this, identifier, responses_before]() {
+        // 3с: прод-ноди без staged-підтримки не відповідають взагалі, і кожен
+        // чистий синк платив цей таймаут повністю (було 15с).
+        QTimer::singleShot(3000, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
                 if (mode() != DfsMode::Light) {
                     return;

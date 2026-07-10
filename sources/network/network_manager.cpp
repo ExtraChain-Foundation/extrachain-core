@@ -383,29 +383,52 @@ void NetworkManager::check_port(const QString     ip,
                                 Network::Protocol protocol,
                                 const bool        request,
                                 const bool        isConstant) {
-    // if (active_connections_count() > Network::maxConnections) {
-    //     return;
-    // }
+    // Ліміт уже вибраний — нові проби не потрібні (раніше апка хендшейкала весь
+    // список нод, десятки зайвих сокетів вбивались одразу після створення).
+    if (active_connections_count() >= Network::maxConnections) {
+        return;
+    }
+
+    // Кандидатів "у польоті" теж обмежуємо, але із запасом: не всі ноди мають
+    // DFS-дані мережі, тож занадто вузький перебір лишає нас із сусідами без
+    // потрібних файлів (штатні відповіді — Unknown, і файли не качаються).
+    static std::atomic_int pending_probes { 0 };
+    if (pending_probes.load() + active_connections_count() >= Network::maxConnections * 5) {
+        return;
+    }
+    pending_probes.fetch_add(1);
+    auto probe_done = std::make_shared<std::atomic_bool>(false);
+    auto release    = [probe_done]() {
+        if (!probe_done->exchange(true)) {
+            pending_probes.fetch_sub(1);
+        }
+    };
 
     auto *socket = new QTcpSocket(this);
     auto *timer  = new QTimer(this);
     timer->setSingleShot(true);
 
-    connect(socket, &QTcpSocket::connected, this, [this, socket, timer, ip, protocol, request, isConstant]() {
+    connect(socket,
+            &QTcpSocket::connected,
+            this,
+            [this, socket, timer, ip, protocol, request, isConstant, release]() {
+                release();
+                timer->stop();
+                timer->deleteLater();
+                socket->disconnectFromHost();
+                socket->deleteLater();
+                connect_to_node_slot(ip, protocol, request, isConstant);
+            });
+
+    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer, release](QAbstractSocket::SocketError) {
+        release();
         timer->stop();
         timer->deleteLater();
-        socket->disconnectFromHost();
-        socket->deleteLater();
-        connect_to_node_slot(ip, protocol, request, isConstant);
-    });
-
-    connect(socket, &QTcpSocket::errorOccurred, this, [socket, timer](QAbstractSocket::SocketError) {
-        timer->stop();
-        timer->deleteLater();
         socket->deleteLater();
     });
 
-    connect(timer, &QTimer::timeout, this, [socket, timer]() {
+    connect(timer, &QTimer::timeout, this, [socket, timer, release]() {
+        release();
         socket->abort();
         socket->deleteLater();
         timer->deleteLater();

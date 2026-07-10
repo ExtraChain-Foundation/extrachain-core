@@ -40,6 +40,19 @@ LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     m_timer->start(5000);
 }
 
+void LoadManager::kick() {
+    if (kick_pending_.exchange(true)) {
+        return;
+    }
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            kick_pending_.store(false);
+            timer_runner();
+        },
+        Qt::QueuedConnection);
+}
+
 void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
     {
         auto amount_file_fragments_requests_locked = *m_amount_file_fragments_requests;
@@ -47,11 +60,54 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         for (auto it = amount_file_fragments_requests_locked->begin();
              it != amount_file_fragments_requests_locked->end();) {
             auto duration = now - it->second;
-            if (duration > std::chrono::seconds(10))
+            // 4с (було 10с): глухий запит тримав слот, а при заповнених слотах
+            // планувальник повністю зупинявся — один мертвий пір коштував 10с.
+            if (duration > std::chrono::seconds(4))
                 it = amount_file_fragments_requests_locked->erase(it);
             else
                 ++it;
         }
+    }
+
+    // Гейт "вектори перед файлами": поки в чергах є вектор (rank<=4), який ще має
+    // шанс докачатись (свіжий у черзі або нещодавно отримував фрагменти), звичайні
+    // файли не плануємо. Вікно свіжості захищає від вічного голодування файлів,
+    // якщо вектор нікому віддати (жоден сусід не має).
+    const bool vectors_waiting = [&]() {
+        const auto now = std::chrono::system_clock::now();
+        // Копія під коротким локом: тримати лок m_completed_once поверх локів
+        // пулів не можна — finish_him бере їх у зворотному порядку (deadlock).
+        std::set<Dfs::FileLink> completed_once;
+        {
+            auto locked    = *m_completed_once;
+            completed_once = *locked;
+        }
+        auto has_fresh = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
+            auto locked = *pool;
+            for (const auto& [link, info] : *locked) {
+                if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
+                    continue;
+                }
+                // Перекачування вже завершеного вектора (цикл hash-розбіжності)
+                // не тримає гейт — інакше файли голодували б вічно.
+                if (completed_once.contains(link)) {
+                    continue;
+                }
+                if (now - info.queued < std::chrono::seconds(60)
+                    || now - info.last_fragment_received < std::chrono::seconds(15)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        return has_fresh(m_active_downloads_priority) || has_fresh(m_active_downloads);
+    }();
+
+    // Лог перемикання гейта: коли файли ставляться на паузу і коли відпускаються.
+    static bool last_vectors_waiting = false;
+    if (vectors_waiting != last_vectors_waiting) {
+        last_vectors_waiting = vectors_waiting;
+        eLog("[Load] {}", vectors_waiting ? "files PAUSED (vectors downloading)" : "files RESUMED");
     }
 
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
@@ -63,9 +119,23 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 download_order.emplace_back(item.first);
             }
 
+            // Порядок: 0 вектори network → 1 файли raccoon → 2 вектори chat-актора →
+            // 3 вектори main-актора → 4 інші вектори → 5 файли; в межах рангу
+            // форсовані (явний request_file) першими.
+            auto rank_of = [&](const Dfs::FileLink& link) {
+                const auto it = active_downloads_locked->find(link);
+                return it != active_downloads_locked->end()
+                           ? node->dfs()->download_rank(link.owner_id, it->second.dir_row)
+                           : 5;
+            };
             std::stable_sort(download_order.begin(),
                              download_order.end(),
-                             [&active_downloads_locked](const Dfs::FileLink& lhs, const Dfs::FileLink& rhs) {
+                             [&](const Dfs::FileLink& lhs, const Dfs::FileLink& rhs) {
+                                 const int lhs_rank = rank_of(lhs);
+                                 const int rhs_rank = rank_of(rhs);
+                                 if (lhs_rank != rhs_rank) {
+                                     return lhs_rank < rhs_rank;
+                                 }
                                  const auto lhs_it = active_downloads_locked->find(lhs);
                                  const auto rhs_it = active_downloads_locked->find(rhs);
                                  const bool lhs_forced =
@@ -81,7 +151,14 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                     continue;
                 }
 
-                auto& load_info      = it->second;
+                auto& load_info = it->second;
+
+                // Файли стоять на паузі, поки качаються вектори. Форсовані файли
+                // (явний користувацький request_file, напр. тап по медіа) не паузимо.
+                if (vectors_waiting && !load_info.forced
+                    && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
+                    continue;
+                }
                 bool  ignore_timeout = file_link_to_proceed == file_link;
                 bool  is_requested   = false;
                 const size_t active_request_limit =
@@ -144,8 +221,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                     if (identifier.second.counter >= 3)
                         continue;
+                    // Ретрай до того ж піра — 4с (було 10с), у парі з таймаутом слота.
                     else if (identifier.second.counter == 0
-                             || (duration > std::chrono::seconds(10) || ignore_timeout)) {
+                             || (duration > std::chrono::seconds(4) || ignore_timeout)) {
                         if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1) {
                             this->node->network()->send_message(file_link,
                                                                 MessageType::DfsFileRequestContinueUpload,
@@ -200,6 +278,14 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 }
                 auto identifier_list_size = load_info.identifier_list.size();
                 if (!is_requested && identifier_list_size > 0) {
+                    if (++load_info.source_refresh_cycles > 3) {
+                        eLog("[Load] GIVE UP {}/{} after {} source cycles",
+                             file_link.owner_id,
+                             file_link.file_id,
+                             load_info.source_refresh_cycles);
+                        active_downloads_locked->erase(it);
+                        continue;
+                    }
                     eLog("[LoadManager] Exhausted identifiers for file {}, refreshing sources", file_link.file_id);
                     load_info.identifier_list.clear();
                     load_info.identifier_storage_checker.clear();
@@ -295,7 +381,24 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
 
     auto row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), owner_id, dir_row.file_id);
-    if (row.has_value()) {
+
+    // Вектор, нечитабельний на диску (нема БД або .vector-компаньйона-шаблона),
+    // при тому що .dirs каже Ready з правильним hash'ом — стан після обірваного
+    // запису (kill під час синку). Усі early-return'и нижче назавжди блокували
+    // повторне завантаження. Не скіпаємо: content-package відновить обидва файли.
+    bool vector_broken_on_disk = false;
+    if (row.has_value() && row->type == Dfs::FileType::Vector) {
+        const auto main_path = std::filesystem::path(Dfs::Path::filePath(owner_id, dir_row.file_id));
+        vector_broken_on_disk =
+            !std::filesystem::exists(main_path) || !std::filesystem::exists(main_path.string() + ".vector");
+        if (vector_broken_on_disk) {
+            eWarning("[Load] REPAIR {}/{}: vector unreadable on disk (db or .vector missing)",
+                     owner_id,
+                     dir_row.file_id);
+        }
+    }
+
+    if (row.has_value() && !vector_broken_on_disk) {
         if (row->state == Dfs::FileState::Ready || row->state == Dfs::FileState::Partial) {
             auto file_path = Dfs::Path::file_path(owner_id, dir_row.file_id);
             if (!file_path.has_value()) {
@@ -347,7 +450,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     }
 
     // check duplicate
-    if (node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
+    if (!vector_broken_on_disk
+        && node->dfs()->is_file_already_downloaded(owner_id, dir_row.file_id, dir_row.hash)) {
         return;
     }
 
@@ -360,7 +464,8 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
         return;
     }
 
-    auto load_info = LoadInfo { .dir_row = dir_row };
+    auto load_info   = LoadInfo { .dir_row = dir_row };
+    load_info.queued = std::chrono::system_clock::now();
     // LoadInfo::Attempts attempts { .counter = 1, .last_attempt = std::chrono::system_clock::now()};
     LoadInfo::Attempts attempts { .counter = 0 };
     load_info.identifier_storage_checker.emplace(identifier);
@@ -394,6 +499,17 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     else
         res = m_active_downloads->emplace(file_link, load_info);
     if (res.second) {
+        eLog("[Load] QUEUE rank={} {} {}/{} size={} hash={} lm={}{}{}",
+             node->dfs()->download_rank(owner_id, dir_row),
+             dir_row.folder.value_or("-"),
+             owner_id,
+             dir_row.file_id,
+             dir_row.size,
+             dir_row.hash.substr(0, 8),
+             dir_row.last_modified,
+             is_forced ? " forced" : "",
+             is_priority ? " prio-pool" : "");
+        kick();
         // Responder responder(nullptr);
         // responder.add_identifier(identifier);
         // this->node->network()->send_message(file_link,
@@ -718,7 +834,16 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
 }
 
 void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row) {
-    eLog("[LoadManager] Finish {} / {}", owner_id, dir_row.file_id);
+    {
+        auto completed_locked = *m_completed_once;
+        completed_locked->insert(Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
+    }
+    eLog("[Load] DONE rank={} {} {}/{} size={}",
+         node->dfs()->download_rank(owner_id, dir_row),
+         dir_row.folder.value_or("-"),
+         owner_id,
+         dir_row.file_id,
+         dir_row.size);
 
     Dfs::Tables::DirsFile::ActorSpace::update_file_state(node->dfs()->get_db_instance(),
                                                          owner_id,

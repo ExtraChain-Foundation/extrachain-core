@@ -48,9 +48,14 @@ struct LoadInfo {
     size_t           amount_fragments;
     std::set<size_t> fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
+    std::chrono::system_clock::time_point queued {};
 
     bool notify_neighbours;
     bool forced { false };
+    // Скільки разів повністю вичерпали джерела і починали заново: після 3 циклів
+    // здаємось (файл повернеться в чергу через request_file/наступний синк) —
+    // інакше недоступний файл жував ретраї вічно.
+    int source_refresh_cycles { 0 };
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
@@ -110,6 +115,11 @@ public:
 
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    // Миттєве (коалесоване) пробудження планувальника — без нього нові елементи
+    // черги чекали наступного 5-секундного тіка таймера.
+    void kick();
+
+    std::atomic_bool kick_pending_ { false };
 
     ExtraChainNode* node;
 
@@ -134,6 +144,10 @@ private:
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
     std::mutex                                              m_write_file_mutex;
+
+    // Файли, що вже завершували завантаження в цій сесії: їхні перекачування
+    // (цикл hash-розбіжності векторів) не тримають гейт "вектори перед файлами".
+    SafePtr<std::set<Dfs::FileLink>> m_completed_once;
 
     QTimer* m_timer;
 };

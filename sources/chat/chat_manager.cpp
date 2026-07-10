@@ -516,7 +516,27 @@ std::optional<std::string> ChatManager::get_channel_name(const Chat::Chat &chat)
         return std::nullopt;
     }
 
-    return node->dfs()->read_dictionary(chat.owner_id, meta_row->file_id, "name");
+    auto name = node->dfs()->read_dictionary(chat.owner_id, meta_row->file_id, "name");
+    if (name.has_value() && !name->empty()) {
+        return name;
+    }
+
+    // Мета-словник відомий, але не читається (файл не докачаний/битий) —
+    // ініціюємо завантаження (тротлиться); після fileLoaded список сам
+    // перечитає назву (hook на "-meta" в MessengerController).
+    node->dfs()->request_file(chat.owner_id, meta_row->file_id);
+
+    // Тимчасовий фолбек, поки мета не доїхала: демонстраційна назва з каталогу
+    // Channels (снапшот на момент публікації каналу).
+    if (auto channels = read_channels(); channels.has_value()) {
+        for (const auto& channel : channels.value()) {
+            if (channel.owner_id == chat.owner_id && channel.file_id == chat.file_id && !channel.name.empty()) {
+                return channel.name;
+            }
+        }
+    }
+
+    return name;
 }
 
 bool ChatManager::set_channel_name(const Chat::Chat &chat, const std::string &name) {
