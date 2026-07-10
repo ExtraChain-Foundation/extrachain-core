@@ -22,6 +22,7 @@
 #include "encryption/encryption_tools.h"
 #include "utils/exc_logs.h"
 #include <QtTest/QtTest>
+#include <algorithm>
 #include <sstream>
 
 class Test : public QObject {
@@ -164,6 +165,49 @@ private slots:
         node           = new ExtraChainNode;
         bool isCreated = node->createNewNetwork("login", "password", "Token", "1000", "#ffffff");
         QVERIFY(isCreated);
+    }
+
+    void chatJsonRemainsBackwardCompatible() {
+        Actor<KeyPrivate> owner;
+        owner.create(ActorType::User);
+
+        Chat::Chat chat { .id       = "row-id",
+                          .owner_id = owner.id(),
+                          .file_id  = "chat-file" };
+        auto json = Json::serialize_value(chat).as_object();
+        json.erase("invite_pending");
+
+        auto restored = Json::deserialize<Chat::Chat>(boost::json::serialize(json));
+        QVERIFY(restored.has_value());
+        QCOMPARE(restored->id, chat.id);
+        QCOMPARE(restored->owner_id, chat.owner_id);
+        QCOMPARE(restored->file_id, chat.file_id);
+        QVERIFY(!restored->invite_pending);
+    }
+
+    void chatCreationPersistsBeforeSuccess() {
+        QVERIFY(node != nullptr);
+
+        auto activation = node->chat_manager()->activate();
+        QVERIFY(activation.has_value());
+
+        Actor<KeyPrivate> peer;
+        peer.create(ActorType::User);
+
+        auto created = node->chat_manager()->create_dialogue(peer.id());
+        QVERIFY(created.has_value());
+        QVERIFY(!created->id.empty());
+        QVERIFY(!created->owner_id.is_zero());
+        QVERIFY(!created->file_id.empty());
+
+        auto stored = node->chat_manager()->read_chats();
+        QVERIFY(stored.has_value());
+        auto persisted = std::find_if(stored->cbegin(), stored->cend(), [&created](const auto &chat) {
+            return chat.id == created->id && chat.owner_id == created->owner_id
+                   && chat.file_id == created->file_id;
+        });
+        QVERIFY(persisted != stored->cend());
+        QCOMPARE(persisted->invite_pending, created->invite_pending);
     }
 
     void blocks() {

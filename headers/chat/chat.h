@@ -28,7 +28,10 @@ enum class ChatError {
     Disabled,
     NoChatActor,
     NotAllowed,
-    NoChannelsVector
+    NoChannelsVector,
+    InvalidPeer,
+    StorageUnavailable,
+    PersistenceFailed
 };
 
 enum class ChatProfileError {
@@ -67,6 +70,7 @@ namespace Chat {
         std::optional<ActorId>            peer_chat_main_id;
         std::optional<Actor<KeyPublic>>   peer_per_chat;
         std::optional<Signature>          peer_bind_signature;
+        bool                              invite_pending = false;
     };
     BOOST_DESCRIBE_STRUCT(Chat,
                           (),
@@ -78,7 +82,8 @@ namespace Chat {
                            my_per_chat_id,
                            peer_chat_main_id,
                            peer_per_chat,
-                           peer_bind_signature))
+                           peer_bind_signature,
+                           invite_pending))
 
     struct ChatInvite {
         ActorId                 owner_id;
