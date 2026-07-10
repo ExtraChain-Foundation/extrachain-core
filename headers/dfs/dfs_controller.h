@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -137,6 +138,12 @@ public:
         ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373")
     };
     std::set<Dfs::FileLink> priority_file_link_;
+    // Актори, dirs яких явно запитано через refresh_actors() (наприклад,
+    // owner-актори чатів після read_chats). Входять у startup_sync_actors():
+    // без цього Light-фільтр у network_response_dir_rows викидає відповідь.
+    // Захищено м'ютексом: пишеться з потоку ноди, читається з DFS-пулу.
+    mutable std::mutex      requested_sync_actors_mutex_;
+    std::set<ActorId>       requested_sync_actors_;
     DfsMode                 dfs_mode_ = DfsMode::Full;
 
     std::shared_ptr<DbConnector> get_db_instance();

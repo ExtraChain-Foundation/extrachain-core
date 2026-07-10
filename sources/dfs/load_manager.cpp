@@ -562,9 +562,13 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        bool need_load =
-            is_full
-            || node->dfs()->is_priority(Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
+        auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        // forces_files_: request_file міг прийти ДО того, як dirs цього актора
+        // синкнулись (файл від іншої людини після імпорту з нуля) — тоді щойно
+        // прибулий dir_row і є сигнал «тепер можна качати». Без цього файл чекав
+        // би повторного request_file (30с троттл + ще один запит з UI).
+        bool need_load = is_full || node->dfs()->is_priority(file_link)
+                         || node->dfs()->forces_files_.contains(file_link);
         if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }

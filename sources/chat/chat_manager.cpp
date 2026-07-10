@@ -677,6 +677,25 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     // Chat list is ready: (re)register my push token per chat (guarded + deduped inside).
     node->thoth_manager()->reconcile_tokens_for_chats(chats);
 
+    // Імпорт з нуля: staged startup sync тягне .dirs лише для network/priority/
+    // моїх акаунтів — owner-актори чатів (per-chat актори пірів) туди не входять.
+    // Без їхніх dirs немає dir_row чат-вектора: ні download, ні відновлення з
+    // DfsVectorContent не працюють («порожні чати» до рестарту). Таргетований
+    // dirs-синк для ще не запитаних акторів; якщо конектів нема, refresh_actors
+    // поверне false — ретрай на наступному read_chats.
+    std::vector<ActorId> unsynced_owners;
+    for (const auto& chat : chats_) {
+        if (!dirs_refreshed_actors_.contains(chat.owner_id)) {
+            unsynced_owners.push_back(chat.owner_id);
+        }
+    }
+    if (!unsynced_owners.empty()) {
+        eLog("[Chat] dirs refresh for {} chat owner actors", unsynced_owners.size());
+        if (node->dfs()->refresh_actors(unsynced_owners)) {
+            dirs_refreshed_actors_.insert(unsynced_owners.begin(), unsynced_owners.end());
+        }
+    }
+
     return chats;
 }
 

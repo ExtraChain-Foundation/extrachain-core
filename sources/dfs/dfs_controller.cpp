@@ -1430,6 +1430,13 @@ void DfsController::request_file(const ActorId &owner_id, const std::string &fil
     auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (row.has_value()) {
         load_manager_.add_to_queue(owner_id, row.value(), std::string {}, false);
+    } else {
+        // Немає навіть dir_row: dirs цього актора не синкались (типово після
+        // імпорту з нуля для файлів від інших людей — медіа/войси/аватарки живуть
+        // у просторі актора-відправника). Таргетований dirs-синк; дедуп повторів
+        // і фолбек на повний синк — усередині refresh_actors.
+        eLog("[Dfs] Request file: no dir_row for {} — refreshing actor dirs", owner_id);
+        refresh_actors({ owner_id });
     }
 }
 
@@ -1749,6 +1756,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
 
     if (!dir_row.has_value()) {
+        eLog("[Dfs] make_vector: no dir_row for {} / {}", owner_id.toQString(), file_id);
         return std::unexpected(DfsVectorError::Unknown);
     }
     // if (dir_row->state == Dfs::FileState::Ready) {
@@ -1760,6 +1768,7 @@ std::expected<std::pair<Dfs::DirRow, DfsVector>, DfsVectorError> DfsController::
     auto encryption = dir_row->encryption ? Dfs::DataSecurity::Encrypted : Dfs::DataSecurity::Public;
 
     if (!signer_actor.has_value()) {
+        eLog("[Dfs] make_vector: no signer actor for {} / {}", owner_id.toQString(), file_id);
         return std::unexpected(DfsVectorError::Unknown);
     }
 
@@ -2678,6 +2687,10 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
     actors.insert(node->network_id());
     actors.insert(startup_metadata_actors_.begin(), startup_metadata_actors_.end());
     actors.insert(priority_actors_.begin(), priority_actors_.end());
+    {
+        std::lock_guard lock(requested_sync_actors_mutex_);
+        actors.insert(requested_sync_actors_.begin(), requested_sync_actors_.end());
+    }
 
     for (const auto& actor_id : node->account_controller()->accounts_ids()) {
         actors.insert(actor_id);
@@ -2750,7 +2763,17 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
         return false;
     }
 
+    // Інакше Light-фільтр у network_response_dir_rows викине відповідь на цей запит.
+    bool has_new_actors = false;
+    {
+        std::lock_guard lock(requested_sync_actors_mutex_);
+        for (const auto &actor : uniqueActors) {
+            has_new_actors = requested_sync_actors_.insert(actor).second || has_new_actors;
+        }
+    }
+
     std::vector<ActorId> requestedActors(uniqueActors.begin(), uniqueActors.end());
+    const auto responses_before = staged_startup_response_count();
     ThreadPoolBoost::instance_dfs()->post(
         [this, identifiers = std::move(identifiers), actors = std::move(requestedActors)]() {
             for (const auto &identifier : identifiers) {
@@ -2758,6 +2781,27 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
                 dirs_manager_.temp_sync_actors(identifier, actors);
             }
         });
+
+    // Прод-ноди без staged-підтримки ігнорують targeted-запит (як і в sync()).
+    // Якщо за 3с жодної staged-відповіді — просимо повний синк: відповідь
+    // відфільтрує network_response_dir_rows, а запитані актори вже в allowed.
+    // ТІЛЬКИ для нових акторів: періодичні рефреші (raccoon з ClientController)
+    // без нових акторів не мають щоразу тягнути повний 600-акторний дамп.
+    if (has_new_actors) {
+        constexpr auto stagedFallbackDelayMs = 3000;
+        QTimer::singleShot(stagedFallbackDelayMs, node, [this, responses_before]() {
+            ThreadPoolBoost::instance_dfs()->post([this, responses_before]() {
+                if (staged_startup_response_count() != responses_before) {
+                    return;
+                }
+                auto identifiers = node->network()->active_connection_identifiers();
+                for (const auto &identifier : identifiers) {
+                    eWarning("[Dfs] Targeted actor refresh fallback to full sync: identifier={}", identifier);
+                    dirs_manager_.temp_sync_all(identifier);
+                }
+            });
+        });
+    }
     return true;
 }
 
