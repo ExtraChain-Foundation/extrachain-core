@@ -124,7 +124,12 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
-    std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
+    std::set<ActorId>       priority_actors_;
+    // Some service actors are needed during bootstrap for metadata discovery,
+    // but their entire content must not become an eager download dependency.
+    std::set<ActorId>       startup_metadata_actors_ = {
+        ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373")
+    };
     std::set<Dfs::FileLink> priority_file_link_;
     DfsMode                 dfs_mode_ = DfsMode::Full;
 

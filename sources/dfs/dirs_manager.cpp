@@ -19,6 +19,7 @@
 
 #include "dfs/dirs_manager.h"
 
+#include <algorithm>
 
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
@@ -262,11 +263,31 @@ void DirsManager::network_request_dir_rows(const Dfs::Tables::DirsFile::DirsSpac
 }
 
 void DirsManager::network_response_dir_rows(
-    const std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
-    const Responder&                                                responder) {
-    if (!response_data.empty()) {
-        node->dfs()->mark_startup_sync_response();
+    std::vector<std::pair<ActorId, std::vector<Dfs::DirRow>>> response_data,
+    const Responder&                                          responder) {
+    // An empty response still proves that the peer understands staged sync.
+    // Do not fall back to a full metadata transfer merely because a requested
+    // actor currently has no DFS rows.
+    node->dfs()->mark_startup_sync_response();
+
+    if (node->dfs()->mode() == DfsMode::Light) {
+        const auto startup_actors = node->dfs()->startup_sync_actors();
+        const std::set<ActorId> allowed_actors(startup_actors.begin(), startup_actors.end());
+        const auto received_actor_count = response_data.size();
+        std::erase_if(response_data, [&allowed_actors](const auto& actor_rows) {
+            return !allowed_actors.contains(actor_rows.first);
+        });
+
+        if (response_data.size() != received_actor_count) {
+            eLog("[Dfs] Light startup response filtered: received={}, retained={}",
+                 received_actor_count,
+                 response_data.size());
+        }
     }
+
+    std::stable_sort(response_data.begin(), response_data.end(), [this](const auto& lhs, const auto& rhs) {
+        return node->dfs()->is_priority(lhs.first) && !node->dfs()->is_priority(rhs.first);
+    });
 
     ThreadPoolBoost::instance_dfs()->post([this, response_data = std::move(response_data), responder]() {
         for (auto& [owner_id, dir_rows] : response_data) {
@@ -388,14 +409,19 @@ void DirsManager::network_request_all(const Responder& responder, const std::vec
         auto raccoon_id = ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373");
 
         if (requested_actors.empty()) {
-            actors = node->actor_index()->read_all_actors_ids();
-            std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
-                return actor == network_id || actor == raccoon_id;
-            });
+            if (node->dfs()->mode() == DfsMode::Light) {
+                actors = node->dfs()->startup_sync_actors();
+                eLog("[Dfs] Legacy startup sync limited for light node: actors={}", actors.size());
+            } else {
+                actors = node->actor_index()->read_all_actors_ids();
+                std::erase_if(actors, [&network_id, &raccoon_id](const ActorId& actor) {
+                    return actor == network_id || actor == raccoon_id;
+                });
 
-            actors.insert(actors.begin(), network_id);
-            actors.insert(actors.begin(), raccoon_id);
-            eLog("[Dfs] Full startup sync request: actors={}", actors.size());
+                actors.insert(actors.begin(), network_id);
+                actors.insert(actors.begin(), raccoon_id);
+                eLog("[Dfs] Full startup sync request: actors={}", actors.size());
+            }
         } else {
             std::set<ActorId> unique_actors;
             unique_actors.insert(network_id);
