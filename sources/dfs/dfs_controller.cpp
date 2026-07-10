@@ -889,6 +889,26 @@ bool DfsController::add_vector_row(const ActorId               &owner_id,
     return operation_res;
 }
 
+bool DfsController::rebroadcast_vector_row(const ActorId     &owner_id,
+                                           const std::string &file_id,
+                                           const std::string &primary_data) {
+    if (!node || !node->network()->is_active_connection_exists()) {
+        return false;
+    }
+
+    auto row = read_vector_row(owner_id, file_id, primary_data);
+    if (!row.has_value()) {
+        return false;
+    }
+
+    auto package = Dfs::Packets::VectorRowAdd {
+        .owner_id = owner_id,
+        .file_id  = file_id,
+        .row      = row.value(),
+    };
+    return !node->network()->send_broadcast(package, MessageType::DfsVectorAdd).empty();
+}
+
 std::optional<std::string> DfsController::add_file_id(const ActorId&      network_id,
                                                       const ActorId&      vector_owner_id,
                                                       const std::string&  vector_file_id,
@@ -2623,6 +2643,35 @@ void DfsController::sync(const std::string &identifier) {
             });
         });
     });
+}
+
+bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
+    std::set<ActorId> uniqueActors;
+    for (const auto &actor : actors) {
+        if (!actor.is_zero()) {
+            uniqueActors.insert(actor);
+        }
+    }
+
+    if (uniqueActors.empty()) {
+        return false;
+    }
+
+    auto identifiers = node->network()->active_connection_identifiers();
+    if (identifiers.empty()) {
+        eLog("[Dfs] Targeted actor refresh deferred: no active connections");
+        return false;
+    }
+
+    std::vector<ActorId> requestedActors(uniqueActors.begin(), uniqueActors.end());
+    ThreadPoolBoost::instance_dfs()->post(
+        [this, identifiers = std::move(identifiers), actors = std::move(requestedActors)]() {
+            for (const auto &identifier : identifiers) {
+                eLog("[Dfs] Targeted actor refresh: identifier={}, actors={}", identifier, actors.size());
+                dirs_manager_.temp_sync_actors(identifier, actors);
+            }
+        });
+    return true;
 }
 
 // TODO: use dfs size
