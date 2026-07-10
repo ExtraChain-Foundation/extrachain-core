@@ -28,6 +28,7 @@
 #include <QtWebSockets/QWebSocketServer>
 #include <string>
 #include <shared_mutex>
+#include <vector>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
@@ -403,6 +404,7 @@ public:
     bool is_connection_exists(const std::string& identifier);
     bool is_active_connection_exists();
     int  active_connections_count();
+    std::vector<std::string> active_connection_identifiers() const;
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 

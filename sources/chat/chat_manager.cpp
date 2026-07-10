@@ -289,36 +289,72 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_myself() {
     auto chat = create_chat();
 
     if (!chat.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(chat.error());
     }
 
-    insert_chat_to_mychats(chat.value());
-    add_new_message_created(chat->owner_id, chat->file_id);
-    return chat;
+    auto persisted = insert_chat_to_mychats(chat.value());
+    if (!persisted.has_value()) {
+        return std::unexpected(persisted.error());
+    }
+
+    auto created_message = add_new_message_created(persisted->owner_id, persisted->file_id);
+    if (!created_message.has_value()) {
+        eWarning("[Chat] Self chat was saved, but its Created message could not be stored");
+    }
+    return persisted;
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::create_dialogue(ActorId with) {
     if (with.is_zero()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::InvalidPeer);
     }
 
     auto chat = create_chat();
 
     if (!chat.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(chat.error());
     }
 
     chat->chat.peer_id       = with;
     chat->peer_chat_main_id  = with;
-    insert_chat_to_mychats(chat.value());
-    add_new_message_created(chat->owner_id, chat->file_id);
-    invite(chat.value());
-    add_new_message_invite(chat->owner_id, chat->file_id, with);
+    chat->invite_pending     = true;
 
-    auto custom = ThothCustom { .ignored = { chat->my_per_chat_id.value_or(current_chat_actor_id()) } };
-    node->thoth_manager()->add_thoth_record(chat->owner_id, chat->file_id, Json::serialize(custom));
+    auto persisted = insert_chat_to_mychats(chat.value());
+    if (!persisted.has_value()) {
+        return std::unexpected(persisted.error());
+    }
 
-    return chat;
+    auto created_message = add_new_message_created(persisted->owner_id, persisted->file_id);
+    if (!created_message.has_value()) {
+        eWarning("[Chat] Dialogue {} was saved, but its Created message could not be stored",
+                 persisted->file_id);
+    }
+
+    auto invite_result = invite(persisted.value());
+    if (invite_result.has_value()) {
+        persisted->invite_pending = false;
+        auto update_result = update_chat_in_mychats(persisted.value());
+        if (update_result.has_value()) {
+            persisted = update_result;
+        } else {
+            persisted->invite_pending = true;
+            eWarning("[Chat] Invite for {} was queued, but its delivery state could not be saved",
+                     persisted->file_id);
+        }
+
+        auto invite_message = add_new_message_invite(persisted->owner_id, persisted->file_id, with);
+        if (!invite_message.has_value()) {
+            eWarning("[Chat] Dialogue {} was saved, but its Invite message could not be stored",
+                     persisted->file_id);
+        }
+    } else {
+        eWarning("[Chat] Dialogue {} was saved locally; invite remains pending", persisted->file_id);
+    }
+
+    auto custom = ThothCustom { .ignored = { persisted->my_per_chat_id.value_or(current_chat_actor_id()) } };
+    node->thoth_manager()->add_thoth_record(persisted->owner_id, persisted->file_id, Json::serialize(custom));
+
+    return persisted;
 }
 
 std::expected<Chat::Chat, ChatError> ChatManager::invite(const Chat::Chat& chat) {
@@ -449,8 +485,16 @@ std::expected<Chat::Chat, ChatError> ChatManager::create_channel(const std::stri
         eWarning("[Chat] Channel {} was not published to the public channels list", chat.file_id);
     }
 
-    insert_chat_to_mychats(chat);
-    add_new_message_created(chat.owner_id, chat.file_id);
+    auto persisted = insert_chat_to_mychats(chat);
+    if (!persisted.has_value()) {
+        return std::unexpected(persisted.error());
+    }
+    chat = persisted.value();
+
+    auto created_message = add_new_message_created(chat.owner_id, chat.file_id);
+    if (!created_message.has_value()) {
+        eWarning("[Chat] Channel {} was saved, but its Created message could not be stored", chat.file_id);
+    }
 
     return chat;
 }
@@ -563,7 +607,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorI
                                   .chat     = Chat::ChatData { .chat_type = Chat::ChatType::Channel } };
     auto my_result = insert_chat_to_mychats(chat);
     if (!my_result.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(my_result.error());
     }
 
     node->dfs()->request_file(owner_id, file_id);
@@ -571,7 +615,7 @@ std::expected<Chat::Chat, ChatError> ChatManager::subscribe_channel(const ActorI
     auto custom = ThothCustom { .ignored = { current_chat_actor_id() } };
     node->thoth_manager()->add_thoth_record(chat.owner_id, chat.file_id, Json::serialize(custom));
 
-    return chat;
+    return my_result;
 }
 
 std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
@@ -626,6 +670,9 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     }
 
     chats_ = chats;
+
+    retry_pending_invites();
+    chats = chats_;
 
     // Chat list is ready: (re)register my push token per chat (guarded + deduped inside).
     node->thoth_manager()->reconcile_tokens_for_chats(chats);
@@ -1100,24 +1147,24 @@ std::expected<Dfs::DirRow, ChatError> ChatManager::read_my_chats_row() {
     return my_chats_row_;
 }
 
-std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::Chat& chat) {
+std::expected<Chat::Chat, ChatError> ChatManager::insert_chat_to_mychats(const Chat::Chat& chat) {
     if (!is_valid_chat_link(chat)) {
         eWarning("[Chat] Refuse to insert invalid chat row: owner={}, file={}", chat.owner_id, chat.file_id);
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::PersistenceFailed);
     }
 
     auto existing_cached = std::find_if(chats_.cbegin(), chats_.cend(), [&chat](const auto& current) {
         return same_chat_link(current, chat);
     });
     if (existing_cached != chats_.cend()) {
-        return true;
+        return *existing_cached;
     }
 
     auto my_chats = this->read_my_chats_row();
     if (!my_chats.has_value()) {
         auto my_chats_result = create_mychats();
         if (!my_chats_result.has_value()) {
-            return std::unexpected(ChatError::Unknown);
+            return std::unexpected(ChatError::StorageUnavailable);
         }
         my_chats = my_chats_result;
     }
@@ -1131,7 +1178,8 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
                 && same_chat_link(existing.value(), chat)) {
                 chats_.push_back(existing.value());
                 mark_chat_priority(existing.value());
-                return true;
+                emit node->chatAdded(existing.value());
+                return existing.value();
             }
         }
     }
@@ -1145,20 +1193,20 @@ std::expected<bool, ChatError> ChatManager::insert_chat_to_mychats(const Chat::C
                                                   chat_actor_id, security_actor);
 
     if (!res) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::PersistenceFailed);
     }
 
     mark_chat_priority(chat_new);
     chats_.push_back(chat_new);
     emit node->chatAdded(chat_new);
 
-    return res;
+    return chat_new;
 }
 
-std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::Chat& chat) {
+std::expected<Chat::Chat, ChatError> ChatManager::update_chat_in_mychats(const Chat::Chat& chat) {
     auto my_chats = this->read_my_chats_row();
     if (!my_chats.has_value()) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::StorageUnavailable);
     }
 
     if (chat.id.empty() || !is_valid_chat_link(chat)) {
@@ -1166,7 +1214,7 @@ std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::C
                  chat.id,
                  chat.owner_id,
                  chat.file_id);
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::PersistenceFailed);
     }
 
     auto chat_actor_id  = current_chat_actor_id();
@@ -1176,9 +1224,53 @@ std::expected<bool, ChatError> ChatManager::update_chat_in_mychats(const Chat::C
                                                   chat_actor_id, security_actor);
 
     if (!res) {
-        return std::unexpected(ChatError::Unknown);
+        return std::unexpected(ChatError::PersistenceFailed);
     }
-    return res;
+
+    auto cached = std::find_if(chats_.begin(), chats_.end(), [&chat](const auto& current) {
+        return same_chat_link(current, chat);
+    });
+    if (cached != chats_.end()) {
+        *cached = chat;
+    } else {
+        chats_.push_back(chat);
+    }
+    emit node->chatUpdated(chat);
+    return chat;
+}
+
+void ChatManager::retry_pending_invites() {
+    std::vector<Chat::Chat> pending;
+    for (const auto& chat : chats_) {
+        if (chat.invite_pending && chat.peer_chat_main_id.has_value()) {
+            pending.push_back(chat);
+        }
+    }
+
+    for (auto& chat : pending) {
+        auto invite_result = invite(chat);
+        if (!invite_result.has_value()) {
+            continue;
+        }
+
+        chat.invite_pending = false;
+        auto update_result  = update_chat_in_mychats(chat);
+        if (!update_result.has_value()) {
+            eWarning("[Chat] Pending invite for {} was sent, but its state remains pending",
+                     chat.file_id);
+            continue;
+        }
+
+        if (chat.peer_chat_main_id.has_value()) {
+            auto invite_message = add_new_message_invite(chat.owner_id,
+                                                         chat.file_id,
+                                                         chat.peer_chat_main_id.value());
+            if (!invite_message.has_value()) {
+                eWarning("[Chat] Pending invite for {} was sent without an Invite message",
+                         chat.file_id);
+            }
+        }
+    }
 }
 
 void ChatManager::mark_chat_priority(const Chat::Chat& chat) {

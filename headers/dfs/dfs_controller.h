@@ -124,11 +124,18 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
+    // raccoon лишається в priority (його файли — ранг 1 у порядку завантаження);
+    // startup_metadata_actors_ додатково гарантує його участь у bootstrap-синку.
     std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     // actor → {vectors_rank, files_rank}; -1 = дефолт для цього виду
     std::map<ActorId, std::pair<int, int>> download_rank_overrides_;
     // (actor, ім'я файла) → ранг; винятки, сильніші за пер-акторні
     std::map<std::pair<ActorId, std::string>, int> download_rank_name_overrides_;
+    // Some service actors are needed during bootstrap for metadata discovery,
+    // but their entire content must not become an eager download dependency.
+    std::set<ActorId>       startup_metadata_actors_ = {
+        ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373")
+    };
     std::set<Dfs::FileLink> priority_file_link_;
     DfsMode                 dfs_mode_ = DfsMode::Full;
 
@@ -364,6 +371,10 @@ public:
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
                         bool                         thothed       = false);
 
+    bool rebroadcast_vector_row(const ActorId     &owner_id,
+                                const std::string &file_id,
+                                const std::string &primary_data);
+
     template <typename T>
     bool update_vector_row(const ActorId               &owner_id,
                            const std::string           &file_id,
@@ -547,6 +558,7 @@ public:
     size_t       load_manager_downloads_size();
 
     void sync(const std::string &identifier);
+    bool refresh_actors(const std::vector<ActorId> &actors);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();
 

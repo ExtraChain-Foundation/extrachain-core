@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
-file(STRINGS "../extrachain_version" EXTRACHAIN_VERSION)
+file(STRINGS "../extrachain_version.h" EXTRACHAIN_VERSION_LINE REGEX "extrachain_version =")
+string(REGEX MATCH "[0-9]+\\.[0-9]+\\.[0-9]+" EXTRACHAIN_VERSION "${EXTRACHAIN_VERSION_LINE}")
 project(extrachain-tests LANGUAGES C CXX VERSION ${EXTRACHAIN_VERSION})
 
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Test REQUIRED)
