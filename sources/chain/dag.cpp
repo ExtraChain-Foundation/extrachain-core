@@ -34,9 +34,7 @@ Dag::Dag(ExtraChainNode *node)
     , cache_(node, this) {
     timer_sync_ = new QTimer();
 
-#ifdef IS_APP_CLIENT
-    clear_dag_folder();
-#endif
+    bool storage_reset = false;
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -97,6 +95,7 @@ Dag::Dag(ExtraChainNode *node)
     } else {
         // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
+        storage_reset = true;
     }
 
     transaction_cache_.make_files();
@@ -120,7 +119,7 @@ Dag::Dag(ExtraChainNode *node)
         node->actor_index()->set_network_id(network_id);
     }
 
-    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1)) {
+    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1) && !storage_reset) {
         clear_dag();
         cache_.reset_db();
         cache_.init_db();

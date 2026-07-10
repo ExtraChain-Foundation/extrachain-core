@@ -1758,9 +1758,18 @@ void DfsController::network_request_file_state(const ActorId     &owner_id,
         return;
     }
 
+    auto available_state = dir_row->state;
+    if (available_state == Dfs::FileState::Ready
+        && !is_file_already_downloaded(owner_id, file_id, dir_row->hash)) {
+        // Metadata can arrive before content. Do not advertise such a row as
+        // a usable source: the requester would otherwise retry a peer that
+        // cannot serve the file.
+        available_state = Dfs::FileState::Known;
+    }
+
     auto file_state = Dfs::Packets::FileState { .owner_id = owner_id,
                                                 .file_id  = file_id,
-                                                .state    = dir_row->state,
+                                                .state    = available_state,
                                                 .hash     = dir_row->hash };
     responder.send_response(file_state, MessageType::DfsFileState, SendMode::Focused, MessageStatus::Response);
 }
@@ -2562,6 +2571,7 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
     std::set<ActorId> actors;
 
     actors.insert(node->network_id());
+    actors.insert(startup_metadata_actors_.begin(), startup_metadata_actors_.end());
     actors.insert(priority_actors_.begin(), priority_actors_.end());
 
     for (const auto& actor_id : node->account_controller()->accounts_ids()) {
@@ -2597,7 +2607,8 @@ void DfsController::sync(const std::string &identifier) {
         eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
         dirs_manager_.temp_sync_actors(identifier, actors);
 
-        QTimer::singleShot(15000, node, [this, identifier, responses_before]() {
+        constexpr auto stagedFallbackDelayMs = 5000;
+        QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
                 if (mode() != DfsMode::Light) {
                     return;
