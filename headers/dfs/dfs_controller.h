@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -126,6 +127,11 @@ public:
     // auto: + network id + local actors
     std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
     std::set<Dfs::FileLink> priority_file_link_;
+    // Actors requested through refresh_actors(). Light mode must keep these
+    // actors in startup_sync_actors() to accept their directory responses.
+    // The node thread writes this set and the DFS pool reads it.
+    mutable std::mutex      requested_sync_actors_mutex_;
+    std::set<ActorId>       requested_sync_actors_;
     DfsMode                 dfs_mode_ = DfsMode::Full;
 
     std::shared_ptr<DbConnector> get_db_instance();

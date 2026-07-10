@@ -377,9 +377,11 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
             continue;
         }
 
-        bool need_load =
-            is_full
-            || node->dfs()->is_priority(Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id });
+        auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
+        // request_file can run before this actor's directory arrives. A forced
+        // file must enter the queue when its directory row becomes available.
+        bool need_load = is_full || node->dfs()->is_priority(file_link)
+                         || node->dfs()->forces_files_.contains(file_link);
         if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }
