@@ -33,6 +33,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <algorithm>
 #include <vector>
 
 #include <QJsonObject>
@@ -1032,6 +1033,27 @@ int NetworkManager::active_connections_count() {
     }
 
     return count;
+}
+
+std::vector<std::string> NetworkManager::active_connection_identifiers() const {
+    std::vector<std::string> identifiers;
+    auto connectionsLocked = *connections();
+    identifiers.reserve(connectionsLocked->size());
+
+    for (const auto &service : *connectionsLocked) {
+        if (!service || !service->is_active()) {
+            continue;
+        }
+
+        auto identifier = service->identifier().toStdString();
+        if (!identifier.empty()) {
+            identifiers.push_back(std::move(identifier));
+        }
+    }
+
+    std::sort(identifiers.begin(), identifiers.end());
+    identifiers.erase(std::unique(identifiers.begin(), identifiers.end()), identifiers.end());
+    return identifiers;
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {

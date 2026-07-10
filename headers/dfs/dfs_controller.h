@@ -322,6 +322,10 @@ public:
                         const Dfs::DataSecurityData &security_data = Dfs::DataSecurityData(),
                         bool                         thothed       = false);
 
+    bool rebroadcast_vector_row(const ActorId     &owner_id,
+                                const std::string &file_id,
+                                const std::string &primary_data);
+
     template <typename T>
     bool update_vector_row(const ActorId               &owner_id,
                            const std::string           &file_id,
@@ -505,6 +509,7 @@ public:
     size_t       load_manager_downloads_size();
 
     void sync(const std::string &identifier);
+    bool refresh_actors(const std::vector<ActorId> &actors);
     bool is_file_already_downloaded(const ActorId &owner_id, const std::string &file_id, const std::string &hash);
     void refresh_calculate();
 
