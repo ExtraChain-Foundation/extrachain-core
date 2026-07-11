@@ -145,8 +145,8 @@ private:
     std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
     std::vector<Chat::Chat> chats_;
-    // Owner-актори чатів, для яких у цій сесії вже запитано targeted dirs-синк
-    // (див. read_chats): без нього після імпорту з нуля немає dir_row чат-векторів.
+    // Chat owner-actors already sent a targeted dirs-sync this session (see read_chats):
+    // without it, chat vectors have no dir_row after a from-scratch import.
     std::set<ActorId>       dirs_refreshed_actors_;
     ChatMode                mode_       = ChatMode::Enabled;
     bool                    activated_  = false;

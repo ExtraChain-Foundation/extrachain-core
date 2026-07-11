@@ -384,15 +384,15 @@ void NetworkManager::check_port(const QString     ip,
                                 Network::Protocol protocol,
                                 const bool        request,
                                 const bool        isConstant) {
-    // Ліміт уже вибраний — нові проби не потрібні (раніше апка хендшейкала весь
-    // список нод, десятки зайвих сокетів вбивались одразу після створення).
+    // Limit already reached — no need for new probes (the app used to handshake the entire
+    // node list, killing dozens of excess sockets right after creation).
     if (active_connections_count() >= Network::maxConnections) {
         return;
     }
 
-    // Кандидатів "у польоті" теж обмежуємо, але із запасом: не всі ноди мають
-    // DFS-дані мережі, тож занадто вузький перебір лишає нас із сусідами без
-    // потрібних файлів (штатні відповіді — Unknown, і файли не качаються).
+    // Also cap in-flight candidates, but with headroom: not all nodes hold the network's DFS
+    // data, so too narrow a search leaves us with neighbours lacking the needed files
+    // (normal responses become Unknown, and files don't download).
     static std::atomic_int pending_probes { 0 };
     if (pending_probes.load() + active_connections_count() >= Network::maxConnections * 5) {
         return;

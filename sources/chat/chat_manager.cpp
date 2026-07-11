@@ -565,13 +565,12 @@ std::optional<std::string> ChatManager::get_channel_name(const Chat::Chat &chat)
         return name;
     }
 
-    // Мета-словник відомий, але не читається (файл не докачаний/битий) —
-    // ініціюємо завантаження (тротлиться); після fileLoaded список сам
-    // перечитає назву (hook на "-meta" в MessengerController).
+    // Meta dictionary known but unreadable (file incomplete/corrupt) — kick off a (throttled)
+    // download; after fileLoaded the list re-reads the name itself (hook on "-meta" in MessengerController).
     node->dfs()->request_file(chat.owner_id, meta_row->file_id);
 
-    // Тимчасовий фолбек, поки мета не доїхала: демонстраційна назва з каталогу
-    // Channels (снапшот на момент публікації каналу).
+    // Temporary fallback until meta arrives: demo name from the Channels catalog
+    // (snapshot taken when the channel was published).
     if (auto channels = read_channels(); channels.has_value()) {
         for (const auto& channel : channels.value()) {
             if (channel.owner_id == chat.owner_id && channel.file_id == chat.file_id && !channel.name.empty()) {
@@ -677,12 +676,11 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
     // Chat list is ready: (re)register my push token per chat (guarded + deduped inside).
     node->thoth_manager()->reconcile_tokens_for_chats(chats);
 
-    // Імпорт з нуля: staged startup sync тягне .dirs лише для network/priority/
-    // моїх акаунтів — owner-актори чатів (per-chat актори пірів) туди не входять.
-    // Без їхніх dirs немає dir_row чат-вектора: ні download, ні відновлення з
-    // DfsVectorContent не працюють («порожні чати» до рестарту). Таргетований
-    // dirs-синк для ще не запитаних акторів; якщо конектів нема, refresh_actors
-    // поверне false — ретрай на наступному read_chats.
+    // From-scratch import: staged startup sync only pulls .dirs for network/priority/my
+    // accounts — chat owner-actors (peers' per-chat actors) aren't included. Without their
+    // dirs there's no chat vector dir_row (no download, no DfsVectorContent recovery —
+    // "empty chats" until restart). Targeted dirs-sync for not-yet-requested actors;
+    // refresh_actors returns false if there are no connections yet, retried on next read_chats.
     std::vector<ActorId> unsynced_owners;
     for (const auto& chat : chats_) {
         if (!dirs_refreshed_actors_.contains(chat.owner_id)) {

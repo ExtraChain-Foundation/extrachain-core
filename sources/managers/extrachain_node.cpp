@@ -682,8 +682,8 @@ void ExtraChainNode::start() {
         // emit m_blockchain->transaction_cache().make_cache();
     }
 
-    // Ранги завантаження DFS (див. DfsController::download_rank): вектори
-    // chat-актора → 2, main-актора → 3. Акаунт на цей момент уже завантажений.
+    // DFS download ranks (see DfsController::download_rank): chat-actor vectors -> 2,
+    // main-actor vectors -> 3. The account is already loaded at this point.
     if (!account_controller_->empty()) {
         if (auto chat_actor = account_controller_->chat_actor(); chat_actor.has_value()) {
             dfs_->set_download_rank(chat_actor->get().id(), 2, -1);
@@ -691,8 +691,8 @@ void ExtraChainNode::start() {
         dfs_->set_download_rank(account_controller_->current_profile().main_id(), 3, -1);
     }
 
-    // Винятки з пріоритетів: великі некритичні вектори не мають затримувати
-    // критичний шлях (Thoth/MyChats/чати) — демотуємо у хвіст векторної фази.
+    // Priority overrides: large non-critical vectors must not delay the critical path
+    // (Thoth/MyChats/chats) — demote them to the tail of the vector phase.
     dfs_->set_download_rank_by_name(network_id(), "Usernames", DfsController::RANK_OTHER_VECTORS);
     dfs_->set_download_rank_by_name(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"),
                                     "RaccoonSubscription",

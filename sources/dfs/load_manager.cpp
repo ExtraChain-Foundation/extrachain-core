@@ -60,8 +60,8 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         for (auto it = amount_file_fragments_requests_locked->begin();
              it != amount_file_fragments_requests_locked->end();) {
             auto duration = now - it->second;
-            // 4с (було 10с): глухий запит тримав слот, а при заповнених слотах
-            // планувальник повністю зупинявся — один мертвий пір коштував 10с.
+            // 4s (was 10s): a dead request held the slot, and with slots full the
+            // scheduler stalled entirely — one dead peer used to cost 10s.
             if (duration > std::chrono::seconds(4))
                 it = amount_file_fragments_requests_locked->erase(it);
             else
@@ -69,14 +69,11 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         }
     }
 
-    // Гейт "вектори перед файлами": поки в чергах є вектор (rank<=4), який ще має
-    // шанс докачатись (свіжий у черзі або нещодавно отримував фрагменти), звичайні
-    // файли не плануємо. Вікно свіжості захищає від вічного голодування файлів,
-    // якщо вектор нікому віддати (жоден сусід не має).
+    // "Vectors before files" gate: skip file scheduling while a vector (rank<=4) can still
+    // download. Freshness window guards against starving files forever if no peer has the vector.
     const bool vectors_waiting = [&]() {
         const auto now = std::chrono::system_clock::now();
-        // Копія під коротким локом: тримати лок m_completed_once поверх локів
-        // пулів не можна — finish_him бере їх у зворотному порядку (deadlock).
+        // Copy under a short lock: holding m_completed_once over the pool locks deadlocks — finish_him takes them in reverse order.
         std::set<Dfs::FileLink> completed_once;
         {
             auto locked    = *m_completed_once;
@@ -88,8 +85,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
                     continue;
                 }
-                // Перекачування вже завершеного вектора (цикл hash-розбіжності)
-                // не тримає гейт — інакше файли голодували б вічно.
+                // Re-downloading an already-completed vector (hash-mismatch cycle) doesn't hold the gate — else files would starve forever.
                 if (completed_once.contains(link)) {
                     continue;
                 }
@@ -103,7 +99,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
         return has_fresh(m_active_downloads_priority) || has_fresh(m_active_downloads);
     }();
 
-    // Лог перемикання гейта: коли файли ставляться на паузу і коли відпускаються.
+    // Log the gate flipping: when files get paused and when they're released.
     static bool last_vectors_waiting = false;
     if (vectors_waiting != last_vectors_waiting) {
         last_vectors_waiting = vectors_waiting;
@@ -119,9 +115,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 download_order.emplace_back(item.first);
             }
 
-            // Порядок: 0 вектори network → 1 файли raccoon → 2 вектори chat-актора →
-            // 3 вектори main-актора → 4 інші вектори → 5 файли; в межах рангу
-            // форсовані (явний request_file) першими.
+            // Order: 0 network vectors -> 1 raccoon files -> 2 chat-actor vectors ->
+            // 3 main-actor vectors -> 4 other vectors -> 5 files; within a rank, forced
+            // (explicit request_file) go first.
             auto rank_of = [&](const Dfs::FileLink& link) {
                 const auto it = active_downloads_locked->find(link);
                 return it != active_downloads_locked->end()
@@ -153,8 +149,8 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                 auto& load_info = it->second;
 
-                // Файли стоять на паузі, поки качаються вектори. Форсовані файли
-                // (явний користувацький request_file, напр. тап по медіа) не паузимо.
+                // Files stay paused while vectors are downloading. Forced files (explicit
+                // user request_file, e.g. tapping media) are not paused.
                 if (vectors_waiting && !load_info.forced
                     && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
                     continue;
@@ -221,7 +217,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                     if (identifier.second.counter >= 3)
                         continue;
-                    // Ретрай до того ж піра — 4с (було 10с), у парі з таймаутом слота.
+                    // Retry to the same peer — 4s (was 10s), paired with the slot timeout.
                     else if (identifier.second.counter == 0
                              || (duration > std::chrono::seconds(4) || ignore_timeout)) {
                         if (identifier.second.counter == 1 && load_info.identifier_list.size() == 1) {
@@ -399,10 +395,10 @@ void LoadManager::add_to_queue(const ActorId&     owner_id,
     auto row =
         Dfs::Tables::DirsFile::ActorSpace::get_dir_row(node->dfs()->get_db_instance(), owner_id, dir_row.file_id);
 
-    // Вектор, нечитабельний на диску (нема БД або .vector-компаньйона-шаблона),
-    // при тому що .dirs каже Ready з правильним hash'ом — стан після обірваного
-    // запису (kill під час синку). Усі early-return'и нижче назавжди блокували
-    // повторне завантаження. Не скіпаємо: content-package відновить обидва файли.
+    // Vector unreadable on disk (missing DB or .vector template companion) while .dirs says
+    // Ready with the correct hash — state left by an interrupted write (kill during sync).
+    // All early-returns below used to permanently block re-download. Don't skip: the
+    // content-package will restore both files.
     bool vector_broken_on_disk = false;
     if (row.has_value() && row->type == Dfs::FileType::Vector) {
         const auto main_path = std::filesystem::path(Dfs::Path::filePath(owner_id, dir_row.file_id));
@@ -563,10 +559,10 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
         }
 
         auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
-        // forces_files_: request_file міг прийти ДО того, як dirs цього актора
-        // синкнулись (файл від іншої людини після імпорту з нуля) — тоді щойно
-        // прибулий dir_row і є сигнал «тепер можна качати». Без цього файл чекав
-        // би повторного request_file (30с троттл + ще один запит з UI).
+        // forces_files_: request_file could arrive BEFORE this actor's dirs synced (file
+        // from another user after a from-scratch import) — the newly arrived dir_row is
+        // itself the signal it's now downloadable. Otherwise the file would wait for
+        // another request_file (30s throttle plus another UI request).
         bool need_load = is_full || node->dfs()->is_priority(file_link)
                          || node->dfs()->forces_files_.contains(file_link);
         if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {

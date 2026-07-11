@@ -289,9 +289,9 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
 
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
-        // Компаньйон загубився (обірваний запис) — два шляхи відновлення разом:
-        // прямий контент-пакет + штатний state→queue (REPAIR у add_to_queue
-        // пропустить "уже скачано" для нечитабельного вектора). Обидва троттляться.
+        // Companion file lost (interrupted write) — recover via two paths together: direct
+        // content package + the normal state->queue (REPAIR in add_to_queue skips "already
+        // downloaded" for an unreadable vector). Both are throttled.
         node->dfs()->request_vector_content(file_actor_id_, file_id_);
         node->dfs()->request_file(file_actor_id_, file_id_);
         eCritical("[DfsVector] Can't find {}", vector_path_.native());

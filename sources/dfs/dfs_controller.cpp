@@ -40,8 +40,8 @@ DfsController::DfsController(ExtraChainNode *node)
     , dirs_manager_(DirsManager(node))
     , load_manager_(LoadManager(node)) {
 
-    // Дефолтний ранг завантаження raccoon-актора (вектори і файли) — 1.
-    // Chat/main-актори реєструються в ExtraChainNode::start(), network — у download_rank.
+    // Default download rank for the raccoon actor (vectors and files) is 1.
+    // Chat/main actors register in ExtraChainNode::start(), network in download_rank.
     set_download_rank(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"), 1, 1);
 
     refresh_calculate();
@@ -1352,23 +1352,23 @@ void DfsController::download_waiting_files() {
 }
 
 int DfsController::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir_row) const {
-    // Векторний клас = самі БД (Vector/Dictionary/Collection) + їхні шаблони
-    // (тип File у :CollectionTemplate — без шаблону вектор не читається).
-    // Класифікація по folder НЕ підходить: вкладення чатів лежать у :DApp:Chat:*.
+    // Vector class = the DBs themselves (Vector/Dictionary/Collection) plus their templates
+    // (File type under :CollectionTemplate — no template means the vector can't be read).
+    // Classifying by folder doesn't work: chat attachments live under :DApp:Chat:*.
     const bool is_vector =
         dir_row.type == Dfs::FileType::Vector || dir_row.type == Dfs::FileType::Dictionary
         || dir_row.type == Dfs::FileType::Collection
         || (dir_row.folder.has_value() && dir_row.folder.value() == Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE);
 
-    // Винятки за іменем (owner+name) — найвищий пріоритет у реєстрі: дозволяють
-    // демотнути конкретний вектор (напр. Usernames мережі) з критичного шляху.
+    // Name-based overrides (owner+name) have top priority in the registry: let a specific
+    // vector (e.g. the network Usernames vector) be demoted off the critical path.
     if (auto it = download_rank_name_overrides_.find({ owner_id, dir_row.name });
         it != download_rank_name_overrides_.end()) {
         return it->second;
     }
 
-    // Реєстр рангів (raccoon — з конструктора, chat/main-актори — з
-    // ExtraChainNode::start(), кастомні — set_download_rank з застосунку).
+    // Rank registry (raccoon from the constructor, chat/main actors from
+    // ExtraChainNode::start(), custom via set_download_rank from the app).
     if (auto it = download_rank_overrides_.find(owner_id); it != download_rank_overrides_.end()) {
         const int rank = is_vector ? it->second.first : it->second.second;
         if (rank >= 0) {
@@ -1382,9 +1382,9 @@ int DfsController::download_rank(const ActorId &owner_id, const Dfs::DirRow &dir
     return is_vector ? RANK_OTHER_VECTORS : RANK_FILES;
 }
 
-// Прямий запит повного вмісту вектора (DfsFileRequest → пір відповідає
-// DfsVectorContent-пакетом): handle_package відновлює і БД, і .vector-компаньйон.
-// Використовується для ремонту векторів із загубленим шаблоном (read_template).
+// Direct request for full vector content (DfsFileRequest -> peer replies with a
+// DfsVectorContent package): handle_package restores both the DB and the .vector companion.
+// Used to repair vectors with a lost template (read_template).
 void DfsController::request_vector_content(const ActorId &owner_id, const std::string &file_id) {
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
 
@@ -1424,17 +1424,16 @@ void DfsController::request_file(const ActorId &owner_id, const std::string &fil
                                         SendMode::Neighbours,
                                         MessageStatus::Request);
 
-    // Не чекаємо state-відповіді (старі ноди мовчать, якщо файла не мають):
-    // кладемо в чергу форсовано — LoadManager сам додає всіх сусідів як
-    // кандидатів і пробингом (ContinueUpload) знаходить власника файла.
+    // Don't wait for a state response (old nodes stay silent if they don't have the file):
+    // queue it forced — LoadManager adds all neighbours as candidates and finds the file's
+    // owner via probing (ContinueUpload).
     auto row = Dfs::Tables::DirsFile::ActorSpace::get_dir_row(dirs_manager_.get_db_instance(), owner_id, file_id);
     if (row.has_value()) {
         load_manager_.add_to_queue(owner_id, row.value(), std::string {}, false);
     } else {
-        // Немає навіть dir_row: dirs цього актора не синкались (типово після
-        // імпорту з нуля для файлів від інших людей — медіа/войси/аватарки живуть
-        // у просторі актора-відправника). Таргетований dirs-синк; дедуп повторів
-        // і фолбек на повний синк — усередині refresh_actors.
+        // No dir_row at all: this actor's dirs never synced (typically after a from-scratch
+        // import, for files from other people — media/voice/avatars live in the sender
+        // actor's space). Targeted dirs-sync; dedup and full-sync fallback live in refresh_actors.
         eLog("[Dfs] Request file: no dir_row for {} — refreshing actor dirs", owner_id);
         refresh_actors({ owner_id });
     }
@@ -2725,8 +2724,8 @@ void DfsController::sync(const std::string &identifier) {
         eLog("[Dfs] Staged startup sync: identifier={}, actors={}", identifier, actors.size());
         dirs_manager_.temp_sync_actors(identifier, actors);
 
-        // 3с: прод-ноди без staged-підтримки не відповідають взагалі, і кожен
-        // чистий синк платив цей таймаут повністю (було 15с).
+        // 3s: prod nodes without staged support don't respond at all, and every clean
+        // sync used to pay this timeout in full (was 15s).
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, identifier, responses_before]() {
             ThreadPoolBoost::instance_dfs()->post([this, identifier, responses_before]() {
@@ -2763,7 +2762,7 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
         return false;
     }
 
-    // Інакше Light-фільтр у network_response_dir_rows викине відповідь на цей запит.
+    // Otherwise the Light filter in network_response_dir_rows would drop the response to this request.
     bool has_new_actors = false;
     {
         std::lock_guard lock(requested_sync_actors_mutex_);
@@ -2782,11 +2781,11 @@ bool DfsController::refresh_actors(const std::vector<ActorId> &actors) {
             }
         });
 
-    // Прод-ноди без staged-підтримки ігнорують targeted-запит (як і в sync()).
-    // Якщо за 3с жодної staged-відповіді — просимо повний синк: відповідь
-    // відфільтрує network_response_dir_rows, а запитані актори вже в allowed.
-    // ТІЛЬКИ для нових акторів: періодичні рефреші (raccoon з ClientController)
-    // без нових акторів не мають щоразу тягнути повний 600-акторний дамп.
+    // Prod nodes without staged support ignore the targeted request (same as in sync()).
+    // If no staged response arrives within 3s, request a full sync: network_response_dir_rows
+    // will filter the response, and the requested actors are already in allowed.
+    // Only for new actors: periodic refreshes (raccoon from ClientController) without new
+    // actors shouldn't have to pull the full ~600-actor dump every time.
     if (has_new_actors) {
         constexpr auto stagedFallbackDelayMs = 3000;
         QTimer::singleShot(stagedFallbackDelayMs, node, [this, responses_before]() {

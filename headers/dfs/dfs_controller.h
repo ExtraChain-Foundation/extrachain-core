@@ -125,12 +125,12 @@ public:
     ~DfsController();
 
     // auto: + network id + local actors
-    // raccoon лишається в priority (його файли — ранг 1 у порядку завантаження);
-    // startup_metadata_actors_ додатково гарантує його участь у bootstrap-синку.
+    // raccoon stays in priority (its files are rank 1 in download order);
+    // startup_metadata_actors_ additionally guarantees it participates in bootstrap sync.
     std::set<ActorId>       priority_actors_ = { ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373") };
-    // actor → {vectors_rank, files_rank}; -1 = дефолт для цього виду
+    // actor -> {vectors_rank, files_rank}; -1 = default classification for that kind
     std::map<ActorId, std::pair<int, int>> download_rank_overrides_;
-    // (actor, ім'я файла) → ранг; винятки, сильніші за пер-акторні
+    // (actor, file name) -> rank; overrides that win over per-actor ranks
     std::map<std::pair<ActorId, std::string>, int> download_rank_name_overrides_;
     // Some service actors are needed during bootstrap for metadata discovery,
     // but their entire content must not become an eager download dependency.
@@ -138,10 +138,10 @@ public:
         ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373")
     };
     std::set<Dfs::FileLink> priority_file_link_;
-    // Актори, dirs яких явно запитано через refresh_actors() (наприклад,
-    // owner-актори чатів після read_chats). Входять у startup_sync_actors():
-    // без цього Light-фільтр у network_response_dir_rows викидає відповідь.
-    // Захищено м'ютексом: пишеться з потоку ноди, читається з DFS-пулу.
+    // Actors whose dirs were explicitly requested via refresh_actors() (e.g. chat owner-actors
+    // after read_chats). Feeds startup_sync_actors(): without it the Light filter in
+    // network_response_dir_rows drops the response. Mutex-guarded: written from the node
+    // thread, read from the DFS pool.
     mutable std::mutex      requested_sync_actors_mutex_;
     std::set<ActorId>       requested_sync_actors_;
     DfsMode                 dfs_mode_ = DfsMode::Full;
@@ -228,9 +228,8 @@ public:
 
     void request_vector_content(const ActorId &owner_id, const std::string &file_id);
 
-    // Винятки за іменем файла в просторі актора — сильніші за пер-акторні ранги.
-    // Використовуються, щоб прибрати конкретний вектор з критичного шляху
-    // (напр. великий Usernames мережі → RANK_OTHER_VECTORS).
+    // Per-actor filename overrides win over per-actor ranks; used to pull a specific vector
+    // off the critical path (e.g. the large network Usernames vector -> RANK_OTHER_VECTORS).
     void set_download_rank_by_name(const ActorId &actor_id, const std::string &name, int rank) {
         download_rank_name_overrides_[{ actor_id, name }] = rank;
     }
@@ -269,8 +268,8 @@ public:
     // re-request a missing file on EVERY failed read; without this the client spams
     // the network several times per second for files the node can't serve.
     std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_file_times_;
-    // Окремий троттлінг для request_vector_content: спільний словник з'їдав
-    // вікно request_file і блокував шлях state-response → add_to_queue.
+    // Separate throttle for request_vector_content: a shared map ate into request_file's
+    // window and blocked the state-response -> add_to_queue path.
     std::map<Dfs::FileLink, std::chrono::steady_clock::time_point> request_vector_times_;
 
     std::expected<Dfs::DirRow, Dfs::DfsError> store_file(

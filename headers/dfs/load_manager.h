@@ -52,9 +52,8 @@ struct LoadInfo {
 
     bool notify_neighbours;
     bool forced { false };
-    // Скільки разів повністю вичерпали джерела і починали заново: після 3 циклів
-    // здаємось (файл повернеться в чергу через request_file/наступний синк) —
-    // інакше недоступний файл жував ретраї вічно.
+    // Count of full source-exhaustion restarts: give up after 3 cycles (file re-enters the
+    // queue via request_file/next sync) — otherwise an unreachable file retries forever.
     int source_refresh_cycles { 0 };
 
     std::set<std::string>                         identifier_storage_checker {};
@@ -115,8 +114,8 @@ public:
 
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
-    // Миттєве (коалесоване) пробудження планувальника — без нього нові елементи
-    // черги чекали наступного 5-секундного тіка таймера.
+    // Instant (coalesced) scheduler wakeup — without it new queue items waited for the next
+    // 5-second timer tick.
     void kick();
 
     std::atomic_bool kick_pending_ { false };
@@ -145,8 +144,8 @@ private:
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
     std::mutex                                              m_write_file_mutex;
 
-    // Файли, що вже завершували завантаження в цій сесії: їхні перекачування
-    // (цикл hash-розбіжності векторів) не тримають гейт "вектори перед файлами".
+    // Files that already finished downloading this session: their re-downloads (vector
+    // hash-mismatch cycle) don't hold the "vectors before files" gate.
     SafePtr<std::set<Dfs::FileLink>> m_completed_once;
 
     QTimer* m_timer;
