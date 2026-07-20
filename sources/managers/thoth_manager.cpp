@@ -31,6 +31,8 @@
 #include <QFile>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QSettings>
+#include <QStringList>
 #include <QSysInfo>
 
 #include "managers/extrachain_node.h"
@@ -246,13 +248,7 @@ void ThothManager::flush_pending_records() {
         }
     }
 
-    std::string os;
-#ifdef Q_OS_IOS
-    os = "iOS";
-#endif
-#ifdef Q_OS_ANDROID
-    os = "Android";
-#endif
+    const std::string os = detect_os();
 
     bool changed = false;
     for (const auto& record : pending_records_) {
@@ -506,13 +502,113 @@ void ThothManager::set_device_name(const std::string& name) {
     device_name_          = name;
     // Rewrite so the new name lands in the registry even if nothing else changed.
     force_registry_write_ = true;
+    // Live rename: re-enqueue the reconciled records so the new name is written
+    // immediately, not only on the next read_chats().
+    for (const auto& record : last_reconciled_records_) {
+        enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
+    }
+    if (!last_reconciled_records_.empty()) {
+        flush_pending_records();
+    }
 }
+
+std::string ThothManager::detect_os() {
+#if defined(Q_OS_IOS)
+    return "iOS";
+#elif defined(Q_OS_ANDROID)
+    return "Android";
+#elif defined(Q_OS_MACOS)
+    return "macOS";
+#elif defined(Q_OS_WIN)
+    return "Windows";
+#elif defined(Q_OS_LINUX)
+    return "Linux";
+#else
+    return QSysInfo::productType().toStdString();
+#endif
+}
+
+namespace {
+// Hardware model from DMI/SMBIOS ("Lenovo ThinkPad X1 Carbon"); empty when
+// the vendor left placeholder junk (custom-built PCs) or the platform has none.
+QString desktop_hardware_model() {
+#if defined(Q_OS_WIN)
+    QSettings bios(QStringLiteral("HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\BIOS"),
+                   QSettings::NativeFormat);
+    QString vendor  = bios.value(QStringLiteral("SystemManufacturer")).toString().trimmed();
+    QString product = bios.value(QStringLiteral("SystemProductName")).toString().trimmed();
+#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    auto read_dmi = [](const char* name) {
+        QFile f(QStringLiteral("/sys/class/dmi/id/") + QLatin1String(name));
+        if (!f.open(QIODevice::ReadOnly)) {
+            return QString();
+        }
+        return QString::fromUtf8(f.readAll()).trimmed();
+    };
+    QString vendor  = read_dmi("sys_vendor");
+    QString product = read_dmi("product_name");
+    // Lenovo puts the machine-type code in product_name; the human name lives in product_version.
+    if (vendor.compare(QStringLiteral("LENOVO"), Qt::CaseInsensitive) == 0) {
+        auto version = read_dmi("product_version");
+        if (!version.isEmpty()) {
+            product = version;
+        }
+    }
+#else
+    QString vendor, product;
+#endif
+    static const QStringList junk = { QStringLiteral("System Product Name"),
+                                      QStringLiteral("To Be Filled By O.E.M."),
+                                      QStringLiteral("Default string"),
+                                      QStringLiteral("System manufacturer"),
+                                      QStringLiteral("INVALID") };
+    if (product.isEmpty() || junk.contains(product, Qt::CaseInsensitive)) {
+        return {};
+    }
+    if (vendor.isEmpty() || junk.contains(vendor, Qt::CaseInsensitive)) {
+        return product;
+    }
+    // Normalize shouty/legal vendor spellings.
+    if (vendor.compare(QStringLiteral("LENOVO"), Qt::CaseInsensitive) == 0) {
+        vendor = QStringLiteral("Lenovo");
+    } else if (vendor.startsWith(QStringLiteral("Dell"), Qt::CaseInsensitive)) {
+        vendor = QStringLiteral("Dell");
+    } else if (vendor.startsWith(QStringLiteral("Hewlett"), Qt::CaseInsensitive)
+               || vendor.compare(QStringLiteral("HP"), Qt::CaseInsensitive) == 0) {
+        vendor = QStringLiteral("HP");
+    } else if (vendor.startsWith(QStringLiteral("ASUS"), Qt::CaseInsensitive)) {
+        vendor = QStringLiteral("ASUS");
+    }
+    if (product.startsWith(vendor, Qt::CaseInsensitive)) {
+        return product;
+    }
+    return vendor + " " + product;
+}
+} // namespace
 
 std::string ThothManager::effective_device_name() {
     if (!device_name_.empty()) {
         return device_name_;
     }
-    device_name_ = QSysInfo::prettyProductName().toStdString();
+    // Windows/Linux: hardware model from DMI ("Lenovo ThinkPad X1 Carbon").
+    auto model = desktop_hardware_model();
+    if (!model.isEmpty()) {
+        device_name_ = model.toStdString();
+        return device_name_;
+    }
+    // Host name identifies the concrete machine ("MacBook-Pro-Alex"), unlike
+    // prettyProductName which is just the OS version and repeats across devices.
+    // Mobile hostnames are meaningless ("localhost") — the app supplies the
+    // model via set_device_name there; until it does, fall back to the OS name.
+    auto host = QSysInfo::machineHostName();
+    if (host.endsWith(QStringLiteral(".local"))) {
+        host.chop(6);
+    }
+    if (!host.isEmpty() && host != QStringLiteral("localhost")) {
+        device_name_ = host.toStdString();
+    } else {
+        device_name_ = QSysInfo::prettyProductName().toStdString();
+    }
     return device_name_;
 }
 
