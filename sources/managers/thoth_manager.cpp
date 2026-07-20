@@ -27,6 +27,7 @@
 #include <string_view>
 #include <utility>
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
 #include <QNetworkAccessManager>
@@ -34,6 +35,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QSysInfo>
+#include <QTimer>
 
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
@@ -242,13 +244,14 @@ void ThothManager::flush_pending_records() {
         chat.file_id   = record.file_id;
 
         auto  name       = effective_device_name();
-        auto  new_record = ThothDeviceRecord { .os = os, .token = ios_token_, .custom = record.custom, .name = name };
+        auto  app        = QCoreApplication::applicationVersion().toStdString();
+        auto  new_record = ThothDeviceRecord { .os = os, .token = ios_token_, .custom = record.custom, .name = name, .app = app };
         auto  dev_it     = chat.devices.find(device_id_);
         // updated_at is intentionally excluded from the change test: it must not, by itself,
         // force a rewrite. But whenever we do write, we refresh it.
         if (dev_it == chat.devices.end() || dev_it->second.os != new_record.os
             || dev_it->second.token != new_record.token || dev_it->second.custom != new_record.custom
-            || dev_it->second.name != new_record.name) {
+            || dev_it->second.name != new_record.name || dev_it->second.app != new_record.app) {
             new_record.updated_at    = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
             chat.devices[device_id_] = new_record;
             changed                  = true;
@@ -269,6 +272,29 @@ void ThothManager::flush_pending_records() {
             dev_it->second.name       = name;
             dev_it->second.updated_at = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
             changed                   = true;
+        }
+    }
+
+    // A force write must also refresh this device's identity fields (os/name/app/token)
+    // in records that already exist: pending may be empty when read_chats() ran before
+    // set_device_token(), and the loop above only touches enqueued records.
+    if (force_registry_write_) {
+        auto name = effective_device_name();
+        auto app  = QCoreApplication::applicationVersion().toStdString();
+        for (auto& [chat_key, chat] : reg.chats) {
+            auto dev_it = chat.devices.find(device_id_);
+            if (dev_it == chat.devices.end()) {
+                continue;
+            }
+            auto& rec = dev_it->second;
+            if (rec.os != os || rec.token != ios_token_ || rec.name != name || rec.app != app) {
+                rec.os         = os;
+                rec.token      = ios_token_;
+                rec.name       = name;
+                rec.app        = app;
+                rec.updated_at = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+                changed        = true;
+            }
         }
     }
 
@@ -456,6 +482,7 @@ void ThothManager::set_device_token(const std::string& token) {
     if (token == ios_token_) {
         persist_device_tokens();
         flush_pending_records();
+        reconcile_after_token_change();
         return;
     }
 
@@ -468,6 +495,15 @@ void ThothManager::set_device_token(const std::string& token) {
     force_registry_write_   = true;
 
     flush_pending_records();
+    reconcile_after_token_change();
+}
+
+// read_chats() often runs before the platform delivers the push token; its reconcile
+// no-ops on an empty token and is never retried. Re-run it with the already-loaded list.
+void ThothManager::reconcile_after_token_change() {
+    if (node->chat_manager() && !node->chat_manager()->chats().empty()) {
+        reconcile_tokens_for_chats(node->chat_manager()->chats());
+    }
 }
 
 void ThothManager::set_device_id(const std::string& id) {
@@ -647,6 +683,7 @@ std::vector<ThothDeviceInfo> ThothManager::my_devices() {
                 info.updated_at = record.updated_at;
                 info.name       = record.name;
                 info.os         = record.os;
+                info.app        = record.app;
             }
             info.is_current = (dev_id == device_id_);
         }
@@ -797,6 +834,11 @@ void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& cha
         enqueue_thoth_record(chat.owner_id, chat.file_id, custom);
     }
     flush_pending_records();
+
+    // The write above can be clobbered by a concurrent full-file sync (file-level
+    // LWW, row merge is still a DFS TODO). Verify after the dust settles; the
+    // downloaded-event verifies don't cover a clobber that happens before login.
+    QTimer::singleShot(7000, this, [this]() { verify_self_registration(); });
 }
 
 // A freshly synced registry file may be a stale full-file copy that lost this device's
@@ -833,7 +875,10 @@ void ThothManager::verify_self_registration() {
         auto chat_it = reg.chats.find(fmt::format("{}:{}", record.owner_id, record.file_id));
         auto ok = chat_it != reg.chats.end() && chat_it->second.devices.contains(device_id_)
                && chat_it->second.devices.at(device_id_).token == ios_token_
-               && chat_it->second.devices.at(device_id_).name == effective_device_name();
+               && chat_it->second.devices.at(device_id_).name == effective_device_name()
+               && chat_it->second.devices.at(device_id_).os == detect_os()
+               && chat_it->second.devices.at(device_id_).app
+                      == QCoreApplication::applicationVersion().toStdString();
         if (!ok) {
             enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
             missing = true;
