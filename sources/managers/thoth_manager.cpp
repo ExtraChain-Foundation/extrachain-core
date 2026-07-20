@@ -24,25 +24,20 @@
 #include <algorithm>
 #include <optional>
 #include <set>
-#include <tuple>
+#include <string_view>
 #include <utility>
 
+#include <QDateTime>
 #include <QFile>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QSysInfo>
 
 #include "managers/extrachain_node.h"
 #include "dfs/dfs_controller.h"
 
 namespace {
-using ThothRecordKey = std::tuple<std::string, std::string, std::string, std::string>;
-
-ThothRecordKey make_thoth_record_key(const ActorId&     owner_id,
-                                     const std::string& file_id,
-                                     const std::string& token,
-                                     const std::string& custom) {
-    return { owner_id.to_string(), file_id, token, custom };
-}
+constexpr std::string_view THOTH_DATABASE = "ThothDevicesV2";
 }
 
 ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
@@ -52,20 +47,34 @@ ThothManager::ThothManager(ExtraChainNode* node, QObject* parent)
     QObject::connect(node->dfs(),
                      &DfsController::waitDownloaded,
                      [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
-                         if (owner_id == node->network_id() && dir_row.name == "Thoth" /* && vector */) {
+                         if (owner_id != node->network_id()) {
+                             return;
+                         }
+                         if (dir_row.name == THOTH_DATABASE) {
                              this->owner_id_ = node->network_id();
                              this->file_id_  = dir_row.file_id;
                              this->read_all(!enabled_);
                              this->flush_pending_records();
+                             this->verify_self_registration();
+                         } else if (dir_row.name == "Thoth") {
+                             this->legacy_file_id_ = dir_row.file_id;
+                             this->legacy_read_all(!enabled_);
                          }
                      });
 
     QObject::connect(node->dfs(), &DfsController::downloaded, [this, node](ActorId owner_id, Dfs::DirRow dir_row) {
-        if (owner_id == node->network_id() && dir_row.name == "Thoth") {
+        if (owner_id != node->network_id()) {
+            return;
+        }
+        if (dir_row.name == THOTH_DATABASE) {
             this->owner_id_ = node->network_id();
             this->file_id_  = dir_row.file_id;
             this->read_all(!enabled_);
             this->flush_pending_records();
+            this->verify_self_registration();
+        } else if (dir_row.name == "Thoth") {
+            this->legacy_file_id_ = dir_row.file_id;
+            this->legacy_read_all(!enabled_);
         }
     });
 
@@ -77,6 +86,7 @@ void ThothManager::start() {
     if (this->read_all(false)) {
         this->flush_pending_records();
     }
+    this->legacy_read_all(false);
 }
 
 void ThothManager::stop() {
@@ -85,43 +95,19 @@ void ThothManager::stop() {
     file_id_.clear();
 }
 
-bool ThothManager::create_thoth_template() {
-    auto thoth_template = Dfs::CollectionTemplate::create("Thoth").value().use_id().add_fields(
-        { Dfs::Field::Blob("owner").not_null(),
-          Dfs::Field::Blob("file_id").not_null(),
-          Dfs::Field::Blob("os").not_null(),
-          Dfs::Field::Blob("token").not_null(),
-          Dfs::Field::Blob("custom") });
-
-    auto system_actor_id = node->account_controller()->system_actor().id();
-    auto template_res    = node->dfs()->store_template(system_actor_id, thoth_template);
-    if (!template_res.has_value()) {
-        eCritical("Can't create Thoth template, because {}", template_res.error());
-        return false;
-    }
-
-    return true;
-}
-
-bool ThothManager::create_thoth_vector() {
+bool ThothManager::create_thoth_dictionary() {
     auto network_id = node->actor_index()->network_id();
     if (network_id.is_zero()) {
         return false;
     }
 
-    auto search_result =
-        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                          network_id,
-                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
-                                                                          "Thoth");
-    if (!search_result.has_value()) {
-        return false;
+    if (node->dfs()->read_file_status(network_id, std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY).has_value()) {
+        return true;
     }
 
-    auto store_res =
-        node->dfs()->store_vector(network_id, network_id, "Thoth", network_id, search_result->file_id);
+    auto store_res = node->dfs()->store_dictionary(network_id, network_id, std::string(THOTH_DATABASE));
     if (!store_res.has_value()) {
-        eCritical("Can't create Thoth database, because {}", store_res.error());
+        eCritical("Can't create Thoth device registry, because {}", store_res.error());
         return false;
     }
 
@@ -131,7 +117,7 @@ bool ThothManager::create_thoth_vector() {
 // TODO: read for user
 
 bool ThothManager::read_all(bool is_my) {
-    auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
+    auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
     if (!file_row.has_value()) {
         // TODO: wait for exists
         return false;
@@ -158,7 +144,7 @@ bool ThothManager::read_all(bool is_my) {
     auto where =
         is_my ? fmt::format("where status = '1' AND actor = '{}'", node->account_controller()->system_actor().id())
               : "where status = '1'";
-    auto rows = node->dfs()->read_vector_rows(owner_id_, file_id_, where, security_key);
+    auto rows = node->dfs()->read_vector_rows(owner_id_, file_id_, where, security_key, Dfs::FileType::Dictionary);
     if (!rows.has_value()) {
         return false;
     }
@@ -174,18 +160,28 @@ bool ThothManager::read_all(bool is_my) {
     return true;
 }
 
+// One dictionary key per account: opaque, carries no plaintext owner/file_id/token.
+std::string ThothManager::registry_key() {
+    if (!registry_key_.empty()) {
+        return registry_key_;
+    }
+    if (node->account_controller()->empty()) {
+        return {};
+    }
+    auto actor = node->account_controller()->derive_local_actor("Thoth", ActorType::User);
+    if (actor.id().is_zero()) {
+        return {};
+    }
+    registry_key_ = actor.id().to_string().substr(0, 20);
+    return registry_key_;
+}
+
 bool ThothManager::add_thoth_record(const ActorId&     owner_id,
                                     const std::string& file_id,
                                     const std::string& custom) {
-    auto add_result = try_add_thoth_record(owner_id, file_id, custom);
-    if (add_result == ThothAddResult::Success) {
-        return true;
-    }
-
-    if (add_result == ThothAddResult::Retry) {
-        enqueue_thoth_record(owner_id, file_id, custom);
-    }
-    return false;
+    enqueue_thoth_record(owner_id, file_id, custom);
+    flush_pending_records();
+    return true;
 }
 
 void ThothManager::enqueue_thoth_record(const ActorId&     owner_id,
@@ -202,153 +198,122 @@ void ThothManager::enqueue_thoth_record(const ActorId&     owner_id,
     }
 }
 
-ThothAddResult ThothManager::try_add_thoth_record(const ActorId&     owner_id,
-                                                  const std::string& file_id,
-                                                  const std::string& custom,
-                                                  bool               check_existing) {
-    if (ios_token_.empty()) {
-        return ThothAddResult::Retry;
+// The single registry writer: read the whole merged JSON, merge this device's records,
+// write it back. Never erases sibling devices or other chats. Keeps queue/flags on bail.
+void ThothManager::flush_pending_records() {
+    if (node->account_controller()->empty() || ios_token_.empty() || registry_key().empty()) {
+        return;
     }
 
-    auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
+    if (pending_records_.empty() && !force_registry_write_) {
+        return;
+    }
+
+    auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
     if (!file_row.has_value()) {
-        // TODO: wait for exists
-        return ThothAddResult::Retry;
+        return; // registry file absent locally: retry later
+    }
+    if (file_row->state != Dfs::FileState::Ready) {
+        node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
+        node->dfs()->request_file(node->network_id(), file_row->file_id);
+        return;
     }
 
     owner_id_ = node->network_id();
     file_id_  = file_row->file_id;
 
-    if (file_row->state != Dfs::FileState::Ready) {
-        node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
-        node->dfs()->request_file(node->network_id(), file_row->file_id);
-        return ThothAddResult::Retry;
-    }
-
-    // auto main_id   = account_controller_->current_profile().main_id();
-    auto system_id = node->account_controller()->system_actor().id();
-
-    // check db file, queue
-    if (check_existing && thoth_record_exists(owner_id, file_id, custom)) {
-        return ThothAddResult::Success;
-    }
-
-    auto thoth_data = ThothData { .id        = Utils::generate_random_hex(6),
-                                  .timestamp = 0,
-                                  .actor     = system_id,
-                                  .owner     = owner_id,
-                                  .file_id   = file_id,
-#ifdef Q_OS_IOS
-                                  .os = "iOS",
-#endif
-#ifdef Q_OS_ANDROID
-                                  .os = "Android",
-#endif
-                                  .token  = ios_token_,
-                                  .custom = custom };
-
-    // DbRow row          = { { "owner", owner_id.to_string() }, { "file", file_id } };
-    auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
-    auto res = node->dfs()->add_vector_row(node->network_id(), file_id_, thoth_data, system_id, security_key);
-
-    if (!res) {
-        return ThothAddResult::Failed;
-    }
-
-    return ThothAddResult::Success;
-}
-
-bool ThothManager::thoth_record_exists(const ActorId&     owner_id,
-                                       const std::string& file_id,
-                                       const std::string& custom) {
-    if (file_id_.empty() || ios_token_.empty()) {
-        return false;
-    }
+    load_or_create_device_id();
 
     auto system_id    = node->account_controller()->system_actor().id();
+    // Same system actor for all of an account's devices: decrypts values written by siblings.
     auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
-    auto rows         = node->dfs()->read_vector_rows(node->network_id(),
-                                              file_id_,
-                                              fmt::format("where status = '1' AND actor = '{}'", system_id),
-                                              security_key);
-    if (!rows.has_value()) {
-        return false;
-    }
 
-    for (const auto& row : *rows) {
-        auto owner_it  = row.find("owner");
-        auto file_it   = row.find("file_id");
-        auto token_it  = row.find("token");
-        auto custom_it = row.find("custom");
-        if (owner_it == row.end() || file_it == row.end() || token_it == row.end() || custom_it == row.end()) {
-            continue;
-        }
-
-        if (make_thoth_record_key(ActorId(owner_it->second), file_it->second, token_it->second, custom_it->second)
-            == make_thoth_record_key(owner_id, file_id, ios_token_, custom)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-void ThothManager::flush_pending_records() {
-    if (node->account_controller()->empty()) {
-        return;
-    }
-
-    purge_retired_token_rows();
-
-    if (pending_records_.empty()) {
-        return;
-    }
-
-    auto records = std::move(pending_records_);
-    pending_records_.clear();
-
-    std::optional<std::set<ThothRecordKey>> existing_records;
-    if (!file_id_.empty() && !ios_token_.empty()) {
-        auto system_id    = node->account_controller()->system_actor().id();
-        auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
-        auto rows         = node->dfs()->read_vector_rows(node->network_id(),
-                                                  file_id_,
-                                                  fmt::format("where status = '1' AND actor = '{}'", system_id),
-                                                  security_key);
-        if (rows.has_value()) {
-            existing_records = std::set<ThothRecordKey> {};
-            for (const auto& row : *rows) {
-                auto owner_it  = row.find("owner");
-                auto file_it   = row.find("file_id");
-                auto token_it  = row.find("token");
-                auto custom_it = row.find("custom");
-                if (owner_it == row.end() || file_it == row.end() || token_it == row.end()
-                    || custom_it == row.end()) {
-                    continue;
-                }
-
-                existing_records->insert(
-                    make_thoth_record_key(ActorId(owner_it->second), file_it->second, token_it->second, custom_it->second));
+    ThothRegistry reg;
+    auto row = node->dfs()->read_vector_row(node->network_id(),
+                                            file_id_,
+                                            registry_key(),
+                                            security_key,
+                                            Dfs::FileType::Dictionary);
+    if (row.has_value()) {
+        auto value_it = row->find("value");
+        if (value_it != row->end()) {
+            auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+            if (parsed.has_value()) {
+                reg = std::move(parsed.value());
+            } else {
+                eWarning("[Thoth] registry parse failed, starting from empty registry");
             }
         }
     }
 
-    for (const auto& record : records) {
-        auto record_key = make_thoth_record_key(record.owner_id, record.file_id, ios_token_, record.custom);
-        if (existing_records.has_value() && existing_records->contains(record_key)) {
-            continue;
-        }
+    std::string os;
+#ifdef Q_OS_IOS
+    os = "iOS";
+#endif
+#ifdef Q_OS_ANDROID
+    os = "Android";
+#endif
 
-        auto result = try_add_thoth_record(record.owner_id,
-                                           record.file_id,
-                                           record.custom,
-                                           !existing_records.has_value());
-        if (result == ThothAddResult::Success && existing_records.has_value()) {
-            existing_records->insert(record_key);
-        } else if (result == ThothAddResult::Retry) {
-            enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
+    bool changed = false;
+    for (const auto& record : pending_records_) {
+        auto  chat_key = fmt::format("{}:{}", record.owner_id, record.file_id);
+        auto& chat     = reg.chats[chat_key];
+        chat.owner     = record.owner_id;
+        chat.file_id   = record.file_id;
+
+        auto  name       = effective_device_name();
+        auto  new_record = ThothDeviceRecord { .os = os, .token = ios_token_, .custom = record.custom, .name = name };
+        auto  dev_it     = chat.devices.find(device_id_);
+        // updated_at is intentionally excluded from the change test: it must not, by itself,
+        // force a rewrite. But whenever we do write, we refresh it.
+        if (dev_it == chat.devices.end() || dev_it->second.os != new_record.os
+            || dev_it->second.token != new_record.token || dev_it->second.custom != new_record.custom
+            || dev_it->second.name != new_record.name) {
+            new_record.updated_at    = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+            chat.devices[device_id_] = new_record;
+            changed                  = true;
         }
     }
+
+    // Refresh this device's entry in every chat it already occupies: a token/name
+    // rotation must propagate even when nothing new is pending.
+    for (auto& [chat_key, chat] : reg.chats) {
+        auto dev_it = chat.devices.find(device_id_);
+        if (dev_it == chat.devices.end()) {
+            continue;
+        }
+        auto name = effective_device_name();
+        if (dev_it->second.os != os || dev_it->second.token != ios_token_ || dev_it->second.name != name) {
+            dev_it->second.os         = os;
+            dev_it->second.token      = ios_token_;
+            dev_it->second.name       = name;
+            dev_it->second.updated_at = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+            changed                   = true;
+        }
+    }
+
+    if (!changed && !force_registry_write_) {
+        pending_records_.clear();
+        return;
+    }
+
+    auto res = node->dfs()->dictionary_set_value(node->network_id(),
+                                                 file_id_,
+                                                 registry_key(),
+                                                 Json::serialize(reg),
+                                                 system_id,
+                                                 security_key);
+    if (!res) {
+        return; // keep pending, retry later
+    }
+
+    // Keep the startup force flag until a write that carried real chat records:
+    // early flushes from DFS callbacks can be lost to the file-sync race, and the
+    // first reconcile (chats ready) must still be able to force its self-heal write.
+    if (!pending_records_.empty()) {
+        force_registry_write_ = false;
+    }
+    pending_records_.clear();
 }
 
 void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
@@ -358,6 +323,12 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
 
     if (node->network_id() == owner_id_ && file_id == file_id_) {
         this->network_thoth_record(owner_id_, file_id_, row);
+        return;
+    }
+
+    // Legacy "Thoth" vector realtime record (read-only compat).
+    if (node->network_id() == owner_id && !legacy_file_id_.empty() && file_id == legacy_file_id_) {
+        this->legacy_network_thoth_record(node->network_id(), legacy_file_id_, row);
         return;
     }
 
@@ -398,21 +369,18 @@ void ThothManager::network_thoth_record(const ActorId& owner_id, const std::stri
         return;
     }
 
-    auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(), .receiver_id = node->network_id() };
-    auto rows         = node->dfs()->read_vector_rows(owner_id_,
-                                              file_id_,
-                                              fmt::format("where status = '1' AND id = '{}'", id_it->second),
-                                              security_key);
-    if (!rows.has_value()) {
+    auto actor_it = row.find("actor");
+    if (actor_it == row.end()) {
         return;
     }
-
-    if (rows->empty()) {
-        remove_thoth_info(id_it->second);
+    auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(actor_it->second),
+                                                  .receiver_id = node->network_id() };
+    auto current = node->dfs()->read_vector_row(owner_id, file_id, id_it->second, security_key,
+                                                 Dfs::FileType::Dictionary);
+    if (!current.has_value()) {
         return;
     }
-
-    apply_thoth_row(rows->at(0));
+    apply_thoth_row(current.value());
 }
 
 void ThothManager::apply_thoth_row(const DbRow& row) {
@@ -421,15 +389,29 @@ void ThothManager::apply_thoth_row(const DbRow& row) {
         return;
     }
 
+    // id is the opaque registry key: drop every ThothInfo previously built from it.
     remove_thoth_info(id_it->second);
 
-    auto file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
-    auto custom     = Json::deserialize<ThothCustom>(row.at("custom"));
-    auto thoth_info = ThothInfo { .id      = id_it->second,
-                                  .os      = row.at("os"),
-                                  .token   = row.at("token"),
-                                  .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
-    infos_[file_link].insert(thoth_info);
+    auto value_it = row.find("value");
+    if (value_it == row.end()) {
+        return;
+    }
+    auto registry = Json::deserialize<ThothRegistry>(value_it->second);
+    if (!registry.has_value()) {
+        return;
+    }
+
+    for (const auto& [chat_key, chat] : registry->chats) {
+        auto file_link = Dfs::FileLink { .owner_id = chat.owner, .file_id = chat.file_id };
+        for (const auto& [device_id, record] : chat.devices) {
+            auto custom     = Json::deserialize<ThothCustom>(record.custom);
+            auto thoth_info = ThothInfo { .id      = id_it->second,
+                                          .os      = record.os,
+                                          .token   = record.token,
+                                          .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
+            infos_[file_link].insert(thoth_info);
+        }
+    }
 }
 
 void ThothManager::remove_thoth_info(const std::string& id) {
@@ -488,6 +470,7 @@ void ThothManager::set_device_token(const std::string& token) {
         // Fresh process: recover this device's token history from disk.
         load_persisted_device_tokens();
     }
+    load_or_create_device_id();
 
     // Same token as before: nothing changed, avoid re-registering.
     if (token == ios_token_) {
@@ -496,19 +479,173 @@ void ThothManager::set_device_token(const std::string& token) {
         return;
     }
 
-    // Token changed: retire the old one; its rows are purged on every flush (see purge).
-    if (!ios_token_.empty()) {
-        retired_tokens_.insert(ios_token_);
-    }
     ios_token_ = token;
-    retired_tokens_.erase(token);
     persist_device_tokens();
 
     // Reset the guard so the next read_chats() re-registers under the new token.
     reconciled_token_.clear();
     reconciled_chats_count_ = 0;
+    force_registry_write_   = true;
 
     flush_pending_records();
+}
+
+void ThothManager::set_device_id(const std::string& id) {
+    if (id.empty() || id == device_id_) {
+        return;
+    }
+    device_id_            = id;
+    // Rewrite the registry under the new device id even if nothing else changed.
+    force_registry_write_ = true;
+}
+
+void ThothManager::set_device_name(const std::string& name) {
+    if (name.empty() || name == device_name_) {
+        return;
+    }
+    device_name_          = name;
+    // Rewrite so the new name lands in the registry even if nothing else changed.
+    force_registry_write_ = true;
+}
+
+std::string ThothManager::effective_device_name() {
+    if (!device_name_.empty()) {
+        return device_name_;
+    }
+    device_name_ = QSysInfo::prettyProductName().toStdString();
+    return device_name_;
+}
+
+const std::string& ThothManager::device_id() {
+    load_or_create_device_id();
+    return device_id_;
+}
+
+// Reads this account's own registry (system-actor sender) and aggregates by device id.
+std::vector<ThothDeviceInfo> ThothManager::my_devices() {
+    std::vector<ThothDeviceInfo> result;
+
+    if (node->account_controller()->empty() || registry_key().empty()) {
+        return result;
+    }
+
+    auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
+    if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
+        return result;
+    }
+
+    load_or_create_device_id();
+
+    auto system_id    = node->account_controller()->system_actor().id();
+    auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+
+    auto row = node->dfs()->read_vector_row(node->network_id(),
+                                            file_row->file_id,
+                                            registry_key(),
+                                            security_key,
+                                            Dfs::FileType::Dictionary);
+    if (!row.has_value()) {
+        return result;
+    }
+    auto value_it = row->find("value");
+    if (value_it == row->end()) {
+        return result;
+    }
+    auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+    if (!parsed.has_value()) {
+        return result;
+    }
+
+    // deviceId -> aggregated info (newest record wins for name/os).
+    std::map<std::string, ThothDeviceInfo> agg;
+    for (const auto& [chat_key, chat] : parsed->chats) {
+        for (const auto& [dev_id, record] : chat.devices) {
+            auto& info = agg[dev_id];
+            info.device_id = dev_id;
+            info.chats += 1;
+            if (record.updated_at >= info.updated_at) {
+                info.updated_at = record.updated_at;
+                info.name       = record.name;
+                info.os         = record.os;
+            }
+            info.is_current = (dev_id == device_id_);
+        }
+    }
+
+    result.reserve(agg.size());
+    for (auto& [dev_id, info] : agg) {
+        result.push_back(std::move(info));
+    }
+    return result;
+}
+
+// Read->merge->write erasing exactly one device id from every chat. Chats left with no
+// devices are dropped. Other device ids are never touched.
+bool ThothManager::remove_device(const std::string& device_id) {
+    if (device_id.empty() || node->account_controller()->empty() || registry_key().empty()) {
+        return false;
+    }
+
+    auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
+    if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
+        return false;
+    }
+
+    load_or_create_device_id();
+
+    auto system_id    = node->account_controller()->system_actor().id();
+    auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+
+    auto row = node->dfs()->read_vector_row(node->network_id(),
+                                            file_row->file_id,
+                                            registry_key(),
+                                            security_key,
+                                            Dfs::FileType::Dictionary);
+    if (!row.has_value()) {
+        return false;
+    }
+    auto value_it = row->find("value");
+    if (value_it == row->end()) {
+        return false;
+    }
+    auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+    if (!parsed.has_value()) {
+        return false;
+    }
+    ThothRegistry reg = std::move(parsed.value());
+
+    bool erased_any = false;
+    for (auto chat_it = reg.chats.begin(); chat_it != reg.chats.end();) {
+        auto dev_it = chat_it->second.devices.find(device_id);
+        if (dev_it != chat_it->second.devices.end()) {
+            chat_it->second.devices.erase(dev_it);
+            erased_any = true;
+        }
+        if (chat_it->second.devices.empty()) {
+            chat_it = reg.chats.erase(chat_it);
+        } else {
+            ++chat_it;
+        }
+    }
+
+    if (!erased_any) {
+        return true; // nothing to remove: registry already lacks this device
+    }
+
+    // Removing the current device: drop any state that would re-register it on the next flush.
+    // (Clear before/independently of the write so a queued flush after logout stays a no-op.)
+    if (device_id == device_id_) {
+        force_registry_write_ = false;
+        pending_records_.clear();
+    }
+
+    auto res = node->dfs()->dictionary_set_value(node->network_id(),
+                                                 file_row->file_id,
+                                                 registry_key(),
+                                                 Json::serialize(reg),
+                                                 system_id,
+                                                 security_key);
+    return bool(res);
 }
 
 // Cwd is the data dir; line 1 = current token, rest = this device's retired tokens.
@@ -517,11 +654,7 @@ void ThothManager::persist_device_tokens() {
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return;
     }
-    std::string data = ios_token_;
-    for (const auto& retired : retired_tokens_) {
-        data += "\n" + retired;
-    }
-    file.write(data.data(), qint64(data.size()));
+    file.write(ios_token_.data(), qint64(ios_token_.size()));
 }
 
 void ThothManager::load_persisted_device_tokens() {
@@ -529,69 +662,80 @@ void ThothManager::load_persisted_device_tokens() {
     if (!file.open(QIODevice::ReadOnly)) {
         return;
     }
-    auto lines = QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts);
-    if (lines.isEmpty()) {
+    auto token = QString::fromUtf8(file.readAll()).trimmed();
+    if (token.isEmpty()) {
         return;
     }
-    ios_token_ = lines.first().toStdString();
-    for (int i = 1; i < lines.size(); ++i) {
-        retired_tokens_.insert(lines.at(i).toStdString());
-    }
+    ios_token_ = token.toStdString();
 }
 
-// Called by read_chats(); the per-chat walk lives in the chat branch, base retries deferred work.
+void ThothManager::load_or_create_device_id() {
+    if (!device_id_.empty()) return;
+    QFile file(".thoth_device_id");
+    if (file.open(QIODevice::ReadOnly)) device_id_ = QString::fromUtf8(file.readAll()).trimmed().toStdString();
+    if (!device_id_.empty()) return;
+    device_id_ = Utils::generate_random_hex(10);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) file.write(device_id_.data(), qint64(device_id_.size()));
+}
+
 void ThothManager::reconcile_tokens_for_chats(const std::vector<Chat::Chat>& chats) {
     (void) chats;
     if (ios_token_.empty()) {
         return;
     }
-
     flush_pending_records();
 }
 
-// Idempotently removes own rows carrying retired tokens (also heals resurrected rows).
-void ThothManager::purge_retired_token_rows() {
-    if (retired_tokens_.empty()) {
+// A freshly synced registry file may be a stale full-file copy that lost this device's
+// records (send_broadcast is not guaranteed; file-level sync is last-writer-wins).
+// Re-enqueue and rewrite whenever our reconciled records are missing.
+void ThothManager::verify_self_registration() {
+    if (ios_token_.empty() || last_reconciled_records_.empty()) {
         return;
     }
-
-    // No profile yet (pre-login): system_actor() would abort.
-    if (node->account_controller()->empty()) {
+    if (node->account_controller()->empty() || registry_key().empty()) {
         return;
     }
-
-    if (file_id_.empty()) {
-        auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
-        if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
-            return; // not Ready locally: next flush retries
-
-        }
-        owner_id_ = node->network_id();
-        file_id_  = file_row->file_id;
+    auto file_row = node->dfs()->read_file_status(node->network_id(), std::string(THOTH_DATABASE), Dfs::Basic::TEMPLATE_DICTIONARY);
+    if (!file_row.has_value() || file_row->state != Dfs::FileState::Ready) {
+        return;
     }
-
+    load_or_create_device_id();
     auto system_id    = node->account_controller()->system_actor().id();
     auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
-    auto rows         = node->dfs()->read_vector_rows(node->network_id(),
-                                              file_id_,
-                                              fmt::format("where status = '1' AND actor = '{}'", system_id),
-                                              security_key);
-    if (!rows.has_value()) {
-        return;
+    auto row = node->dfs()->read_vector_row(node->network_id(), file_row->file_id, registry_key(),
+                                            security_key, Dfs::FileType::Dictionary);
+    ThothRegistry reg;
+    if (row.has_value()) {
+        auto value_it = row->find("value");
+        if (value_it != row->end()) {
+            auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+            if (parsed.has_value()) {
+                reg = std::move(parsed.value());
+            }
+        }
     }
-
-    for (const auto& row : *rows) {
-        auto id_it    = row.find("id");
-        auto token_it = row.find("token");
-        if (id_it == row.end() || token_it == row.end()) {
-            continue;
+    bool missing = false;
+    for (const auto& record : last_reconciled_records_) {
+        auto chat_it = reg.chats.find(fmt::format("{}:{}", record.owner_id, record.file_id));
+        auto ok = chat_it != reg.chats.end() && chat_it->second.devices.contains(device_id_)
+               && chat_it->second.devices.at(device_id_).token == ios_token_
+               && chat_it->second.devices.at(device_id_).name == effective_device_name();
+        if (!ok) {
+            enqueue_thoth_record(record.owner_id, record.file_id, record.custom);
+            missing = true;
         }
-        if (!retired_tokens_.contains(token_it->second)) {
-            continue;
+    }
+    if (missing) {
+        // Rate-limit: a stale-copy ping-pong with file-level sync must not spin.
+        auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+        if (now - last_self_heal_ms_ < 15000) {
+            return;
         }
-
-        eLog("[Thoth] remove stale token row id={} token={}", id_it->second, token_it->second);
-        node->dfs()->remove_vector_row(node->network_id(), file_id_, id_it->second, system_id);
+        last_self_heal_ms_ = now;
+        eLog("[Thoth] self registration lost after sync, rewriting");
+        force_registry_write_ = true;
+        flush_pending_records();
     }
 }
 
@@ -632,4 +776,151 @@ std::string ThothManager::read_username(const ActorId& actor_id) {
     }
 
     return row->at("name").c_str();
+}
+
+// ---------------------------------------------------------------------------
+// Legacy "Thoth" vector compatibility (read-only). Remove this whole section
+// once all clients migrated to ThothDevicesV2.
+// ---------------------------------------------------------------------------
+
+bool ThothManager::create_thoth_template() {
+    auto thoth_template = Dfs::CollectionTemplate::create("Thoth").value().use_id().add_fields(
+        { Dfs::Field::Blob("owner").not_null(),
+          Dfs::Field::Blob("file_id").not_null(),
+          Dfs::Field::Blob("os").not_null(),
+          Dfs::Field::Blob("token").not_null(),
+          Dfs::Field::Blob("custom") });
+
+    auto system_actor_id = node->account_controller()->system_actor().id();
+    auto template_res    = node->dfs()->store_template(system_actor_id, thoth_template);
+    if (!template_res.has_value()) {
+        eCritical("Can't create Thoth template, because {}", template_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+bool ThothManager::create_thoth_vector() {
+    auto network_id = node->actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    auto search_result =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_COLLECTION_TEMPLATE,
+                                                                          "Thoth");
+    if (!search_result.has_value()) {
+        return false;
+    }
+
+    auto store_res =
+        node->dfs()->store_vector(network_id, network_id, "Thoth", network_id, search_result->file_id);
+    if (!store_res.has_value()) {
+        eCritical("Can't create Thoth database, because {}", store_res.error());
+        return false;
+    }
+
+    return true;
+}
+
+// Read the legacy "Thoth" vector into infos_ so already-registered old clients keep pushes.
+bool ThothManager::legacy_read_all(bool is_my) {
+    auto file_row = node->dfs()->read_file_status(node->network_id(), "Thoth");
+    if (!file_row.has_value()) {
+        return false;
+    }
+
+    if (file_row->state != Dfs::FileState::Ready) {
+        node->dfs()->add_to_waiting_file(node->network_id(), file_row->file_id);
+        node->dfs()->request_file(node->network_id(), file_row->file_id);
+        return false;
+    }
+
+    auto network_id = node->actor_index()->network_id();
+    if (network_id.is_zero()) {
+        return false;
+    }
+
+    legacy_file_id_ = file_row->file_id;
+
+    auto security_key =
+        Dfs::DataSecurityActor { .sender_id = is_my ? node->account_controller()->system_actor().id() : ActorId(),
+                                 .receiver_id = node->network_id() };
+
+    auto where =
+        is_my ? fmt::format("where status = '1' AND actor = '{}'", node->account_controller()->system_actor().id())
+              : "where status = '1'";
+    auto rows = node->dfs()->read_vector_rows(node->network_id(), legacy_file_id_, where, security_key);
+    if (!rows.has_value()) {
+        return false;
+    }
+
+    for (const auto& row : *rows) {
+        legacy_apply_thoth_row(row);
+    }
+
+    return true;
+}
+
+// Legacy row layout: fields owner/file_id/os/token/custom read directly (id = row id).
+void ThothManager::legacy_apply_thoth_row(const DbRow& row) {
+    auto id_it     = row.find("id");
+    auto owner_it  = row.find("owner");
+    auto file_it   = row.find("file_id");
+    auto os_it     = row.find("os");
+    auto token_it  = row.find("token");
+    auto custom_it = row.find("custom");
+    if (id_it == row.end() || owner_it == row.end() || file_it == row.end() || token_it == row.end()) {
+        return;
+    }
+
+    remove_thoth_info(id_it->second);
+
+    auto file_link = Dfs::FileLink { .owner_id = ActorId(owner_it->second), .file_id = file_it->second };
+    std::set<ActorId> ignored;
+    if (custom_it != row.end()) {
+        auto custom = Json::deserialize<ThothCustom>(custom_it->second);
+        if (custom.has_value()) {
+            ignored = custom->ignored;
+        }
+    }
+    auto thoth_info = ThothInfo { .id      = id_it->second,
+                                  .os      = os_it == row.end() ? std::string {} : os_it->second,
+                                  .token   = token_it->second,
+                                  .ignored = std::move(ignored) };
+    infos_[file_link].insert(thoth_info);
+}
+
+void ThothManager::legacy_network_thoth_record(const ActorId&     owner_id,
+                                               const std::string& file_id,
+                                               const DbRow&       row) {
+    auto id_it = row.find("id");
+    if (id_it == row.end()) {
+        return;
+    }
+
+    auto status_it = row.find("status");
+    if (status_it != row.end() && status_it->second == "0") {
+        remove_thoth_info(id_it->second);
+        return;
+    }
+
+    auto security_key = Dfs::DataSecurityActor { .sender_id = ActorId(), .receiver_id = node->network_id() };
+    auto rows         = node->dfs()->read_vector_rows(owner_id,
+                                              file_id,
+                                              fmt::format("where status = '1' AND id = '{}'", id_it->second),
+                                              security_key);
+    if (!rows.has_value()) {
+        return;
+    }
+
+    if (rows->empty()) {
+        remove_thoth_info(id_it->second);
+        return;
+    }
+
+    legacy_apply_thoth_row(rows->at(0));
 }
