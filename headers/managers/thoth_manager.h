@@ -177,6 +177,7 @@ private:
 
     std::string device_name_;
     std::string effective_device_name();
+    static std::string detect_os();
 
 signals:
     void sendSuccess(const QString& response);
