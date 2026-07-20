@@ -459,7 +459,8 @@ std::vector<std::string> Serialization::deserialize(const std::string &serialize
 }
 
 void Utils::wipeDataFiles() {
-#ifdef QT_DEBUG
+    // No QT_DEBUG gate: every caller is an explicit, user-confirmed wipe flow
+    // (logout / remote revocation) and release builds must actually erase data.
     // QString current = QDir::currentPath();
 
     QDir(QString::fromStdString(ChainConst::ACTORS_FOLDER)).removeRecursively();
@@ -470,6 +471,7 @@ void Utils::wipeDataFiles() {
     QDir("encrypt").removeRecursively();
     QDir("tokens").removeRecursively();
     QFile(".auth_hash").remove();
+    // (endif of the former QT_DEBUG gate removed together with the gate)
 
     // QDir dir(QDir::currentPath());
     // dir.cdUp();
@@ -482,7 +484,17 @@ void Utils::wipeDataFiles() {
     // "/Share"; QDir(shareFolder).removeRecursively();
 
     // QDir::setCurrent(current);
-#endif
+}
+
+void Utils::wipeSessionKeys() {
+    QDir(QString::fromStdString(ChainConst::ACTORS_FOLDER)).removeRecursively();
+    QDir(QString::fromStdString(Profiles::folder)).removeRecursively();
+    QFile(".auth_hash").remove();
+    // Device identity must not survive a logout: a re-login with the old id
+    // would immediately match its own revocation tombstone.
+    QFile(".thoth_device_id").remove();
+    QFile(".thoth_device_token").remove();
+    QFile(".thoth_revoked").remove();
 }
 
 qint64 Utils::diskAvailableMemory() {

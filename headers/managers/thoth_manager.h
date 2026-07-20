@@ -25,6 +25,7 @@
 #include <vector>
 
 class QNetworkAccessManager;
+class QTimer;
 
 namespace Chat {
 struct Chat;
@@ -48,9 +49,12 @@ struct ThothChatDevices {
 BOOST_DESCRIBE_STRUCT(ThothChatDevices, (), (owner, file_id, devices))
 
 struct ThothRegistry {
-    std::map<std::string, ThothChatDevices> chats; // "owner:file_id" -> data
+    std::map<std::string, ThothChatDevices> chats;   // "owner:file_id" -> data
+    // Deliberately signed-out devices: deviceId -> unix ms of the revocation.
+    // Distinguishes remote logout from a sync clobber (which self-heal repairs).
+    std::map<std::string, std::uint64_t>    revoked;
 };
-BOOST_DESCRIBE_STRUCT(ThothRegistry, (), (chats))
+BOOST_DESCRIBE_STRUCT(ThothRegistry, (), (chats, revoked))
 
 struct ThothInfo {
     std::string       id;
@@ -177,6 +181,24 @@ private:
     void verify_self_registration();
     void reconcile_after_token_change();
     std::uint64_t last_self_heal_ms_ = 0;
+    // True once the registry marked this device revoked; gates all writes.
+    bool revoked_ = false;
+    // Returns true (and emits deviceRevoked once) when reg revokes this device.
+    bool check_revocation(const ThothRegistry& reg);
+    // Revocations authored by THIS device (persisted): each device re-asserts
+    // its own deletions if a stale sync copy resurrects the victim.
+    std::map<std::string, std::uint64_t> my_revocations_;
+    bool my_revocations_loaded_ = false;
+    // Periodic pull of the registry (dirs refresh of the network actor) so a
+    // revocation reaches an idle device even without a broadcast (e.g. relay
+    // dedup by node identifier). Stopped permanently once revoked.
+    QTimer* revocation_watchdog_ = nullptr;
+    std::atomic_bool enabled_watchdog_ { false };
+    void load_my_revocations();
+    void persist_my_revocations();
+    // Applies my_revocations_ to reg (erase records, union tombstones);
+    // returns true when reg was modified.
+    bool enforce_my_revocations(ThothRegistry& reg);
 
     std::string device_name_;
     std::string effective_device_name();
@@ -185,6 +207,9 @@ private:
 signals:
     void sendSuccess(const QString& response);
     void sendFailed(const QString& error);
+    // This device found itself in the registry's revoked list: it was signed
+    // out remotely. The app should log out (wipe local data).
+    void deviceRevoked();
 
 private:
     QNetworkAccessManager* m_networkManager;

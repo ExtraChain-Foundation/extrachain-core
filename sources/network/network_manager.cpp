@@ -187,7 +187,24 @@ void NetworkManager::process() {
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
 
+void NetworkManager::go_offline() {
+    offline_ = true;
+    reconnect_timer_->stop();
+    {
+        auto reconnectionsLocked = *reconnections_to_identifier_;
+        reconnectionsLocked->clear();
+    }
+    auto connectionsLocked = *connections_;
+    for (const auto& connection : *connectionsLocked) {
+        emit connection->close();
+    }
+    eWarning("[NetworkManager] offline mode: all connections closed, reconnects disabled");
+}
+
 void NetworkManager::reconnection() {
+    if (offline_) {
+        return;
+    }
     if (this->node->account_controller()->empty()) {
         return;
     }
@@ -384,6 +401,9 @@ void NetworkManager::check_port(const QString     ip,
                                 Network::Protocol protocol,
                                 const bool        request,
                                 const bool        isConstant) {
+    if (offline_) {
+        return;
+    }
     // Limit already reached — no need for new probes (the app used to handshake the entire
     // node list, killing dozens of excess sockets right after creation).
     if (active_connections_count() >= Network::maxConnections) {
