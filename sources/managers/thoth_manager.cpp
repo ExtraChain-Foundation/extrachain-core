@@ -244,14 +244,22 @@ void ThothManager::flush_pending_records() {
             if (parsed.has_value()) {
                 reg = std::move(parsed.value());
             } else {
-                eWarning("[Thoth] registry parse failed, starting from empty registry");
+                // Never rewrite a registry we could not read: starting from empty
+                // would erase every sibling device (e.g. an older app meeting a
+                // newer format). Bail and retry after the next sync/update.
+                eWarning("[Thoth] registry parse failed, refusing to overwrite it");
+                return;
             }
         }
     }
 
+    if (check_revocation(reg)) {
+        return; // signed out remotely: never re-register
+    }
+
     const std::string os = detect_os();
 
-    bool changed = false;
+    bool changed = enforce_my_revocations(reg);
     for (const auto& record : pending_records_) {
         auto  chat_key = fmt::format("{}:{}", record.owner_id, record.file_id);
         auto& chat     = reg.chats[chat_key];
@@ -338,6 +346,27 @@ void ThothManager::flush_pending_records() {
 }
 
 void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row) {
+    // Live registry-row update: even pure clients (enabled_ is server-only)
+    // must notice immediately when a sibling device revoked this one.
+    if (owner_id == node->network_id() && !node->account_controller()->empty()) {
+        auto id_it = row.find("id");
+        if (id_it != row.end() && !registry_key().empty() && id_it->second == registry_key()) {
+            auto system_id    = node->account_controller()->system_actor().id();
+            auto security_key = Dfs::DataSecurityActor { .sender_id = system_id, .receiver_id = node->network_id() };
+            auto current      = node->dfs()->read_vector_row(owner_id, file_id, id_it->second,
+                                                             security_key, Dfs::FileType::Dictionary);
+            if (current.has_value()) {
+                auto value_it = current->find("value");
+                if (value_it != current->end()) {
+                    auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+                    if (parsed.has_value()) {
+                        check_revocation(parsed.value());
+                    }
+                }
+            }
+        }
+    }
+
     if (!enabled_) {
         return;
     }
@@ -401,6 +430,19 @@ void ThothManager::network_thoth_record(const ActorId& owner_id, const std::stri
     if (!current.has_value()) {
         return;
     }
+
+    // Live update of my own account's registry row (written by a sibling
+    // device): check immediately whether it revoked this device.
+    if (!registry_key().empty() && id_it->second == registry_key()) {
+        auto value_it = current->find("value");
+        if (value_it != current->end()) {
+            auto parsed = Json::deserialize<ThothRegistry>(value_it->second);
+            if (parsed.has_value()) {
+                check_revocation(parsed.value());
+            }
+        }
+    }
+
     apply_thoth_row(current.value());
 }
 
@@ -703,6 +745,84 @@ std::vector<ThothDeviceInfo> ThothManager::my_devices() {
 
 // Read->merge->write erasing exactly one device id from every chat. Chats left with no
 // devices are dropped. Other device ids are never touched.
+void ThothManager::load_my_revocations() {
+    if (my_revocations_loaded_) {
+        return;
+    }
+    my_revocations_loaded_ = true;
+    QFile file(".thoth_revoked");
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    for (const auto& line : QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts)) {
+        auto parts = line.trimmed().split(' ');
+        if (parts.size() == 2) {
+            my_revocations_[parts[0].toStdString()] = parts[1].toULongLong();
+        }
+    }
+}
+
+void ThothManager::persist_my_revocations() {
+    QFile file(".thoth_revoked");
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return;
+    }
+    for (const auto& [id, ms] : my_revocations_) {
+        auto line = QString("%1 %2\n").arg(QString::fromStdString(id)).arg(ms);
+        file.write(line.toUtf8());
+    }
+}
+
+// Symmetric responsibility: this device re-asserts the deletions it made, the
+// same way every device re-asserts its own registration after a stale sync.
+bool ThothManager::enforce_my_revocations(ThothRegistry& reg) {
+    load_my_revocations();
+    if (my_revocations_.empty()) {
+        return false;
+    }
+    auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+    constexpr std::uint64_t TOMBSTONE_TTL_MS = 30ull * 24 * 60 * 60 * 1000;
+    if (std::erase_if(my_revocations_, [now](const auto& kv) { return now - kv.second > TOMBSTONE_TTL_MS; })) {
+        persist_my_revocations();
+    }
+
+    bool changed = false;
+    for (const auto& [dev_id, ms] : my_revocations_) {
+        for (auto chat_it = reg.chats.begin(); chat_it != reg.chats.end();) {
+            if (chat_it->second.devices.erase(dev_id)) {
+                changed = true;
+            }
+            if (chat_it->second.devices.empty()) {
+                chat_it = reg.chats.erase(chat_it);
+            } else {
+                ++chat_it;
+            }
+        }
+        if (!reg.revoked.contains(dev_id)) {
+            reg.revoked[dev_id] = ms;
+            changed             = true;
+        }
+    }
+    return changed;
+}
+
+bool ThothManager::check_revocation(const ThothRegistry& reg) {
+    if (device_id_.empty() || !reg.revoked.contains(device_id_)) {
+        return revoked_;
+    }
+    if (!revoked_) {
+        revoked_ = true;
+        // Stop every re-registration path: a revoked device must not resurrect.
+        force_registry_write_ = false;
+        pending_records_.clear();
+        last_reconciled_records_.clear();
+        reconciled_token_.clear();
+        eWarning("[Thoth] this device was revoked remotely, signing out");
+        emit deviceRevoked();
+    }
+    return true;
+}
+
 bool ThothManager::remove_device(const std::string& device_id) {
     if (device_id.empty() || node->account_controller()->empty() || registry_key().empty()) {
         return false;
@@ -750,7 +870,18 @@ bool ThothManager::remove_device(const std::string& device_id) {
         }
     }
 
-    if (!erased_any) {
+    auto now = std::uint64_t(QDateTime::currentMSecsSinceEpoch());
+    bool tombstoned = !reg.revoked.contains(device_id);
+    reg.revoked[device_id] = reg.revoked.contains(device_id) ? reg.revoked[device_id] : now;
+    // Remember the deletion: I keep re-asserting it until every stale copy dies out.
+    load_my_revocations();
+    my_revocations_[device_id] = reg.revoked[device_id];
+    persist_my_revocations();
+    // Prune stale tombstones: a wiped device gets a fresh id and can never match again.
+    constexpr std::uint64_t TOMBSTONE_TTL_MS = 30ull * 24 * 60 * 60 * 1000;
+    std::erase_if(reg.revoked, [now](const auto& kv) { return now - kv.second > TOMBSTONE_TTL_MS; });
+
+    if (!erased_any && !tombstoned) {
         return true; // nothing to remove: registry already lacks this device
     }
 
@@ -837,7 +968,16 @@ void ThothManager::verify_self_registration() {
             }
         }
     }
+    if (check_revocation(reg)) {
+        return; // signed out remotely: do not self-heal back
+    }
     bool missing = false;
+    {
+        auto probe = reg;
+        if (enforce_my_revocations(probe)) {
+            missing = true; // a deletion of mine was undone by a stale copy
+        }
+    }
     for (const auto& record : last_reconciled_records_) {
         auto chat_it = reg.chats.find(fmt::format("{}:{}", record.owner_id, record.file_id));
         auto ok = chat_it != reg.chats.end() && chat_it->second.devices.contains(device_id_)
