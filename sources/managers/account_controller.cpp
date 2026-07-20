@@ -162,6 +162,16 @@ Actor<KeyPrivate> AccountController::restore_actor(const ActorId     &profileAct
     return actor;
 }
 
+Actor<KeyPrivate> AccountController::derive_local_actor(const std::string &seed_label, ActorType type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+    return actor;
+}
+
 std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatActorError> AccountController::chat_actor() {
     if (current_profile_.is_zero() || profiles_.empty()) {
         return std::unexpected(ChatActorError::NoProfile);

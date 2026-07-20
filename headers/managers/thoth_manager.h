@@ -30,17 +30,26 @@ namespace Chat {
 struct Chat;
 }
 
-struct ThothData {
-    std::string   id;
-    std::uint64_t timestamp = 0;
-    ActorId       actor;
-    ActorId       owner;
-    std::string   file_id;
+struct ThothDeviceRecord {
     std::string   os;
     std::string   token;
-    std::string   custom;
+    std::string   custom;         // serialized ThothCustom, opaque here
+    std::string   name;           // human-readable device name
+    std::uint64_t updated_at = 0; // unix ms of the last write of this record
 };
-BOOST_DESCRIBE_STRUCT(ThothData, (), (id, timestamp, actor, owner, file_id, os, token, custom))
+BOOST_DESCRIBE_STRUCT(ThothDeviceRecord, (), (os, token, custom, name, updated_at))
+
+struct ThothChatDevices {
+    ActorId     owner;
+    std::string file_id;
+    std::map<std::string, ThothDeviceRecord> devices; // deviceId -> record
+};
+BOOST_DESCRIBE_STRUCT(ThothChatDevices, (), (owner, file_id, devices))
+
+struct ThothRegistry {
+    std::map<std::string, ThothChatDevices> chats; // "owner:file_id" -> data
+};
+BOOST_DESCRIBE_STRUCT(ThothRegistry, (), (chats))
 
 struct ThothInfo {
     std::string       id;
@@ -64,6 +73,16 @@ struct ThothServiceMessage {
 };
 BOOST_DESCRIBE_STRUCT(ThothServiceMessage, (), (device_token, title, body));
 
+// Aggregated per-device view for the "My devices" UI.
+struct ThothDeviceInfo {
+    std::string   device_id;
+    std::string   name;
+    std::string   os;
+    std::uint64_t updated_at = 0;
+    bool          is_current = false;
+    std::size_t   chats      = 0;
+};
+
 class ExtraChainNode;
 
 enum class ThothType {
@@ -76,23 +95,14 @@ struct ThothPendingRecord {
     std::string custom;
 };
 
-enum class ThothAddResult {
-    Success,
-    Retry,
-    Failed
-};
-
 class ThothManager : public QObject {
     Q_OBJECT
 
 public:
     ThothManager(ExtraChainNode* node, QObject* parent = nullptr);
 
-    // for network
-    bool create_thoth_template();
-
-    // for apps
-    bool create_thoth_vector();
+    // Creates the current Thoth key-value registry. The legacy "Thoth" vector is not used.
+    bool create_thoth_dictionary();
     bool read_all(bool is_my);
     void dfs_vector_add_check(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
     void network_thoth_record(const ActorId& owner_id, const std::string& file_id, const DbRow& row);
@@ -110,9 +120,25 @@ public:
     bool send_to_service(const ThothInfo& info, const std::string& username);
 
     // Platform-neutral alias: stores the device push token (APNS on iOS, FCM on Android).
-    // The platform is distinguished by the "os" field in ThothData, not by this setter.
     void        set_device_token(const std::string& token);
     void        set_ios_token(const std::string& token);
+
+    // Stable platform device id injected by the app (ANDROID_ID / Keychain). Falls back
+    // to a random id persisted in the data dir (test/dev fallback only).
+    void        set_device_id(const std::string& id);
+
+    // Human-readable name written into this device's records (defaults from QSysInfo).
+    void        set_device_name(const std::string& name);
+
+    // Current device id (ensures it is loaded/created first).
+    const std::string& device_id();
+
+    // "My devices": aggregate this account's own registry across all chats.
+    std::vector<ThothDeviceInfo> my_devices();
+
+    // Erase one device id from every chat in this account's registry (read->merge->write).
+    bool remove_device(const std::string& device_id);
+
     std::string read_username(const ActorId& actor_id);
 
 private:
@@ -134,13 +160,23 @@ private:
     // Reconcile anti-spam guard: redo only when the token or the chat count changed.
     std::string reconciled_token_;
     std::size_t reconciled_chats_count_ = 0;
+    // Force a registry rewrite on start / after token or device-id change (self-healing).
+    bool        force_registry_write_ = true;
 
-    // This device's previous tokens; their rows are purged on every flush (idempotent).
-    std::set<std::string> retired_tokens_;
+    // One dictionary key per account: first 20 hex of a local "Thoth" actor derived from seed.
+    std::string registry_key_;
+    std::string registry_key();
 
     void persist_device_tokens();
     void load_persisted_device_tokens();
-    void purge_retired_token_rows();
+    void load_or_create_device_id();
+    // Records written by the last reconcile; used to detect and heal sync clobbering.
+    std::vector<ThothPendingRecord> last_reconciled_records_;
+    void verify_self_registration();
+    std::uint64_t last_self_heal_ms_ = 0;
+
+    std::string device_name_;
+    std::string effective_device_name();
 
 signals:
     void sendSuccess(const QString& response);
@@ -150,13 +186,9 @@ private:
     QNetworkAccessManager* m_networkManager;
 
     void enqueue_thoth_record(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
-    ThothAddResult try_add_thoth_record(const ActorId&     owner_id,
-                                        const std::string& file_id,
-                                        const std::string& custom,
-                                        bool               check_existing = true);
     void flush_pending_records();
     void apply_thoth_row(const DbRow& row);
     void remove_thoth_info(const std::string& id);
-    bool thoth_record_exists(const ActorId& owner_id, const std::string& file_id, const std::string& custom);
+    std::string device_id_;
 
 };

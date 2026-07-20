@@ -69,6 +69,8 @@ public:
     Actor<KeyPrivate> create_actor(const ActorId &profileActor, const std::string &seed_label, ActorType type);
     // Re-derive an actor from seed+label and add to profile.actors_ without broadcast.
     Actor<KeyPrivate> restore_actor(const ActorId &profileActor, const std::string &seed_label, ActorType type);
+    // Derive an actor from seed+label without storing it in the profile or broadcasting it.
+    Actor<KeyPrivate> derive_local_actor(const std::string &seed_label, ActorType type);
     // Actor<KeyPrivate> create_dapp_master
     Actor<KeyPrivate> create_service(const ActorId                   &profileActor     = ActorId(),
                                      std::optional<Actor<KeyPrivate>> predefined_actor = std::nullopt);
