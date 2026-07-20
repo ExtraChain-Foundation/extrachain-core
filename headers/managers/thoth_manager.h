@@ -35,9 +35,10 @@ struct ThothDeviceRecord {
     std::string   token;
     std::string   custom;         // serialized ThothCustom, opaque here
     std::string   name;           // human-readable device name
+    std::string   app;            // app version of the writing device ("0.1.1.0")
     std::uint64_t updated_at = 0; // unix ms of the last write of this record
 };
-BOOST_DESCRIBE_STRUCT(ThothDeviceRecord, (), (os, token, custom, name, updated_at))
+BOOST_DESCRIBE_STRUCT(ThothDeviceRecord, (), (os, token, custom, name, app, updated_at))
 
 struct ThothChatDevices {
     ActorId     owner;
@@ -78,6 +79,7 @@ struct ThothDeviceInfo {
     std::string   device_id;
     std::string   name;
     std::string   os;
+    std::string   app;
     std::uint64_t updated_at = 0;
     bool          is_current = false;
     std::size_t   chats      = 0;
