@@ -113,7 +113,9 @@ private:
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
-    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 5;
+    // 16 x 250KB = 4MB in flight: enough to keep a fast pipe busy while a
+    // phone on a slow link is still bounded by its own request pacing.
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 16;
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;
