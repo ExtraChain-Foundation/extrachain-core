@@ -114,6 +114,8 @@ public:
 
 private:
     void timer_runner(const Dfs::FileLink file_link_to_proceed = {});
+    // "Vectors before files" gate state; a full scan of both pools, so callers cache it.
+    bool compute_vectors_waiting();
     // Instant (coalesced) scheduler wakeup — without it new queue items waited for the next
     // 5-second timer tick.
     void kick();
@@ -123,10 +125,16 @@ private:
     ExtraChainNode* node;
 
     static constexpr int  MAX_ATTEMPTS             = 10;
-    // 16 x 250KB = 4MB in flight: enough to keep a fast pipe busy while a
-    // phone on a slow link is still bounded by its own request pacing.
+    // Desktop: 16 x 250KB = 4MB in flight keeps a fast pipe busy. Phones get
+    // half the window — still 8x the old depth, but bounds memory and the
+    // radio burst on mobile links.
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    static constexpr int  MAX_CONCURRENT_DOWNLOADS = 8;
+    static constexpr int  MAX_FORCED_DOWNLOADS     = 4;
+#else
     static constexpr int  MAX_CONCURRENT_DOWNLOADS = 16;
     static constexpr int  MAX_FORCED_DOWNLOADS     = 8;
+#endif
     static constexpr auto STALL_TIMEOUT            = std::chrono::seconds(30);
 
     PullMode pull_mode = PullMode::All;

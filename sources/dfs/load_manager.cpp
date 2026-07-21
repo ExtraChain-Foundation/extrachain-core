@@ -29,6 +29,7 @@
 
 #include <QTimer>
 #include <algorithm>
+#include <optional>
 
 LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     : QObject(parent)
@@ -48,9 +49,40 @@ void LoadManager::kick() {
         this,
         [this] {
             kick_pending_.store(false);
+            if (!m_timer->isActive()) {
+                m_timer->start(5000);
+            }
             timer_runner();
         },
         Qt::QueuedConnection);
+}
+
+bool LoadManager::compute_vectors_waiting() {
+    const auto now = std::chrono::system_clock::now();
+    // Copy under a short lock: holding m_completed_once over the pool locks deadlocks — finish_him takes them in reverse order.
+    std::set<Dfs::FileLink> completed_once;
+    {
+        auto locked    = *m_completed_once;
+        completed_once = *locked;
+    }
+    auto has_fresh = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
+        auto locked = *pool;
+        for (const auto& [link, info] : *locked) {
+            if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
+                continue;
+            }
+            // Re-downloading an already-completed vector (hash-mismatch cycle) doesn't hold the gate — else files would starve forever.
+            if (completed_once.contains(link)) {
+                continue;
+            }
+            if (now - info.queued < std::chrono::seconds(60)
+                || now - info.last_fragment_received < std::chrono::seconds(15)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    return has_fresh(m_active_downloads_priority) || has_fresh(m_active_downloads);
 }
 
 void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
@@ -71,45 +103,37 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
     // "Vectors before files" gate: skip file scheduling while a vector (rank<=4) can still
     // download. Freshness window guards against starving files forever if no peer has the vector.
-    const bool vectors_waiting = [&]() {
-        const auto now = std::chrono::system_clock::now();
-        // Copy under a short lock: holding m_completed_once over the pool locks deadlocks — finish_him takes them in reverse order.
-        std::set<Dfs::FileLink> completed_once;
-        {
-            auto locked    = *m_completed_once;
-            completed_once = *locked;
+    // Computed lazily: on the per-fragment targeted path this full two-map scan is
+    // usually never needed — that matters on phones where the path runs per arrival.
+    std::optional<bool>       vectors_waiting_cache;
+    const auto vectors_waiting = [&]() -> bool {
+        if (vectors_waiting_cache.has_value()) {
+            return *vectors_waiting_cache;
         }
-        auto has_fresh = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& pool) {
-            auto locked = *pool;
-            for (const auto& [link, info] : *locked) {
-                if (node->dfs()->download_rank(link.owner_id, info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
-                    continue;
-                }
-                // Re-downloading an already-completed vector (hash-mismatch cycle) doesn't hold the gate — else files would starve forever.
-                if (completed_once.contains(link)) {
-                    continue;
-                }
-                if (now - info.queued < std::chrono::seconds(60)
-                    || now - info.last_fragment_received < std::chrono::seconds(15)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        return has_fresh(m_active_downloads_priority) || has_fresh(m_active_downloads);
-    }();
-
-    // Log the gate flipping: when files get paused and when they're released.
-    static bool last_vectors_waiting = false;
-    if (vectors_waiting != last_vectors_waiting) {
-        last_vectors_waiting = vectors_waiting;
-        eLog("[Load] {}", vectors_waiting ? "files PAUSED (vectors downloading)" : "files RESUMED");
-    }
+        vectors_waiting_cache = compute_vectors_waiting();
+        // Log the gate flipping: when files get paused and when they're released.
+        static bool last_vectors_waiting = false;
+        if (*vectors_waiting_cache != last_vectors_waiting) {
+            last_vectors_waiting = *vectors_waiting_cache;
+            eLog("[Load] {}", *vectors_waiting_cache ? "files PAUSED (vectors downloading)" : "files RESUMED");
+        }
+        return *vectors_waiting_cache;
+    };
 
     auto process_func = [&](SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& active_downloads) -> bool {
         if (!active_downloads->empty()) {
             auto active_downloads_locked = *active_downloads;
             std::vector<Dfs::FileLink> download_order;
+
+            // Targeted per-fragment call: touch only the file that just received a
+            // fragment. The full sorted pass over every transfer (plus the gate
+            // scan) runs on the periodic timer — not once per arriving fragment.
+            if (!file_link_to_proceed.file_id.empty()) {
+                if (active_downloads_locked->contains(file_link_to_proceed)) {
+                    download_order.emplace_back(file_link_to_proceed);
+                }
+                // fall through with a possibly empty order — nothing else to do here
+            } else {
             download_order.reserve(active_downloads_locked->size());
             for (const auto& item : *active_downloads_locked) {
                 download_order.emplace_back(item.first);
@@ -140,6 +164,7 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                                      rhs_it != active_downloads_locked->end() && rhs_it->second.forced;
                                  return lhs_forced && !rhs_forced;
                              });
+            }
 
             for (const auto& file_link : download_order) {
                 auto it = active_downloads_locked->find(file_link);
@@ -151,8 +176,9 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
                 // Files stay paused while vectors are downloading. Forced files (explicit
                 // user request_file, e.g. tapping media) are not paused.
-                if (vectors_waiting && !load_info.forced
-                    && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row) > DfsController::RANK_OTHER_VECTORS) {
+                if (!load_info.forced
+                    && node->dfs()->download_rank(file_link.owner_id, load_info.dir_row) > DfsController::RANK_OTHER_VECTORS
+                    && vectors_waiting()) {
                     continue;
                 }
                 bool  ignore_timeout = file_link_to_proceed == file_link;
@@ -322,6 +348,21 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
 
     if (process_func(m_active_downloads_priority))
         process_func(m_active_downloads);
+
+    // Idle: nothing queued in either pool — stop the periodic tick so an idle
+    // messenger does not wake the CPU every 5 seconds (battery on phones).
+    // kick() re-arms the timer when a download is queued again.
+    if (file_link_to_proceed.file_id.empty() && m_active_downloads->empty()
+        && m_active_downloads_priority->empty()) {
+        QMetaObject::invokeMethod(
+            this,
+            [this] {
+                if (m_active_downloads->empty() && m_active_downloads_priority->empty()) {
+                    m_timer->stop();
+                }
+            },
+            Qt::QueuedConnection);
+    }
 }
 
 void LoadManager::remove_active_download(const Dfs::FileLinkFragment& file_link_fragment) {
@@ -944,6 +985,11 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
                                                          Dfs::FileState::Ready);
     emit node->dfs()->added(owner_id, dir_row);
     emit node->dfs()->downloaded(owner_id, dir_row);
+
+    // A finished transfer frees window slots; hand them to the next queued
+    // download now instead of on the next periodic tick. Coalesced, so a burst
+    // of small completed vectors costs one full pass.
+    kick();
 }
 
 bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
