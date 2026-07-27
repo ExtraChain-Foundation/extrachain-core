@@ -198,7 +198,11 @@ string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
-target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+if(MSVC)
+    target_compile_options(extrachain PRIVATE "/FI${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h")
+else()
+    target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+endif()
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 set(bip3x_BUILD_SHARED_LIBS OFF CACHE BOOL "")
