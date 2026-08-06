@@ -65,7 +65,8 @@ class ThothManager;
 class JanusManager;
 namespace ExtraChain::Contracts {
     class ContractManager;
-}
+    class ToolchainRegistry;
+} // namespace ExtraChain::Contracts
 
 enum class ImportProfileError {
     DataEmpty,
@@ -101,7 +102,10 @@ class EXTRACHAIN_EXPORT ExtraChainNodeWrapper : public QObject {
     Q_OBJECT
 
 public:
-    ExtraChainNodeWrapper(QObject* parent, bool is_client_application = false, bool is_custom_app = false, std::uint16_t ws_port = 17593);
+    ExtraChainNodeWrapper(QObject*      parent,
+                          bool          is_client_application = false,
+                          bool          is_custom_app         = false,
+                          std::uint16_t ws_port               = 17593);
 
     ~ExtraChainNodeWrapper();
 
@@ -118,29 +122,30 @@ class EXTRACHAIN_EXPORT ExtraChainNode : public QObject {
 
 private:
     // common object for
-    DfsController*     dfs_                = nullptr;
-    ActorIndex*        actor_index_        = nullptr;
-    Dag*               dag_                = nullptr;
-    LuminanceManager*  luminance_manager_  = nullptr;
-    NetworkManager*    network_manager_    = nullptr;
-    AccountController* account_controller_ = nullptr;
-    DataMiningManager* dmm_                = nullptr;
-    TokenManager*      token_manager_      = nullptr;
-    ChatManager*       chat_manager_       = nullptr;
-    ThothManager*      thoth_manager_      = nullptr;
-    JanusManager*      janus_manager_      = nullptr;
+    DfsController*                                                                 dfs_                = nullptr;
+    ActorIndex*                                                                    actor_index_        = nullptr;
+    Dag*                                                                           dag_                = nullptr;
+    LuminanceManager*                                                              luminance_manager_  = nullptr;
+    NetworkManager*                                                                network_manager_    = nullptr;
+    AccountController*                                                             account_controller_ = nullptr;
+    DataMiningManager*                                                             dmm_                = nullptr;
+    TokenManager*                                                                  token_manager_      = nullptr;
+    ChatManager*                                                                   chat_manager_       = nullptr;
+    ThothManager*                                                                  thoth_manager_      = nullptr;
+    JanusManager*                                                                  janus_manager_      = nullptr;
     std::unique_ptr<ExtraChain::Contracts::ContractManager>                        contract_manager_;
+    std::unique_ptr<ExtraChain::Contracts::ToolchainRegistry>                      toolchain_registry_;
     std::mutex                                                                     pending_contracts_mutex_;
     std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
-    QTimer*            timer_reward_       = nullptr;
-    QTimer*            timer_info_         = nullptr;
-    QTimer*            timer_luminance_    = nullptr;
+    QTimer*                                                                        timer_reward_    = nullptr;
+    QTimer*                                                                        timer_info_      = nullptr;
+    QTimer*                                                                        timer_luminance_ = nullptr;
 
     bool                        started_               = false;
     bool                        is_client_application_ = false;
     std::vector<BigNumber>      resive_counts_;
     std::pair<QString, QString> init_public_ip_and_country_;
-    std::function<void()>       cleanup_callback_      = nullptr;
+    std::function<void()>       cleanup_callback_ = nullptr;
 
     std::optional<SubscriptionRow> subscription_row_;
 
@@ -174,7 +179,8 @@ public:
     DfsFileStatus create_renames_vector();
 
     bool create_file_id_template(Dfs::FileIdState with_state = Dfs::FileIdState::Without);
-    bool create_file_id_vector(const std::string& vector_name, Dfs::FileIdState with_state = Dfs::FileIdState::Without);
+    bool create_file_id_vector(const std::string& vector_name,
+                               Dfs::FileIdState   with_state = Dfs::FileIdState::Without);
 
     bool write_actor_rename(const ActorId& actor_id, const std::string& name);
     std::vector<std::pair<ActorId, std::string>> read_actor_renames();
@@ -241,8 +247,9 @@ public:
     std::string generate_node_identifier();
     std::string node_identifier();
 
-    TokenManager*                           token_manager() const;
-    ExtraChain::Contracts::ContractManager* contract_manager() const;
+    TokenManager*                             token_manager() const;
+    ExtraChain::Contracts::ContractManager*   contract_manager() const;
+    ExtraChain::Contracts::ToolchainRegistry* toolchain_registry() const;
     void stage_contract_change(std::string transaction_hash, ExtraChain::Contracts::PreparedContractChange change);
     void finalize_contract_change(std::string_view transaction_hash, bool approved);
     std::expected<Transaction, TransactionError> send_contract_transaction(
@@ -266,6 +273,8 @@ public:
         const ActorId&                contract_id,
         std::string_view              method,
         std::span<const std::uint8_t> arguments);
+    ExtraChain::Contracts::ContractCatalogPage list_contracts(
+        const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
     void set_cleanup_callback(std::function<void()> callback);
     bool is_custom_app_;
 
@@ -274,10 +283,10 @@ public:
     JanusManager* janus_manager();
 
     std::expected<Transaction, TransactionError> add_subscription(const ActorId&     owner_id,
-                          const std::string& file_id,
-                          int                type,
-                          bool               auto_renew,
-                          const TokenId&     token_id);
+                                                                  const std::string& file_id,
+                                                                  int                type,
+                                                                  bool               auto_renew,
+                                                                  const TokenId&     token_id);
 
 private:
     ExtraChainNode(bool is_client_application = false, bool is_custom_app = false, std::uint16_t port = 17593);

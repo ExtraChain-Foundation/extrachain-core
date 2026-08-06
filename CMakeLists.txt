@@ -126,6 +126,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/dfs_contract_storage.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_transaction.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/toolchain_registry.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/load_manager.cpp
@@ -188,6 +189,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/toolchain_installer.cpp
     ${CMAKE_CURRENT_LIST_DIR}/contracts/contracts.qrc
     )
 

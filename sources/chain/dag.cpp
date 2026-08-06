@@ -400,8 +400,7 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
             }
 
             // Update sync target if transaction section is ahead but within reasonable range
-            if (transaction.section() > sync_last_index_
-                && transaction.section() <= sync_last_index_ + 15) {
+            if (transaction.section() > sync_last_index_ && transaction.section() <= sync_last_index_ + 15) {
                 sync_last_index_ = transaction.section();
                 emit node->dagSyncStart(current_section_, sync_last_index_);
             }
@@ -942,7 +941,11 @@ bool Dag::save_transaction(const Transaction &transaction) {
             eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
         }
 
-        return write_section(section).has_value();
+        const bool written = write_section(section).has_value();
+        if (written) {
+            cache_.index_contract_transaction(transaction);
+        }
+        return written;
     }
 
     // if (section->id > current_section_) {
@@ -973,7 +976,11 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Update range file
     update_range();
 
-    return write_section(section.value()).has_value();
+    const bool written = write_section(section.value()).has_value();
+    if (written) {
+        cache_.index_contract_transaction(transaction);
+    }
+    return written;
 }
 
 bool Dag::local_remove_transaction(const SectionId &section_id, const std::string &hash) {
@@ -1075,7 +1082,13 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
             }
         }
 
-        all_saved &= write_section(section).has_value();
+        const bool section_saved = write_section(section).has_value();
+        all_saved &= section_saved;
+        if (section_saved && changed) {
+            for (auto transaction = first; transaction != last; ++transaction) {
+                cache_.index_contract_transaction(*transaction);
+            }
+        }
         it = last;
     }
 
@@ -1384,12 +1397,17 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     if (tx.type() == TransactionType::Regular) {
         auto network_id = node->actor_index()->network_id();
         if (!network_id.is_zero()) {
-            auto alloc_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-                node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+            auto alloc_row =
+                Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                                  network_id,
+                                                                                  Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                                  "token_allocations");
             if (alloc_row.has_value()) {
-                auto minted_str = node->dfs()->read_dictionary(
-                    network_id, alloc_row->file_id,
-                    fmt::format("{}:{}", targetSender.to_string(), token.to_string()));
+                auto minted_str = node->dfs()->read_dictionary(network_id,
+                                                               alloc_row->file_id,
+                                                               fmt::format("{}:{}",
+                                                                           targetSender.to_string(),
+                                                                           token.to_string()));
                 if (minted_str.has_value() && !minted_str->empty()) {
                     auto minted_amount = BigNumberFloat::create(*minted_str);
                     if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
@@ -1425,7 +1443,9 @@ void Dag::update_range(bool allow_lower_first) {
                 auto existing_first = SectionId::create(existing->first);
                 if (!allow_lower_first && existing_first.has_value() && existing_first.value() != SectionId(-1)
                     && new_first != SectionId(-1) && new_first < existing_first.value()) {
-                    eLog("[Dag] update_range blocked: new first {} < existing {}", new_first, existing_first.value());
+                    eLog("[Dag] update_range blocked: new first {} < existing {}",
+                         new_first,
+                         existing_first.value());
                     return;
                 }
             }
@@ -1802,7 +1822,9 @@ void Dag::network_request_sections_response(const std::string &compressed, const
 
         // timer_sync->start();
         emit node->dagTimerStart(15002);
-        this->request_file_sections(section_sync->to, std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH), responder);
+        this->request_file_sections(section_sync->to,
+                                    std::min(sync_last_index_, section_sync->to + SYNC_SECTIONS_BATCH),
+                                    responder);
     });
 }
 
@@ -1996,7 +2018,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
         emit node->dagSyncProgress(file_sync->to);
         emit node->dagTimerStart(15002);
-        this->request_file_sections(file_sync->to + 1, std::min(sync_last_index_, file_sync->to + SYNC_SECTIONS_BATCH), responder);
+        this->request_file_sections(file_sync->to + 1,
+                                    std::min(sync_last_index_, file_sync->to + SYNC_SECTIONS_BATCH),
+                                    responder);
     });
 }
 
@@ -2031,7 +2055,7 @@ void Dag::network_request_light(const Responder &responder) {
             return;
         }
 
-        auto [cache_section, cache] = this->cache().read_cached_balances();
+        auto [cache_section, cached_balances] = this->cache().read_cached_balances();
         // txs.reserve(20);
 
         auto section = this->read_section(SectionId(0));
@@ -2060,6 +2084,32 @@ void Dag::network_request_light(const Responder &responder) {
             }
         }
 
+        ExtraChain::Contracts::ContractCatalogFilter catalog_filter;
+        catalog_filter.limit = 100;
+        do {
+            const auto catalog_page = cache().list_contracts(catalog_filter);
+            for (const auto &contract : catalog_page.items) {
+                const auto add_evidence = [this, &txs](std::uint64_t      section_number,
+                                                       const std::string &transaction_hash) {
+                    const auto evidence_section = read_section(SectionId(section_number));
+                    if (!evidence_section.has_value()) {
+                        return;
+                    }
+                    const auto evidence =
+                        std::ranges::find_if(evidence_section->transactions,
+                                             [&transaction_hash](const Transaction &transaction) {
+                                                 return transaction.hash() == transaction_hash;
+                                             });
+                    if (evidence != evidence_section->transactions.end()) {
+                        txs.insert(*evidence);
+                    }
+                };
+                add_evidence(contract.deploy_section, contract.deploy_transaction_hash);
+                add_evidence(contract.section, contract.transaction_hash);
+            }
+            catalog_filter.cursor = catalog_page.next_cursor;
+        } while (catalog_filter.cursor.has_value());
+
         auto section_before = this->read_section(cache_section - CONTROL_INTERVAL);
         if (section_before.has_value()) {
             if (section_before->control.has_value()) {
@@ -2072,8 +2122,10 @@ void Dag::network_request_light(const Responder &responder) {
             return;
         }
 
-        auto dag_light =
-            DagLightPackage { .cache = cache, .cache_section = cache_section, .txs = txs, .controls = controls };
+        auto dag_light = DagLightPackage { .cache         = cached_balances,
+                                           .cache_section = cache_section,
+                                           .txs           = txs,
+                                           .controls      = controls };
 
         node->network()->send_message(dag_light,
                                       MessageType::DagLightData,
@@ -2977,8 +3029,11 @@ void Dag::mint_analysis_log() {
         return;
     }
 
-    auto alloc_row = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        node->dfs()->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+    auto alloc_row =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                          "token_allocations");
     if (!alloc_row.has_value()) {
         eWarning("[Dag] mint_analysis_log: token_allocations not found");
         return;
@@ -2993,7 +3048,7 @@ void Dag::mint_analysis_log() {
     // Parse actor:token -> minted amount from token_allocations
     using ActorTokenKey = std::pair<ActorId, TokenId>;
     std::map<ActorTokenKey, BigNumberFloat> minted;
-    for (const auto& [key, val] : alloc_map.value()) {
+    for (const auto &[key, val] : alloc_map.value()) {
         auto sep = key.find(':');
         if (sep == std::string::npos)
             continue;
@@ -3008,9 +3063,9 @@ void Dag::mint_analysis_log() {
     }
 
     // Build minted pairs set and per-token minted actors set for taint tracking
-    std::set<ActorTokenKey> minted_pairs;
+    std::set<ActorTokenKey>              minted_pairs;
     std::map<TokenId, std::set<ActorId>> tainted; // token -> set of tainted actors
-    for (const auto& [key, _] : minted) {
+    for (const auto &[key, _] : minted) {
         minted_pairs.insert(key);
         tainted[key.second].insert(key.first);
     }
@@ -3033,14 +3088,14 @@ void Dag::mint_analysis_log() {
     };
 
     std::map<ActorTokenKey, BigNumberFloat> spent;
-    std::vector<Transfer>  all_transfers; // all Regular txs (for taint chain)
-    std::vector<MintTx>    mint_txs;
+    std::vector<Transfer>                   all_transfers; // all Regular txs (for taint chain)
+    std::vector<MintTx>                     mint_txs;
 
     // Scan chain from min_section to current
     static const SectionId min_section = SectionId(BigNumber::from_hex("a05133"));
     eLog("[Dag] mint_analysis_log: scanning {} .. {}", min_section, current_section_);
 
-    SectionId section_id = min_section;
+    SectionId     section_id    = min_section;
     std::uint64_t sections_read = 0, sections_missing = 0;
     while (section_id <= current_section_) {
         auto section = read_section(section_id);
@@ -3051,7 +3106,7 @@ void Dag::mint_analysis_log() {
         }
         ++sections_read;
 
-        for (const auto& tx : section->transactions) {
+        for (const auto &tx : section->transactions) {
             if (tx.type() == TransactionType::Minting) {
                 mint_txs.push_back({ tx.receiver(), tx.token(), tx.amount(), section_id, tx.timestamp() });
             } else if (tx.type() == TransactionType::Regular) {
@@ -3059,7 +3114,8 @@ void Dag::mint_analysis_log() {
                 if (minted_pairs.count(key)) {
                     spent[key] += tx.amount();
                 }
-                all_transfers.push_back({ tx.sender(), tx.receiver(), tx.token(), tx.amount(), section_id, tx.timestamp() });
+                all_transfers.push_back(
+                    { tx.sender(), tx.receiver(), tx.token(), tx.amount(), section_id, tx.timestamp() });
             }
         }
 
@@ -3070,18 +3126,18 @@ void Dag::mint_analysis_log() {
     // Build tainted chain via BFS (max depth 10)
     // transfers index: (sender, token) -> list of receivers
     std::map<ActorTokenKey, std::vector<std::pair<ActorId, SectionId>>> transfers_by_sender;
-    for (const auto& t : all_transfers)
+    for (const auto &t : all_transfers)
         transfers_by_sender[{ t.from, t.token }].push_back({ t.to, t.section_id });
 
-    for (auto& [token, actors] : tainted) {
+    for (auto &[token, actors] : tainted) {
         std::vector<ActorId> queue(actors.begin(), actors.end());
         for (int depth = 0; depth < 10 && !queue.empty(); ++depth) {
             std::vector<ActorId> next;
-            for (const auto& actor : queue) {
+            for (const auto &actor : queue) {
                 auto it = transfers_by_sender.find({ actor, token });
                 if (it == transfers_by_sender.end())
                     continue;
-                for (const auto& [receiver, _] : it->second) {
+                for (const auto &[receiver, _] : it->second) {
                     if (!actors.count(receiver)) {
                         actors.insert(receiver);
                         next.push_back(receiver);
@@ -3094,18 +3150,18 @@ void Dag::mint_analysis_log() {
 
     // Collect chain transfers (any tx involving tainted actors)
     std::vector<Transfer> chain_transfers;
-    for (const auto& t : all_transfers) {
+    for (const auto &t : all_transfers) {
         auto it = tainted.find(t.token);
         if (it == tainted.end())
             continue;
-        const auto& tainted_set = it->second;
+        const auto &tainted_set = it->second;
         if (tainted_set.count(t.from) || tainted_set.count(t.to))
             chain_transfers.push_back(t);
     }
 
     // Collector stats: non-minted actors that received tainted tokens
     std::map<ActorTokenKey, BigNumberFloat> collector_received;
-    for (const auto& t : chain_transfers) {
+    for (const auto &t : chain_transfers) {
         if (!minted_pairs.count({ t.to, t.token }))
             collector_received[{ t.to, t.token }] += t.amount;
     }
@@ -3113,21 +3169,21 @@ void Dag::mint_analysis_log() {
     // ── Output ──────────────────────────────────────────────────────────────
 
     eLog("[Dag] mint_analysis_log: === MINT TRANSACTIONS ===");
-    for (const auto& m : mint_txs) {
+    for (const auto &m : mint_txs) {
         eLog("[Dag] mint_analysis_log: section={} actor={} token={} amount={}",
              m.section_id, m.actor, m.token, m.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === SUMMARY PER ACTOR+TOKEN ===");
     int abuse_count = 0;
-    for (const auto& [key, mint_amount] : minted) {
-        const auto& [actor, token] = key;
+    for (const auto &[key, mint_amount] : minted) {
+        const auto &[actor, token]  = key;
         BigNumberFloat spent_amount = spent.count(key) ? spent.at(key) : BigNumberFloat(0);
         BigNumberFloat frozen       = mint_amount - spent_amount;
         if (frozen < BigNumberFloat(0))
             frozen = BigNumberFloat(0);
         BigNumberFloat overspend = spent_amount - mint_amount;
-        bool abused = spent_amount > BigNumberFloat(0);
+        bool           abused    = spent_amount > BigNumberFloat(0);
         if (abused)
             ++abuse_count;
 
@@ -3143,16 +3199,16 @@ void Dag::mint_analysis_log() {
     }
 
     eLog("[Dag] mint_analysis_log: === COLLECTORS (received tainted, no direct mint) ===");
-    for (const auto& [key, total] : collector_received) {
-        const auto& [actor, token] = key;
+    for (const auto &[key, total] : collector_received) {
+        const auto &[actor, token] = key;
         eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}",
              actor, token, total.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === TAINTED CHAIN TRANSFERS ===");
-    for (const auto& t : chain_transfers) {
-        bool from_minted = minted_pairs.count({ t.from, t.token }) > 0;
-        bool to_minted   = minted_pairs.count({ t.to,   t.token }) > 0;
+    for (const auto &t : chain_transfers) {
+        bool        from_minted = minted_pairs.count({ t.from, t.token }) > 0;
+        bool        to_minted   = minted_pairs.count({ t.to, t.token }) > 0;
         std::string tag;
         if (from_minted && !to_minted)
             tag = "MINT->COLLECTOR";
@@ -3165,7 +3221,9 @@ void Dag::mint_analysis_log() {
     }
 
     eLog("[Dag] mint_analysis_log: done. minted_pairs={} abused={} chain_transfers={}",
-         minted.size(), abuse_count, chain_transfers.size());
+         minted.size(),
+         abuse_count,
+         chain_transfers.size());
 }
 
 void Dag::cache_log() {

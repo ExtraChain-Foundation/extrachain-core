@@ -10,6 +10,7 @@
 
 #include "contracts/wasm_runtime.h"
 #include "contracts/contract_manager.h"
+#include "contracts/contract_codec.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -444,6 +445,24 @@ namespace {
         require(!replay.has_value(), "ContractManager allowed a second redeem");
     }
 
+    void test_json_codec() {
+        const auto encoded = ExtraChain::Contracts::Codec::encode_json(R"(["hello",7,true,null])");
+        require(encoded.has_value(), "JSON arguments could not be encoded");
+        const auto decoded = ExtraChain::Contracts::Codec::decode_json(*encoded);
+        require(decoded.has_value() && *decoded == R"(["hello",7,true,null])",
+                "MessagePack arguments did not round-trip through JSON");
+
+        const auto binary = ExtraChain::Contracts::Codec::encode_json(R"({"$binary":"AQID"})");
+        require(binary.has_value(), "Extended JSON binary value could not be encoded");
+        const auto binary_json = ExtraChain::Contracts::Codec::decode_json(*binary);
+        require(binary_json.has_value() && *binary_json == R"({"$binary":"AQID"})",
+                "Extended JSON binary value did not round-trip");
+
+        const auto oversized = ExtraChain::Contracts::Codec::encode_json(
+            std::string(ExtraChain::Contracts::ExecutionLimits {}.input_bytes + 1, ' '));
+        require(!oversized.has_value(), "Oversized JSON arguments were accepted");
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -456,6 +475,7 @@ int main(int argc, char **argv) {
         auto fungible_module = read_file(argv[1]);
         auto message_module  = read_file(argv[2]);
         test_runtime_limits(runtime, fungible_module);
+        test_json_codec();
         test_fungible(runtime, fungible_module);
         test_message_claim(runtime, message_module);
         test_contract_manager(fungible_module, message_module);

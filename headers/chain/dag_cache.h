@@ -27,6 +27,7 @@
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"
+#include "contracts/contract_types.h"
 #include "utils/exc_utils.h"
 
 class ExtraChainNode;
@@ -214,13 +215,19 @@ public:
     // rebuilt as ChainIndex (Phase 14) with proper batching/prepared statements and
     // compound indexes. Nothing here now — callers should use ChainIndex.
 
+    void                                       index_contract_transaction(const Transaction& transaction);
+    ExtraChain::Contracts::ContractCatalogPage list_contracts(
+        const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
+
 private:
-    ExtraChainNode*              node;                            // Node reference
-    Dag*                         dag;                             // Dag reference
-    SectionId                    cached_section_ = SectionId(-1); // Current cached section id (genesis point)
-    std::unique_ptr<DbConnector> cache_db_;                       // Database connection
-    bool                         db_initialized_ = false;         // Whether DB is initialized
+    ExtraChainNode*              node;                              // Node reference
+    Dag*                         dag;                               // Dag reference
+    SectionId                    cached_section_ = SectionId(-1);   // Current cached section id (genesis point)
+    std::unique_ptr<DbConnector> cache_db_;                         // Database connection
+    bool                         db_initialized_           = false; // Whether DB is initialized
+    bool                         contract_catalog_scanned_ = false;
     std::mutex                   mutex_;
+    std::mutex                   contract_catalog_mutex_;
 
 public:
     /**
@@ -237,5 +244,7 @@ public:
     void process_transaction(const Transaction& transaction, Balances& balances);
 
 private:
+    bool ensure_contract_catalog_schema();
+    bool rebuild_contract_catalog();
     friend Dag;
 };
