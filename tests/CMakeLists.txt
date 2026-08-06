@@ -15,17 +15,7 @@ find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Test REQUIRED)
 set(EXTRACHAIN_STATIC_BUILD true)
 include(../CMakeLists.txt)
 
-add_executable(extrachain-tests
-    test.cpp
-    )
-
-target_link_libraries(extrachain-tests
-    PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
-set_property(TARGET extrachain-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
-
-# Self-contained synchronization tests (pack-sync data path, wire-format
-# legacy/canonical round-trip, hex->decimal migration round-trip). Kept in a
-# separate target so it builds and runs independently of test.cpp.
+# Synchronization tests for the current pack, wire, and migration paths.
 add_executable(extrachain-sync-tests
     sync_test.cpp
     )
@@ -33,3 +23,6 @@ add_executable(extrachain-sync-tests
 target_link_libraries(extrachain-sync-tests
     PRIVATE Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Test extrachain)
 set_property(TARGET extrachain-sync-tests PROPERTY POSITION_INDEPENDENT_CODE 1)
+
+enable_testing()
+add_test(NAME sync-runtime COMMAND extrachain-sync-tests)
