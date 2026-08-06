@@ -26,6 +26,26 @@ namespace ExtraChain::Contracts {
         std::size_t RuntimeUsers = 0;
         bool        RuntimeReady = false;
 
+        class ThreadEnvironment final {
+        public:
+            ThreadEnvironment()
+                : ready_(wasm_runtime_init_thread_env()) {
+            }
+
+            ~ThreadEnvironment() {
+                if (ready_) {
+                    wasm_runtime_destroy_thread_env();
+                }
+            }
+
+            [[nodiscard]] bool ready() const {
+                return ready_;
+            }
+
+        private:
+            bool ready_ = false;
+        };
+
         ExecutionFailure failure(ExecutionError error, const char *detail) {
             return { error, detail != nullptr ? detail : "Unknown WAMR error" };
         }
@@ -91,6 +111,12 @@ namespace ExtraChain::Contracts {
         if (module_bytes.size() > std::numeric_limits<std::uint32_t>::max()
             || input.size() > std::numeric_limits<std::uint32_t>::max()) {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
+        }
+
+        ThreadEnvironment thread_environment;
+        if (!thread_environment.ready()) {
+            return std::unexpected(
+                failure(ExecutionError::RuntimeUnavailable, "Cannot initialize the WAMR thread environment"));
         }
 
         std::vector<std::uint8_t>          module_copy(module_bytes.begin(), module_bytes.end());

@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <span>
 #include <stdexcept>
@@ -398,6 +399,19 @@ namespace {
         require(!result.ok && result.state == state, "Redeemed message token still has an owner");
     }
 
+    void test_worker_thread(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        auto invocation = std::async(std::launch::async, [&runtime, &module]() {
+            Bytes state;
+            auto  first = invoke(runtime, module, "alice", "init", {}, state);
+            if (!first.ok) {
+                return first;
+            }
+            state.clear();
+            return invoke(runtime, module, "alice", "init", {}, state);
+        });
+        require(invocation.get().ok, "Repeated WAMR execution failed on a worker thread");
+    }
+
     void test_contract_manager(const Bytes &fungible_module, const Bytes &message_module) {
         ExtraChain::Contracts::ContractManager manager;
 
@@ -475,6 +489,7 @@ int main(int argc, char **argv) {
         auto fungible_module = read_file(argv[1]);
         auto message_module  = read_file(argv[2]);
         test_runtime_limits(runtime, fungible_module);
+        test_worker_thread(runtime, message_module);
         test_json_codec();
         test_fungible(runtime, fungible_module);
         test_message_claim(runtime, message_module);
