@@ -86,7 +86,8 @@ public:
                                                             const std::string    &symbol,
                                                             const BigNumberFloat &token_count,
                                                             const std::string    &color,
-                                                            const std::string    &predefine_token_id = "");
+                                                            const std::string    &predefine_token_id = "",
+                                                            std::uint8_t          decimals           = 8);
 
     void final_token_creation(const Transaction &transaction);
 

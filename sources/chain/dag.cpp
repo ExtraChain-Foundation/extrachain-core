@@ -18,6 +18,14 @@
  */
 
 #include "chain/dag.h"
+#include "contracts/contract_manager.h"
+
+#include <QDir>
+#include <QElapsedTimer>
+#include <QMetaObject>
+#include <QFile>
+#include <QProcess>
+#include <QStringList>
 
 #include "dfs/dfs_controller.h"
 #include "managers/extrachain_node.h"
@@ -427,6 +435,16 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
                                            .hash       = transaction.hash(),
                                            .result     = res };
 
+    if (res == TransactionProveError::ContractDependencyMissing) {
+        std::scoped_lock lock(deferred_contracts_mutex_);
+        if (deferred_contracts_.size() >= MaxDeferredContractTransactions
+            && !deferred_contracts_.contains(transaction.hash())) {
+            deferred_contracts_.erase(deferred_contracts_.begin());
+        }
+        deferred_contracts_.insert_or_assign(transaction.hash(), transaction);
+        return {};
+    }
+
     if (res != TransactionProveError::NoError) {
         auto tx = transaction;
         tx.set_prev_hashs({ "hashs" });
@@ -450,12 +468,18 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         auto save_result = this->save_transaction(transaction);
         if (!save_result) {
             transaction_result.result = TransactionProveError::NoSectionAdded;
+            if (is_contract_transaction(transaction.type())) {
+                node->finalize_contract_change(transaction.hash(), false);
+            }
             // send response
             return std::unexpected(transaction_result.result);
         }
 
         this->set_current_section(transaction.section());
         this->update_range();
+        if (is_contract_transaction(transaction.type())) {
+            node->finalize_contract_change(transaction.hash(), true);
+        }
     }
 
     // send broadcast to network with tx result
@@ -483,6 +507,9 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
     // this->sended_transactions.erase(hash);
 
     if (tx_result.result != TransactionProveError::NoError) {
+        if (is_contract_transaction(transaction.type())) {
+            node->finalize_contract_change(transaction.hash(), false);
+        }
         eLog("[Dag] Our transaction not approved: {} / {}, {}",
              transaction.section().to_string(),
              transaction.hash(),
@@ -504,7 +531,14 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         eLog("[Dag] Can't save our approved transaction {} in section {}",
              transaction.hash(),
              transaction.section());
+        if (is_contract_transaction(transaction.type())) {
+            node->finalize_contract_change(transaction.hash(), false);
+        }
         return;
+    }
+
+    if (is_contract_transaction(transaction.type())) {
+        node->finalize_contract_change(transaction.hash(), true);
     }
 
     this->check_self(transaction);
@@ -522,7 +556,8 @@ void Dag::check_self(const Transaction &transaction) {
 
             emit transaction_cache_.add(transaction);
 
-            if (transaction.type() == TransactionType::InitContract) {
+            if (transaction.type() == TransactionType::InitContract
+                || transaction.type() == TransactionType::ContractDeploy) {
                 node->selfTxInitContractAdded(transaction);
             }
 
@@ -630,6 +665,23 @@ void Dag::add_to_cached_tx(const Transaction &transaction) {
 
         // eLog("[Dag] Add to cached transaction: {} / {}", transaction.section(), transaction.hash());
     }
+}
+
+void Dag::retry_contract_transactions() {
+    std::unordered_map<std::string, Transaction> transactions;
+    {
+        std::scoped_lock lock(deferred_contracts_mutex_);
+        transactions.swap(deferred_contracts_);
+    }
+    for (const auto &[hash, transaction] : transactions) {
+        static_cast<void>(hash);
+        Responder responder(node->network());
+        static_cast<void>(network_transaction(transaction, responder));
+    }
+}
+
+void Dag::request_contract_section(const SectionId &section_id) {
+    request_sections(section_id, section_id, Responder(node->network()));
 }
 
 std::optional<Section> Dag::read_section(const SectionId &section_id) const {
@@ -1081,7 +1133,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     }
 
     // Validate transaction amount
-    if (tx.amount() == BigNumberFloat(0)) {
+    if (tx.amount() == BigNumberFloat(0) && !is_contract_transaction(tx.type())) {
         return TransactionProveError::AmountZero;
     }
 
@@ -1129,6 +1181,33 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     senderActor = node->actor_index()->read_actor_old(targetSender);
     if (senderActor.empty()) {
         return TransactionProveError::SenderNotExists;
+    }
+
+    if (is_contract_transaction(tx.type())) {
+        if (tx.amount() != 0 || tx.meta().value_or("").empty() || tx.meta()->size() > 1024 * 1024
+            || targetReceiver.is_zero() || targetSender == targetReceiver || !tx.token().is_zero()) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+
+        auto receiver_actor = node->actor_index()->read_actor_old(targetReceiver);
+        if (receiver_actor.empty()) {
+            return tx.type() == TransactionType::ContractDeploy ? TransactionProveError::ContractDependencyMissing
+                                                                : TransactionProveError::ReceiverNotExists;
+        }
+        if (tx.signature().empty()) {
+            return TransactionProveError::MissingSignature;
+        }
+        if (!tx.verify(senderActor)) {
+            return TransactionProveError::InvalidSignature;
+        }
+        return node->validate_contract_transaction(tx);
+    }
+
+    if (tx.type() == TransactionType::Regular && !tx.token().is_zero()) {
+        auto token_contract = node->contract_manager()->inspect(tx.token().to_string());
+        if (token_contract.has_value() && token_contract->kind == "fungible-token") {
+            return TransactionProveError::InvalidContractPayload;
+        }
     }
 
     // Special handling for Burn transactions
@@ -1645,6 +1724,13 @@ void Dag::network_request_sections_response(const std::string &compressed, const
                 // eLog("sysync 3");
                 return;
             }
+
+            QMetaObject::invokeMethod(
+                node,
+                [this]() {
+                    retry_contract_transactions();
+                },
+                Qt::QueuedConnection);
 
             const auto &[min, max] = res.value();
         }

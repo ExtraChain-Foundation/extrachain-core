@@ -135,6 +135,14 @@ typedef enum ExcError {
     /* DAG 800-899 */
     EXC_ERR_DAG_SECTION_NOT_FOUND = 800,
     EXC_ERR_DAG_TX_NOT_FOUND = 801,
+
+    /* Contracts 900-999 */
+    EXC_ERR_CONTRACT_NOT_FOUND        = 900,
+    EXC_ERR_CONTRACT_INVALID_ARGUMENT = 901,
+    EXC_ERR_CONTRACT_EXECUTION        = 902,
+    EXC_ERR_CONTRACT_CONFLICT         = 903,
+    EXC_ERR_CONTRACT_STORAGE          = 904,
+    EXC_ERR_CONTRACT_UPGRADE_DENIED   = 905,
 } ExcError;
 
 /* ── Enums ──────────────────────────────────────────────────────── */
@@ -153,6 +161,10 @@ typedef enum ExcTransactionType {
     EXC_TX_REWARD = 4,
     EXC_TX_BURN = 5,
     EXC_TX_CONVERSION = 6,
+    EXC_TX_MINTING          = 7,
+    EXC_TX_CONTRACT_DEPLOY  = 8,
+    EXC_TX_CONTRACT_CALL    = 9,
+    EXC_TX_CONTRACT_UPGRADE = 10,
     EXC_TX_BALANCE = 99,
     EXC_TX_UNKNOWN = 100,
 } ExcTransactionType;

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
-    project(extrachain LANGUAGES CXX DESCRIPTION "ExtraChain Core")
+    project(extrachain LANGUAGES C CXX DESCRIPTION "ExtraChain Core")
     add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
@@ -120,6 +120,12 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_types.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_codec.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_manager.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/dfs_contract_storage.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_transaction.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/wasm_runtime.h
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dfs_controller.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/dirs_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/dfs/load_manager.cpp
@@ -178,7 +184,14 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/contracts/contracts.qrc
     )
+
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/ExtraChainWamr.cmake)
 
 # C FFI bindings (optional)
 option(EXTRACHAIN_BUILD_CBINDINGS "Build C FFI bindings (libextrachainc)" OFF)
@@ -230,8 +243,11 @@ target_include_directories(extrachain PUBLIC ${CMAKE_CURRENT_LIST_DIR}/../extrac
 target_link_libraries(extrachain
     Qt6::Core Qt6::Network Qt6::WebSockets
     unofficial-sodium::sodium unofficial::sqlite3::sqlite3 msgpack-cxx fmt::fmt-header-only BLAKE3::blake3 magic_enum::magic_enum
-    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x
+    Boost::boost Boost::system Boost::thread Boost::mp11 Boost::describe Boost::json bip3x extrachain-wamr
     $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
+if(UNIX AND NOT APPLE)
+    target_link_options(extrachain PRIVATE "-Wl,-z,noexecstack")
+endif()
 # C FFI bindings
 if(EXTRACHAIN_BUILD_CBINDINGS)
     add_subdirectory(Cbindings)

@@ -21,7 +21,9 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
+#include <unordered_map>
 
 #include <boost/describe.hpp>
 #include <QTimer>
@@ -638,6 +640,8 @@ public:
      * was synchronizing with the network.
      */
     void process_cached_transactions(bool not_ready = false);
+    void retry_contract_transactions();
+    void request_contract_section(const SectionId &section_id);
 
     std::unordered_map<std::string, Transaction> sended_transactions() {
         return sended_transactions_;
@@ -702,6 +706,9 @@ private:
     bool                                         light_requested_             = false;
 
     rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+    static constexpr std::size_t                 MaxDeferredContractTransactions = 1024;
+    std::mutex                                   deferred_contracts_mutex_;
+    std::unordered_map<std::string, Transaction> deferred_contracts_;
 
     // Immutable packed storage for cold sections (10k per pack)
     std::unique_ptr<Pack::Registry> pack_registry_;

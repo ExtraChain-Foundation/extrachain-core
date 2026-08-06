@@ -14,9 +14,12 @@ using namespace exc_ffi;
 
 extern "C" {
 
-EXC_API ExcError exc_token_create(const char* name, const char* ticker,
-                                  const char* amount, const char* color,
-                                  char** out_token_json) {
+EXC_API ExcError exc_token_create(const char* name,
+                                  const char* ticker,
+                                  const char* amount,
+                                  uint8_t     decimals,
+                                  const char* color,
+                                  char**      out_token_json) {
     EXC_CHECK_NODE();
     EXC_CHECK_NULL(name);
     EXC_CHECK_NULL(ticker);
@@ -35,8 +38,8 @@ EXC_API ExcError exc_token_create(const char* name, const char* ticker,
         ActorId owner = ac->current_wallet().id();
         BigNumberFloat amt{std::string(amount)};
 
-        auto res = tm->create_token(owner, std::string(name), std::string(ticker),
-                                    amt, std::string(color));
+        auto res =
+            tm->create_token(owner, std::string(name), std::string(ticker), amt, std::string(color), "", decimals);
         if (!res.has_value()) {
             switch (res.error()) {
             case CreateTokenError::NoConnections: result = EXC_ERR_TOKEN_NO_CONNECTIONS; break;

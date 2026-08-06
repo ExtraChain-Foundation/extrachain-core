@@ -38,6 +38,7 @@
 #include "chain/private_profile.h"
 #include "extrachain_global.h"
 #include "chain/dag.h"
+#include "contracts/contract_types.h"
 
 class DfsController;
 class ActorIndex;
@@ -62,6 +63,9 @@ class WebSocketService;
 class ChatManager;
 class ThothManager;
 class JanusManager;
+namespace ExtraChain::Contracts {
+    class ContractManager;
+}
 
 enum class ImportProfileError {
     DataEmpty,
@@ -125,6 +129,9 @@ private:
     ChatManager*       chat_manager_       = nullptr;
     ThothManager*      thoth_manager_      = nullptr;
     JanusManager*      janus_manager_      = nullptr;
+    std::unique_ptr<ExtraChain::Contracts::ContractManager>                        contract_manager_;
+    std::mutex                                                                     pending_contracts_mutex_;
+    std::unordered_map<std::string, ExtraChain::Contracts::PreparedContractChange> pending_contracts_;
     QTimer*            timer_reward_       = nullptr;
     QTimer*            timer_info_         = nullptr;
     QTimer*            timer_luminance_    = nullptr;
@@ -234,9 +241,33 @@ public:
     std::string generate_node_identifier();
     std::string node_identifier();
 
-    TokenManager* token_manager() const;
-    void          set_cleanup_callback(std::function<void()> callback);
-    bool          is_custom_app_;
+    TokenManager*                           token_manager() const;
+    ExtraChain::Contracts::ContractManager* contract_manager() const;
+    void stage_contract_change(std::string transaction_hash, ExtraChain::Contracts::PreparedContractChange change);
+    void finalize_contract_change(std::string_view transaction_hash, bool approved);
+    std::expected<Transaction, TransactionError> send_contract_transaction(
+        Transaction                                   transaction,
+        const Actor<KeyPrivate>&                      signer,
+        ExtraChain::Contracts::PreparedContractChange change);
+    TransactionProveError validate_contract_transaction(const Transaction& transaction) const;
+    std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_deploy(
+        std::string                   kind,
+        std::span<const std::uint8_t> module,
+        std::span<const std::uint8_t> init_arguments);
+    std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_call(
+        const ActorId&                contract_id,
+        std::string_view              method,
+        std::span<const std::uint8_t> arguments);
+    std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_upgrade(
+        const ActorId&                contract_id,
+        std::span<const std::uint8_t> module,
+        std::span<const std::uint8_t> migration_arguments);
+    std::expected<ExtraChain::Contracts::ContractReceipt, ExtraChain::Contracts::ContractFailure> query_contract(
+        const ActorId&                contract_id,
+        std::string_view              method,
+        std::span<const std::uint8_t> arguments);
+    void set_cleanup_callback(std::function<void()> callback);
+    bool is_custom_app_;
 
     ChatManager*  chat_manager();
     ThothManager* thoth_manager();

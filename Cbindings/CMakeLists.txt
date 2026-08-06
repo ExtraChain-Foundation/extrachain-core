@@ -12,6 +12,7 @@ set(EXC_C_SOURCES
     src/exc_chat.cpp
     src/exc_janus.cpp
     src/exc_token.cpp
+    src/exc_contract.cpp
 )
 
 set(EXC_C_HEADERS

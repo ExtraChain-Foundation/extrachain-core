@@ -19,6 +19,35 @@
 
 #include "chain/transaction.h"
 
+namespace {
+
+    void append_field(std::string &target, std::string_view value) {
+        auto size = static_cast<std::uint32_t>(value.size());
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            target.push_back(static_cast<char>(size >> shift));
+        }
+        target.append(value);
+    }
+
+    std::string contract_hash_data(const Transaction &transaction) {
+        std::string result = "EXTRACHAIN:CONTRACT-TRANSACTION:1";
+        append_field(result, transaction.section().to_string());
+        append_field(result, std::to_string(std::to_underlying(transaction.type())));
+        append_field(result, transaction.sender().to_string());
+        append_field(result, transaction.receiver().to_string());
+        append_field(result, transaction.token().to_string());
+        append_field(result, transaction.amount().to_string(NumeralBase::Hex));
+        append_field(result, std::to_string(transaction.timestamp()));
+        append_field(result, transaction.meta().value_or(""));
+        append_field(result, std::to_string(transaction.prev_hashs().size()));
+        for (const auto &previous_hash : transaction.prev_hashs()) {
+            append_field(result, previous_hash);
+        }
+        return result;
+    }
+
+} // namespace
+
 Transaction::Transaction() {
     this->sender_    = ActorId();
     this->receiver_  = ActorId();
@@ -113,6 +142,10 @@ std::string Transaction::hash_preimage(bool hex) const {
 }
 
 std::string Transaction::calculate_hash() const {
+    if (is_contract_transaction(type_)) {
+        return Utils::calculate_hash(contract_hash_data(*this));
+    }
+
     return Utils::calculate_hash(hash_preimage(false));
 }
 

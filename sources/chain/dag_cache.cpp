@@ -24,6 +24,90 @@
 #include "utils/db_connector.h"
 
 #include "utils/thread_pool_boost.h"
+#include "contracts/contract_transaction.h"
+
+#include <msgpack.hpp>
+
+namespace {
+    using ContractDelta = std::pair<ActorId, BigNumberFloat>;
+
+    std::vector<ContractDelta> fungible_contract_deltas(const Transaction& transaction) {
+        if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value()) {
+            return {};
+        }
+        auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+        if (!metadata.has_value() || metadata->kind != "fungible-token") {
+            return {};
+        }
+        auto decoded = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
+        if (!decoded.has_value()) {
+            return {};
+        }
+
+        auto amount = [](std::uint64_t value, bool positive) {
+            auto result = BigNumberFloat(std::to_string(value), NumeralBase::Dec);
+            return positive ? result : -result;
+        };
+        auto actor = [](std::string value) -> std::optional<ActorId> {
+            auto result = ActorId::create(std::move(value));
+            if (!result.has_value()) {
+                return std::nullopt;
+            }
+            return *result;
+        };
+
+        try {
+            auto handle = msgpack::unpack(reinterpret_cast<const char*>(decoded->data()), decoded->size());
+            auto object = handle.get();
+            if (transaction.type() == TransactionType::ContractDeploy && metadata->method == "init") {
+                std::tuple<std::string, std::string, std::uint8_t, std::uint64_t> init;
+                object.convert(init);
+                return { { transaction.sender(), amount(std::get<3>(init), true) } };
+            }
+            if (transaction.type() != TransactionType::ContractCall) {
+                return {};
+            }
+            if (metadata->method == "transfer" || metadata->method == "mint") {
+                std::tuple<std::string, std::uint64_t> arguments;
+                object.convert(arguments);
+                auto receiver = actor(std::get<0>(arguments));
+                if (!receiver.has_value()) {
+                    return {};
+                }
+                auto value = std::get<1>(arguments);
+                if (metadata->method == "mint") {
+                    return { { *receiver, amount(value, true) } };
+                }
+                return { { transaction.sender(), amount(value, false) }, { *receiver, amount(value, true) } };
+            }
+            if (metadata->method == "transfer_from") {
+                std::tuple<std::string, std::string, std::uint64_t> arguments;
+                object.convert(arguments);
+                auto owner    = actor(std::get<0>(arguments));
+                auto receiver = actor(std::get<1>(arguments));
+                if (!owner.has_value() || !receiver.has_value()) {
+                    return {};
+                }
+                auto value = std::get<2>(arguments);
+                return { { *owner, amount(value, false) }, { *receiver, amount(value, true) } };
+            }
+            if (metadata->method == "burn") {
+                std::uint64_t value = 0;
+                object.convert(value);
+                return { { transaction.sender(), amount(value, false) } };
+            }
+        } catch (const std::exception&) {
+            return {};
+        }
+        return {};
+    }
+
+    void apply_contract_deltas(const Transaction& transaction, Balances& balances, bool reverse) {
+        for (auto& [actor_id, delta] : fungible_contract_deltas(transaction)) {
+            balances[{ actor_id, transaction.receiver() }] += reverse ? -delta : delta;
+        }
+    }
+} // namespace
 
 DagCache::DagCache(ExtraChainNode* node, Dag* dag)
     : node(node)
@@ -604,6 +688,10 @@ void DagCache::process_transaction(const Transaction& tx, Balances& balances) {
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
+    if (is_contract_transaction(tx.type())) {
+        apply_contract_deltas(tx, balances, false);
+        return;
+    }
 
     // Minting transactions (creates from nothing, adds to receiver)
     if (tx.type() == TransactionType::Minting && !tx.receiver().is_zero() && !tx.token().is_zero()) {
@@ -729,6 +817,10 @@ void reverse_transaction(const Transaction& tx, Balances& balances) {
     if (tx.type() == TransactionType::Unknown) {
         return;
     }
+    if (is_contract_transaction(tx.type())) {
+        apply_contract_deltas(tx, balances, true);
+        return;
+    }
 
     // Reward transactions - reverse: subtract amount from sender
     if (tx.type() == TransactionType::Reward && !tx.sender().is_zero()) {
@@ -801,7 +893,8 @@ std::set<ActorId> DagCache::local_clear_less_balances(const SectionId& from, con
             //     eLog("{}\n", tx1);
             // }
 
-            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion) {
+            if (tx.type() == TransactionType::Reward || tx.type() == TransactionType::Conversion
+                || is_contract_transaction(tx.type())) {
                 continue;
             }
 
