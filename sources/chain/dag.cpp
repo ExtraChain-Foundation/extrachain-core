@@ -36,15 +36,33 @@
 static constexpr int SYNC_SECTIONS_BATCH   = 2100;
 static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 
+// Pack files are shipped in fixed-size chunks so neither side holds a whole pack
+// in memory and large packs stay well under the socket buffer limit.
+static constexpr std::size_t   PACK_SYNC_CHUNK    = 256 * 1024;
+static constexpr std::uint64_t MAX_PACK_SYNC_SIZE = 512ULL * 1024 * 1024;
+static constexpr std::size_t   MAX_PACK_LIST_SIZE = 100000;
+
+// Upper bound on live transactions parked in the pending set while sync runs.
+// They are replayed once sync completes; the cap stops a flood from growing
+// memory without bound during a long sync.
+static constexpr std::size_t MAX_CACHED_TXS = 100000;
+
 Dag::Dag(ExtraChainNode *node)
     : node(node)
     , transaction_cache_(node, node)
-    , cache_(node, this) {
+    , cache_(node, this)
+    , pack_registry_(std::make_unique<Pack::Registry>(ChainConst::DAG_PACKS_FOLDER)) {
     timer_sync_ = new QTimer();
+
+    std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
+    std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
+    pack_registry_->rescan();
 
 #ifdef IS_APP_CLIENT
     clear_dag_folder();
 #endif
+
+    bool storage_reset = false;
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -57,6 +75,20 @@ Dag::Dag(ExtraChainNode *node)
 #else
         set_mode(DagMode::Full);
 #endif
+    }
+
+    // ChainIndex defaults to enabled on Full nodes and disabled on Light;
+    // an explicit chain_index_mode setting overrides this.
+    if (settings.chain_index_mode.has_value()) {
+        chain_index_enabled_ = (*settings.chain_index_mode == ChainIndexMode::Enabled);
+    } else {
+        chain_index_enabled_ = (mode_ == DagMode::Full);
+    }
+    if (chain_index_enabled_) {
+        chain_index_ = std::make_unique<ChainIndex>(node);
+        eLog("[Dag] ChainIndex enabled");
+    } else {
+        eLog("[Dag] ChainIndex disabled");
     }
 
     QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
@@ -105,6 +137,7 @@ Dag::Dag(ExtraChainNode *node)
     } else {
         // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
+        storage_reset = true;
     }
 
     transaction_cache_.make_files();
@@ -117,10 +150,6 @@ Dag::Dag(ExtraChainNode *node)
 
     timestamp_bigger_sync_start_ = 0;
 
-#ifndef IS_APP_CLIENT
-    this->set_status(DagStatus::Ready);
-#endif
-
     auto section = this->read_section(SectionId(0));
     if (section.has_value() && section->transactions.size() == 1) {
         // prove_transaction()
@@ -128,18 +157,64 @@ Dag::Dag(ExtraChainNode *node)
         node->actor_index()->set_network_id(network_id);
     }
 
-    if (mode_ == DagMode::Light) {
+    if (mode_ == DagMode::Light && cache_.section() == SectionId(-1) && !storage_reset) {
         clear_dag();
         cache_.reset_db();
         cache_.init_db();
     }
 
     eLog("[Dag] Started. Mode: {}", mode_);
+
+    // After previous runs the hot/ folder may contain full pack ranges that
+    // never got packed (sync was killed mid-flight, or earlier versions
+    // didn't pack out-of-order completions). Sweep them on startup.
+    try_pack_hot();
+
+    // Automatically start so existing callers get the previous default lifecycle.
+    // Callers that want explicit control can stop()/start() around migration etc.
+    start();
 }
 
 Dag::~Dag() {
+    stop();
     cache_.dag = nullptr;
     timer_sync_->deleteLater();
+}
+
+void Dag::start() {
+    // Idempotent: once started, later calls are no-ops so callers don't need
+    // to track state themselves.
+    if (started_.exchange(true)) {
+        return;
+    }
+    accepting_messages_.store(true);
+
+#ifndef IS_APP_CLIENT
+    this->set_status(DagStatus::Ready);
+#endif
+
+    eLog("[Dag] start: mode {}, current {}", mode_, current_section_);
+}
+
+void Dag::stop() {
+    // First close the door on incoming work, then tear down the pieces that
+    // would otherwise race against a late callback.
+    bool was_started = started_.exchange(false);
+    accepting_messages_.store(false);
+    if (!was_started) {
+        return;
+    }
+
+    if (timer_sync_) {
+        QMetaObject::invokeMethod(timer_sync_, "stop", Qt::QueuedConnection);
+    }
+    emit node->dagTimerStop();
+
+    eLog("[Dag] stop");
+}
+
+bool Dag::is_accepting_messages() const {
+    return accepting_messages_.load();
 }
 
 SectionId Dag::current_section() const {
@@ -210,6 +285,18 @@ DagCache &Dag::cache() {
     return cache_;
 }
 
+ChainIndex *Dag::chain_index() {
+    return chain_index_.get();
+}
+
+const ChainIndex *Dag::chain_index() const {
+    return chain_index_.get();
+}
+
+bool Dag::chain_index_enabled() const {
+    return chain_index_enabled_;
+}
+
 SectionId Dag::first_saved_section() {
     return first_saved_section_;
 }
@@ -218,15 +305,13 @@ SectionId Dag::file_section(const SectionId &section) const {
     return section / Config::DataStorage::SECTION_SIZE;
 }
 
-std::string Dag::file_folder(const SectionId &section) const {
-    auto file_section = this->file_section(section);
-    auto path         = fmt::format("{}/{}", ChainConst::DAG_FOLDER, file_section.to_string());
-    return path;
+std::string Dag::file_folder(const SectionId &) const {
+    // Hot sections live in a flat directory until they're packed.
+    return ChainConst::DAG_HOT_FOLDER;
 }
 
 std::string Dag::file_path(const SectionId &section) const {
-    auto path = fmt::format("{}/{}", this->file_folder(section), section.to_string());
-    return path;
+    return fmt::format("{}/{}", ChainConst::DAG_HOT_FOLDER, section.to_string());
 }
 
 std::expected<Transaction, TransactionError> Dag::prepare_transaction(const Transaction       &transaction,
@@ -301,13 +386,21 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
         */
 
-        if (/* !sync_timeout && */ status_ != DagStatus::Ready) {
-            if (mode_ == DagMode::Light || light_requested_) {
-                this->add_to_cached_tx(transaction);
-            }
-        }
-
         if (status_ != DagStatus::Ready) {
+            // A live transaction arriving mid-sync would otherwise be lost — the
+            // peer we sync from may not have it in a sealed section yet. Park it
+            // in the pending set (a cheap, deduplicated insert — no prove/save on
+            // the sync path) and replay it via process_cached_transactions() once
+            // sync finishes. Capped so a flood during a long sync can't grow
+            // memory without bound (the per-sender rate limit above also helps).
+            if (cached_txs_size() < MAX_CACHED_TXS) {
+                this->add_to_cached_tx(transaction);
+            } else {
+                eWarning("[Dag] Pending tx cache full ({}), dropping {} during sync",
+                         MAX_CACHED_TXS,
+                         transaction.hash());
+            }
+
             // Update sync target if transaction section is ahead but within reasonable range
             if (transaction.section() > sync_last_index_ && transaction.section() <= sync_last_index_ + 15) {
                 sync_last_index_ = transaction.section();
@@ -359,13 +452,10 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         eLog("[Dag] Transaction not approved: {} {}", tx, res);
 
         if (res == TransactionProveError::TooSectionDiff) {
-            eLog("[Dag] Current: {} (0x{}) section (status: {}), but TooSectionDiff!: {} (0x{})",
-
-                 this->current_section().to_string(NumeralBase::Dec),
-                 this->current_section(),
+            eLog("[Dag] Current: {} section (status: {}), but TooSectionDiff!: {}",
+                 this->current_section().to_string(),
                  this->status(),
-                 transaction.section().to_string(NumeralBase::Dec),
-                 transaction.section());
+                 transaction.section().to_string());
 
             if (tx.section() < this->current_section()) {
                 // need sync?
@@ -421,9 +511,8 @@ void Dag::network_transaction_result(const TransactionResult &tx_result, const R
         if (is_contract_transaction(transaction.type())) {
             node->finalize_contract_change(transaction.hash(), false);
         }
-        eLog("[Dag] Our transaction not approved: 0x{} ({}) / {}, {}",
-             transaction.section(),
-             transaction.section().to_string(NumeralBase::Dec),
+        eLog("[Dag] Our transaction not approved: {} / {}, {}",
+             transaction.section().to_string(),
              transaction.hash(),
              tx_result.result);
 
@@ -540,7 +629,10 @@ void Dag::process_cached_transactions(bool not_ready) {
 
         for (const auto &tx : txs_to_process) {
             Responder responder(node->network());
-            network_transaction(tx, responder);
+            auto      result = network_transaction(tx, responder);
+            if (!result.has_value()) {
+                eWarning("[Dag] Cached transaction {} failed: {}", tx.hash(), std::to_underlying(result.error()));
+            }
         }
     }
 
@@ -600,12 +692,29 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
     try {
         std::shared_lock<std::shared_mutex> lock(section_mutex_);
 
+        // On-disk sections are always canonical (decimal), regardless of any
+        // wire-format scope a network handler may have left active on this thread.
+        WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
+        // Hot path: per-section file
         auto p    = this->file_path(section_id);
         auto path = FsPath::create(p);
         if (path.has_value()) {
             auto content = Utils::read_file_content(path.value());
             if (content.has_value()) {
                 auto section = Json::deserialize<Section>(content.value());
+                if (section.has_value()) {
+                    section->id = section_id;
+                    return section.value();
+                }
+            }
+        }
+
+        // Cold path: look up in packs
+        if (pack_registry_) {
+            auto packed = pack_registry_->read_section(section_id);
+            if (packed.has_value()) {
+                auto section = Json::deserialize<Section>(*packed);
                 if (section.has_value()) {
                     section->id = section_id;
                     return section.value();
@@ -631,25 +740,39 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 
 std::optional<bool> Dag::write_section(const Section &section) {
     try {
-        std::unique_lock<std::shared_mutex> lock(section_mutex_);
+        {
+            std::unique_lock<std::shared_mutex> lock(section_mutex_);
 
-        auto folder = this->file_folder(section.id);
-        if (!std::filesystem::exists(folder)) {
-            std::filesystem::create_directory(folder);
-        }
+            // Persist sections in canonical (decimal) form regardless of any
+            // wire-format scope left active by a network handler on this thread.
+            WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
 
-        auto p    = this->file_path(section.id);
-        auto path = FsPath::create(p);
-        if (!path.has_value()) {
-            return std::nullopt;
-        }
+            auto folder = this->file_folder(section.id);
+            if (!std::filesystem::exists(folder)) {
+                std::filesystem::create_directories(folder);
+            }
 
-        auto res = Utils::write_file_content(path.value(), Json::serialize(section));
-        if (!res.has_value()) {
-            return std::nullopt;
+            auto p    = this->file_path(section.id);
+            auto path = FsPath::create(p);
+            if (!path.has_value()) {
+                return std::nullopt;
+            }
+
+            auto res = Utils::write_file_content(path.value(), Json::serialize(section));
+            if (!res.has_value()) {
+                return std::nullopt;
+            }
         }
 
         update_range();
+        // Feed the tx index for live writes only. During sync we skip it — the
+        // index is rebuilt in bulk once sync completes, so per-section SQLite
+        // writes here would be pure wasted work on the sync hot path.
+        if (status_ != DagStatus::Sync && chain_index_enabled_ && chain_index_) {
+            chain_index_->on_section_written(section);
+        }
+        // try_pack_hot() is a no-op during sync (it checks status_ itself).
+        try_pack_hot();
         return true;
     } catch (const std::system_error &e) {
         return std::nullopt;
@@ -1037,20 +1160,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     //     }
     // }
 
-    // Verify transaction hash integrity
-    auto tx_copy = tx;
-    tx_copy.update_hash();
-    if (tx.hash() != tx_copy.hash()) {
+    // Verify transaction hash integrity.
+    // A transaction from a legacy peer will carry a hash computed in the old hex
+    // form — accept either the new canonical decimal hash or the legacy one.
+    auto tx_copy     = tx;
+    auto new_hash    = tx_copy.calculate_hash();
+    auto legacy_hash = tx_copy.calculate_hash_hex();
+    if (tx.hash() != new_hash && tx.hash() != legacy_hash) {
         return TransactionProveError::WrongHash;
-    }
-
-    // Check for duplicate transaction
-    auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
-    if (tx_result.has_value()) {
-        // TODO
-        // if (tx == tx_result.value()) {
-        // }
-        return TransactionProveError::Duplicate;
     }
 
     // Validate sender
@@ -1277,7 +1394,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
                                                                            targetSender.to_string(),
                                                                            token.to_string()));
                 if (minted_str.has_value() && !minted_str->empty()) {
-                    auto minted_amount = BigNumberFloat::create(*minted_str, NumeralBase::Dec);
+                    auto minted_amount = BigNumberFloat::create(*minted_str);
                     if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
                         return TransactionProveError::SenderBalanceBelowZero;
                     }
@@ -1295,7 +1412,7 @@ void Dag::add_transaction_sended(const Transaction &transaction) {
     emit node->dagTxSended(transaction.section(), transaction.hash());
 }
 
-void Dag::update_range() {
+void Dag::update_range(bool allow_lower_first) {
     try {
         std::lock_guard<std::mutex> lock(range_mutex_);
 
@@ -1309,7 +1426,7 @@ void Dag::update_range() {
 
             if (existing.has_value()) {
                 auto existing_first = SectionId::create(existing->first);
-                if (existing_first.has_value() && existing_first.value() != SectionId(-1)
+                if (!allow_lower_first && existing_first.has_value() && existing_first.value() != SectionId(-1)
                     && new_first != SectionId(-1) && new_first < existing_first.value()) {
                     eLog("[Dag] update_range blocked: new first {} < existing {}",
                          new_first,
@@ -1336,32 +1453,16 @@ void Dag::update_range() {
     }
 }
 
-std::optional<Transaction> Dag::search_duplicate_by_hash(const std::string &hash, int deep) const {
-    int count = 0;
-
-    for (SectionId i = current_section_ + 1; i >= first_saved_section_; i--) {
-        auto section = this->read_section(i);
-
-        if (!section.has_value()) {
-            continue;
-        }
-
-        if (section.has_value() && (section->transactions.empty() || section->id < 0)) {
-            continue;
-        }
-
-        for (auto &tx : section->transactions) {
-            if (tx.hash() == hash) {
-                return tx;
-            }
-        }
-
-        count += 1;
-        if (deep != 0 && count > deep) {
-            return std::nullopt;
-        }
+std::optional<Transaction> Dag::find_transaction(const SectionId &section_id, const std::string &hash) const {
+    // Direct read: section is part of the natural identity of a tx, so we
+    // jump straight to its file/pack and scan its small (set-sized) tx list.
+    auto section = this->read_section(section_id);
+    if (!section.has_value())
+        return std::nullopt;
+    for (const auto &tx : section->transactions) {
+        if (tx.hash() == hash)
+            return tx;
     }
-
     return std::nullopt;
 }
 
@@ -1729,30 +1830,38 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         return;
     }
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder]() {
+    // Pick the section file format the peer stores on disk: legacy peers expect
+    // hex-serialized sections, post-0.26 peers decimal. A legacy peer has no
+    // PeerMeta entry or advertises a pre-0.26 dag, so default to hex when unknown.
+    auto peer_id     = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta        = node->network()->peer_meta_for(peer_id);
+    bool peer_legacy = !meta.has_value() || meta->is_legacy_dag();
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder, peer_legacy]() {
         std::vector<SectionFileData> sections;
 
         for (SectionId i = from; i <= to; i++) {
-            auto p    = this->file_path(i);
-            auto path = FsPath::create(p);
-            if (!path.has_value() || !path->exists()) {
+            // read_section falls back to packs, so cold (packed) history is served
+            // to file-sync peers that can't speak pack-sync. file_bytes is the
+            // peer's on-disk section format: legacy stores hex, post-0.26 decimal.
+            auto section = this->read_section(i);
+            if (!section.has_value()) {
                 continue;
             }
 
-            auto content = Utils::read_file_content(path.value());
-            if (!content.has_value()) {
-                continue;
-            }
-
-            auto &bytes = content.value();
+            WireFormat::Scope disk_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
             sections.push_back(
-                SectionFileData { .section_id = i, .file_bytes = std::string(bytes.begin(), bytes.end()) });
+                SectionFileData { .section_id = i, .file_bytes = Json::serialize(section.value()) });
         }
 
         auto file_sync = FileSectionsSync { .to = to, .sections = sections, .last_section = current_section_ };
 
-        auto ser      = MessagePack::serialize(file_sync);
-        auto compress = qCompress(QByteArray::fromStdString(ser));
+        // The message envelope (section ids in SectionFileData/FileSectionsSync)
+        // travels in the wire format, symmetric with the request and response
+        // decode, independent of the peer's on-disk file_bytes format above.
+        WireFormat::Scope wire_scope(WireFormat::wire());
+        auto              ser      = MessagePack::serialize(file_sync);
+        auto              compress = qCompress(QByteArray::fromStdString(ser));
         responder.send_response(compress.toStdString(),
                                 MessageType::DagFileSections,
                                 SendMode::Focused,
@@ -1763,11 +1872,21 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
 void Dag::network_file_sections_response(const std::string &compressed, const Responder &responder) {
     emit node->dagTimerStop();
 
-    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder]() {
+    // A legacy server sends section file_bytes in hex; our disk is canonical
+    // (decimal), so such sections need re-serializing before they're written.
+    auto peer_id     = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta        = node->network()->peer_meta_for(peer_id);
+    bool peer_legacy = meta.has_value() && meta->is_legacy_dag();
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder, peer_legacy]() {
         if (mode_ == DagMode::Light) {
             eLog("[Dag] Skip file sections response: light mode");
             return;
         }
+
+        // Runs on a worker thread, so the dispatch-layer wire scope doesn't apply
+        // here — set it explicitly so section ids decode in the wire format.
+        WireFormat::Scope wire_scope(WireFormat::wire());
 
         const auto file_sync = MessagePack::deserialize<FileSectionsSync>(
             qUncompress(QByteArray::fromStdString(compressed)).toStdString());
@@ -1794,7 +1913,23 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 continue;
             }
 
-            Utils::write_file_content(path.value(), section_data.file_bytes);
+            std::string disk_bytes = section_data.file_bytes;
+            if (peer_legacy) {
+                // Normalize hex section bytes from a legacy peer into our canonical
+                // (decimal) on-disk format, so later read_section parses them.
+                WireFormat::Scope legacy_scope(WireFormat::Mode::Legacy);
+                auto              section = Json::deserialize<Section>(section_data.file_bytes);
+                if (section.has_value()) {
+                    WireFormat::Scope canon_scope(WireFormat::Mode::Canonical);
+                    disk_bytes = Json::serialize(section.value());
+                }
+            }
+
+            auto write_result = Utils::write_file_content(path.value(), disk_bytes);
+            if (!write_result.has_value()) {
+                eWarning("[Dag] Can't write synchronized section {}", section_data.section_id);
+                return;
+            }
         }
 
         if (mode_ == DagMode::Light) {
@@ -1809,6 +1944,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             if (section_data.section_id > current_section_) {
                 this->set_current_section(section_data.section_id);
             }
+
+            // ChainIndex is intentionally NOT fed per-section here: during sync
+            // that would be thousands of wasted SQLite writes. It is rebuilt once
+            // in bulk when sync completes (see below).
         }
 
         update_range();
@@ -1836,7 +1975,31 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 light_requested_ = true;
 #else
                 this->process_cached_transactions();
+                set_status(DagStatus::Ready);
+                set_sync_status(DagSyncStatus::None);
+                emit node->dagSyncFinish();
+
+                // Pull the peer's prebuilt cache instead of rebuilding it locally,
+                // when the peer supports it and our cache lags the chain.
+                {
+                    auto peer_id =
+                        responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+                    auto meta = node->network()->peer_meta_for(peer_id);
+                    if (meta.has_value() && meta->supports_pack_sync() && cache_.section() < current_section_) {
+                        request_cache_snapshot(responder);
+                    }
+                }
 #endif
+            }
+
+            // Sync is done — now do the deferred bookkeeping once: seal the cold
+            // tail into packs and bulk-rebuild the tx index off the network thread.
+            try_pack_hot();
+            if (chain_index_enabled_ && chain_index_) {
+                auto *index = chain_index_.get();
+                ThreadPoolBoost::instance_dag_sync()->post([index]() {
+                    index->rebuild_from_disk();
+                });
             }
             return;
         }
@@ -1855,7 +2018,14 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
         return;
     }
 
-    auto range         = SectionRange { .first = from == -1 ? "0" : from.to_string(), .last = to.to_string() };
+    // SectionRange carries ids as bare strings outside the BigNumber wire path,
+    // so encode them in the wire format (hex during the legacy transition) to
+    // match what legacy peers send and parse. Decode mirrors this in the handler.
+    bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
+    auto encode   = [wire_hex](const SectionId &s) {
+        return wire_hex ? s.to_hex_string() : s.to_string();
+    };
+    auto range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
@@ -2008,6 +2178,10 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
 
         light_requested_ = false;
         this->process_cached_transactions();
+
+        set_status(DagStatus::Ready);
+        set_sync_status(DagSyncStatus::None);
+        emit node->dagSyncFinish();
         // start check hash
         // TIMER_END(network_response_light)
     });
@@ -2144,8 +2318,8 @@ void Dag::handle_sync_request() {
                  last_control->control,
                  info.last_control_hash);
             eLog("____ {} {} {} {}",
-                 last_control->section_id.to_string(NumeralBase::Dec),
-                 info.last_control_section_id.to_string(NumeralBase::Dec),
+                 last_control->section_id.to_string(),
+                 info.last_control_section_id.to_string(),
                  last_control->control,
                  info.last_control_hash);
 
@@ -2252,21 +2426,29 @@ void Dag::handle_sync_request() {
     if (current_section_exists && current_section_ >= sync_last_index_) {
         eLog("[Dag] Not need sync");
 
-        set_status(DagStatus::Ready);
-        set_sync_status(DagSyncStatus::None);
+        // Drain any transactions parked while we were deciding whether to sync,
+        // then go Ready (process_cached_transactions sets Ready + sync None).
         check_status_ = DagSyncStatus::None;
+        this->process_cached_transactions();
         // start_check();
         return;
     }
 
-    eLog("[Dag] sync_last_index: 0x{} / {} sections",
-         sync_last_index_,
-         sync_last_index_.to_string(NumeralBase::Dec));
+    eLog("[Dag] sync_last_index: {} sections", sync_last_index_.to_string());
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_file_sections(current_section_,
-                              std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
-                              responder);
+        // Pack-capable peer: fetch cold history wholesale, then file-sync only the
+        // hot tail once pack-sync finishes (see issue_next_pack_request) so the
+        // two paths never overlap. Legacy peers fall straight through to file-sync.
+        auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+        auto meta    = node->network()->peer_meta_for(peer_id);
+        if (meta.has_value() && meta->supports_pack_sync()) {
+            start_pack_sync(responder);
+        } else {
+            request_file_sections(current_section_,
+                                  std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
+                                  responder);
+        }
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
@@ -2379,8 +2561,437 @@ void Dag::clear_dag() {
 
     cache_.reset_db();
     cache_.init_db();
+
+    // Also clear hot and packed storage
+    std::error_code ec;
+    std::filesystem::remove_all(ChainConst::DAG_HOT_FOLDER, ec);
+    std::filesystem::remove_all(ChainConst::DAG_PACKS_FOLDER, ec);
+    std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
+    std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
+    if (pack_registry_)
+        pack_registry_->rescan();
+    if (chain_index_enabled_ && chain_index_)
+        chain_index_->clear();
+
     eLog("[Dag] Cleared");
 #endif
+}
+
+// ---- Pack-level sync (peers with dag_version >= 100) ------------------------
+
+void Dag::network_pack_list_request(const Responder &responder) {
+    if (!pack_registry_)
+        return;
+
+    PackList list;
+    auto     spans = pack_registry_->spans(); // in-memory metadata, no file I/O
+    list.packs.reserve(spans.size());
+    for (const auto &s : spans) {
+        list.packs.push_back(PackInfo {
+            .pack_id       = s.id,
+            .first_section = s.first,
+            .last_section  = s.last,
+        });
+    }
+
+    node->network()->send_message(list,
+                                  MessageType::DagPackList,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
+}
+
+void Dag::network_pack_request(const PackRequest &req, const Responder &responder) {
+    if (!pack_registry_)
+        return;
+
+    auto total = pack_registry_->pack_byte_size(req.pack_id);
+    if (!total.has_value()) {
+        eWarning("[Dag] Pack {} requested but missing locally", req.pack_id);
+        return; // peer will time out / move on
+    }
+    if (*total == 0 || *total > MAX_PACK_SYNC_SIZE || req.offset >= *total) {
+        eWarning("[Dag] Rejected pack {} request at offset {} with size {}", req.pack_id, req.offset, *total);
+        return;
+    }
+
+    auto chunk = pack_registry_->read_chunk(req.pack_id, req.offset, PACK_SYNC_CHUNK);
+    if (!chunk.has_value()) {
+        eWarning("[Dag] Pack {} chunk at {} read failed", req.pack_id, req.offset);
+        return;
+    }
+
+    PackData out {
+        .pack_id    = req.pack_id,
+        .offset     = req.offset,
+        .total_size = *total,
+        .bytes      = std::move(*chunk),
+    };
+    node->network()->send_message(out,
+                                  MessageType::DagPackData,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
+}
+
+void Dag::start_pack_sync(const Responder &responder) {
+    // Fresh message id: the core dedups Requests by message_id, so reusing the shared sync responder's id gets
+    // dropped.
+    node->network()->send_message(PackList {},
+                                  MessageType::DagPackList,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
+                                  responder.with_new_message_id());
+}
+
+void Dag::network_pack_list_response(const PackList &list, const Responder &responder) {
+    if (!pack_registry_)
+        return;
+    if (list.packs.size() > MAX_PACK_LIST_SIZE) {
+        eWarning("[Dag] Rejected pack list with {} entries", list.packs.size());
+        return;
+    }
+
+    auto local_ids = pack_registry_->known_packs();
+    std::sort(local_ids.begin(), local_ids.end());
+
+    std::vector<Pack::PackId> missing;
+    missing.reserve(list.packs.size());
+    for (const auto &p : list.packs) {
+        if (!std::binary_search(local_ids.begin(), local_ids.end(), p.pack_id)) {
+            missing.push_back(p.pack_id);
+        }
+    }
+    std::sort(missing.begin(), missing.end()); // ascending — sync history forward
+
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_pending_       = std::move(missing);
+        pack_sync_in_flight_     = false;
+        pack_sync_installed_any_ = false;
+    }
+
+    eLog("[Dag] Pack sync: {} packs missing locally", pack_sync_pending_.size());
+    issue_next_pack_request(responder);
+}
+
+void Dag::issue_next_pack_request(const Responder &responder) {
+    Pack::PackId next_id;
+    bool         has_next      = false;
+    bool         rebuild_index = false;
+    bool         finished      = false;
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        if (pack_sync_in_flight_)
+            return;
+        if (pack_sync_pending_.empty()) {
+            eLog("[Dag] Pack sync: all packs received");
+            finished = true;
+            if (pack_sync_installed_any_ && chain_index_enabled_ && chain_index_) {
+                pack_sync_installed_any_ = false;
+                rebuild_index            = true;
+            }
+        } else {
+            next_id = pack_sync_pending_.front();
+            pack_sync_pending_.erase(pack_sync_pending_.begin());
+            pack_sync_in_flight_  = true;
+            pack_sync_current_id_ = next_id;
+            pack_sync_offset_     = 0; // start the new pack from its first chunk
+            has_next              = true;
+        }
+    }
+
+    if (finished) {
+        // Installed packs extend history backwards, so pull first_saved_section_ down to their coverage.
+        SectionId tail_from = current_section_ + 1;
+        if (pack_registry_) {
+            if (auto cov = pack_registry_->coverage(); cov.has_value()) {
+                if (first_saved_section_ == SectionId(-1) || cov->first < first_saved_section_) {
+                    first_saved_section_ = cov->first;
+                }
+                // File-sync starts past the last packed section so it never re-pulls cold history.
+                if (cov->last + 1 > tail_from) {
+                    tail_from = cov->last + 1;
+                }
+            }
+        }
+        update_range(/*allow_lower_first*/ true);
+
+        // Cold history is in place; now pull the hot tail per-section.
+        if (mode_ == DagMode::Full && tail_from <= sync_last_index_) {
+            request_file_sections(tail_from,
+                                  std::min(sync_last_index_, tail_from + SYNC_SECTIONS_BATCH),
+                                  responder);
+        }
+    }
+
+    if (rebuild_index) {
+        // Heavy disk + decompress + SQLite work — never on the network thread.
+        auto *index = chain_index_.get();
+        ThreadPoolBoost::instance_dag_sync()->post([index]() {
+            index->rebuild_from_disk();
+        });
+        return;
+    }
+    if (!has_next)
+        return;
+
+    // Fresh message id per pack request: the core dedups Requests by message_id, dropping reuses of the sync
+    // responder's id.
+    PackRequest req { .pack_id = next_id, .offset = 0 };
+    node->network()->send_message(req,
+                                  MessageType::DagPackRequest,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
+                                  responder.with_new_message_id());
+}
+
+void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
+    if (!pack_registry_)
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        if (!pack_sync_in_flight_ || data.pack_id != pack_sync_current_id_ || data.offset != pack_sync_offset_) {
+            eWarning("[Dag] Ignored unexpected pack chunk {} at {}", data.pack_id, data.offset);
+            return;
+        }
+    }
+
+    const bool invalid_size = data.total_size == 0 || data.total_size > MAX_PACK_SYNC_SIZE || data.bytes.empty()
+                              || data.bytes.size() > PACK_SYNC_CHUNK || data.offset >= data.total_size
+                              || data.bytes.size() > data.total_size - data.offset;
+    if (invalid_size) {
+        eWarning("[Dag] Rejected invalid pack chunk {} at {}", data.pack_id, data.offset);
+        pack_registry_->discard_incoming(data.pack_id);
+        {
+            std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+            pack_sync_in_flight_ = false;
+        }
+        issue_next_pack_request(responder);
+        return;
+    }
+
+    std::uint64_t next_offset = data.offset + data.bytes.size();
+    bool          is_last     = next_offset >= data.total_size;
+
+    auto res = pack_registry_->install_chunk(data.pack_id, data.offset, data.bytes, is_last);
+    if (!res.has_value()) {
+        eWarning("[Dag] Pack {} chunk at {} install failed: error {}",
+                 data.pack_id,
+                 data.offset,
+                 static_cast<int>(res.error()));
+        pack_registry_->discard_incoming(data.pack_id);
+        // Abort this pack; clear in_flight so the next pack can proceed.
+        {
+            std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+            pack_sync_in_flight_ = false;
+        }
+        issue_next_pack_request(responder);
+        return;
+    }
+
+    if (!is_last) {
+        // Request the next chunk of the same pack; memory stays bounded.
+        {
+            std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+            pack_sync_offset_ = next_offset;
+        }
+        PackRequest req { .pack_id = data.pack_id, .offset = next_offset };
+        node->network()->send_message(req,
+                                      MessageType::DagPackRequest,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder.with_new_message_id());
+        return;
+    }
+
+    // Pack fully received and installed.
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_in_flight_     = false;
+        pack_sync_installed_any_ = true;
+    }
+    eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.total_size);
+
+    issue_next_pack_request(responder);
+}
+
+// ---- Balance-cache snapshot (peers with dag_version >= 100) ------------------
+
+void Dag::network_cache_snapshot_request(const Responder &responder) {
+    if (mode_ != DagMode::Full)
+        return;
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
+        auto [section, balances] = cache_.read_cached_balances();
+
+        CacheSnapshot snapshot;
+        snapshot.section = section;
+        snapshot.balances.reserve(balances.size());
+        for (const auto &[key, balance] : balances) {
+            snapshot.balances.push_back(CacheBalanceRow {
+                .actor_id = key.first.to_string(),
+                .token_id = key.second.to_string(),
+                .balance  = balance.to_string(),
+            });
+        }
+
+        // Wire format for the section id field; balances are already plain strings.
+        WireFormat::Scope wire_scope(WireFormat::wire());
+        auto              ser      = MessagePack::serialize(snapshot);
+        auto              compress = qCompress(QByteArray::fromStdString(ser));
+        responder.send_response(compress.toStdString(),
+                                MessageType::DagCacheSnapshotData,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+    });
+}
+
+void Dag::network_cache_snapshot_response(const std::string &compressed, const Responder &responder) {
+    if (mode_ != DagMode::Full)
+        return;
+
+    ThreadPoolBoost::instance_dag_sync()->post([this, compressed]() {
+        auto              raw = qUncompress(QByteArray::fromStdString(compressed));
+        WireFormat::Scope wire_scope(WireFormat::wire());
+        auto              snapshot = MessagePack::deserialize<CacheSnapshot>(raw.toStdString());
+        if (!snapshot.has_value()) {
+            eWarning("[Dag] Cache snapshot: failed to deserialize");
+            return;
+        }
+
+        // Ignore a snapshot not ahead of our cache (peer may be mid-rebuild).
+        if (snapshot->section <= cache_.section()) {
+            eLog("[Dag] Cache snapshot {} not ahead of local {}, ignoring", snapshot->section, cache_.section());
+            return;
+        }
+
+        Balances balances;
+        for (const auto &row : snapshot->balances) {
+            auto actor_id = ActorId::create(row.actor_id);
+            auto token_id = TokenId::create(row.token_id);
+            auto balance  = BigNumberFloat::create(row.balance);
+            if (!actor_id.has_value() || !token_id.has_value() || !balance.has_value()) {
+                continue;
+            }
+            balances[{ actor_id.value(), token_id.value() }] = balance.value();
+        }
+
+        cache_.write_cached_balances(balances, snapshot->section);
+        update_range();
+        eLog("[Dag] Installed cache snapshot at section {} ({} balances)", snapshot->section, balances.size());
+    });
+}
+
+void Dag::request_cache_snapshot(const Responder &responder) {
+    if (mode_ != DagMode::Full)
+        return;
+    node->network()->send_message(true,
+                                  MessageType::DagCacheSnapshotRequest,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
+                                  responder.with_new_message_id());
+}
+
+// -----------------------------------------------------------------------------
+
+void Dag::try_pack_hot() {
+    if (!pack_registry_)
+        return;
+
+    // Sealing a pack is irreversible. Never do it while a sync is in flight:
+    // set_current_section() only moves forward, so a high section arriving first
+    // can push current_section_ ahead of sections that are still downloading, and
+    // we'd seal their slots as empty. Packing only the at-rest cold tail (status
+    // Ready, or at startup before any sync starts) avoids that race.
+    if (status_ == DagStatus::Sync)
+        return;
+
+    // Sync delivers sections out-of-order in batches; packing must be tried for
+    // every pack range that's been completed in hot/, not just the most recent
+    // one. We iterate from pack 0 upwards and pack each range whose 10k files
+    // are all present and that isn't already on disk.
+    auto      section_size = Config::DataStorage::SECTION_SIZE;
+    SectionId lag(HOT_PACK_LAG);
+    // We pack [N*size .. N*size+size-1] only after `current` is HOT_PACK_LAG
+    // sections past pack_last, so reorgs and out-of-order delivery can still
+    // mutate the trailing window without rewriting an immutable pack.
+    if (current_section_ < section_size + lag)
+        return;
+
+    SectionId max_pack_idx = ((current_section_ - lag) / section_size) - SectionId(1);
+    if (max_pack_idx < SectionId(0))
+        return;
+
+    // On-disk pack payloads are canonical (decimal) — the empty placeholder and
+    // any re-read content must not pick up an ambient wire (hex) scope.
+    WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
+
+    for (SectionId pack_idx = SectionId(0); pack_idx <= max_pack_idx; pack_idx = pack_idx + 1) {
+        SectionId pack_first = pack_idx * section_size;
+
+        if (pack_registry_->find_pack_for_section(pack_first).has_value()) {
+            continue; // already packed
+        }
+
+        SectionId pack_last = pack_first + section_size - 1;
+
+        // A genuinely-empty section legitimately has no hot file. But a section
+        // missing because it hasn't been downloaded yet must NOT be sealed as
+        // empty — that would silently corrupt control hashes and fork the node.
+        // We only treat absence as "empty" for ranges that sit entirely above
+        // first_saved_section_ (i.e. fully within our synced history). A range
+        // that dips below first_saved_section_ is incompletely synced; skip it.
+        if (first_saved_section_ != SectionId(-1) && pack_first < first_saved_section_) {
+            continue;
+        }
+
+        // Gather all section files in this range. Missing file == empty section
+        // (sync skips sections with no transactions). With HOT_PACK_LAG already
+        // guarding the moment, every id in this range has been "passed by" sync
+        // — so absence is an empty section, not pending data.
+        std::map<SectionId, std::string> sections;
+        const std::string                empty_serialized = Json::serialize(Section { .id = SectionId(0) });
+        for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+            auto p   = this->file_path(s);
+            auto fsp = FsPath::create(p);
+            if (fsp.has_value() && fsp->exists()) {
+                auto content = Utils::read_file_content(fsp.value());
+                if (content.has_value()) {
+                    sections.emplace(s, std::string(content->begin(), content->end()));
+                    continue;
+                }
+            }
+            // Missing or unreadable -> empty placeholder section.
+            sections.emplace(s, empty_serialized);
+        }
+
+        Pack::PackId pid;
+        {
+            auto candidate_int = pack_idx.to_int();
+            if (!candidate_int.has_value() || *candidate_int < 0)
+                continue;
+            pid = static_cast<Pack::PackId>(*candidate_int);
+        }
+
+        auto res = pack_registry_->create_pack(pid, sections);
+        if (!res.has_value()) {
+            eWarning("[Dag] Failed to pack sections {}..{} (error {})",
+                     pack_first,
+                     pack_last,
+                     static_cast<int>(res.error()));
+            continue;
+        }
+
+        // Remove hot files that are now safely packed.
+        for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+            std::error_code ec;
+            std::filesystem::remove(this->file_path(s), ec);
+        }
+
+        eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
+    }
 }
 
 void Dag::remove_sections(const SectionId &from) {
@@ -2453,9 +3064,9 @@ void Dag::tx_list_log(const ActorId &actor_id, bool ignore_reward) {
                                 tx.receiver(),
                                 tx.type(),
                                 tx.token(),
-                                tx.amount().to_string(NumeralBase::Dec),
+                                tx.amount().to_string(),
                                 tx.timestamp(),
-                                balances[{ actor_id, tx.token() }].to_string(NumeralBase::Dec)));
+                                balances[{ actor_id, tx.token() }].to_string()));
             }
         }
     }
@@ -2503,7 +3114,7 @@ void Dag::mint_analysis_log() {
         auto token = TokenId::create(key.substr(sep + 1));
         if (!actor.has_value() || !token.has_value())
             continue;
-        auto parsed = BigNumberFloat::create(val, NumeralBase::Dec);
+        auto parsed = BigNumberFloat::create(val);
         if (!parsed.has_value())
             continue;
         minted[{ actor.value(), token.value() }] = parsed.value();
@@ -2539,7 +3150,7 @@ void Dag::mint_analysis_log() {
     std::vector<MintTx>                     mint_txs;
 
     // Scan chain from min_section to current
-    static const SectionId min_section = SectionId(BigNumber("a05133", NumeralBase::Hex));
+    static const SectionId min_section = SectionId(BigNumber::from_hex("a05133"));
     eLog("[Dag] mint_analysis_log: scanning {} .. {}", min_section, current_section_);
 
     SectionId     section_id    = min_section;
@@ -2621,7 +3232,7 @@ void Dag::mint_analysis_log() {
              m.section_id,
              m.actor,
              m.token,
-             m.amount.to_string(NumeralBase::Dec));
+             m.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === SUMMARY PER ACTOR+TOKEN ===");
@@ -2640,21 +3251,17 @@ void Dag::mint_analysis_log() {
         eLog("[Dag] mint_analysis_log: actor={} token={} minted={} spent={} frozen={} {}{}",
              actor,
              token,
-             mint_amount.to_string(NumeralBase::Dec),
-             spent_amount.to_string(NumeralBase::Dec),
-             frozen.to_string(NumeralBase::Dec),
+             mint_amount.to_string(),
+             spent_amount.to_string(),
+             frozen.to_string(),
              abused ? "USED_BEFORE_FREEZE " : "",
-             overspend > BigNumberFloat(0) ? fmt::format("OVERSPEND={}", overspend.to_string(NumeralBase::Dec))
-                                           : "");
+             overspend > BigNumberFloat(0) ? fmt::format("OVERSPEND={}", overspend.to_string()) : "");
     }
 
     eLog("[Dag] mint_analysis_log: === COLLECTORS (received tainted, no direct mint) ===");
     for (const auto &[key, total] : collector_received) {
         const auto &[actor, token] = key;
-        eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}",
-             actor,
-             token,
-             total.to_string(NumeralBase::Dec));
+        eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}", actor, token, total.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === TAINTED CHAIN TRANSFERS ===");
@@ -2673,7 +3280,7 @@ void Dag::mint_analysis_log() {
              t.section_id,
              t.from,
              t.to,
-             t.amount.to_string(NumeralBase::Dec));
+             t.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: done. minted_pairs={} abused={} chain_transfers={}",
@@ -2701,7 +3308,7 @@ void Dag::cache_log() {
         eLog("ActorId: {}, TokenId: {}, Balance: {} (hex: {})",
              actor_id,
              token_id,
-             balance.to_string(NumeralBase::Dec),
+             balance.to_string(),
              balance.to_string());
     }
 
@@ -2789,7 +3396,7 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
 
         if (i % SectionId(1000) == 0) {
-            eLog("Processing section 0x{} / {} from {}", i, i.to_string(NumeralBase::Dec), current_section_);
+            eLog("Processing section {} from {}", i.to_string(), current_section_);
         }
 
         for (const auto &tx : section->transactions) {
@@ -2799,17 +3406,18 @@ BigNumberFloat Dag::sum_all_rewards() {
         }
     }
 
-    eLog("Total rewards sum: {}", total_rewards.to_string(NumeralBase::Dec));
+    eLog("Total rewards sum: {}", total_rewards.to_string());
     return total_rewards;
 }
 
 std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disable_break) {
-    int j  = 0;
-    int jj = 0;
-    // eTemp("[Dag] find_last_control: search from {}, current section: {}",
-    //       from < 0 ? current_section_ : from,
-    //       current_section_);
-    // emit checking local?
+    // `skips`: sections scanned since we last saw a control-aligned slot.
+    // `missing_aligned`: control-aligned slots with no section file at all.
+    // The `// jj++` in the missing-section branch is intentionally disabled:
+    // a missing aligned section currently resets `skips` only — preserve the existing
+    // consensus behaviour, but keep the variable as a guard-rail for future tuning.
+    int skips           = 0;
+    int missing_aligned = 0;
 
     if (disable_break) {
         auto section = this->read_section(SectionId(0));
@@ -2820,7 +3428,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         }
     }
 
-    for (SectionId i = from < 0 /*|| from > current_section_*/ ? current_section_ : from; i >= SectionId(0); i--) {
+    for (SectionId i = from < 0 ? current_section_ : from; i >= SectionId(0); i--) {
         if (i < first_saved_section_) {
             eCritical("[Dag] Try to find section < current first");
             break;
@@ -2830,23 +3438,23 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         if (!section.has_value()) {
             if (i % CONTROL_INTERVAL_MOD == 0) {
                 eLog("[Dag] No section: {}", i);
-                j = 0;
-                // jj++;
+                skips = 0;
+                // missing_aligned++;  // kept intentionally disabled, see note above
             }
             continue;
         }
 
         if (section->control.has_value()) {
             if (section->id % CONTROL_INTERVAL_MOD != 0) {
-                eCritical("[Dag] Control for section {}", section->id.to_string(NumeralBase::Dec));
+                eCritical("[Dag] Control for section {}", section->id.to_string());
                 continue;
             }
 
             return DagControl { .section_id = i, .control = section->control.value() };
         }
 
-        j += 1;
-        if (!disable_break && (j > 37 || jj > 10)) {
+        skips += 1;
+        if (!disable_break && (skips > CONTROL_SEARCH_SKIP_LIMIT || missing_aligned > CONTROL_SEARCH_MISS_LIMIT)) {
             break;
         }
     }
@@ -3036,16 +3644,12 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
     // TODO: if first < from or to
 
     if (status_ != DagStatus::Sync) {
-        eLog("[Dag] Hash interval from {} to {}, from 0x{} to 0x{}",
-             from.to_string(NumeralBase::Dec),
-             to.to_string(NumeralBase::Dec),
-             from,
-             to);
+        eLog("[Dag] Hash interval from {} to {}", from.to_string(), to.to_string());
     }
 
     // current or to?
     if (to > current_section_) {
-        eCritical("[Dag] Section to (0x{}) > current (0x{})", to, current_section_);
+        eCritical("[Dag] Section to ({}) > current ({})", to.to_string(), current_section_.to_string());
         return std::nullopt;
     }
 
@@ -3061,15 +3665,15 @@ std::optional<std::string> Dag::hash_interval(const SectionId &from, const Secti
         }
 
         if (is_empty) {
-            auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec));
+            auto hash = Utils::calculate_hash(i.to_string());
             section_hashs += hash;
-            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+            // eTemp("[Dag] section_hashs: no section +{} {}, {}", i, i.to_string(), hash);
             continue;
         }
 
-        auto hash = Utils::calculate_hash(i.to_string(NumeralBase::Dec) + section->calculate_hash());
+        auto hash = Utils::calculate_hash(i.to_string() + section->calculate_hash());
         section_hashs += hash;
-        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(NumeralBase::Dec), hash);
+        // eTemp("[Dag] section_hashs: section +{} {}, {}", i, i.to_string(), hash);
     }
 
     return Utils::calculate_hash(section_hashs);
@@ -3092,7 +3696,7 @@ void Dag::start_control(Force force, Force qt_signals) {
     if (find_result.has_value()) {
         auto section_id = find_result->section_id;
         // write last control?
-        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string(NumeralBase::Dec));
+        // eTemp("[Dag] Find control in section 0x{} / {}", section_id, section_id.to_string());
 
         if (section_id % 20 != 0) {
             eCritical("[Dag] Incorrect control section % 20 != 0: {}, remove wrong control", section_id);

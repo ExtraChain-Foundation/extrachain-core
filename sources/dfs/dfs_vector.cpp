@@ -29,12 +29,12 @@ DfsVector::DfsVector(ExtraChainNode              *node,
                      Dfs::DataSecurity            data_security,
                      const Dfs::DataSecurityData &security_data,
                      Dfs::FileType                file_type) {
-    this->node           = node;
-    this->file_path_     = Dfs::Path::file_path(file_actor_id, file_id).value();
-    this->file_type_     = file_type;
+    this->node       = node;
+    this->file_path_ = Dfs::Path::file_path(file_actor_id, file_id).value();
+    this->file_type_ = file_type;
 
-    const std::string &extension = (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE
-                                                                            : Dfs::Basic::VECTOR_FILE;
+    const std::string &extension =
+        (file_type == Dfs::FileType::Dictionary) ? Dfs::Basic::DICTIONARY_FILE : Dfs::Basic::VECTOR_FILE;
     this->vector_path_ = FsPath::create(this->file_path_.native().string() + extension).value();
 
     this->actor_         = actor;
@@ -286,6 +286,9 @@ std::expected<Dfs::CollectionTemplate, DfsVectorError> DfsVector::read_template(
 
     auto content = Utils::read_file_content(vector_path_);
     if (!content.has_value()) {
+        // A partial write can lose the companion file. Request full vector
+        // content and also use the normal state-to-queue recovery path.
+        node->dfs()->request_vector_content(file_actor_id_, file_id_);
         node->dfs()->request_file(file_actor_id_, file_id_);
         eCritical("[DfsVector] Can't find {}", vector_path_.native());
         return std::unexpected(DfsVectorError::Unknown);
@@ -391,7 +394,10 @@ bool DfsVector::handle_package(const Dfs::Packets::DfsVectorContentPackage &dfs_
 
     DbConnector db(file_path_);
     db.open();
-    db.create_table(schema.value());
+    if (!db.create_table(schema.value()).has_value()) {
+        db.close();
+        return false;
+    }
 
     for (const auto &db_row : dfs_vector_content.content) {
         db.replace("Vector", db_row);

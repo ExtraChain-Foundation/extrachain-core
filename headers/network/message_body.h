@@ -48,6 +48,15 @@ enum class MessageType {
 
     DagFileSections = 42, // File-based sync for Full mode
 
+    // Pack-level sync between dag_version >= 100 peers. Whole .pack files are
+    // transferred verbatim (1 round-trip per 10k sections instead of 10k).
+    DagPackList    = 43, // empty req -> response with vector<PackInfo>
+    DagPackRequest = 44, // req: { pack_id }
+    DagPackData    = 45, // resp: { pack_id, raw_bytes }
+
+    DagCacheSnapshotRequest = 46, // empty req -> prebuilt balance-cache snapshot
+    DagCacheSnapshotData    = 47, // resp: { section, balances } (skips local rebuild)
+
     DfsStoreFile = 50,
     // DfsSyncSearchFile   = 51, // parent for now
     // DfsSyncSearchResult = 52, // true or false

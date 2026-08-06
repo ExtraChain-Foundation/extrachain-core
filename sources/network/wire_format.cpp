@@ -17,14 +17,20 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#pragma once
+#include "network/wire_format.h"
 
-#include <string>
+namespace WireFormat {
 
-// Frozen handshake protocol-compat anchor: kept at 0.25.0 so the strict
-// handshake version check still matches pre-0.26 peers. Do NOT bump — the real
-// release version lives in extrachain_node_version below.
-static const std::string extrachain_version = "0.25.0";
+namespace {
+thread_local Mode current_mode = Mode::Canonical;
+}
 
-// Release: 0.26.0
-static const std::string extrachain_node_version = "0.26.0";
+Mode get_mode() {
+    return current_mode;
+}
+
+void set_mode(Mode m) {
+    current_mode = m;
+}
+
+} // namespace WireFormat

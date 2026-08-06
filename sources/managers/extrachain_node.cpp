@@ -33,6 +33,7 @@
 #include <sodium/core.h>
 
 #include "chain/dag.h"
+#include "chain/dag_migration.h"
 #include "extrachain_version.h"
 #include "chain/actor.h"
 #include "dfs/dfs_controller.h"
@@ -145,6 +146,24 @@ void ExtraChainNode::process() {
     ThreadPoolBoost::instance(4);
 
     prepare_folders();
+
+    // Auto-migrate legacy hex-shard DAG layout into decimal hot/ + packs/.
+    // No-op when storage is already up to date. Must run before `new Dag(...)`
+    // so the constructor reads range/sections in the new layout.
+    if (DagMigration::needs_migration()) {
+        eLog("[Node] Legacy DAG layout detected — migrating");
+        auto res = DagMigration::migrate([](const DagMigration::Progress& p) {
+            if (p.processed % 10000 == 0 || p.stage == "done") {
+                eLog("[Node] Migration {}: {}/{}", p.stage, p.processed, p.total);
+            }
+        });
+        if (!res.has_value()) {
+            eCritical("[Node] DAG migration failed: error {}", static_cast<int>(res.error()));
+        } else {
+            eSuccess("[Node] DAG migration complete");
+        }
+    }
+
     actor_index_        = new ActorIndex(this);
     account_controller_ = new AccountController(this);
     luminance_manager_  = new LuminanceManager(this);
@@ -232,6 +251,12 @@ bool ExtraChainNode::create_new_network(const std::string& login, const std::str
     auto first       = account_controller_->create_profile(consoleHash, ActorType::DAppMaster);
     actor_index_->set_network_id(first.actors().front().id());
     // m_accountController->getProfile(first.id()).rename_wallet(first.id(), "King of the World");
+
+    // Freshly created network starts at the current storage schema.
+    auto settings        = Utils::read_settings();
+    settings.dag_version = CURRENT_DAG_VERSION;
+    settings.dfs_version = CURRENT_DFS_VERSION;
+    Utils::write_settings(settings);
 
     this->create_new_dag();
 
@@ -455,7 +480,7 @@ void ExtraChainNode::backfill_token_allocations() {
 
         SectionId start_section = dag_->current_section();
         SectionId section_id    = start_section;
-        SectionId min_section   = SectionId(BigNumber("a05133", NumeralBase::Hex));
+        SectionId min_section   = SectionId(BigNumber::from_hex("a05133"));
         eLog("[Node] token_allocations backfill: starting from section {}", section_id);
 
         while (section_id >= min_section) {
@@ -489,11 +514,7 @@ void ExtraChainNode::backfill_token_allocations() {
         }
 
         for (const auto& [key, amount] : totals) {
-            dfs_->dictionary_set_value(network_id,
-                                       alloc_row->file_id,
-                                       key,
-                                       amount.to_string(NumeralBase::Dec),
-                                       network_id);
+            dfs_->dictionary_set_value(network_id, alloc_row->file_id, key, amount.to_string(), network_id);
         }
 
         eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
@@ -749,6 +770,17 @@ void ExtraChainNode::start() {
         // emit m_blockchain->transaction_cache().make_cache();
     }
 
+    // The account is ready here, so its main DFS vectors can enter the early queue.
+    if (!account_controller_->empty()) {
+        dfs_->set_download_rank(account_controller_->current_profile().main_id(), 3, -1);
+    }
+
+    // Large, non-critical vectors must not delay the account startup path.
+    dfs_->set_download_rank_by_name(network_id(), "Usernames", DfsController::RANK_OTHER_VECTORS);
+    dfs_->set_download_rank_by_name(ActorId("46710a2d823c23db9fc2ac01e0f84212a8128373"),
+                                    "RaccoonSubscription",
+                                    DfsController::RANK_OTHER_VECTORS);
+
     // Version compatibility: 0.17.0 (temp)
 #ifdef IS_APP_UI_CLIENT
     QThreadPool::globalInstance()->start([this]() {
@@ -884,7 +916,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
 
     // 3) sign transaction
     tx.sign(actor);
-    eLog("[Transaction] Send {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
+    eLog("[Transaction] Send {} to {}", tx.amount().to_string(), tx.receiver());
 
     return tx;
 }
@@ -1304,9 +1336,9 @@ std::expected<Transaction, TransactionError> ExtraChainNode::add_subscription(co
     Transaction transaction;
     transaction.set_sender(system_id);
     transaction.set_receiver(owner_id);
-    transaction.set_amount(BigNumberFloat("500", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("500"));
 #ifdef QT_DEBUG
-    transaction.set_amount(BigNumberFloat("0.112", NumeralBase::Dec));
+    transaction.set_amount(BigNumberFloat("0.112"));
 #endif
     transaction.set_token(token_id); // TODO: get token_id from json
     transaction.set_meta(std::to_string(type));
@@ -1384,7 +1416,7 @@ std::expected<std::string, ImportError> ExtraChainNode::export_profile() {
 
     const auto& current_profile = account_controller_->current_profile();
 
-    auto imported_user = ImportedUser { .version       = extrachain_version,
+    auto imported_user = ImportedUser { .version       = extrachain_node_version,
                                         .date          = Utils::current_date_ms(),
                                         .system        = current_profile.system().id(),
                                         .main          = current_profile.main()->get().id(),
@@ -1533,7 +1565,7 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction_
             eLog("Attempting to create: {} from user {}", tx, actor->get().id());
 
             tx.sign(actor.value());
-            eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(NumeralBase::Dec), tx.receiver());
+            eLog("[Transaction] Send tx {} to {}", tx.amount().to_string(), tx.receiver());
             auto createdTx = this->create_transaction(tx);
             return createdTx;
         }
@@ -1615,14 +1647,10 @@ void ExtraChainNode::timer_info_print() {
     malloc_trim(0);
 #endif
 
-    eLog("[Dag] Current: {} (0x{}) section, status: {}, last cache: {} (0x{})", //. Dfs: {:.2f} from {:.2f} KB",
-         dag_->current_section().to_string(NumeralBase::Dec),
-         dag_->current_section(),
+    eLog("[Dag] Current: {} section, status: {}, last cache: {}",
+         dag_->current_section().to_printable_string(),
          dag_->status(),
-         dag_->cache().section().to_string(NumeralBase::Dec),
-         dag_->cache().section()/*,
-         m_dfs->sizeTaken() / 1024.0,
-         m_dfs->totalDfsSize() / 1024.0*/);
+         dag_->cache().section().to_printable_string());
 
 #ifndef IS_APP_CLIENT
     #ifdef Q_OS_LINUX

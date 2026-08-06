@@ -227,10 +227,17 @@ public:
     Signature signature() const;
 
     /**
-     * @brief Calculate Blake3 hash of transaction
-     * @return Calculated hash string
+     * @brief Calculate Blake3 hash of transaction using decimal amount/section.
+     *        This is the canonical hash; new signatures are generated over this form.
      */
     std::string calculate_hash() const;
+
+    /**
+     * @brief Calculate Blake3 hash of transaction using hex amount/section.
+     *        Kept for verifying signatures created before the hex → decimal switch.
+     *        Called only as a fallback from verify().
+     */
+    std::string calculate_hash_hex() const;
 
     /**
      * @brief Update stored hash with calculated value

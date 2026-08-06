@@ -28,12 +28,14 @@
 #include <QtWebSockets/QWebSocketServer>
 #include <string>
 #include <shared_mutex>
+#include <vector>
 
 #include "managers/account_controller.h"
 #include "managers/extrachain_node.h"
 #include "network/isocket_service.h"
 #include "network/message_body.h"
 #include "network/network_status.h"
+#include "network/wire_format.h"
 #include "dfs/dfs_utils.h"
 #include "utils/exc_utils.h"
 #include "utils/safeptr.h"
@@ -281,7 +283,8 @@ private:
 #ifdef QT_DEBUG
         {
             "57.128.191.73", // test node 1
-            "57.128.191.74"  // test node 2
+            "57.128.191.74", // test node 2
+            "57.128.200.221" // test node 3
         };
 #else
         {
@@ -307,6 +310,7 @@ private:
     void connectWsService(WebSocketService* ws, bool requestListNodes = false);
 
     void send_message_connections(const std::string& serialized_message,
+                                  const std::string& serialized_message_legacy,
                                   const MessageBody& non_serialized_message,
                                   SendMode           send_mode,
                                   const std::string& receiver_identifier,
@@ -320,6 +324,11 @@ private:
 public:
     bool is_first_node(const std::string& identifier); // detect for safety
     SafePtr<std::set<SocketService*>> connections() const;
+
+    // Look up an active connection's peer_meta by its node identifier (the
+    // string carried by Responder). Returns nullopt when the peer is not
+    // currently connected — caller should treat that as "legacy".
+    std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
 
@@ -402,6 +411,7 @@ public:
     bool is_connection_exists(const std::string& identifier);
     bool is_active_connection_exists();
     int  active_connections_count();
+    std::vector<std::string> active_connection_identifiers() const;
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 
@@ -412,10 +422,20 @@ public:
                                      MessageStatus    status,
                                      const Responder& responder);
     std::string send_message_send(const std::string& data_serialized,
+                                  const std::string& data_serialized_legacy,
                                   MessageType        type,
                                   SendMode           send_mode,
                                   MessageStatus      status,
                                   const Responder&   responder);
+
+    // Backward-compat overload for Responder::send_response in message_body.cpp.
+    std::string send_message_send(const std::string& data_serialized,
+                                  MessageType        type,
+                                  SendMode           send_mode,
+                                  MessageStatus      status,
+                                  const Responder&   responder) {
+        return send_message_send(data_serialized, data_serialized, type, send_mode, status, responder);
+    }
 
     template <class T>
     std::string send_message(const T&         data,
@@ -428,8 +448,22 @@ public:
             return "";
         }
 
-        auto data_serialized = MessagePack::serialize(data);
-        auto message_id      = send_message_send(data_serialized, type, send_mode, status, responder);
+        // Serialize the payload in the current wire format (see WireFormat::wire()).
+        // Forced via an explicit scope so it never depends on whatever ambient
+        // scope a receive handler may have left active on this thread.
+        std::string data_serialized;
+        {
+            WireFormat::Scope scope(WireFormat::wire());
+            data_serialized = MessagePack::serialize(data);
+        }
+        // TEMPORARY 0.26 legacy compat: hex variant for pre-0.26 peers, picked
+        // per-peer by send_message_connections. Drop with the wire() shim.
+        std::string data_serialized_legacy;
+        {
+            WireFormat::Scope scope(WireFormat::Mode::Legacy);
+            data_serialized_legacy = MessagePack::serialize(data);
+        }
+        auto message_id = send_message_send(data_serialized, data_serialized_legacy, type, send_mode, status, responder);
         return message_id;
     }
 

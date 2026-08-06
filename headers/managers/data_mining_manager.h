@@ -75,9 +75,9 @@ public:
 
 private:
     const int            max_reward_          = 2;
-    const BigNumberFloat koef_reward_dag_dfs_ = BigNumberFloat("0.017", NumeralBase::Dec);
-    const BigNumberFloat koef_reward_dag_     = BigNumberFloat("0.0063", NumeralBase::Dec); // 0.0063 - dfs + dag
-    const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015", NumeralBase::Dec);
+    const BigNumberFloat koef_reward_dag_dfs_ = BigNumberFloat("0.017");
+    const BigNumberFloat koef_reward_dag_     = BigNumberFloat("0.0063"); // 0.0063 - dfs + dag
+    const BigNumberFloat koef_reward_         = BigNumberFloat("0.000015");
     BigNumberFloat       koef_to_koef_        = BigNumberFloat(1);
     ExtraChainNode      *node;
 

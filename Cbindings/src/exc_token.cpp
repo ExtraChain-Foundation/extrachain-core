@@ -36,7 +36,7 @@ EXC_API ExcError exc_token_create(const char* name,
         auto* ac = gs.node->account_controller();
 
         ActorId owner = ac->current_wallet().id();
-        BigNumberFloat amt(std::string(amount), NumeralBase::Dec);
+        BigNumberFloat amt{std::string(amount)};
 
         auto res =
             tm->create_token(owner, std::string(name), std::string(ticker), amt, std::string(color), "", decimals);

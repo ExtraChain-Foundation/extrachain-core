@@ -32,7 +32,7 @@
 
 class ExtraChainNode;
 class Dag;
-class Section;
+struct Section;
 class DbConnector;
 
 // Cache configuration constants
@@ -210,22 +210,10 @@ public:
     std::set<ActorId> local_clear_less_balances(const SectionId& from           = SectionId(2),
                                                 const Balances&  start_balances = Balances());
 
-    void write_index(const ActorId&   sender,
-                     const ActorId&   receiver,
-                     const SectionId& section_id,
-                     std::uint64_t    timestamp_ms);
-
-    std::vector<SectionId> read_index(const ActorId& actor);
-
-    bool has_section(const ActorId& actor, const SectionId& section_id) const;
-
-    std::uint64_t count_sections(const ActorId& actor) const;
-
-    std::vector<ActorId> get_actors_with_section(const SectionId& section_id) const;
-
-    bool has_daily_activity(const ActorId& actor, const std::string& time_period) const;
-
-    bool has_daily_activity_ms(const ActorId& actor, std::uint64_t period_ms) const;
+    // NOTE: per-actor transaction index (write_index/read_index/has_section/...) used
+    // to live here on top of its own Index.db. It was slow on first pass and is being
+    // rebuilt as ChainIndex (Phase 14) with proper batching/prepared statements and
+    // compound indexes. Nothing here now — callers should use ChainIndex.
 
     void                                       index_contract_transaction(const Transaction& transaction);
     ExtraChain::Contracts::ContractCatalogPage list_contracts(
@@ -256,14 +244,7 @@ public:
     void process_transaction(const Transaction& transaction, Balances& balances);
 
 private:
-    mutable std::unique_ptr<DbConnector> index_db_;
-    mutable std::once_flag               init_flag_;
-
-    void         ensure_index_db_initialized() const;
-    std::int64_t get_or_create_actor_pk(const std::string& actor_id) const;
-
     bool ensure_contract_catalog_schema();
     bool rebuild_contract_catalog();
-
     friend Dag;
 };
