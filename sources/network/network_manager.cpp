@@ -587,6 +587,28 @@ void NetworkManager::connect_to_node_slot(const QString    &ip,
     }
 }
 
+void NetworkManager::connect_to_endpoint(const QString &ip,
+                                         quint16        port,
+                                         bool           requestListNodes,
+                                         bool           isConstant,
+                                         bool           is_light) {
+    const QString normalized_ip = ip.simplified();
+    if (normalized_ip.isEmpty() || port == 0) {
+        eWarning("[NetworkManager] Invalid endpoint {}:{}", ip, port);
+        return;
+    }
+
+    if (active_connections_count() >= Network::maxConnections) {
+        if (!isConstant || !remove_one_connection()) {
+            eWarning("[NetworkManager] Can't connect to {}:{}: maximum connections reached", ip, port);
+            return;
+        }
+    }
+
+    eLog("[NetworkManager] Connect to endpoint {}:{}", normalized_ip, port);
+    connect_to_websocket(normalized_ip, port, requestListNodes, isConstant, is_light);
+}
+
 void NetworkManager::connect_to_websocket(const QString &ip,
                                           quint16        port,
                                           bool           requestListNodes,
@@ -1181,7 +1203,7 @@ void NetworkManager::message_received(const std::string &message,
 
         if (!should_ignore
             && (messages_->contains(message_id)
-                || message_body.init_sender_id == node->account_controller()->system_actor().id())) {
+                || message_body.init_sender_identifier == node->node_identifier())) {
             // eWarning(
             //     "Network Message ignored: already achieved such Request with messageId: {}, from: {}, type: {}",
             //     messageId,
@@ -1418,8 +1440,8 @@ void NetworkManager::message_received(const std::string &message,
             }
 
             auto save_result = node->actor_index()->save_actor(actor_result.value());
-            if (!save_result.has_value()) {
-                eWarning("[NetworkManager] Can't save actor from network response");
+            if (!save_result.has_value() && save_result.error() != ActorSaveError::AlreadyExists) {
+                eWarning("[NetworkManager] Can't save actor from network response: {}", save_result.error());
             }
         }
 

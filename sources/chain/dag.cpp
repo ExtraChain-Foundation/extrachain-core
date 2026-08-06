@@ -1527,19 +1527,8 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    // temp
-#ifndef IS_APP_CLIENT
-    if (status_ == DagStatus::Ready) {
-        return;
-    }
-#endif
-
-    if (status_ != DagStatus::Ready || status_ == DagStatus::Maybe) {
+    if (status_ != DagStatus::Ready) {
         start_sync();
-        // QTimer::singleShot(3000, [this]() {
-        //     this->start_sync();
-        // });
-        // eLog("BC 12 start_check return");
         return;
     }
 
@@ -1571,6 +1560,18 @@ void Dag::network_status_sync_request(const Responder &responder) {
     SectionId section_id   = section.has_value() ? section->id : SectionId(-1);
     auto      hashs        = section.has_value() ? section->hashs() : std::set<std::string> {};
     auto      zero_section = this->read_section(SectionId(0));
+
+    if (!section.has_value()) {
+        responder.send_response(DagLastInfo { .last_section_id         = SectionId(-1),
+                                              .last_control_section_id = SectionId(-1),
+                                              .last_control_hash       = {},
+                                              .zero_date               = 0,
+                                              .status                  = status_ },
+                                MessageType::DagSyncLastInfo,
+                                SendMode::Focused,
+                                MessageStatus::Response);
+        return;
+    }
 
     auto last_control = this->find_last_control();
     if (!last_control.has_value()) {
