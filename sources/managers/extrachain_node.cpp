@@ -57,6 +57,7 @@
 #include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/dfs_contract_storage.h"
+#include "contracts/toolchain_registry.h"
 #include "utils/exc_utils.h"
 
 std::atomic<bool> node_enabled { true };
@@ -84,7 +85,10 @@ namespace {
     }
 } // namespace
 
-ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
+ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject*      parent,
+                                             bool          is_client_application,
+                                             bool          is_custom_app,
+                                             std::uint16_t ws_port)
     : QObject(parent)
     , node(new ExtraChainNode(is_client_application, is_custom_app, ws_port)) {
 }
@@ -149,6 +153,7 @@ void ExtraChainNode::process() {
     dfs_                = new DfsController(this);
     contract_manager_   = std::make_unique<ExtraChain::Contracts::ContractManager>(
         std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_, dag_));
+    toolchain_registry_  = std::make_unique<ExtraChain::Contracts::ToolchainRegistry>(this);
     auto retry_contracts = [this](ActorId, Dfs::DirRow row) {
         if (row.folder == Dfs::Basic::TEMPLATE_CONTRACTS) {
             QTimer::singleShot(0, this, [this]() {
@@ -168,11 +173,11 @@ void ExtraChainNode::process() {
             dag_->retry_contract_transactions();
         });
     });
-    dmm_                = new DataMiningManager(this);
-    token_manager_      = new TokenManager(this);
-    chat_manager_       = new ChatManager(this);
-    thoth_manager_      = new ThothManager(this);
-    janus_manager_      = new JanusManager(this);
+    dmm_           = new DataMiningManager(this);
+    token_manager_ = new TokenManager(this);
+    chat_manager_  = new ChatManager(this);
+    thoth_manager_ = new ThothManager(this);
+    janus_manager_ = new JanusManager(this);
 
     // auto key             = actorIndex()->network_id().toQByteArray();
     // auto address         = "12.12.12.12";
@@ -410,8 +415,11 @@ bool ExtraChainNode::create_token_allocations() {
         return false;
     }
 
-    auto search_result = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-        dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+    auto search_result =
+        Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                          network_id,
+                                                                          Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                          "token_allocations");
     if (search_result.has_value()) {
         eLog("[Node] token_allocations dictionary already exists");
         return true;
@@ -432,14 +440,17 @@ void ExtraChainNode::backfill_token_allocations() {
         QThread::sleep(10);
 
         auto network_id = actor_index()->network_id();
-        auto alloc_row  = Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(
-            dfs_->get_db_instance(), network_id, Dfs::Basic::TEMPLATE_DICTIONARY, "token_allocations");
+        auto alloc_row =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(dfs_->get_db_instance(),
+                                                                              network_id,
+                                                                              Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                              "token_allocations");
         if (!alloc_row.has_value()) {
             eWarning("[Node] token_allocations backfill: dictionary not found");
             return;
         }
 
-        constexpr std::uint64_t       cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
+        constexpr std::uint64_t               cutoff_ms = 1743458400000ULL; // 2026-04-01 00:00:00 UTC
         std::map<std::string, BigNumberFloat> totals;
 
         SectionId start_section = dag_->current_section();
@@ -457,7 +468,10 @@ void ExtraChainNode::backfill_token_allocations() {
             }
 
             if (!section->transactions.empty()) {
-                eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}", section_id, section->middle(), cutoff_ms);
+                eLog("[Node] token_allocations backfill: section {} middle={} cutoff={}",
+                     section_id,
+                     section->middle(),
+                     cutoff_ms);
                 if (section->middle() < cutoff_ms) {
                     eLog("[Node] token_allocations backfill: reached cutoff at section {}", section_id);
                     break;
@@ -475,8 +489,11 @@ void ExtraChainNode::backfill_token_allocations() {
         }
 
         for (const auto& [key, amount] : totals) {
-            dfs_->dictionary_set_value(network_id, alloc_row->file_id, key,
-                                       amount.to_string(NumeralBase::Dec), network_id);
+            dfs_->dictionary_set_value(network_id,
+                                       alloc_row->file_id,
+                                       key,
+                                       amount.to_string(NumeralBase::Dec),
+                                       network_id);
         }
 
         eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
@@ -880,6 +897,10 @@ ExtraChain::Contracts::ContractManager* ExtraChainNode::contract_manager() const
     return contract_manager_.get();
 }
 
+ExtraChain::Contracts::ToolchainRegistry* ExtraChainNode::toolchain_registry() const {
+    return toolchain_registry_.get();
+}
+
 void ExtraChainNode::stage_contract_change(std::string                                   transaction_hash,
                                            ExtraChain::Contracts::PreparedContractChange change) {
     std::scoped_lock lock(pending_contracts_mutex_);
@@ -1252,6 +1273,11 @@ std::expected<ExtraChain::Contracts::ContractReceipt, ExtraChain::Contracts::Con
     return contract_manager_->query(contract_id.to_string(), signer.id().to_string(), method, arguments, block);
 }
 
+ExtraChain::Contracts::ContractCatalogPage ExtraChainNode::list_contracts(
+    const ExtraChain::Contracts::ContractCatalogFilter& filter) {
+    return dag_ == nullptr ? ExtraChain::Contracts::ContractCatalogPage {} : dag_->cache().list_contracts(filter);
+}
+
 ChatManager* ExtraChainNode::chat_manager() {
     return chat_manager_;
 }
@@ -1265,10 +1291,10 @@ JanusManager* ExtraChainNode::janus_manager() {
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::add_subscription(const ActorId&     owner_id,
-                                      const std::string& file_id,
-                                      int                type,
-                                      bool               auto_renew,
-                                      const TokenId&     token_id) {
+                                                                              const std::string& file_id,
+                                                                              int                type,
+                                                                              bool               auto_renew,
+                                                                              const TokenId&     token_id) {
     if (subscription_row_.has_value()) {
         return std::unexpected(TransactionError::SubscriptionRowFull);
     }
@@ -1599,43 +1625,44 @@ void ExtraChainNode::timer_info_print() {
          m_dfs->totalDfsSize() / 1024.0*/);
 
 #ifndef IS_APP_CLIENT
-#ifdef Q_OS_LINUX
+    #ifdef Q_OS_LINUX
     {
         std::ifstream statm("/proc/self/statm");
         if (statm.is_open()) {
             long pages = 0;
             statm >> pages; // total
             statm >> pages; // RSS
-            long rss_mb = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
-            long queue_total = 0;
+            long rss_mb               = pages * sysconf(_SC_PAGESIZE) / (1024 * 1024);
+            long queue_total          = 0;
             long bytes_to_write_total = 0;
             {
                 auto conns = *network_manager_->connections();
-                for (const auto &s : *conns) {
+                for (const auto& s : *conns) {
                     queue_total += s->queue_size();
                     bytes_to_write_total += s->pending_bytes();
                 }
             }
 
-            eLog("[Mem] RSS: {} MB | msg_hash: {} messages: {} forwarded: {} "
-                 "snd_tx: {} fail_tx: {} last_tx: {} cached_tx: {} "
-                 "conn: {}/{} queue: {} pending_kb: {} dfs_dl: {}",
-                 rss_mb,
-                 network_manager_->msg_hash_list_size(),
-                 network_manager_->messages_size(),
-                 network_manager_->forwarded_messages_size(),
-                 dag_->sended_transactions_size(),
-                 dag_->failed_transactions_size(),
-                 dag_->last_txs_size(),
-                 dag_->cached_txs_size(),
-                 network_manager_->active_connections_count(),
-                 network_manager_->connections_size(),
-                 queue_total,
-                 bytes_to_write_total / 1024,
-                 dfs_->load_manager_downloads_size());
+            eLog(
+                "[Mem] RSS: {} MB | msg_hash: {} messages: {} forwarded: {} "
+                "snd_tx: {} fail_tx: {} last_tx: {} cached_tx: {} "
+                "conn: {}/{} queue: {} pending_kb: {} dfs_dl: {}",
+                rss_mb,
+                network_manager_->msg_hash_list_size(),
+                network_manager_->messages_size(),
+                network_manager_->forwarded_messages_size(),
+                dag_->sended_transactions_size(),
+                dag_->failed_transactions_size(),
+                dag_->last_txs_size(),
+                dag_->cached_txs_size(),
+                network_manager_->active_connections_count(),
+                network_manager_->connections_size(),
+                queue_total,
+                bytes_to_write_total / 1024,
+                dfs_->load_manager_downloads_size());
         }
     }
-#endif
+    #endif
 #endif
 
     if (dag_->current_section_ >= 0 && dag_->status() == DagStatus::Ready

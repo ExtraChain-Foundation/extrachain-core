@@ -97,6 +97,7 @@ namespace Dfs {
         static const std::string TEMPLATE_DICTIONARY          = ":Dictionary";
         static const std::string TEMPLATE_VECTOR              = ":Vector";
         static const std::string TEMPLATE_CONTRACTS           = ":Contracts";
+        static const std::string TEMPLATE_CONTRACT_TOOLCHAIN  = ":ContractToolchain";
         static const std::string TEMPLATE_CHAT                = ":Chat";
         static const std::string TEMPLATE_JANUS               = ":Janus";
     } // namespace Basic
@@ -447,7 +448,7 @@ namespace Dfs {
 
             ReferenceData(std::string _key, std::string _access)
                 : key(_key)
-                , access(_access) { };
+                , access(_access) {};
 
             std::string toString() const {
                 return std::string(fmt::format("[\"key\":\"{}\",\"access\":\"{}\"]", key, access));
@@ -703,11 +704,10 @@ namespace Dfs {
                                                              const ActorId&                     owner_id,
                                                              const std::string&                 file_id);
 
-                std::expected<bool, Dfs::DfsError> validate_folder_hierarchy(
-                    const std::shared_ptr<DbConnector> db,
-                    const ActorId&                     owner_id,
-                    const std::string&                 folder_file_id,
-                    const std::string&                 new_parent_id);
+                std::expected<bool, Dfs::DfsError> validate_folder_hierarchy(const std::shared_ptr<DbConnector> db,
+                                                                             const ActorId&     owner_id,
+                                                                             const std::string& folder_file_id,
+                                                                             const std::string& new_parent_id);
             } // namespace ActorSpace
         } // namespace DirsFile
 

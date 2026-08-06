@@ -27,6 +27,7 @@
 
 #include "utils/bignumber.h"
 #include "chain/transaction.h"
+#include "contracts/contract_types.h"
 #include "utils/exc_utils.h"
 
 class ExtraChainNode;
@@ -226,13 +227,19 @@ public:
 
     bool has_daily_activity_ms(const ActorId& actor, std::uint64_t period_ms) const;
 
+    void                                       index_contract_transaction(const Transaction& transaction);
+    ExtraChain::Contracts::ContractCatalogPage list_contracts(
+        const ExtraChain::Contracts::ContractCatalogFilter& filter = {});
+
 private:
-    ExtraChainNode*              node;                            // Node reference
-    Dag*                         dag;                             // Dag reference
-    SectionId                    cached_section_ = SectionId(-1); // Current cached section id (genesis point)
-    std::unique_ptr<DbConnector> cache_db_;                       // Database connection
-    bool                         db_initialized_ = false;         // Whether DB is initialized
+    ExtraChainNode*              node;                              // Node reference
+    Dag*                         dag;                               // Dag reference
+    SectionId                    cached_section_ = SectionId(-1);   // Current cached section id (genesis point)
+    std::unique_ptr<DbConnector> cache_db_;                         // Database connection
+    bool                         db_initialized_           = false; // Whether DB is initialized
+    bool                         contract_catalog_scanned_ = false;
     std::mutex                   mutex_;
+    std::mutex                   contract_catalog_mutex_;
 
 public:
     /**
@@ -254,6 +261,9 @@ private:
 
     void         ensure_index_db_initialized() const;
     std::int64_t get_or_create_actor_pk(const std::string& actor_id) const;
+
+    bool ensure_contract_catalog_schema();
+    bool rebuild_contract_catalog();
 
     friend Dag;
 };

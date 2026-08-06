@@ -12,7 +12,10 @@
 
 #include <limits>
 
+#include <boost/json.hpp>
 #include <msgpack.hpp>
+
+#include <QByteArray>
 
 namespace ExtraChain::Contracts::Codec {
     namespace {
@@ -34,6 +37,100 @@ namespace ExtraChain::Contracts::Codec {
             return { begin, begin + object.via.bin.size };
         }
 
+        void pack_json(msgpack::packer<msgpack::sbuffer> &packer, const boost::json::value &value) {
+            if (value.is_null()) {
+                packer.pack_nil();
+            } else if (value.is_bool()) {
+                packer.pack(value.as_bool());
+            } else if (value.is_int64()) {
+                packer.pack(value.as_int64());
+            } else if (value.is_uint64()) {
+                packer.pack(value.as_uint64());
+            } else if (value.is_double()) {
+                packer.pack(value.as_double());
+            } else if (value.is_string()) {
+                packer.pack(std::string_view(value.as_string().data(), value.as_string().size()));
+            } else if (value.is_array()) {
+                const auto &array = value.as_array();
+                packer.pack_array(static_cast<std::uint32_t>(array.size()));
+                for (const auto &item : array) {
+                    pack_json(packer, item);
+                }
+            } else {
+                const auto &object       = value.as_object();
+                const auto  binary_value = object.if_contains("$binary");
+                if (object.size() == 1 && binary_value != nullptr && binary_value->is_string()) {
+                    const auto decoded =
+                        QByteArray::fromBase64Encoding(QByteArray(binary_value->as_string().data(),
+                                                                  static_cast<qsizetype>(
+                                                                      binary_value->as_string().size())),
+                                                       QByteArray::Base64UrlEncoding
+                                                           | QByteArray::AbortOnBase64DecodingErrors);
+                    if (!decoded) {
+                        throw std::invalid_argument("Invalid $binary value");
+                    }
+                    const auto &bytes = decoded.decoded;
+                    pack_binary(packer,
+                                std::span(reinterpret_cast<const std::uint8_t *>(bytes.constData()),
+                                          static_cast<std::size_t>(bytes.size())));
+                    return;
+                }
+                packer.pack_map(static_cast<std::uint32_t>(object.size()));
+                for (const auto &item : object) {
+                    packer.pack(std::string_view(item.key().data(), item.key().size()));
+                    pack_json(packer, item.value());
+                }
+            }
+        }
+
+        boost::json::value unpack_json(const msgpack::object &value) {
+            switch (value.type) {
+            case msgpack::type::NIL:
+                return nullptr;
+            case msgpack::type::BOOLEAN:
+                return value.via.boolean;
+            case msgpack::type::POSITIVE_INTEGER:
+                return value.via.u64;
+            case msgpack::type::NEGATIVE_INTEGER:
+                return value.via.i64;
+            case msgpack::type::FLOAT32:
+            case msgpack::type::FLOAT64:
+                return value.via.f64;
+            case msgpack::type::STR:
+                return boost::json::string(value.via.str.ptr, value.via.str.size);
+            case msgpack::type::BIN: {
+                const auto          bytes = binary(value);
+                boost::json::object object;
+                object["$binary"] =
+                    QByteArray(reinterpret_cast<const char *>(bytes.data()), static_cast<qsizetype>(bytes.size()))
+                        .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)
+                        .toStdString();
+                return object;
+            }
+            case msgpack::type::ARRAY: {
+                boost::json::array array;
+                array.reserve(value.via.array.size);
+                for (std::uint32_t index = 0; index < value.via.array.size; ++index) {
+                    array.push_back(unpack_json(value.via.array.ptr[index]));
+                }
+                return array;
+            }
+            case msgpack::type::MAP: {
+                boost::json::object object;
+                for (std::uint32_t index = 0; index < value.via.map.size; ++index) {
+                    const auto &item = value.via.map.ptr[index];
+                    if (item.key.type != msgpack::type::STR) {
+                        throw msgpack::type_error();
+                    }
+                    object[std::string(item.key.via.str.ptr, item.key.via.str.size)] = unpack_json(item.val);
+                }
+                return object;
+            }
+            default:
+                throw msgpack::type_error();
+            }
+        }
+
     } // namespace
 
     std::vector<std::uint8_t> encode_request(std::string_view              sender,
@@ -49,7 +146,7 @@ namespace ExtraChain::Contracts::Codec {
         pack_binary(packer, arguments);
         pack_binary(packer, state);
         packer.pack(block);
-        packer.pack(std::uint32_t { 1 });
+        packer.pack(ContractAbiVersion);
         auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return { begin, begin + buffer.size() };
     }
@@ -59,6 +156,38 @@ namespace ExtraChain::Contracts::Codec {
         msgpack::pack(buffer, value);
         auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return { begin, begin + buffer.size() };
+    }
+
+    std::expected<std::vector<std::uint8_t>, ContractFailure> encode_json(std::string_view json) {
+        if (json.size() > ExecutionLimits {}.input_bytes) {
+            return std::unexpected(
+                ContractFailure { ContractError::InvalidArguments, "JSON arguments are too large" });
+        }
+        try {
+            const auto       parsed = boost::json::parse(json);
+            msgpack::sbuffer buffer;
+            msgpack::packer  packer(buffer);
+            pack_json(packer, parsed);
+            const auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
+            return std::vector<std::uint8_t>(begin, begin + buffer.size());
+        } catch (const std::exception &error) {
+            return std::unexpected(ContractFailure { ContractError::InvalidArguments, error.what() });
+        }
+    }
+
+    std::expected<std::string, ContractFailure> decode_json(std::span<const std::uint8_t> value) {
+        try {
+            std::size_t offset = 0;
+            const auto  handle =
+                msgpack::unpack(reinterpret_cast<const char *>(value.data()), value.size(), offset);
+            if (offset != value.size()) {
+                return std::unexpected(
+                    ContractFailure { ContractError::InvalidResponse, "MessagePack value has trailing data" });
+            }
+            return boost::json::serialize(unpack_json(handle.get()));
+        } catch (const std::exception &error) {
+            return std::unexpected(ContractFailure { ContractError::InvalidResponse, error.what() });
+        }
     }
 
     std::expected<ContractOutput, ContractFailure> decode_response(std::span<const std::uint8_t> response) {

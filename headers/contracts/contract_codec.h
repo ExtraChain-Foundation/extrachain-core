@@ -12,6 +12,7 @@
 
 #include <expected>
 #include <span>
+#include <string>
 
 #include "contracts/contract_types.h"
 
@@ -24,6 +25,10 @@ namespace ExtraChain::Contracts::Codec {
                                                            std::uint64_t                 block);
 
     [[nodiscard]] std::vector<std::uint8_t> encode_string(std::string_view value);
+
+    [[nodiscard]] std::expected<std::vector<std::uint8_t>, ContractFailure> encode_json(std::string_view json);
+
+    [[nodiscard]] std::expected<std::string, ContractFailure> decode_json(std::span<const std::uint8_t> value);
 
     [[nodiscard]] std::expected<ContractOutput, ContractFailure> decode_response(
         std::span<const std::uint8_t> response);

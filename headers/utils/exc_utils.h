@@ -281,6 +281,25 @@ CREATE TABLE IF NOT EXISTS balance_cache (
 );
 )";
 
+        constexpr char ContractCatalogCreate[] = R"(
+CREATE TABLE IF NOT EXISTS contract_catalog (
+    contract_id TEXT PRIMARY KEY NOT NULL,
+    owner_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    revision INTEGER NOT NULL,
+    module_hash TEXT NOT NULL,
+    state_hash TEXT NOT NULL,
+    transaction_hash TEXT NOT NULL,
+    section INTEGER NOT NULL,
+    deploy_transaction_hash TEXT NOT NULL,
+    deploy_section INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS contract_catalog_owner_idx ON contract_catalog(owner_id);
+CREATE INDEX IF NOT EXISTS contract_catalog_kind_idx ON contract_catalog(kind);
+CREATE INDEX IF NOT EXISTS contract_catalog_section_idx ON contract_catalog(section DESC, contract_id);
+)";
+
         static const std::string LUMINANCE_TABLE = "luminance";
         static const std::string LUMINANCE_TABLE_CREATE = "CREATE TABLE IF NOT EXISTS " + LUMINANCE_TABLE
                                                           + " ("

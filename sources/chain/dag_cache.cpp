@@ -19,6 +19,7 @@
 
 #include "chain/dag_cache.h"
 #include "chain/dag.h"
+#include "contracts/contract_transaction.h"
 #include "managers/extrachain_node.h"
 #include "network/network_manager.h"
 #include "utils/db_connector.h"
@@ -27,7 +28,6 @@
 #include <QFile>
 
 #include "utils/thread_pool_boost.h"
-#include "contracts/contract_transaction.h"
 
 #include <msgpack.hpp>
 
@@ -756,8 +756,8 @@ bool DagCache::init_db() {
     }
 
     if (cache_db_ && cache_db_->is_open()) {
-        db_initialized_ = true;
-        return true;
+        db_initialized_ = ensure_contract_catalog_schema();
+        return db_initialized_;
     }
 
     std::unique_lock<std::mutex> lock(mutex_);
@@ -777,7 +777,7 @@ bool DagCache::init_db() {
     }
 
     // Create table if it doesn't exist
-    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate);
+    bool success = cache_db_->query(Config::DataStorage::DagCacheCreate) && ensure_contract_catalog_schema();
 
     if (!success) {
         eLog("[DagCache] Failed to create cache table");
@@ -806,13 +806,148 @@ bool DagCache::init_db() {
 }
 
 void DagCache::reset_db() {
+    std::unique_lock<std::mutex> catalog_lock(contract_catalog_mutex_);
     std::unique_lock<std::mutex> lock(mutex_);
-    db_initialized_ = false;
-    if (db_initialized_) {
+    const bool                   was_initialized = db_initialized_;
+    db_initialized_                              = false;
+    if (was_initialized && cache_db_) {
         cache_db_->close();
         QFile::remove(ChainConst::BALANCE_CACHE.c_str());
     }
     cache_db_.reset();
+    contract_catalog_scanned_ = false;
+}
+
+bool DagCache::ensure_contract_catalog_schema() {
+    return cache_db_ != nullptr && cache_db_->query(Config::DataStorage::ContractCatalogCreate);
+}
+
+void DagCache::index_contract_transaction(const Transaction& transaction) {
+    if (!is_contract_transaction(transaction.type()) || !transaction.meta().has_value() || !init_db()) {
+        return;
+    }
+
+    const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+    const auto section  = transaction.section().to_int();
+    if (!metadata.has_value() || !section.has_value() || metadata->schema != 1 || metadata->kind.empty()
+        || metadata->version == 0 || metadata->revision == 0) {
+        return;
+    }
+
+    const auto contract_id = transaction.receiver().to_string();
+    auto       existing    = cache_db_->select("SELECT * FROM contract_catalog WHERE contract_id = ?",
+                                      "contract_catalog",
+                                               { { "contract_id", contract_id } });
+
+    ExtraChain::Contracts::ContractSummary summary;
+    if (transaction.type() == TransactionType::ContractDeploy) {
+        if (!existing.empty()) {
+            return;
+        }
+        summary.contract_id             = contract_id;
+        summary.owner_id                = transaction.sender().to_string();
+        summary.deploy_transaction_hash = transaction.hash();
+        summary.deploy_section          = static_cast<std::uint64_t>(*section);
+    } else {
+        if (existing.empty()) {
+            return;
+        }
+        const auto parsed = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(existing.front());
+        if (!parsed.has_value() || parsed->owner_id.empty() || metadata->revision <= parsed->revision) {
+            return;
+        }
+        summary = *parsed;
+        if (transaction.type() == TransactionType::ContractUpgrade
+            && transaction.sender().to_string() != summary.owner_id) {
+            return;
+        }
+    }
+
+    summary.kind             = metadata->kind;
+    summary.version          = metadata->version;
+    summary.revision         = metadata->revision;
+    summary.module_hash      = metadata->module_hash;
+    summary.state_hash       = metadata->state_hash;
+    summary.transaction_hash = transaction.hash();
+    summary.section          = static_cast<std::uint64_t>(*section);
+    cache_db_->replace("contract_catalog", Utils::to_dbrow(summary));
+}
+
+ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(
+    const ExtraChain::Contracts::ContractCatalogFilter& filter) {
+    ExtraChain::Contracts::ContractCatalogPage page;
+    if (!init_db()) {
+        return page;
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(contract_catalog_mutex_);
+        if (!contract_catalog_scanned_) {
+            if (cache_db_->count("contract_catalog") == 0) {
+                rebuild_contract_catalog();
+            }
+            contract_catalog_scanned_ = true;
+        }
+    }
+
+    auto                                                rows = cache_db_->select_all("contract_catalog");
+    std::vector<ExtraChain::Contracts::ContractSummary> matches;
+    matches.reserve(rows.size());
+    for (const auto& row : rows) {
+        auto summary = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(row);
+        if (!summary.has_value()) {
+            continue;
+        }
+        if (filter.owner_id.has_value() && summary->owner_id != *filter.owner_id) {
+            continue;
+        }
+        if (filter.kind.has_value() && summary->kind != *filter.kind) {
+            continue;
+        }
+        matches.push_back(std::move(*summary));
+    }
+    std::ranges::sort(matches, [](const auto& left, const auto& right) {
+        return std::tie(right.section, right.transaction_hash) < std::tie(left.section, left.transaction_hash);
+    });
+
+    std::size_t offset = 0;
+    if (filter.cursor.has_value()) {
+        const auto iterator =
+            std::ranges::find(matches, *filter.cursor, &ExtraChain::Contracts::ContractSummary::transaction_hash);
+        if (iterator != matches.end()) {
+            offset = static_cast<std::size_t>(std::distance(matches.begin(), iterator)) + 1;
+        }
+    }
+    const auto limit = std::clamp<std::size_t>(filter.limit, 1, 100);
+    const auto end   = std::min(matches.size(), offset + limit);
+    page.items.insert(page.items.end(),
+                      matches.begin() + static_cast<std::ptrdiff_t>(offset),
+                      matches.begin() + static_cast<std::ptrdiff_t>(end));
+    if (end < matches.size() && !page.items.empty()) {
+        page.next_cursor = page.items.back().transaction_hash;
+    }
+    return page;
+}
+
+bool DagCache::rebuild_contract_catalog() {
+    if (!init_db() || dag == nullptr || !cache_db_->query("DELETE FROM contract_catalog")) {
+        return false;
+    }
+    const auto first = dag->first_saved_section();
+    const auto last  = dag->current_section();
+    if (first < SectionId(0) || last < first) {
+        return true;
+    }
+    for (SectionId section_id = first; section_id <= last; ++section_id) {
+        const auto section = dag->read_section(section_id);
+        if (!section.has_value()) {
+            continue;
+        }
+        for (const auto& transaction : section->transactions) {
+            index_contract_transaction(transaction);
+        }
+    }
+    return true;
 }
 
 void reverse_transaction(const Transaction& tx, Balances& balances) {
