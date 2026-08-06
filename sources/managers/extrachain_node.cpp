@@ -26,6 +26,9 @@
 #endif
 
 #include <QJsonObject>
+#include <QByteArrayView>
+#include <QCryptographicHash>
+#include <QFile>
 #include <QThread>
 #include <sodium/core.h>
 
@@ -50,8 +53,36 @@
 #include "network/network_manager.h"
 #include "chat/chat_manager.h"
 #include "utils/thread_pool_boost.h"
+#include "contracts/contract_manager.h"
+#include "contracts/contract_codec.h"
+#include "contracts/contract_transaction.h"
+#include "contracts/dfs_contract_storage.h"
+#include "utils/exc_utils.h"
 
 std::atomic<bool> node_enabled { true };
+
+namespace {
+    std::string contract_content_hash(std::span<const std::uint8_t> value) {
+        QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
+        hasher.addData(
+            QByteArrayView(reinterpret_cast<const char*>(value.data()), static_cast<qsizetype>(value.size())));
+        return hasher.result().toHex().toStdString();
+    }
+
+    std::string contract_hash_prefix(std::string_view value) {
+        return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
+    }
+
+    std::optional<std::string> standard_fungible_module_hash() {
+        QFile module_file(":/contracts/fungible_token.wasm");
+        if (!module_file.open(QIODevice::ReadOnly)) {
+            return std::nullopt;
+        }
+        auto module = module_file.readAll();
+        auto begin  = reinterpret_cast<const std::uint8_t*>(module.constData());
+        return contract_content_hash(std::span(begin, static_cast<std::size_t>(module.size())));
+    }
+} // namespace
 
 ExtraChainNodeWrapper::ExtraChainNodeWrapper(QObject* parent, bool is_client_application, bool is_custom_app, std::uint16_t ws_port)
     : QObject(parent)
@@ -116,6 +147,27 @@ void ExtraChainNode::process() {
     network_manager_    = new NetworkManager(this, ws_port);
     dag_                = new Dag(this);
     dfs_                = new DfsController(this);
+    contract_manager_   = std::make_unique<ExtraChain::Contracts::ContractManager>(
+        std::make_unique<ExtraChain::Contracts::DfsContractStorage>(dfs_, dag_));
+    auto retry_contracts = [this](ActorId, Dfs::DirRow row) {
+        if (row.folder == Dfs::Basic::TEMPLATE_CONTRACTS) {
+            QTimer::singleShot(0, this, [this]() {
+                dag_->retry_contract_transactions();
+            });
+        }
+    };
+    connect(dfs_, &DfsController::added, this, retry_contracts);
+    connect(dfs_, &DfsController::downloaded, this, retry_contracts);
+    connect(actor_index_, &ActorIndex::newActorSaved, this, [this](ActorId) {
+        QTimer::singleShot(0, this, [this]() {
+            dag_->retry_contract_transactions();
+        });
+    });
+    connect(actor_index_, &ActorIndex::actorSaved, this, [this](ActorId) {
+        QTimer::singleShot(0, this, [this]() {
+            dag_->retry_contract_transactions();
+        });
+    });
     dmm_                = new DataMiningManager(this);
     token_manager_      = new TokenManager(this);
     chat_manager_       = new ChatManager(this);
@@ -822,6 +874,382 @@ std::expected<Transaction, TransactionError> ExtraChainNode::create_transaction(
 
 TokenManager* ExtraChainNode::token_manager() const {
     return token_manager_;
+}
+
+ExtraChain::Contracts::ContractManager* ExtraChainNode::contract_manager() const {
+    return contract_manager_.get();
+}
+
+void ExtraChainNode::stage_contract_change(std::string                                   transaction_hash,
+                                           ExtraChain::Contracts::PreparedContractChange change) {
+    std::scoped_lock lock(pending_contracts_mutex_);
+    pending_contracts_.insert_or_assign(std::move(transaction_hash), std::move(change));
+}
+
+std::expected<Transaction, TransactionError> ExtraChainNode::send_contract_transaction(
+    Transaction                                   transaction,
+    const Actor<KeyPrivate>&                      signer,
+    ExtraChain::Contracts::PreparedContractChange change) {
+    auto prepared = dag_->prepare_transaction(transaction, signer);
+    if (!prepared.has_value()) {
+        return std::unexpected(prepared.error());
+    }
+    stage_contract_change(prepared->hash(), std::move(change));
+    dag_->add_transaction_sended(*prepared);
+    network_manager_->send_message(*prepared, MessageType::DagTransaction, SendMode::Broadcast);
+    return *prepared;
+}
+
+void ExtraChainNode::finalize_contract_change(std::string_view transaction_hash, bool approved) {
+    std::optional<ExtraChain::Contracts::PreparedContractChange> change;
+    {
+        std::scoped_lock lock(pending_contracts_mutex_);
+        auto             iterator = pending_contracts_.find(std::string(transaction_hash));
+        if (iterator == pending_contracts_.end()) {
+            return;
+        }
+        if (approved) {
+            change = std::move(iterator->second);
+        }
+        pending_contracts_.erase(iterator);
+    }
+    if (!change.has_value()) {
+        return;
+    }
+    auto committed = contract_manager_->commit(std::move(*change), std::string(transaction_hash));
+    if (!committed.has_value()) {
+        eCritical("[Contract] Cannot commit approved transaction {}: {}",
+                  transaction_hash,
+                  committed.error().detail);
+    }
+}
+
+TransactionProveError ExtraChainNode::validate_contract_transaction(const Transaction& transaction) const {
+    if (!transaction.meta().has_value()) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
+    if (!metadata.has_value() || metadata->schema != 1 || metadata->kind.empty() || metadata->kind.size() > 64
+        || metadata->method.empty() || metadata->method.size() > 64 || metadata->module_hash.size() != 64
+        || metadata->state_hash.size() != 64 || metadata->version == 0 || metadata->revision == 0) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+
+    auto arguments = Utils::from_base64<std::vector<std::uint8_t>>(metadata->arguments_base64);
+    if (!arguments.has_value() || arguments->size() > 512 * 1024) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+
+    const auto contract_id   = transaction.receiver();
+    auto       read_artifact = [this, &contract_id](const std::string& name, const ActorId& expected_author)
+        -> std::expected<std::vector<std::uint8_t>, TransactionProveError> {
+        auto row = dfs_->read_file_status(contract_id, name, Dfs::Basic::TEMPLATE_CONTRACTS);
+        if (!row.has_value() || row->state != Dfs::FileState::Ready) {
+            return std::unexpected(TransactionProveError::ContractDependencyMissing);
+        }
+        if (row->actor_id != expected_author) {
+            return std::unexpected(TransactionProveError::InvalidContractPayload);
+        }
+        auto content = Dfs::Tables::DirsFile::ActorSpace::get_file_content(contract_id, row->file_id);
+        if (!content.has_value()) {
+            dfs_->request_file(contract_id, row->file_id);
+            return std::unexpected(TransactionProveError::ContractDependencyMissing);
+        }
+        return *content;
+    };
+
+    auto verify_output = [&](const ExtraChain::Contracts::ContractOutput& output) -> TransactionProveError {
+        if (contract_content_hash(output.state) != metadata->state_hash) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        auto state_name = fmt::format("contract-state-v{:06}-r{:012}-{}.msgpack",
+                                      metadata->version,
+                                      metadata->revision,
+                                      contract_hash_prefix(metadata->state_hash));
+        auto state      = read_artifact(state_name, transaction.sender());
+        if (!state.has_value()) {
+            return state.error();
+        }
+        return *state == output.state ? TransactionProveError::NoError
+                                      : TransactionProveError::InvalidContractPayload;
+    };
+
+    const auto block = static_cast<std::uint64_t>(transaction.section().to_int().value_or(0));
+    if (transaction.type() == TransactionType::ContractDeploy) {
+        if (metadata->method != "init" || metadata->version != 1 || metadata->revision != 1
+            || !metadata->previous_state_hash.empty()) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        if (contract_manager_->inspect(contract_id.to_string()).has_value()) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        auto module_name = fmt::format("contract-module-v{:06}-{}.wasm",
+                                       metadata->version,
+                                       contract_hash_prefix(metadata->module_hash));
+        auto module      = read_artifact(module_name, transaction.sender());
+        if (!module.has_value()) {
+            return module.error();
+        }
+        if (contract_content_hash(*module) != metadata->module_hash) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        if (metadata->kind == "fungible-token") {
+            auto standard_hash = standard_fungible_module_hash();
+            if (!standard_hash.has_value() || *standard_hash != metadata->module_hash) {
+                return TransactionProveError::InvalidContractPayload;
+            }
+        }
+        auto output =
+            contract_manager_->evaluate(*module, transaction.sender().to_string(), "init", *arguments, {}, block);
+        return output.has_value() ? verify_output(*output) : TransactionProveError::InvalidContractPayload;
+    }
+
+    auto record = contract_manager_->inspect(contract_id.to_string());
+    if (!record.has_value() || record->kind != metadata->kind || record->versions.empty()) {
+        return TransactionProveError::ContractDependencyMissing;
+    }
+    const auto& current  = record->versions.at(record->active_version - 1);
+    const auto& previous = current.revisions.back();
+
+    if (transaction.type() == TransactionType::ContractCall) {
+        if (metadata->method == "init" || metadata->method == "migrate" || metadata->method == "authorize_upgrade"
+            || metadata->version != current.version || metadata->revision != previous.revision + 1
+            || metadata->module_hash != current.module_hash
+            || metadata->previous_state_hash != previous.state_hash) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        auto output = contract_manager_->evaluate(current.module,
+                                                  transaction.sender().to_string(),
+                                                  metadata->method,
+                                                  *arguments,
+                                                  previous.state,
+                                                  block);
+        if (!output.has_value() || output->state == previous.state) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        return verify_output(*output);
+    }
+
+    if (transaction.type() != TransactionType::ContractUpgrade || metadata->method != "migrate"
+        || transaction.sender().to_string() != record->owner_id || metadata->version != current.version + 1
+        || metadata->revision != previous.revision + 1 || metadata->previous_state_hash != previous.state_hash
+        || record->kind == "fungible-token") {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    auto module_name = fmt::format("contract-module-v{:06}-{}.wasm",
+                                   metadata->version,
+                                   contract_hash_prefix(metadata->module_hash));
+    auto module      = read_artifact(module_name, transaction.sender());
+    if (!module.has_value()) {
+        return module.error();
+    }
+    if (contract_content_hash(*module) != metadata->module_hash) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string(metadata->module_hash);
+    auto authorization           = contract_manager_->evaluate(current.module,
+                                                     transaction.sender().to_string(),
+                                                     "authorize_upgrade",
+                                                     authorization_arguments,
+                                                     previous.state,
+                                                     block);
+    if (!authorization.has_value()) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    auto output = contract_manager_->evaluate(*module,
+                                              transaction.sender().to_string(),
+                                              "migrate",
+                                              *arguments,
+                                              previous.state,
+                                              block);
+    return output.has_value() ? verify_output(*output) : TransactionProveError::InvalidContractPayload;
+}
+
+std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_contract_deploy(
+    std::string                   kind,
+    std::span<const std::uint8_t> module,
+    std::span<const std::uint8_t> init_arguments) {
+    auto signer = account_controller_->current_wallet();
+    if (signer.empty()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
+            .detail = "No current wallet",
+        });
+    }
+    if (kind == "fungible-token") {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidArguments,
+            .detail = "The fungible-token kind is reserved for the standard token contract",
+        });
+    }
+    auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+    auto validation =
+        contract_manager_->evaluate(module, signer.id().to_string(), "init", init_arguments, {}, block);
+    if (!validation.has_value()) {
+        return std::unexpected(validation.error());
+    }
+    auto contract_actor = account_controller_->create_service();
+    auto change         = contract_manager_->prepare_deploy(contract_actor.id().to_string(),
+                                                    signer.id().to_string(),
+                                                    std::move(kind),
+                                                    module,
+                                                    init_arguments,
+                                                    block);
+    if (!change.has_value()) {
+        return std::unexpected(change.error());
+    }
+    const auto&             version  = change->record.versions.back();
+    const auto&             revision = version.revisions.back();
+    ContractTransactionData metadata {
+        .kind                = change->record.kind,
+        .method              = "init",
+        .arguments_base64    = Utils::to_base64(init_arguments),
+        .module_hash         = version.module_hash,
+        .previous_state_hash = revision.previous_hash,
+        .state_hash          = revision.state_hash,
+        .version             = version.version,
+        .revision            = revision.revision,
+    };
+    Transaction transaction;
+    transaction.set_sender(signer.id());
+    transaction.set_receiver(contract_actor.id());
+    transaction.set_amount(BigNumberFloat(0));
+    transaction.set_token(TokenId());
+    transaction.set_type(TransactionType::ContractDeploy);
+    transaction.set_meta(Json::serialize(metadata));
+    auto sent = send_contract_transaction(transaction, signer, std::move(*change));
+    if (!sent.has_value()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::StorageError,
+            .detail = transaction_error_description(sent.error()),
+        });
+    }
+    return *sent;
+}
+
+std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_contract_call(
+    const ActorId&                contract_id,
+    std::string_view              method,
+    std::span<const std::uint8_t> arguments) {
+    auto signer = account_controller_->current_wallet();
+    if (signer.empty()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
+            .detail = "No current wallet",
+        });
+    }
+    auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+    auto change = contract_manager_->prepare_call(contract_id.to_string(),
+                                                  signer.id().to_string(),
+                                                  method,
+                                                  arguments,
+                                                  block);
+    if (!change.has_value()) {
+        return std::unexpected(change.error());
+    }
+    if (change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidArguments,
+            .detail = "The method is read-only; use a contract query",
+        });
+    }
+
+    const auto&             version  = change->record.versions.at(change->record.active_version - 1);
+    const auto&             revision = version.revisions.back();
+    ContractTransactionData metadata {
+        .kind                = change->record.kind,
+        .method              = std::string(method),
+        .arguments_base64    = Utils::to_base64(arguments),
+        .module_hash         = version.module_hash,
+        .previous_state_hash = revision.previous_hash,
+        .state_hash          = revision.state_hash,
+        .version             = version.version,
+        .revision            = revision.revision,
+    };
+    Transaction transaction;
+    transaction.set_sender(signer.id());
+    transaction.set_receiver(contract_id);
+    transaction.set_amount(BigNumberFloat(0));
+    transaction.set_token(TokenId());
+    transaction.set_type(TransactionType::ContractCall);
+    transaction.set_meta(Json::serialize(metadata));
+    auto sent = send_contract_transaction(transaction, signer, std::move(*change));
+    if (!sent.has_value()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::StorageError,
+            .detail = transaction_error_description(sent.error()),
+        });
+    }
+    return *sent;
+}
+
+std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_contract_upgrade(
+    const ActorId&                contract_id,
+    std::span<const std::uint8_t> module,
+    std::span<const std::uint8_t> migration_arguments) {
+    auto signer = account_controller_->current_wallet();
+    if (signer.empty()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
+            .detail = "No current wallet",
+        });
+    }
+    auto current = contract_manager_->inspect(contract_id.to_string());
+    if (current.has_value() && current->kind == "fungible-token") {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::UpgradeDenied,
+            .detail = "Standard token contracts cannot be upgraded",
+        });
+    }
+    auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+    auto change = contract_manager_->prepare_upgrade(contract_id.to_string(),
+                                                     signer.id().to_string(),
+                                                     module,
+                                                     migration_arguments,
+                                                     block);
+    if (!change.has_value()) {
+        return std::unexpected(change.error());
+    }
+    const auto&             version  = change->record.versions.at(change->record.active_version - 1);
+    const auto&             revision = version.revisions.back();
+    ContractTransactionData metadata {
+        .kind                = change->record.kind,
+        .method              = "migrate",
+        .arguments_base64    = Utils::to_base64(migration_arguments),
+        .module_hash         = version.module_hash,
+        .previous_state_hash = revision.previous_hash,
+        .state_hash          = revision.state_hash,
+        .version             = version.version,
+        .revision            = revision.revision,
+    };
+    Transaction transaction;
+    transaction.set_sender(signer.id());
+    transaction.set_receiver(contract_id);
+    transaction.set_amount(BigNumberFloat(0));
+    transaction.set_token(TokenId());
+    transaction.set_type(TransactionType::ContractUpgrade);
+    transaction.set_meta(Json::serialize(metadata));
+    auto sent = send_contract_transaction(transaction, signer, std::move(*change));
+    if (!sent.has_value()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::StorageError,
+            .detail = transaction_error_description(sent.error()),
+        });
+    }
+    return *sent;
+}
+
+std::expected<ExtraChain::Contracts::ContractReceipt, ExtraChain::Contracts::ContractFailure> ExtraChainNode::
+    query_contract(const ActorId& contract_id, std::string_view method, std::span<const std::uint8_t> arguments) {
+    auto signer = account_controller_->current_wallet();
+    if (signer.empty()) {
+        return std::unexpected(ExtraChain::Contracts::ContractFailure {
+            .error  = ExtraChain::Contracts::ContractError::InvalidOwner,
+            .detail = "No current wallet",
+        });
+    }
+    auto block = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0));
+    return contract_manager_->query(contract_id.to_string(), signer.id().to_string(), method, arguments, block);
 }
 
 ChatManager* ExtraChainNode::chat_manager() {

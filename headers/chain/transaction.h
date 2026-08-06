@@ -27,18 +27,26 @@
  * @brief Types of chain transactions
  */
 enum class TransactionType {
-    Genesis      = 0,  ///< Initial chain transaction
-    Regular      = 1,  ///< Standard value transfer
-    InitContract = 2,  ///< Smart contract initialization
-    Repeatable   = 3,  ///< Recurring transaction
-    Reward       = 4,  ///< Mining/validation reward
-    Burn         = 5,  ///< Token destruction
-    Conversion   = 6,  ///< Token conversion
-    Minting      = 7,  ///< Token minting (owner only)
-    Balance      = 99, ///< Balance query transaction
-    Unknown      = 100 ///< Unrecognized transaction type
+    Genesis         = 0,  ///< Initial chain transaction
+    Regular         = 1,  ///< Standard value transfer
+    InitContract    = 2,  ///< Smart contract initialization
+    Repeatable      = 3,  ///< Recurring transaction
+    Reward          = 4,  ///< Mining/validation reward
+    Burn            = 5,  ///< Token destruction
+    Conversion      = 6,  ///< Token conversion
+    Minting         = 7,  ///< Token minting (owner only)
+    ContractDeploy  = 8,  ///< Deploy a WebAssembly contract
+    ContractCall    = 9,  ///< Execute a WebAssembly contract method
+    ContractUpgrade = 10, ///< Activate a new immutable contract version
+    Balance         = 99, ///< Balance query transaction
+    Unknown         = 100 ///< Unrecognized transaction type
 };
 MSGPACK_ADD_ENUM(TransactionType)
+
+constexpr bool is_contract_transaction(TransactionType type) {
+    return type == TransactionType::ContractDeploy || type == TransactionType::ContractCall
+           || type == TransactionType::ContractUpgrade;
+}
 
 /**
  * @brief Transaction processing error codes
@@ -95,7 +103,9 @@ enum class TransactionProveError {
     BalanceOnlyFirstSection,      ///< Balance transactions limited to first section
     TooSectionDiff,               ///< Section difference too large
     BigReward,
-    TooOften
+    TooOften,
+    InvalidContractPayload,
+    ContractDependencyMissing
 };
 
 /**
