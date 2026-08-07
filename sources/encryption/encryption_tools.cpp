@@ -110,7 +110,6 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes&   data,
         return std::unexpected(CryptoError::EmptyKey);
     }
 
-    Bytes encrypted(crypto_secretbox_MACBYTES + data.size());
     Nonce nonce;
 
     if (nonce_from_key) {
@@ -119,17 +118,20 @@ Cryptography::CryptoResult Cryptography::symmetric_encrypt(const Bytes&   data,
         randombytes_buf(nonce.data(), nonce.size());
     }
 
-    if (crypto_secretbox_easy(encrypted.data(), data.data(), data.size(), nonce.data(), secret_key.data()) != 0) {
+    const auto nonce_size = nonce_from_key ? std::size_t { 0 } : nonce.size();
+    Bytes      result(nonce_size + crypto_secretbox_MACBYTES + data.size());
+    if (!nonce_from_key) {
+        std::copy(nonce.begin(), nonce.end(), result.begin());
+    }
+
+    if (crypto_secretbox_easy(result.data() + nonce_size,
+                              data.data(),
+                              data.size(),
+                              nonce.data(),
+                              secret_key.data())
+        != 0) {
         return std::unexpected(CryptoError::EncryptionFailed);
     }
-
-    if (nonce_from_key) {
-        return encrypted;
-    }
-
-    Bytes result(nonce.size() + encrypted.size());
-    std::copy(nonce.begin(), nonce.end(), result.begin());
-    std::copy(encrypted.begin(), encrypted.end(), result.begin() + nonce.size());
 
     return result;
 }
@@ -156,13 +158,13 @@ Cryptography::CryptoResult Cryptography::symmetric_decrypt(const Bytes&   encryp
         std::copy_n(encrypted_data.begin(), crypto_secretbox_NONCEBYTES, nonce.begin());
     }
 
-    Bytes encrypted_message(encrypted_data.begin() + (!nonce_from_key ? crypto_secretbox_NONCEBYTES : 0),
-                            encrypted_data.end());
-    Bytes decrypted_message(encrypted_message.size() - crypto_secretbox_MACBYTES);
+    const auto encrypted_offset = nonce_from_key ? std::size_t { 0 } : std::size_t { crypto_secretbox_NONCEBYTES };
+    const auto encrypted_size   = encrypted_data.size() - encrypted_offset;
+    Bytes      decrypted_message(encrypted_size - crypto_secretbox_MACBYTES);
 
     if (crypto_secretbox_open_easy(decrypted_message.data(),
-                                   encrypted_message.data(),
-                                   encrypted_message.size(),
+                                   encrypted_data.data() + encrypted_offset,
+                                   encrypted_size,
                                    nonce.data(),
                                    secret_key.data())
         != 0) {
@@ -332,8 +334,9 @@ Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      da
     Nonce nonce;
     randombytes_buf(nonce.data(), nonce.size());
 
-    Bytes encrypted_message(crypto_box_MACBYTES + data.size());
-    if (crypto_box_easy(encrypted_message.data(),
+    Bytes result(nonce.size() + crypto_box_MACBYTES + data.size());
+    std::copy(nonce.begin(), nonce.end(), result.begin());
+    if (crypto_box_easy(result.data() + nonce.size(),
                         data.data(),
                         data.size(),
                         nonce.data(),
@@ -343,9 +346,6 @@ Cryptography::CryptoResult Cryptography::asymmetric_encrypt(const Bytes&      da
         return std::unexpected(CryptoError::EncryptionFailed);
     }
 
-    Bytes result(nonce.size() + encrypted_message.size());
-    std::copy(nonce.begin(), nonce.end(), result.begin());
-    std::copy(encrypted_message.begin(), encrypted_message.end(), result.begin() + nonce.size());
     return result;
 }
 
@@ -363,8 +363,6 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes&      en
     Nonce nonce;
     std::copy_n(encrypted_data.begin(), crypto_box_NONCEBYTES, nonce.begin());
 
-    Bytes encrypted_message(encrypted_data.begin() + crypto_box_NONCEBYTES, encrypted_data.end());
-
     Curve25519Key x_secret_key;
     Curve25519Key x_public_key;
     if (crypto_sign_ed25519_sk_to_curve25519(x_secret_key.data(), receiver_secret_key.data()) != 0
@@ -372,10 +370,11 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes&      en
         return std::unexpected(CryptoError::KeyConversionFailed);
     }
 
-    Bytes decrypted_message(encrypted_message.size() - crypto_box_MACBYTES);
+    const auto encrypted_size = encrypted_data.size() - crypto_box_NONCEBYTES;
+    Bytes      decrypted_message(encrypted_size - crypto_box_MACBYTES);
     if (crypto_box_open_easy(decrypted_message.data(),
-                             encrypted_message.data(),
-                             encrypted_message.size(),
+                             encrypted_data.data() + crypto_box_NONCEBYTES,
+                             encrypted_size,
                              nonce.data(),
                              x_public_key.data(),
                              x_secret_key.data())
@@ -389,20 +388,12 @@ Cryptography::CryptoResult Cryptography::asymmetric_decrypt(const Bytes&      en
 Cryptography::CryptoResult Cryptography::asymmetric_encrypt_self(const Bytes&      data,
                                                                  const PrivateKey& self_secret_key,
                                                                  const PublicKey&  self_public_key) {
-    Nonce nonce;
-    std::copy_n(self_secret_key.begin(),
-                std::min(size_t(crypto_box_NONCEBYTES), self_secret_key.size()),
-                nonce.begin());
     return asymmetric_encrypt(data, self_secret_key, self_public_key);
 }
 
 Cryptography::CryptoResult Cryptography::asymmetric_decrypt_self(const Bytes&      data,
                                                                  const PrivateKey& self_secret_key,
                                                                  const PublicKey&  self_public_key) {
-    Nonce nonce;
-    std::copy_n(self_secret_key.begin(),
-                std::min(size_t(crypto_box_NONCEBYTES), self_secret_key.size()),
-                nonce.begin());
     return asymmetric_decrypt(data, self_secret_key, self_public_key);
 }
 

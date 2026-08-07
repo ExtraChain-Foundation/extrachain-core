@@ -37,6 +37,7 @@
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
 #include "chain/transaction.h"
+#include "encryption/encryption_tools.h"
 #include "network/wire_format.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
@@ -229,6 +230,43 @@ private slots:
         QCOMPARE(BigNumber("12345").to_printable_string(), std::string("12345"));
         QCOMPARE(BigNumber("1234567").to_printable_string(), std::string("1 234 567"));
         QCOMPARE(BigNumber("-1234567").to_printable_string(), std::string("-1 234 567"));
+    }
+
+    void encryptionRoundTripsWithoutIntermediateFormats() {
+        const Bytes data { 'E', 'x', 't', 'r', 'a', 'C', 'h', 'a', 'i', 'n' };
+        const auto  key = Cryptography::keygen();
+
+        for (const bool nonce_from_key : { false, true }) {
+            auto encrypted = Cryptography::symmetric_encrypt(data, key, nonce_from_key);
+            QVERIFY(encrypted.has_value());
+            const auto expected_overhead =
+                crypto_secretbox_MACBYTES + (nonce_from_key ? 0 : crypto_secretbox_NONCEBYTES);
+            QCOMPARE(encrypted->size(), data.size() + expected_overhead);
+
+            auto decrypted = Cryptography::symmetric_decrypt(*encrypted, key, nonce_from_key);
+            QVERIFY(decrypted.has_value());
+            QCOMPARE(*decrypted, data);
+
+            encrypted->back() ^= 0x01;
+            QVERIFY(!Cryptography::symmetric_decrypt(*encrypted, key, nonce_from_key).has_value());
+        }
+
+        const auto [sender_private, sender_public]     = Cryptography::asymmetric_create_pair();
+        const auto [receiver_private, receiver_public] = Cryptography::asymmetric_create_pair();
+        auto encrypted = Cryptography::asymmetric_encrypt(data, sender_private, receiver_public);
+        QVERIFY(encrypted.has_value());
+        QCOMPARE(encrypted->size(), data.size() + Cryptography::MIN_ENCRYPTED_SIZE_ASYMMETRIC);
+
+        auto decrypted = Cryptography::asymmetric_decrypt(*encrypted, receiver_private, sender_public);
+        QVERIFY(decrypted.has_value());
+        QCOMPARE(*decrypted, data);
+
+        auto self_encrypted = Cryptography::asymmetric_encrypt_self(data, sender_private, sender_public);
+        QVERIFY(self_encrypted.has_value());
+        auto self_decrypted =
+            Cryptography::asymmetric_decrypt_self(*self_encrypted, sender_private, sender_public);
+        QVERIFY(self_decrypted.has_value());
+        QCOMPARE(*self_decrypted, data);
     }
 
     // ----- Migration round-trip ----------------------------------------------
