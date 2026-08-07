@@ -368,6 +368,22 @@ void DirsManager::network_response_dir_rows(
                 return;
             }
 
+            // Gossip fresh File rows that arrived via sync: a file added while its
+            // owner had no uplink reaches us through the handshake sync only, and
+            // without re-broadcast the rest of the network never hears about it.
+            // Receivers dedupe via is_file_already_downloaded; 10 min cap keeps a
+            // full catalog sync from turning into a broadcast storm.
+            if (node->dfs()->mode() == DfsMode::Full) {
+                const auto now_ms = Utils::current_date_ms();
+                for (const auto &row : dir_rows_res) {
+                    if (row.type != Dfs::FileType::File)
+                        continue;
+                    if (now_ms < 0 || now_ms - static_cast<long long>(row.last_modified) > 10 * 60 * 1000)
+                        continue;
+                    node->dfs()->broadcast_stored(owner_id, row);
+                }
+            }
+
             node->dfs()->download_manager().add_to_queue(owner_id, dir_rows_res, *responder.identifiers().begin());
             node->dfs()->download_manager().add_to_queue(owner_id,
                                                          dir_rows_todo,
