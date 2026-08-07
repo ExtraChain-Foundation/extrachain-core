@@ -20,8 +20,7 @@
 #include "dfs/name_validator.h"
 
 #include <algorithm>
-#include <string>
-#include <iterator>
+#include <cctype>
 
 std::expected<void, NameValidator::ValidationError> NameValidator::check_empty(std::string_view name) noexcept {
     if (name.empty()) {
@@ -67,7 +66,10 @@ std::expected<void, NameValidator::ValidationError> NameValidator::check_control
 
 std::expected<void, NameValidator::ValidationError> NameValidator::check_boundary_chars(
     std::string_view name) noexcept {
-    if (name.back() == '.' || name.back() == ' ' || name.front() == ' ') {
+    if (name.front() == '.' || name.front() == ' ') {
+        return std::unexpected(ValidationError { .code = ErrorCode::LeadingDotSpace, .position = 0 });
+    }
+    if (name.back() == '.' || name.back() == ' ') {
         return std::unexpected(
             ValidationError { .code = ErrorCode::TrailingDotSpace, .position = name.length() - 1 });
     }
@@ -86,17 +88,15 @@ std::expected<void, NameValidator::ValidationError> NameValidator::check_consecu
 
 std::expected<void, NameValidator::ValidationError> NameValidator::check_reserved_name(
     std::string_view name) noexcept {
-    std::string upper_name;
-    upper_name.reserve(name.size());
-    std::transform(name.begin(), name.end(), std::back_inserter(upper_name), [](unsigned char c) {
-        return std::toupper(c);
-    });
-
-    auto             dot_pos = upper_name.find('.');
-    std::string_view base_name(upper_name.data(), dot_pos == std::string::npos ? upper_name.length() : dot_pos);
+    const auto base_name = name.substr(0, name.find('.'));
 
     for (const auto& reserved : RESERVED_NAMES) {
-        if (base_name == reserved) {
+        const bool matches =
+            base_name.size() == reserved.size()
+            && std::equal(base_name.begin(), base_name.end(), reserved.begin(), [](char lhs, char rhs) {
+                   return std::toupper(static_cast<unsigned char>(lhs)) == rhs;
+               });
+        if (matches) {
             return std::unexpected(ValidationError { .code = ErrorCode::ReservedName, .position = 0 });
         }
     }

@@ -37,6 +37,7 @@
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
 #include "chain/transaction.h"
+#include "dfs/name_validator.h"
 #include "encryption/encryption_tools.h"
 #include "network/wire_format.h"
 #include "utils/bignumber.h"
@@ -277,6 +278,31 @@ private slots:
             Cryptography::asymmetric_decrypt_self(*self_encrypted, sender_private, sender_public);
         QVERIFY(self_decrypted.has_value());
         QCOMPARE(*self_decrypted, data);
+    }
+
+    void dfsNameValidationMatchesCrossPlatformRules() {
+        QVERIFY(NameValidator::validate("normal-file.txt").has_value());
+        QVERIFY(NameValidator::validate("привет.txt").has_value());
+
+        auto reserved = NameValidator::validate("cOm1.txt");
+        QVERIFY(!reserved.has_value());
+        QCOMPARE(reserved.error().code, NameValidator::ErrorCode::ReservedName);
+
+        auto leading_dot = NameValidator::validate(".hidden");
+        QVERIFY(!leading_dot.has_value());
+        QCOMPARE(leading_dot.error().code, NameValidator::ErrorCode::LeadingDotSpace);
+        QCOMPARE(leading_dot.error().position, std::size_t { 0 });
+
+        auto leading_space = NameValidator::validate(" file.txt");
+        QVERIFY(!leading_space.has_value());
+        QCOMPARE(leading_space.error().code, NameValidator::ErrorCode::LeadingDotSpace);
+
+        auto trailing_space = NameValidator::validate("file.txt ");
+        QVERIFY(!trailing_space.has_value());
+        QCOMPARE(trailing_space.error().code, NameValidator::ErrorCode::TrailingDotSpace);
+
+        QVERIFY(PathValidator::validate("C:\\folder\\file.txt").has_value());
+        QVERIFY(!PathValidator::validate("folder//file.txt").has_value());
     }
 
     // ----- Migration round-trip ----------------------------------------------
