@@ -816,7 +816,19 @@ void DagCache::reset_db() {
 }
 
 bool DagCache::ensure_contract_catalog_schema() {
-    return cache_db_ != nullptr && cache_db_->query(Config::DataStorage::ContractCatalogCreate);
+    if (cache_db_ == nullptr) {
+        return false;
+    }
+    if (cache_db_->table_exists("contract_catalog")) {
+        const auto columns        = cache_db_->table_columns("contract_catalog");
+        const auto has_schema_two = std::ranges::any_of(columns, [](const DBColumn& column) {
+            return column.name == "checkpoint_revision";
+        });
+        if (!has_schema_two && !cache_db_->drop_table("contract_catalog")) {
+            return false;
+        }
+    }
+    return cache_db_->query(Config::DataStorage::ContractCatalogCreate);
 }
 
 void DagCache::index_contract_transaction(const Transaction& transaction) {
@@ -826,7 +838,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
 
     const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
     const auto section  = transaction.section().to_int();
-    if (!metadata.has_value() || !section.has_value() || metadata->schema != 1 || metadata->kind.empty()
+    if (!metadata.has_value() || !section.has_value() || metadata->schema != 2 || metadata->kind.empty()
         || metadata->version == 0 || metadata->revision == 0) {
         return;
     }
@@ -867,6 +879,13 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
     summary.state_hash       = metadata->state_hash;
     summary.transaction_hash = transaction.hash();
     summary.section          = static_cast<std::uint64_t>(*section);
+    if (metadata->checkpoint) {
+        summary.checkpoint_revision         = metadata->revision;
+        summary.checkpoint_section          = summary.section;
+        summary.checkpoint_state_hash       = metadata->state_hash;
+        summary.checkpoint_transaction_hash = transaction.hash();
+    }
+    summary.replay_depth = summary.revision - summary.checkpoint_revision;
     cache_db_->replace("contract_catalog", Utils::to_dbrow(summary));
 }
 

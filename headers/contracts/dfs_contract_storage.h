@@ -11,6 +11,7 @@
 #pragma once
 
 #include <mutex>
+#include <unordered_map>
 
 #include "contracts/contract_manager.h"
 
@@ -35,12 +36,12 @@ namespace ExtraChain::Contracts {
                                                                    std::string_view expected_state_hash) override;
 
     private:
-        [[nodiscard]] std::expected<void, ContractFailure> save(const ContractRecord &record,
-                                                                bool                  write_manifest) const;
+        [[nodiscard]] std::expected<void, ContractFailure> stage_artifacts(const ContractRecord &record) const;
 
-        DfsController     *dfs_ = nullptr;
-        Dag               *dag_ = nullptr;
-        mutable std::mutex mutex_;
+        DfsController                                          *dfs_ = nullptr;
+        Dag                                                    *dag_ = nullptr;
+        mutable std::mutex                                      mutex_;
+        mutable std::unordered_map<std::string, ContractRecord> heads_;
     };
 
 } // namespace ExtraChain::Contracts

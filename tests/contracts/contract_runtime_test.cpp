@@ -20,6 +20,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -297,6 +298,55 @@ namespace {
         return std::search(value.begin(), value.end(), text.begin(), text.end()) != value.end();
     }
 
+    class StageTrackingStorage final : public ExtraChain::Contracts::ContractStorage {
+    public:
+        std::expected<ExtraChain::Contracts::ContractRecord, ExtraChain::Contracts::ContractFailure> load(
+            std::string_view contract_id) const override {
+            const auto record = records_.find(std::string(contract_id));
+            if (record == records_.end()) {
+                return std::unexpected(ExtraChain::Contracts::ContractFailure {
+                    .error  = ExtraChain::Contracts::ContractError::NotFound,
+                    .detail = "Contract does not exist",
+                });
+            }
+            return record->second;
+        }
+
+        std::expected<void, ExtraChain::Contracts::ContractFailure> create(
+            const ExtraChain::Contracts::ContractRecord &record) override {
+            auto current = record;
+            ExtraChain::Contracts::retain_current_contract_state(current);
+            if (!records_.emplace(current.contract_id, std::move(current)).second) {
+                return std::unexpected(ExtraChain::Contracts::ContractFailure {
+                    .error  = ExtraChain::Contracts::ContractError::AlreadyExists,
+                    .detail = "Contract already exists",
+                });
+            }
+            return {};
+        }
+
+        std::expected<void, ExtraChain::Contracts::ContractFailure> stage(
+            const ExtraChain::Contracts::ContractRecord &) override {
+            ++stage_count;
+            return {};
+        }
+
+        std::expected<void, ExtraChain::Contracts::ContractFailure> replace(
+            const ExtraChain::Contracts::ContractRecord &record,
+            std::uint32_t,
+            std::string_view) override {
+            auto current = record;
+            ExtraChain::Contracts::retain_current_contract_state(current);
+            records_.insert_or_assign(current.contract_id, std::move(current));
+            return {};
+        }
+
+        std::size_t stage_count = 0;
+
+    private:
+        std::unordered_map<std::string, ExtraChain::Contracts::ContractRecord> records_;
+    };
+
     void test_fungible(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
         Bytes state;
         auto  result = invoke(runtime, module, "alice", "init", token_init_argument(), state);
@@ -459,6 +509,72 @@ namespace {
         require(!replay.has_value(), "ContractManager allowed a second redeem");
     }
 
+    void test_checkpoint_schedule(const Bytes &fungible_module) {
+        std::vector<std::string> state_hashes;
+        state_hashes.reserve(ExtraChain::Contracts::ContractCheckpointInterval + 1);
+
+        for (int node_index = 0; node_index < 2; ++node_index) {
+            ExtraChain::Contracts::ContractManager manager;
+            auto                                   deploy = manager.prepare_deploy("checkpoint-contract",
+                                                 "alice",
+                                                 "fungible",
+                                                 fungible_module,
+                                                 token_init_argument(),
+                                                 1);
+            require(deploy.has_value() && deploy->checkpoint, "Deploy did not create a checkpoint");
+            const auto deploy_hash = deploy->record.versions.back().revisions.back().state_hash;
+            if (node_index == 0) {
+                state_hashes.push_back(deploy_hash);
+            } else {
+                require(state_hashes.front() == deploy_hash, "Peer deploy result is not deterministic");
+            }
+            require(manager.commit(std::move(*deploy), "deploy-transaction").has_value(),
+                    "Checkpoint contract deploy failed");
+
+            for (std::uint64_t call_index = 1; call_index <= ExtraChain::Contracts::ContractCheckpointInterval;
+                 ++call_index) {
+                auto call = manager.prepare_call("checkpoint-contract",
+                                                 "alice",
+                                                 "approve",
+                                                 pair_argument("bob", call_index),
+                                                 call_index + 1);
+                require(call.has_value(), "Checkpoint schedule call failed");
+                const auto call_hash = call->record.versions.back().revisions.back().state_hash;
+                if (node_index == 0) {
+                    state_hashes.push_back(call_hash);
+                } else {
+                    require(state_hashes.at(call_index) == call_hash, "Peer call result is not deterministic");
+                }
+                const bool expected = call_index == ExtraChain::Contracts::ContractCheckpointInterval;
+                require(call->checkpoint == expected, "Checkpoint schedule is incorrect");
+                require(manager.commit(std::move(*call), "call-" + std::to_string(call_index)).has_value(),
+                        "Checkpoint schedule commit failed");
+            }
+            const auto record = manager.inspect("checkpoint-contract");
+            require(record.has_value(), "Checkpoint contract cannot be inspected");
+            const auto &head = record->versions.back().revisions.back();
+            require(record->versions.back().revisions.size() == 1
+                        && head.revision == ExtraChain::Contracts::ContractCheckpointInterval + 1
+                        && head.checkpoint_revision == head.revision
+                        && head.checkpoint_transaction_hash
+                               == "call-" + std::to_string(ExtraChain::Contracts::ContractCheckpointInterval),
+                    "Checkpoint head metadata is incorrect");
+        }
+    }
+
+    void test_prepare_and_artifact_stage_are_separate(const Bytes &message_module) {
+        auto                                   storage = std::make_unique<StageTrackingStorage>();
+        auto                                  *tracker = storage.get();
+        ExtraChain::Contracts::ContractManager manager(std::move(storage));
+
+        auto deploy = manager.prepare_deploy("staged-contract", "alice", "message-claim", message_module, {}, 1);
+        require(deploy.has_value(), "Contract preparation failed");
+        require(tracker->stage_count == 0, "Contract preparation published artifacts");
+        require(manager.stage(*deploy).has_value() && tracker->stage_count == 1, "Contract artifact stage failed");
+        require(manager.commit(std::move(*deploy), "deploy-transaction").has_value(),
+                "Staged contract commit failed");
+    }
+
     void test_json_codec() {
         const auto encoded = ExtraChain::Contracts::Codec::encode_json(R"(["hello",7,true,null])");
         require(encoded.has_value(), "JSON arguments could not be encoded");
@@ -494,6 +610,8 @@ int main(int argc, char **argv) {
         test_fungible(runtime, fungible_module);
         test_message_claim(runtime, message_module);
         test_contract_manager(fungible_module, message_module);
+        test_checkpoint_schedule(fungible_module);
+        test_prepare_and_artifact_stage_are_separate(message_module);
         std::cout << "Contract runtime tests passed\n";
         return 0;
     } catch (const std::exception &error) {

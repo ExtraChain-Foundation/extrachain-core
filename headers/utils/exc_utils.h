@@ -90,16 +90,18 @@ enum class ChainIndexMode {
 };
 
 struct ExtraChainSettings {
-    std::optional<std::string>   first_node;
-    std::optional<DagMode>       dag_mode;
-    std::optional<DfsMode>       dfs_mode;
-    std::optional<std::string>   node_identifier;
-    std::optional<int>           dag_version;
-    std::optional<int>           dfs_version;
+    std::optional<std::string>    first_node;
+    std::optional<DagMode>        dag_mode;
+    std::optional<DfsMode>        dfs_mode;
+    std::optional<std::string>    node_identifier;
+    std::optional<int>            dag_version;
+    std::optional<int>            dfs_version;
     std::optional<ChainIndexMode> chain_index_mode;
 };
-BOOST_DESCRIBE_STRUCT(ExtraChainSettings, (),
-                      (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
+BOOST_DESCRIBE_STRUCT(
+    ExtraChainSettings,
+    (),
+    (first_node, dag_mode, dfs_mode, node_identifier, dag_version, dfs_version, chain_index_mode))
 
 class ByteArray {
 public:
@@ -308,7 +310,12 @@ CREATE TABLE IF NOT EXISTS contract_catalog (
     transaction_hash TEXT NOT NULL,
     section INTEGER NOT NULL,
     deploy_transaction_hash TEXT NOT NULL,
-    deploy_section INTEGER NOT NULL
+    deploy_section INTEGER NOT NULL,
+    checkpoint_revision INTEGER NOT NULL,
+    checkpoint_section INTEGER NOT NULL,
+    checkpoint_state_hash TEXT NOT NULL,
+    checkpoint_transaction_hash TEXT NOT NULL,
+    replay_depth INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS contract_catalog_owner_idx ON contract_catalog(owner_id);
 CREATE INDEX IF NOT EXISTS contract_catalog_kind_idx ON contract_catalog(kind);

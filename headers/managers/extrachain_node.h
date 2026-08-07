@@ -250,13 +250,13 @@ public:
     TokenManager*                             token_manager() const;
     ExtraChain::Contracts::ContractManager*   contract_manager() const;
     ExtraChain::Contracts::ToolchainRegistry* toolchain_registry() const;
-    void stage_contract_change(std::string transaction_hash, ExtraChain::Contracts::PreparedContractChange change);
+    bool stage_contract_change(std::string transaction_hash, ExtraChain::Contracts::PreparedContractChange change);
     void finalize_contract_change(std::string_view transaction_hash, bool approved);
     std::expected<Transaction, TransactionError> send_contract_transaction(
         Transaction                                   transaction,
         const Actor<KeyPrivate>&                      signer,
         ExtraChain::Contracts::PreparedContractChange change);
-    TransactionProveError validate_contract_transaction(const Transaction& transaction) const;
+    TransactionProveError validate_contract_transaction(const Transaction& transaction);
     std::expected<Transaction, ExtraChain::Contracts::ContractFailure> submit_contract_deploy(
         std::string                   kind,
         std::span<const std::uint8_t> module,

@@ -19,6 +19,7 @@
 
 #include "managers/extrachain_node.h"
 
+#include <algorithm>
 #include <array>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
@@ -923,21 +924,36 @@ ExtraChain::Contracts::ToolchainRegistry* ExtraChainNode::toolchain_registry() c
     return toolchain_registry_.get();
 }
 
-void ExtraChainNode::stage_contract_change(std::string                                   transaction_hash,
+bool ExtraChainNode::stage_contract_change(std::string                                   transaction_hash,
                                            ExtraChain::Contracts::PreparedContractChange change) {
     std::scoped_lock lock(pending_contracts_mutex_);
+    const auto       contract_id = change.record.contract_id;
+    const auto       conflict    = std::ranges::any_of(pending_contracts_, [&](const auto& pending) {
+        return pending.first != transaction_hash && pending.second.record.contract_id == contract_id;
+    });
+    if (conflict) {
+        return false;
+    }
     pending_contracts_.insert_or_assign(std::move(transaction_hash), std::move(change));
+    return true;
 }
 
 std::expected<Transaction, TransactionError> ExtraChainNode::send_contract_transaction(
     Transaction                                   transaction,
     const Actor<KeyPrivate>&                      signer,
     ExtraChain::Contracts::PreparedContractChange change) {
+    auto staged = contract_manager_->stage(change);
+    if (!staged.has_value()) {
+        eWarning("[Contract] Cannot stage transaction artifacts: {}", staged.error().detail);
+        return std::unexpected(TransactionError::Unknown);
+    }
     auto prepared = dag_->prepare_transaction(transaction, signer);
     if (!prepared.has_value()) {
         return std::unexpected(prepared.error());
     }
-    stage_contract_change(prepared->hash(), std::move(change));
+    if (!stage_contract_change(prepared->hash(), std::move(change))) {
+        return std::unexpected(TransactionError::Unknown);
+    }
     dag_->add_transaction_sended(*prepared);
     network_manager_->send_message(*prepared, MessageType::DagTransaction, SendMode::Broadcast);
     return *prepared;
@@ -967,14 +983,20 @@ void ExtraChainNode::finalize_contract_change(std::string_view transaction_hash,
     }
 }
 
-TransactionProveError ExtraChainNode::validate_contract_transaction(const Transaction& transaction) const {
+TransactionProveError ExtraChainNode::validate_contract_transaction(const Transaction& transaction) {
     if (!transaction.meta().has_value()) {
         return TransactionProveError::InvalidContractPayload;
     }
     auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
-    if (!metadata.has_value() || metadata->schema != 1 || metadata->kind.empty() || metadata->kind.size() > 64
+    if (!metadata.has_value() || metadata->schema != 2 || metadata->kind.empty() || metadata->kind.size() > 64
         || metadata->method.empty() || metadata->method.size() > 64 || metadata->module_hash.size() != 64
         || metadata->state_hash.size() != 64 || metadata->version == 0 || metadata->revision == 0) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    if (metadata->checkpoint != (metadata->checkpoint_revision == metadata->revision)
+        || metadata->checkpoint_revision == 0 || metadata->checkpoint_revision > metadata->revision
+        || metadata->revision - metadata->checkpoint_revision
+               >= ExtraChain::Contracts::ContractCheckpointInterval) {
         return TransactionProveError::InvalidContractPayload;
     }
 
@@ -1005,22 +1027,24 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         if (contract_content_hash(output.state) != metadata->state_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
-        auto state_name = fmt::format("contract-state-v{:06}-r{:012}-{}.msgpack",
+        if (!metadata->checkpoint) {
+            return TransactionProveError::NoError;
+        }
+        auto state_name = fmt::format("contract-checkpoint-v{:06}-r{:012}-{}.msgpack",
                                       metadata->version,
                                       metadata->revision,
                                       contract_hash_prefix(metadata->state_hash));
         auto state      = read_artifact(state_name, transaction.sender());
-        if (!state.has_value()) {
-            return state.error();
-        }
-        return *state == output.state ? TransactionProveError::NoError
-                                      : TransactionProveError::InvalidContractPayload;
+        return !state.has_value() ? state.error()
+                                  : (*state == output.state ? TransactionProveError::NoError
+                                                            : TransactionProveError::InvalidContractPayload);
     };
 
     const auto block = static_cast<std::uint64_t>(transaction.section().to_int().value_or(0));
     if (transaction.type() == TransactionType::ContractDeploy) {
         if (metadata->method != "init" || metadata->version != 1 || metadata->revision != 1
-            || !metadata->previous_state_hash.empty()) {
+            || !metadata->previous_state_hash.empty() || !metadata->checkpoint
+            || metadata->checkpoint_revision != 1) {
             return TransactionProveError::InvalidContractPayload;
         }
         if (contract_manager_->inspect(contract_id.to_string()).has_value()) {
@@ -1042,9 +1066,22 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
                 return TransactionProveError::InvalidContractPayload;
             }
         }
-        auto output =
-            contract_manager_->evaluate(*module, transaction.sender().to_string(), "init", *arguments, {}, block);
-        return output.has_value() ? verify_output(*output) : TransactionProveError::InvalidContractPayload;
+        auto change = contract_manager_->prepare_deploy(contract_id.to_string(),
+                                                        transaction.sender().to_string(),
+                                                        metadata->kind,
+                                                        *module,
+                                                        *arguments,
+                                                        block);
+        if (!change.has_value() || !change->checkpoint) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+        const auto verified = verify_output(change->output);
+        if (verified == TransactionProveError::NoError) {
+            if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+                return TransactionProveError::InvalidContractPayload;
+            }
+        }
+        return verified;
     }
 
     auto record = contract_manager_->inspect(contract_id.to_string());
@@ -1055,28 +1092,39 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     const auto& previous = current.revisions.back();
 
     if (transaction.type() == TransactionType::ContractCall) {
+        const bool checkpoint_due = previous.revision + 1 - previous.checkpoint_revision
+                                    >= ExtraChain::Contracts::ContractCheckpointInterval;
         if (metadata->method == "init" || metadata->method == "migrate" || metadata->method == "authorize_upgrade"
             || metadata->version != current.version || metadata->revision != previous.revision + 1
-            || metadata->module_hash != current.module_hash
-            || metadata->previous_state_hash != previous.state_hash) {
+            || metadata->module_hash != current.module_hash || metadata->previous_state_hash != previous.state_hash
+            || metadata->checkpoint != checkpoint_due
+            || metadata->checkpoint_revision
+                   != (checkpoint_due ? metadata->revision : previous.checkpoint_revision)) {
             return TransactionProveError::InvalidContractPayload;
         }
-        auto output = contract_manager_->evaluate(current.module,
-                                                  transaction.sender().to_string(),
-                                                  metadata->method,
-                                                  *arguments,
-                                                  previous.state,
-                                                  block);
-        if (!output.has_value() || output->state == previous.state) {
+        auto change = contract_manager_->prepare_call(contract_id.to_string(),
+                                                      transaction.sender().to_string(),
+                                                      metadata->method,
+                                                      *arguments,
+                                                      block);
+        if (!change.has_value() || change->kind == ExtraChain::Contracts::ContractChangeKind::ReadOnly
+            || change->checkpoint != metadata->checkpoint) {
             return TransactionProveError::InvalidContractPayload;
         }
-        return verify_output(*output);
+        const auto verified = verify_output(change->output);
+        if (verified == TransactionProveError::NoError) {
+            if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+                return TransactionProveError::InvalidContractPayload;
+            }
+        }
+        return verified;
     }
 
     if (transaction.type() != TransactionType::ContractUpgrade || metadata->method != "migrate"
         || transaction.sender().to_string() != record->owner_id || metadata->version != current.version + 1
         || metadata->revision != previous.revision + 1 || metadata->previous_state_hash != previous.state_hash
-        || record->kind == "fungible-token") {
+        || record->kind == "fungible-token" || !metadata->checkpoint
+        || metadata->checkpoint_revision != metadata->revision) {
         return TransactionProveError::InvalidContractPayload;
     }
     auto module_name = fmt::format("contract-module-v{:06}-{}.wasm",
@@ -1099,13 +1147,21 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     if (!authorization.has_value()) {
         return TransactionProveError::InvalidContractPayload;
     }
-    auto output = contract_manager_->evaluate(*module,
-                                              transaction.sender().to_string(),
-                                              "migrate",
-                                              *arguments,
-                                              previous.state,
-                                              block);
-    return output.has_value() ? verify_output(*output) : TransactionProveError::InvalidContractPayload;
+    auto change = contract_manager_->prepare_upgrade(contract_id.to_string(),
+                                                     transaction.sender().to_string(),
+                                                     *module,
+                                                     *arguments,
+                                                     block);
+    if (!change.has_value() || !change->checkpoint) {
+        return TransactionProveError::InvalidContractPayload;
+    }
+    const auto verified = verify_output(change->output);
+    if (verified == TransactionProveError::NoError) {
+        if (!stage_contract_change(transaction.hash(), std::move(*change))) {
+            return TransactionProveError::InvalidContractPayload;
+        }
+    }
+    return verified;
 }
 
 std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNode::submit_contract_deploy(
@@ -1152,6 +1208,8 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .state_hash          = revision.state_hash,
         .version             = version.version,
         .revision            = revision.revision,
+        .checkpoint          = change->checkpoint,
+        .checkpoint_revision = revision.checkpoint_revision,
     };
     Transaction transaction;
     transaction.set_sender(signer.id());
@@ -1208,6 +1266,8 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .state_hash          = revision.state_hash,
         .version             = version.version,
         .revision            = revision.revision,
+        .checkpoint          = change->checkpoint,
+        .checkpoint_revision = revision.checkpoint_revision,
     };
     Transaction transaction;
     transaction.set_sender(signer.id());
@@ -1264,6 +1324,8 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
         .state_hash          = revision.state_hash,
         .version             = version.version,
         .revision            = revision.revision,
+        .checkpoint          = change->checkpoint,
+        .checkpoint_revision = revision.checkpoint_revision,
     };
     Transaction transaction;
     transaction.set_sender(signer.id());

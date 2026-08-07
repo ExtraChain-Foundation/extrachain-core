@@ -20,7 +20,8 @@
 
 namespace ExtraChain::Contracts {
 
-    inline constexpr std::uint32_t ContractAbiVersion = 1;
+    inline constexpr std::uint32_t ContractAbiVersion         = 1;
+    inline constexpr std::uint64_t ContractCheckpointInterval = 256;
 
     struct ExecutionLimits {
         std::size_t   module_bytes        = 2 * 1024 * 1024;
@@ -78,6 +79,12 @@ namespace ExtraChain::Contracts {
         std::string               author_id;
         std::string               storage_id;
         std::vector<std::uint8_t> state;
+        std::uint64_t             checkpoint_revision = 0;
+        std::uint64_t             checkpoint_block    = 0;
+        std::string               checkpoint_hash;
+        std::string               checkpoint_transaction_hash;
+        std::string               checkpoint_storage_id;
+        std::string               checkpoint_author_id;
     };
 
     struct ContractVersion {
@@ -108,7 +115,12 @@ namespace ExtraChain::Contracts {
         std::string   transaction_hash;
         std::uint64_t section = 0;
         std::string   deploy_transaction_hash;
-        std::uint64_t deploy_section = 0;
+        std::uint64_t deploy_section      = 0;
+        std::uint64_t checkpoint_revision = 0;
+        std::uint64_t checkpoint_section  = 0;
+        std::string   checkpoint_state_hash;
+        std::string   checkpoint_transaction_hash;
+        std::uint64_t replay_depth = 0;
     };
     BOOST_DESCRIBE_STRUCT(ContractSummary,
                           (),
@@ -122,7 +134,12 @@ namespace ExtraChain::Contracts {
                            transaction_hash,
                            section,
                            deploy_transaction_hash,
-                           deploy_section))
+                           deploy_section,
+                           checkpoint_revision,
+                           checkpoint_section,
+                           checkpoint_state_hash,
+                           checkpoint_transaction_hash,
+                           replay_depth))
 
     struct ContractCatalogFilter {
         std::optional<std::string> owner_id;
@@ -179,6 +196,7 @@ namespace ExtraChain::Contracts {
         ContractOutput     output;
         std::uint32_t      expected_version = 0;
         std::string        expected_state_hash;
+        bool               checkpoint = false;
     };
 
 } // namespace ExtraChain::Contracts

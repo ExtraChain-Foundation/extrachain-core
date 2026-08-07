@@ -30,7 +30,7 @@ namespace {
     }
 
     std::string contract_hash_data(const Transaction &transaction) {
-        std::string result = "EXTRACHAIN:CONTRACT-TRANSACTION:1";
+        std::string result = "EXTRACHAIN:CONTRACT-TRANSACTION:2";
         append_field(result, transaction.section().to_string());
         append_field(result, std::to_string(std::to_underlying(transaction.type())));
         append_field(result, transaction.sender().to_string());

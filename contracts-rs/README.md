@@ -13,8 +13,9 @@ The release modules are in `target/wasm32v1-none/release/`. A contract implement
 trait and uses `export_contract!` to export the ExtraChain ABI.
 
 Contract code cannot use files, sockets, clocks, random data, threads, or operating system calls.
-Persistent state is the binary state value in each request and response. ExtraChain stores approved
-state revisions in ExDFS.
+Persistent state is the binary state value in each request and response. ExtraChain stores one
+current local state and periodic approved checkpoints in ExDFS. The DAG stores the ordered calls
+and the previous and result state hashes.
 
 Use the SDK `Encoder` and `Decoder` for MessagePack arguments and results. Keep all operations
 deterministic. Check all integer operations for overflow. Return a failure response without a state
