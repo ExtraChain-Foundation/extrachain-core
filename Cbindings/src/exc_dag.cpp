@@ -16,6 +16,25 @@
 
 using namespace exc_ffi;
 
+namespace {
+
+template <typename Getter>
+ExcError transaction_string(ExcHandle transaction, char** output, Getter&& getter) {
+    *output = nullptr;
+    std::string value;
+    const bool found = HandleTable::instance().with<Transaction>(transaction, [&](const Transaction& current) {
+        value = std::invoke(std::forward<Getter>(getter), current);
+    });
+    if (!found) {
+        return EXC_ERR_INVALID_HANDLE;
+    }
+
+    *output = exc_strdup(value);
+    return *output != nullptr ? EXC_OK : EXC_ERR_UNKNOWN;
+}
+
+} // namespace
+
 extern "C" {
 
 /* ── Transactions ────────────────────────────────────────────────── */
@@ -179,66 +198,60 @@ EXC_API ExcError exc_balance_query_all(const char** actor_ids, size_t count,
 
 EXC_API ExcError exc_transaction_get_sender(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->sender().to_string());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.sender().to_string();
+    });
 }
 
 EXC_API ExcError exc_transaction_get_receiver(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->receiver().to_string());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.receiver().to_string();
+    });
 }
 
 EXC_API ExcError exc_transaction_get_amount(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->amount().to_string());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.amount().to_string();
+    });
 }
 
 EXC_API ExcError exc_transaction_get_hash(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->hash());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.hash();
+    });
 }
 
 EXC_API ExcError exc_transaction_get_section(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->section().to_string());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.section().to_string();
+    });
 }
 
 EXC_API ExcError exc_transaction_get_type(ExcHandle tx, ExcTransactionType* out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = static_cast<ExcTransactionType>(t->type());
-    return EXC_OK;
+    const bool found = HandleTable::instance().with<Transaction>(tx, [&](const Transaction& value) {
+        *out = static_cast<ExcTransactionType>(value.type());
+    });
+    return found ? EXC_OK : EXC_ERR_INVALID_HANDLE;
 }
 
 EXC_API ExcError exc_transaction_get_timestamp(ExcHandle tx, uint64_t* out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = t->timestamp();
-    return EXC_OK;
+    const bool found = HandleTable::instance().with<Transaction>(tx, [&](const Transaction& value) {
+        *out = value.timestamp();
+    });
+    return found ? EXC_OK : EXC_ERR_INVALID_HANDLE;
 }
 
 EXC_API ExcError exc_transaction_get_token(ExcHandle tx, char** out) {
     EXC_CHECK_NULL(out);
-    auto* t = HandleTable::instance().get<Transaction>(tx);
-    if (!t) return EXC_ERR_INVALID_HANDLE;
-    *out = exc_strdup(t->token().to_string());
-    return EXC_OK;
+    return transaction_string(tx, out, [](const Transaction& value) {
+        return value.token().to_string();
+    });
 }
 
 EXC_API void exc_transaction_free(ExcHandle tx) {

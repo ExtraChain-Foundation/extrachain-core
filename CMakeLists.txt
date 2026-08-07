@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.19)
 
 if (${CMAKE_CURRENT_LIST_DIR} MATCHES ${CMAKE_SOURCE_DIR})
     project(extrachain LANGUAGES C CXX DESCRIPTION "ExtraChain Core")
-    add_compile_definitions(EXTRACHAIN_LIBRARY_ACTIVATE)
 endif()
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
@@ -11,6 +10,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+option(EXTRACHAIN_STATIC_BUILD "Build ExtraChain Core as a static library" OFF)
 
 if (EXTRACHAIN_STATIC_BUILD)
     message("Build static ExtraChain")
@@ -209,9 +210,12 @@ if (EXTRACHAIN_STATIC_BUILD)
     message("ExtraChain: static build")
     add_library(extrachain ${EXTRACHAIN_CORE_SOURCES})
 else()
-    add_compile_definitions(extrachain PRIVATE EXTRACHAIN_LIBRARY)
     message("ExtraChain: library build")
     add_library(extrachain SHARED ${EXTRACHAIN_CORE_SOURCES})
+    target_compile_definitions(extrachain
+        PUBLIC EXTRACHAIN_LIBRARY_ACTIVATE
+        PRIVATE EXTRACHAIN_LIBRARY
+    )
 endif()
 
 # link time optimization
@@ -228,10 +232,18 @@ if (EXTRACHAIN_ENABLE_LTO)
 endif(EXTRACHAIN_ENABLE_LTO)
 
 # git
-execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD describe --always --tags OUTPUT_VARIABLE GIT_COMMIT_CORE)
-execute_process(COMMAND git --git-dir ${CMAKE_CURRENT_LIST_DIR}/.git --work-tree $$PWD symbolic-ref --short HEAD OUTPUT_VARIABLE GIT_BRANCH_CORE)
-string(STRIP "${GIT_COMMIT_CORE}" GIT_COMMIT_CORE)
-string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
+execute_process(
+    COMMAND git -C "${CMAKE_CURRENT_LIST_DIR}" describe --always --tags
+    OUTPUT_VARIABLE GIT_COMMIT_CORE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+execute_process(
+    COMMAND git -C "${CMAKE_CURRENT_LIST_DIR}" symbolic-ref --short HEAD
+    OUTPUT_VARIABLE GIT_BRANCH_CORE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 

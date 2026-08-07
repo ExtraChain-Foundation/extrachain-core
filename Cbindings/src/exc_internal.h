@@ -8,13 +8,15 @@
 #include "../extrachain_c.h"
 
 #include <any>
-#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
+#include <utility>
 
 #include <QCoreApplication>
 #include <QMetaObject>
@@ -58,18 +60,22 @@ public:
     template <typename T>
     ExcHandle store(T&& value) {
         std::lock_guard lock(mutex_);
-        ExcHandle h = next_++;
-        entries_[h] = Entry { std::any(std::forward<T>(value)), std::type_index(typeid(std::decay_t<T>)) };
-        return h;
+        const ExcHandle handle = next_++;
+        entries_.emplace(
+            handle,
+            Entry { std::any(std::forward<T>(value)), std::type_index(typeid(std::decay_t<T>)) });
+        return handle;
     }
 
-    template <typename T>
-    T* get(ExcHandle h) {
+    template <typename T, typename Function>
+    bool with(ExcHandle h, Function&& function) {
         std::lock_guard lock(mutex_);
         auto it = entries_.find(h);
-        if (it == entries_.end()) return nullptr;
-        if (it->second.type != std::type_index(typeid(T))) return nullptr;
-        return std::any_cast<T>(&it->second.value);
+        if (it == entries_.end() || it->second.type != std::type_index(typeid(T))) {
+            return false;
+        }
+        std::invoke(std::forward<Function>(function), *std::any_cast<T>(&it->second.value));
+        return true;
     }
 
     void release(ExcHandle h) {
@@ -85,9 +91,9 @@ private:
         std::type_index type{typeid(void)};
     };
 
-    std::mutex                               mutex_;
-    std::atomic<ExcHandle>                   next_;
-    std::unordered_map<ExcHandle, Entry>     entries_;
+    std::mutex                           mutex_;
+    ExcHandle                           next_;
+    std::unordered_map<ExcHandle, Entry> entries_;
 };
 
 /* ── Global state ────────────────────────────────────────────────── */
