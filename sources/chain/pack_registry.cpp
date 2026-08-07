@@ -39,7 +39,7 @@ std::uint64_t section_to_u64(const SectionId &id) {
 
 Registry::Registry(std::filesystem::path packs_dir, std::size_t max_open)
     : dir_(std::move(packs_dir))
-    , max_open_(max_open) {
+    , max_open_(std::max<std::size_t>(1, max_open)) {
     std::error_code ec;
     std::filesystem::create_directories(dir_, ec);
 }
@@ -110,7 +110,7 @@ void Registry::rescan() {
         std::sort(valid.begin(), valid.end());
         for (auto it = readers_.begin(); it != readers_.end();) {
             if (!std::binary_search(valid.begin(), valid.end(), it->first)) {
-                lru_.remove(it->first);
+                lru_.erase(it->second.lru_position);
                 it = readers_.erase(it);
             } else {
                 ++it;
@@ -144,10 +144,8 @@ std::optional<PackId> Registry::find_pack_for_section(const SectionId &id) const
 Reader *Registry::acquire_reader_locked(PackId id) {
     auto it = readers_.find(id);
     if (it != readers_.end()) {
-        // touch LRU
-        lru_.remove(id);
-        lru_.push_front(id);
-        return it->second.get();
+        lru_.splice(lru_.begin(), lru_, it->second.lru_position);
+        return it->second.reader.get();
     }
 
     auto r = Reader::open(pack_path(id));
@@ -157,12 +155,16 @@ Reader *Registry::acquire_reader_locked(PackId id) {
         return nullptr;
     }
 
-    auto [inserted_it, _] =
-        readers_.emplace(id, std::make_unique<Reader>(std::move(*r)));
     lru_.push_front(id);
+    auto [inserted_it, _] = readers_.emplace(
+        id,
+        ReaderEntry {
+            .reader       = std::make_unique<Reader>(std::move(*r)),
+            .lru_position = lru_.begin(),
+        });
 
     evict_if_needed_locked();
-    return inserted_it->second.get();
+    return inserted_it->second.reader.get();
 }
 
 void Registry::evict_if_needed_locked() {
@@ -332,8 +334,11 @@ std::expected<void, Error> Registry::finalize_incoming(PackId id, const std::fil
     // some platforms keeps a hold on the path).
     {
         std::lock_guard cache_lock(cache_mutex_);
-        readers_.erase(id);
-        lru_.remove(id);
+        auto reader = readers_.find(id);
+        if (reader != readers_.end()) {
+            lru_.erase(reader->second.lru_position);
+            readers_.erase(reader);
+        }
     }
 
     std::error_code ec;

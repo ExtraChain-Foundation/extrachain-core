@@ -86,7 +86,7 @@ private slots:
 
         Pack::Registry server(server_dir);
         server.rescan();
-        Pack::Registry client(client_dir);
+        Pack::Registry client(client_dir, 1);
 
         // Client learns which packs exist (network_pack_list_response uses spans()).
         auto spans = server.spans();
@@ -106,6 +106,16 @@ private slots:
             QVERIFY2(got.has_value(), qPrintable(QString("client missing section %1").arg(sid)));
             QCOMPARE(*got, std::string("sec-") + std::to_string(sid));
         }
+
+        auto reopened = client.read_section(SectionId(0));
+        QVERIFY(reopened.has_value());
+        QCOMPARE(*reopened, std::string("sec-0"));
+
+        Pack::Registry zero_sized_cache(client_dir, 0);
+        zero_sized_cache.rescan();
+        QVERIFY(zero_sized_cache.read_section(SectionId(0)).has_value());
+        QVERIFY(zero_sized_cache.read_section(SectionId(per_pack)).has_value());
+        QVERIFY(zero_sized_cache.read_section(SectionId(0)).has_value());
 
         // Coverage matches the server.
         auto cov = client.coverage();

@@ -127,9 +127,14 @@ private:
     mutable std::shared_mutex       meta_mutex_;
     std::vector<PackMeta>           meta_; // sorted by first
 
-    mutable std::mutex                           cache_mutex_;
-    std::map<PackId, std::unique_ptr<Reader>>    readers_;
-    std::list<PackId>                            lru_;
+    struct ReaderEntry {
+        std::unique_ptr<Reader>      reader;
+        std::list<PackId>::iterator lru_position;
+    };
+
+    mutable std::mutex              cache_mutex_;
+    std::map<PackId, ReaderEntry>    readers_;
+    std::list<PackId>                lru_;
 
     // Returns iterator into meta_ or meta_.end() (requires shared lock).
     std::vector<PackMeta>::const_iterator find_meta_for(std::uint64_t section) const;
