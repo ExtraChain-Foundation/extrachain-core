@@ -605,6 +605,8 @@ std::optional<bool> Dag::write_section(const Section &section) {
 }
 
 std::optional<std::pair<WriteResult, std::optional<SectionDiff>>> Dag::write_section_diff(const Section &section) {
+    // Same-section RMW race: a sync write must not clobber a concurrent tx insert.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
     std::optional<SectionDiff> section_diff;
     auto                       existing_section = this->read_section(section.id);
 
@@ -636,6 +638,9 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         return std::nullopt;
     }
 
+    // Serialize against save_transaction: a concurrent tx insert into this section
+    // must not race with writing its control hash.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         section = Section { .id = section_id };
@@ -659,6 +664,7 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
 }
 
 std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return std::nullopt;
@@ -730,6 +736,11 @@ SectionDiff Dag::calculate_section_diff(const Section &old_section, const Sectio
 }
 
 bool Dag::save_transaction(const Transaction &transaction) {
+    // Hold save_mutex_ across the whole read-insert-write cycle: without it two
+    // concurrent transactions for the same section both read the old set and one
+    // insert is lost, so sections diverge between nodes and ControlIndex fails.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
+
     auto section = this->read_section(transaction.section());
 
     if (!section.has_value()) {
@@ -793,6 +804,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 }
 
 bool Dag::local_remove_transaction(const SectionId &section_id, const std::string &hash) {
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return false;
@@ -818,6 +830,8 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     if (transactions.empty()) {
         return std::nullopt;
     }
+    // Same section RMW race as save_transaction — serialize the batch too.
+    std::lock_guard<std::recursive_mutex> save_lock(save_mutex_);
 
     bool      all_saved   = true;
     bool      has_changes = false;

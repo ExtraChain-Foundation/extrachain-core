@@ -569,6 +569,10 @@ private:
 
     mutable std::shared_mutex section_mutex_; //
     mutable std::mutex        range_mutex_;   //
+    // Serializes the whole read-modify-write cycle of save_transaction so that
+    // two transactions targeting the same section can't both read the old set and
+    // clobber each other's insert (lost update -> divergent sections -> control fail).
+    mutable std::recursive_mutex save_mutex_;
 
     SectionId current_section_     = SectionId(-1);      // Current (latest) section ID
     SectionId first_saved_section_ = SectionId(-1);      // First section ID saved in the chain
