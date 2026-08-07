@@ -21,8 +21,11 @@
 
 #include <extrachain_global.h>
 #include <expected>
+#include "chain/actor.h"
 #include "chain/actor_id.h"
 #include "chat/chat.h"
+#include "chat/chat_folders.h"
+#include "chat/chat_profile.h"
 #include "chat/message.h"
 #include "dfs/dfs_utils.h"
 #include "dfs/dfs_vector.h"
@@ -30,13 +33,14 @@
 static const std::string CHAT_DAPP_FOLDER        = ":DApp:Chat";
 static const std::string CHAT_DAPP_INVITE_FOLDER = ":DApp:Chat:Invite";
 
-static const std::string CHAT_MY_CHATS = "MyChats";
+static const std::string CHAT_MY_CHATS_INFO = "MyChatsInfo";
+// Keep the legacy vector name for existing node bootstrap and stored data.
+static const std::string CHAT_MY_CHATS      = "MyChats";
+static const std::string CHAT_PROFILE       = "ChatProfile";
+static const std::string CHAT_FOLDERS       = "ChatFolders";
+static const std::string CHAT_SERVICE_ACTOR = "46710a2d823c23db9fc2ac01e0f84212a8128373";
 
 class ExtraChainNode;
-
-enum class ChatError {
-    Unknown
-};
 
 class EXTRACHAIN_EXPORT ChatManager {
 private:
@@ -45,17 +49,31 @@ private:
 public:
     ChatManager(ExtraChainNode *node);
 
+    void              set_mode(ChatMode mode);
+    ChatMode          mode() const;
+    bool              activated() const;
+    // Ensures chat actor exists and scans pending invites. Idempotent.
+    std::expected<void, ChatError> activate();
+
     std::expected<Chat::Chat, ChatError> create_chat(bool encryption = true);
     std::expected<Chat::Chat, ChatError> create_myself();
     std::expected<Chat::Chat, ChatError> create_dialogue(ActorId with);
     std::expected<Chat::Chat, ChatError> invite(const Chat::Chat &chat);
 
+    ChatProfile &profile() { return profile_; }
+    ChatFolders &folders() { return folders_; }
+
+    ActorId my_chat_main_id();
+
     std::expected<Chat::Chat, ChatError> create_channel(const std::string &name = "");
     std::expected<Chat::Chat, ChatError> subscribe_channel(const ActorId &owner_id, const std::string &file_id);
+    std::expected<std::vector<Chat::ChannelInfo>, ChatError> read_channels();
     std::optional<std::string>           get_channel_name(const Chat::Chat &chat);
     bool                                 set_channel_name(const Chat::Chat &chat, const std::string &name);
 
     std::expected<std::vector<Chat::Chat>, ChatError>    read_chats();
+    // Last chat list produced by read_chats() (empty before the first read).
+    const std::vector<Chat::Chat>& chats() const { return chats_; }
     std::expected<std::vector<Chat::Message>, ChatError> read_chat_messages(const ActorId     &owner_id,
                                                                             const std::string &file_id,
                                                                             bool               quick = false);
@@ -108,16 +126,38 @@ public:
                                                   const std::string &file_id,
                                                   const std::string &message_id);
 
+    std::expected<bool, ChatError> delete_for_me(const ActorId     &owner_id,
+                                                  const std::string &file_id,
+                                                  const std::string &message_id);
+
     std::optional<Chat::Chat> get_chat(const ActorId &owner_id, const std::string &file_id);
 
     void update_dfs_files();
 
 private:
+    // Chat vector + peer chat_main go into the DFS priority set so the download
+    // queue keeps exactly our interests fresh (messages, profiles, avatars).
+    void                                  mark_chat_priority(const Chat::Chat &chat);
+    bool                                  publish_channel(const Chat::Chat &chat, const std::string &name);
+    std::expected<Dfs::DirRow, Dfs::DfsError> channels_vector_row();
     std::expected<Dfs::DirRow, ChatError> create_mychats();
-    std::expected<bool, ChatError>        insert_chat_to_mychats(const Chat::Chat &chat);
+    std::expected<Chat::Chat, ChatError>  insert_chat_to_mychats(const Chat::Chat &chat);
+    std::expected<Chat::Chat, ChatError>  update_chat_in_mychats(const Chat::Chat &chat);
+    void                                  retry_pending_invites();
     bool                                  parse_invite(const ActorId &owner_id, const Dfs::DirRow &dir_row);
-
-    ActorId chat_actor_;
+    ActorId                               current_chat_actor_id();
+    std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatError> current_chat_actor();
 
     std::vector<Chat::Chat> chats_;
+    // Chat owner-actors already sent a targeted dirs-sync this session (see read_chats):
+    // without it, chat vectors have no dir_row after a from-scratch import.
+    std::set<ActorId>       dirs_refreshed_actors_;
+    ChatMode                mode_       = ChatMode::Enabled;
+    bool                    activated_  = false;
+    Dfs::DirRow             my_chats_row_;
+    ChatProfile             profile_ { this };
+    ChatFolders             folders_ { this };
+
+    friend class ChatFolders;
+    friend class ChatProfile;
 };

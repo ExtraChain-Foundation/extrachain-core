@@ -119,6 +119,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/utils/compression.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_manager.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_folders.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chat/chat_profile.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chat/message.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_types.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/contracts/contract_codec.h
@@ -184,6 +186,8 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/utils/compression.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_folders.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_policy.cpp
@@ -231,7 +235,9 @@ string(STRIP "${GIT_BRANCH_CORE}" GIT_BRANCH_CORE)
 string(TIMESTAMP COMPILE_DATE "%m.%d")
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS EXTRACHAIN_CMAKE COMPILE_DATE="${COMPILE_DATE}" GIT_COMMIT_CORE="${GIT_COMMIT_CORE}" GIT_BRANCH_CORE="${GIT_BRANCH_CORE}" MAGIC_ENUM_RANGE_MIN=0 MAGIC_ENUM_RANGE_MAX=256)
 
-target_precompile_headers(extrachain PRIVATE ${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h)
+target_precompile_headers(extrachain PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/headers/precompiled.h>"
+)
 target_include_directories(extrachain PUBLIC ${EXTRACHAIN_CORE_INCLUDES})
 
 set(bip3x_BUILD_SHARED_LIBS OFF CACHE BOOL "")

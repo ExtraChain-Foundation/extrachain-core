@@ -281,6 +281,10 @@ bool ThothManager::send_to_service(const ThothInfo& info, const std::string& use
     return true;
 }
 
+void ThothManager::set_device_token(const std::string& token) {
+    set_ios_token(token);
+}
+
 void ThothManager::set_ios_token(const std::string& token) {
     ios_token_ = token;
 }

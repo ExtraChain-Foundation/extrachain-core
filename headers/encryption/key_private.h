@@ -50,6 +50,7 @@ public:
 public:
     void generate_random();
     void generate_seed(const MasterSeed &seed, int index);
+    void generate_seed(const MasterSeed &seed, const std::string &label);
 
     Cryptography::CryptoResult encrypt(const Bytes &data, const PublicKey &receiver_public_key) const;
     Cryptography::CryptoResult decrypt(const Bytes &data, const PublicKey &sender_public_key) const;

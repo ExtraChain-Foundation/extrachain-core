@@ -36,11 +36,7 @@ target_include_directories(extrachainc
 
 target_link_libraries(extrachainc PRIVATE extrachain)
 
-if(MSVC)
-    target_compile_options(extrachainc PRIVATE "/FI${CMAKE_SOURCE_DIR}/headers/precompiled.h")
-else()
-    target_precompile_headers(extrachainc REUSE_FROM extrachain)
-endif()
+target_precompile_headers(extrachainc REUSE_FROM extrachain)
 
 set_target_properties(extrachainc PROPERTIES
     C_STANDARD 11

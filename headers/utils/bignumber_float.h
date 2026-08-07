@@ -39,6 +39,7 @@ class EXTRACHAIN_EXPORT BigNumberFloat {
 public:
     BigNumberFloat();
     explicit BigNumberFloat(const std::string &bigNumberFloat);
+    BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base);
     BigNumberFloat(const BigNumberFloat &other);
     BigNumberFloat(BigNumberFloat &&other) noexcept;
     explicit BigNumberFloat(const BigNumber &other);
@@ -83,11 +84,14 @@ public:
 public:
     const cpp_dec_float_exc &data() const;
     std::string              to_string() const;
+    std::string              to_string(NumeralBase base) const;
     std::string              to_hex_string() const;
     BigNumberFloat           pow(unsigned long number);
     BigNumberFloat           abs() const;
 
     static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat);
+    static std::expected<BigNumberFloat, BigNumberError> create(const std::string &bigNumberFloat,
+                                                                NumeralBase        base);
 
     // Legacy hex helper for migration and pre-decimal protocol peers.
     static BigNumberFloat from_hex(const std::string &number);
@@ -103,9 +107,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy)
-                              ? to_hex_string()
-                              : to_string();
+        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? to_hex_string() : to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }
@@ -114,8 +116,7 @@ public:
         std::string num = msgpack_o.as<std::string>();
         // Mirror msgpack_pack: the active WireFormat scope decides the encoding,
         // never the content. Legacy peers send hex; canonical peers send decimal.
-        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num)
-                                                                     : BigNumberFloat(num);
+        *this = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? from_hex(num) : BigNumberFloat(num);
     }
 };
 

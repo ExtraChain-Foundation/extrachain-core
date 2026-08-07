@@ -413,6 +413,10 @@ void SeedProfile::generate() {
         actor.generate_from_seed(seed_, i, ActorType::User);
         actors_.push_back(actor);
     }
+
+    Actor<KeyPrivate> chat;
+    chat.generate_from_seed(seed_, std::string("chat"), ActorType::User);
+    actors_.push_back(chat);
 }
 
 std::vector<Actor<KeyPrivate>> SeedProfile::generate_other(ExtraChainNode *node) {

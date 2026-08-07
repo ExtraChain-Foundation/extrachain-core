@@ -41,6 +41,12 @@ enum class BigNumberError {
     Infinity
 };
 
+// Public compatibility selector. Canonical storage and wire data remain decimal.
+enum class NumeralBase {
+    Dec = 10,
+    Hex = 16
+};
+
 /**
  * Arbitrary-precision integer. Canonical string form is decimal.
  * Hex parsing retained for backward compatibility with pre-decimal chain data.
@@ -49,6 +55,7 @@ class EXTRACHAIN_EXPORT BigNumber {
 public:
     BigNumber();
     explicit BigNumber(const std::string &bigNumber);
+    BigNumber(const std::string &bigNumber, NumeralBase base);
     BigNumber(const BigNumber &other);
     BigNumber(BigNumber &&other) noexcept;
     explicit BigNumber(const boost::multiprecision::cpp_int &number);
@@ -105,6 +112,7 @@ public:
 
     bool               is_empty() const;
     std::string        to_string() const;
+    std::string        to_string(NumeralBase base) const;
     std::string        to_hex_string() const;
     std::string        to_printable_string() const;
     std::optional<int> to_int() const;
@@ -113,6 +121,7 @@ public:
     BigNumber abs() const;
 
     static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber);
+    static std::expected<BigNumber, BigNumberError> create(const std::string &bigNumber, NumeralBase base);
 
     // Legacy hex helpers — used by migration and by peers running pre-decimal protocol.
     static bool      is_hex_string(const std::string &str);
@@ -126,9 +135,7 @@ public:
 
     template <typename Packer>
     void msgpack_pack(Packer &msgpack_pk) const {
-        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy)
-                              ? to_hex_string()
-                              : to_string();
+        std::string num = (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? to_hex_string() : to_string();
         msgpack_pk.pack_str(num.size());
         msgpack_pk.pack_str_body(num.data(), num.size());
     }

@@ -87,6 +87,7 @@ public:
 
     bool send_to_service(const ThothInfo& info, const std::string& username);
 
+    void        set_device_token(const std::string& token);
     void        set_ios_token(const std::string& token);
     std::string read_username(const ActorId& actor_id);
 

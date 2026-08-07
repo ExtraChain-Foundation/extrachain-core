@@ -61,6 +61,14 @@ SeedProfile AccountController::create_profile(const std::string               &h
     profile_seed.save(hash);
     this->profile_seed = profile_seed;
 
+    // chat_main is in seed_profile.actors()[2]; add to profile.actors_ for DFS lookup.
+    if (profile_seed.actors().size() > 2) {
+        const auto& chat_main = profile_seed.actors()[2];
+        this->profile(current_profile_).add_wallet(chat_main, false);
+        node->actor_index()->store_new_actor(chat_main.to_public());
+        eLog("[Accounts] chat_main registered: {}", chat_main.id());
+    }
+
     eLog("[Accounts] Created new profile. System: {}, main: {}", system_actor.id(), main_actor.id());
 
     node->start(); // TODO: remove
@@ -102,6 +110,89 @@ Actor<KeyPrivate> AccountController::create_service(const ActorId               
     profile.add_wallet(actor);
     node->actor_index()->store_new_actor(actor.to_public());
     return actor;
+}
+
+Actor<KeyPrivate> AccountController::create_actor(const ActorId &profileActor, int seed_index, ActorType type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_index, type);
+
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
+    profile.add_wallet(actor, false);
+    node->actor_index()->store_new_actor(actor.to_public());
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::create_actor(const ActorId     &profileActor,
+                                                  const std::string &seed_label,
+                                                  ActorType          type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
+    profile.add_wallet(actor, false);
+
+    if (!node->actor_index()->exists(actor.id())) {
+        node->actor_index()->store_new_actor(actor.to_public());
+    }
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::restore_actor(const ActorId     &profileActor,
+                                                   const std::string &seed_label,
+                                                   ActorType          type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+
+    auto &profile = this->profile(profileActor.is_zero() ? current_profile_ : profileActor);
+    if (!profile.get_actor(actor.id()).has_value()) {
+        profile.add_wallet(actor, false);
+    }
+    return actor;
+}
+
+Actor<KeyPrivate> AccountController::derive_local_actor(const std::string &seed_label, ActorType type) {
+    Actor<KeyPrivate> actor;
+    if (profile_type_ == ProfileType::Old) {
+        return actor;
+    }
+
+    actor.generate_from_seed(profile_seed.seed(), seed_label, type);
+    return actor;
+}
+
+std::expected<std::reference_wrapper<const Actor<KeyPrivate>>, ChatActorError> AccountController::chat_actor() {
+    if (current_profile_.is_zero() || profiles_.empty()) {
+        return std::unexpected(ChatActorError::NoProfile);
+    }
+
+    // Chat identity is strictly chat_main: never fall back to main, it must
+    // stay hidden from chat peers. Old profiles have no seed, so no chat.
+    if (profile_type_ == ProfileType::Old) {
+        return std::unexpected(ChatActorError::NoSeed);
+    }
+
+    if (profile_seed.actors().size() <= 2) {
+        return std::unexpected(ChatActorError::DerivationFailed);
+    }
+
+    auto chat_id = profile_seed.actors()[2].id();
+    auto stored  = this->profile(current_profile_).get_actor(chat_id);
+    if (!stored.has_value()) {
+        return std::unexpected(ChatActorError::DerivationFailed);
+    }
+    return stored.value();
 }
 
 void AccountController::import_old_profile(const ImportedUser &imported_profile, const std::string &hash) {
@@ -209,6 +300,16 @@ bool AccountController::load_profile(const ActorId                &actor_id,
         if (try_new.has_value()) {
 
             auto profile = PrivateProfile::create(try_new->actors()[0], try_new->actors()[1], hash, node, false);
+
+            // chat_main lives at seed_profile.actors()[2]; needs to be in profile.actors_ for DFS.
+            if (try_new->actors().size() > 2) {
+                const auto& chat_main = try_new->actors()[2];
+                profile.add_wallet(chat_main, false);
+                if (!node->actor_index()->exists(chat_main.id())) {
+                    node->actor_index()->store_new_actor(chat_main.to_public());
+                }
+                eLog("[Accounts] chat_main registered (load): {}", chat_main.id());
+            }
 
             const auto actors = try_new->generate_other(node);
             if (!actors.empty()) {
@@ -372,8 +473,18 @@ void AccountController::insert_to_profile_set(const ActorId &actorId) {
 }
 
 std::vector<std::string> AccountController::seed_mnemonic() {
-    auto seed     = profile_seed.seed();
+    auto seed = profile_seed.seed();
+    if (Utils::is_container_empty(seed)) {
+        eWarning("[Accounts] Can't export seed mnemonic: profile seed is empty");
+        return {};
+    }
+
     auto mnemonic = Cryptography::create_mnemonic(seed);
+    if (mnemonic.size() != 24) {
+        eWarning("[Accounts] Can't export seed mnemonic: unexpected word count {}", mnemonic.size());
+        return {};
+    }
+
     return mnemonic;
 }
 

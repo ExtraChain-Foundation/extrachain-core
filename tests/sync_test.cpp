@@ -45,24 +45,24 @@
 
 namespace {
 
-// Build a server-side registry holding `pack_count` packs of `per_pack` sections,
-// section ids contiguous from 0. Section payload is a small JSON-ish blob whose
-// content is deterministic per id.
-std::filesystem::path make_server_packs(const std::filesystem::path &dir,
-                                        int pack_count, int per_pack) {
-    std::filesystem::remove_all(dir);
-    Pack::Registry reg(dir);
-    for (int p = 0; p < pack_count; ++p) {
-        std::map<SectionId, std::string> sections;
-        for (int i = 0; i < per_pack; ++i) {
-            int sid = p * per_pack + i;
-            sections.emplace(SectionId(sid), "sec-" + std::to_string(sid));
+    // Build a server-side registry holding `pack_count` packs of `per_pack` sections,
+    // section ids contiguous from 0. Section payload is a small JSON-ish blob whose
+    // content is deterministic per id.
+    std::filesystem::path make_server_packs(const std::filesystem::path &dir, int pack_count, int per_pack) {
+        std::filesystem::remove_all(dir);
+        Pack::Registry reg(dir);
+        for (int p = 0; p < pack_count; ++p) {
+            std::map<SectionId, std::string> sections;
+            for (int i = 0; i < per_pack; ++i) {
+                int sid = p * per_pack + i;
+                sections.emplace(SectionId(sid), "sec-" + std::to_string(sid));
+            }
+            auto w = reg.create_pack(static_cast<Pack::PackId>(p), sections);
+            if (!w.has_value())
+                return {};
         }
-        auto w = reg.create_pack(static_cast<Pack::PackId>(p), sections);
-        if (!w.has_value()) return {};
+        return dir;
     }
-    return dir;
-}
 
 } // namespace
 
@@ -170,13 +170,13 @@ private slots:
         // Decode each under the matching scope -> original value.
         {
             WireFormat::Scope s(WireFormat::Mode::Canonical);
-            auto back = MessagePack::deserialize<BigNumber>(decimal_wire);
+            auto              back = MessagePack::deserialize<BigNumber>(decimal_wire);
             QVERIFY(back.has_value());
             QCOMPARE(back->to_string(), std::string("255"));
         }
         {
             WireFormat::Scope s(WireFormat::Mode::Legacy);
-            auto back = MessagePack::deserialize<BigNumber>(hex_wire);
+            auto              back = MessagePack::deserialize<BigNumber>(hex_wire);
             QVERIFY(back.has_value());
             QCOMPARE(back->to_string(), std::string("255"));
         }
@@ -187,7 +187,7 @@ private slots:
     // read the same characters as 100. This is exactly why receive handlers parse
     // under WireFormat::wire().
     void wireFormatLegacyHexIsUnambiguous() {
-        BigNumber v(256);
+        BigNumber   v(256);
         std::string hex_wire;
         {
             WireFormat::Scope s(WireFormat::Mode::Legacy);
@@ -202,6 +202,29 @@ private slots:
         // And the strict decimal constructor never sniffs hex.
         QCOMPARE(BigNumber("100").to_string(), std::string("100"));
         QCOMPARE(BigNumber::from_hex("100").to_string(), std::string("256"));
+    }
+
+    // Existing desktop and mobile clients select the display or input base
+    // explicitly. These overloads must not change the canonical decimal default.
+    void numeralBaseCompatibility() {
+        const BigNumber integer("100");
+        QCOMPARE(integer.to_string(), std::string("100"));
+        QCOMPARE(integer.to_string(NumeralBase::Dec), std::string("100"));
+        QCOMPARE(integer.to_string(NumeralBase::Hex), std::string("64"));
+        QCOMPARE(BigNumber("100", NumeralBase::Hex).to_string(), std::string("256"));
+
+        auto numeric_hex = BigNumber::create("100", NumeralBase::Hex);
+        QVERIFY(numeric_hex.has_value());
+        QCOMPARE(numeric_hex->to_string(), std::string("256"));
+        QVERIFY(!BigNumber::create("10g", NumeralBase::Hex).has_value());
+
+        const BigNumberFloat decimal("1.25", NumeralBase::Dec);
+        QCOMPARE(decimal.to_string(NumeralBase::Dec), std::string("1.25"));
+
+        auto float_hex = BigNumberFloat::create("a.5", NumeralBase::Hex);
+        QVERIFY(float_hex.has_value());
+        QCOMPARE(float_hex->to_string(), std::string("10.5"));
+        QVERIFY(!BigNumberFloat::create("a.5.1", NumeralBase::Hex).has_value());
     }
 
     // ----- Migration round-trip ----------------------------------------------

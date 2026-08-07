@@ -20,6 +20,7 @@
 #include "utils/bignumber_float.h"
 #include "utils/bignumber.h"
 
+#include <cctype>
 #include <exception>
 #include <iomanip>
 #include <sstream>
@@ -31,6 +32,29 @@
 #else
     #define UPDATE_DEBUG()
 #endif
+
+namespace {
+    bool is_hex_float(const std::string &value) {
+        auto first = value.begin();
+        if (first != value.end() && *first == '-') {
+            ++first;
+        }
+
+        bool has_digit = false;
+        bool has_dot   = false;
+        for (auto it = first; it != value.end(); ++it) {
+            if (*it == '.' && !has_dot) {
+                has_dot = true;
+                continue;
+            }
+            if (std::isxdigit(static_cast<unsigned char>(*it)) == 0) {
+                return false;
+            }
+            has_digit = true;
+        }
+        return has_digit;
+    }
+} // namespace
 
 BigNumberFloat::BigNumberFloat()
     : m_data(0) {
@@ -51,6 +75,10 @@ BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat) {
     }
 
     UPDATE_DEBUG()
+}
+
+BigNumberFloat::BigNumberFloat(const std::string &bigNumberFloat, NumeralBase base)
+    : BigNumberFloat(base == NumeralBase::Hex ? from_hex(bigNumberFloat) : BigNumberFloat(bigNumberFloat)) {
 }
 
 BigNumberFloat::BigNumberFloat(const BigNumberFloat &other) {
@@ -232,6 +260,10 @@ std::string BigNumberFloat::to_string() const {
     return str;
 }
 
+std::string BigNumberFloat::to_string(NumeralBase base) const {
+    return base == NumeralBase::Hex ? to_hex_string() : to_string();
+}
+
 std::string BigNumberFloat::to_hex_string() const {
     std::string str     = to_string();
     size_t      dot_pos = str.find('.');
@@ -270,6 +302,17 @@ std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::
     } catch (std::exception &) {
         return std::unexpected(BigNumberError::InvalidNumber);
     }
+}
+
+std::expected<BigNumberFloat, BigNumberError> BigNumberFloat::create(const std::string &bigNumberFloat,
+                                                                     NumeralBase        base) {
+    if (base == NumeralBase::Dec) {
+        return create(bigNumberFloat);
+    }
+    if (!is_hex_float(bigNumberFloat)) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
+    return from_hex(bigNumberFloat);
 }
 
 BigNumberFloat BigNumberFloat::from_hex(const std::string &number) {
@@ -335,8 +378,7 @@ bool BigNumberFloat::operator!=(const BigNumberFloat &other) const {
 
 namespace magic {
     std::string custom_magic<BigNumberFloat>::read(const BigNumberFloat &value) {
-        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string()
-                                                                    : value.to_string();
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string() : value.to_string();
     }
 
     BigNumberFloat custom_magic<BigNumberFloat>::write(const std::string &value) {

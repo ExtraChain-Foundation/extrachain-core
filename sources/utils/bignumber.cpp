@@ -20,6 +20,7 @@
 #include "utils/bignumber.h"
 
 #include <algorithm>
+#include <cctype>
 #include <exception>
 #include <sstream>
 
@@ -28,11 +29,9 @@
 using boost::multiprecision::cpp_int;
 
 BigNumber::BigNumber()
-    : m_data(0) {
-    UPDATE_DEBUG()
-}
+    : m_data(0) { UPDATE_DEBUG() }
 
-BigNumber::BigNumber(const std::string &bigNumber) {
+    BigNumber::BigNumber(const std::string &bigNumber) {
     if (bigNumber == "inf")
         eFatal("BigNumber: infinity");
     try {
@@ -45,11 +44,14 @@ BigNumber::BigNumber(const std::string &bigNumber) {
         } else {
             std::string trimmed     = bigNumber;
             bool        is_negative = !trimmed.empty() && trimmed[0] == '-';
-            if (is_negative) trimmed = trimmed.substr(1);
+            if (is_negative)
+                trimmed = trimmed.substr(1);
             trimmed.erase(0, trimmed.find_first_not_of('0'));
-            if (trimmed.empty()) trimmed = "0";
+            if (trimmed.empty())
+                trimmed = "0";
             this->m_data = cpp_int(trimmed);
-            if (is_negative) this->m_data = -this->m_data;
+            if (is_negative)
+                this->m_data = -this->m_data;
         }
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
@@ -57,6 +59,10 @@ BigNumber::BigNumber(const std::string &bigNumber) {
     }
 
     UPDATE_DEBUG()
+}
+
+BigNumber::BigNumber(const std::string &bigNumber, NumeralBase base)
+    : BigNumber(base == NumeralBase::Hex ? from_hex(bigNumber) : BigNumber(bigNumber)) {
 }
 
 BigNumber::BigNumber(const BigNumber &other) {
@@ -239,6 +245,10 @@ std::string BigNumber::to_string() const {
     return m_data.str();
 }
 
+std::string BigNumber::to_string(NumeralBase base) const {
+    return base == NumeralBase::Hex ? to_hex_string() : to_string();
+}
+
 std::string BigNumber::to_hex_string() const {
     std::stringstream ss;
     if (m_data >= 0) {
@@ -297,7 +307,8 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
         // explicitly — never sniffed (see the constructor for why).
         std::string trimmed     = bigNumber;
         bool        is_negative = !trimmed.empty() && trimmed[0] == '-';
-        if (is_negative) trimmed = trimmed.substr(1);
+        if (is_negative)
+            trimmed = trimmed.substr(1);
         if (trimmed.empty()) {
             return std::unexpected(BigNumberError::InvalidNumber);
         }
@@ -305,7 +316,8 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
         bool all_digits = std::all_of(trimmed.begin(), trimmed.end(), [](char c) {
             return c >= '0' && c <= '9';
         });
-        if (!all_digits) return std::unexpected(BigNumberError::InvalidNumber);
+        if (!all_digits)
+            return std::unexpected(BigNumberError::InvalidNumber);
         return BigNumber(bigNumber);
     } catch (std::exception &) {
         eLog("Incorrect BigNumber value: {}", bigNumber);
@@ -313,12 +325,29 @@ std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bi
     }
 }
 
+std::expected<BigNumber, BigNumberError> BigNumber::create(const std::string &bigNumber, NumeralBase base) {
+    if (base == NumeralBase::Dec) {
+        return create(bigNumber);
+    }
+    const auto first =
+        (!bigNumber.empty() && bigNumber.front() == '-') ? bigNumber.begin() + 1 : bigNumber.begin();
+    if (first == bigNumber.end() || !std::all_of(first, bigNumber.end(), [](unsigned char c) {
+            return std::isxdigit(c) != 0;
+        })) {
+        return std::unexpected(BigNumberError::InvalidNumber);
+    }
+    return from_hex(bigNumber);
+}
+
 bool BigNumber::is_hex_string(const std::string &str) {
-    if (str.empty()) return false;
+    if (str.empty())
+        return false;
 
     size_t start = 0;
-    if (str[0] == '-') start = 1;
-    if (start >= str.size()) return false;
+    if (str[0] == '-')
+        start = 1;
+    if (start >= str.size())
+        return false;
 
     for (size_t i = start; i < str.size(); i++) {
         char c = str[i];
@@ -330,14 +359,17 @@ bool BigNumber::is_hex_string(const std::string &str) {
 }
 
 BigNumber BigNumber::from_hex(const std::string &hex) {
-    if (hex.empty()) return BigNumber(0);
+    if (hex.empty())
+        return BigNumber(0);
 
-    std::string trimmed = hex;
-    bool is_negative = !trimmed.empty() && trimmed[0] == '-';
-    if (is_negative) trimmed = trimmed.substr(1);
+    std::string trimmed     = hex;
+    bool        is_negative = !trimmed.empty() && trimmed[0] == '-';
+    if (is_negative)
+        trimmed = trimmed.substr(1);
 
     trimmed.erase(0, trimmed.find_first_not_of('0'));
-    if (trimmed.empty()) trimmed = "0";
+    if (trimmed.empty())
+        trimmed = "0";
 
     BigNumber result(boost::multiprecision::cpp_int("0x" + trimmed));
     if (is_negative) {
@@ -373,8 +405,7 @@ bool BigNumber::operator==(const int &other) const {
 
 namespace magic {
     std::string custom_magic<BigNumber>::read(const BigNumber &value) {
-        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string()
-                                                                    : value.to_string();
+        return (WireFormat::get_mode() == WireFormat::Mode::Legacy) ? value.to_hex_string() : value.to_string();
     }
 
     BigNumber custom_magic<BigNumber>::write(const std::string &value) {
