@@ -186,6 +186,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/chat.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chat/message.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_runtime.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/wasm_policy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_codec.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/contract_manager.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/contracts/dfs_contract_storage.cpp

@@ -409,6 +409,30 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unsigned_decoder_accepts_all_message_pack_widths() {
+        for (encoded, expected) in [
+            (&[0x7f][..], 127),
+            (&[0xcc, 0x80][..], 128),
+            (&[0xcd, 0x01, 0x00][..], 256),
+            (&[0xce, 0x00, 0x01, 0x00, 0x00][..], 65_536),
+            (
+                &[0xcf, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00][..],
+                4_294_967_296,
+            ),
+        ] {
+            let mut decoder = Decoder::new(encoded);
+            assert_eq!(decoder.u64(), Ok(expected));
+            assert!(decoder.is_empty());
+        }
+    }
+
+    #[test]
+    fn unsigned_decoder_rejects_float_values() {
+        let mut decoder = Decoder::new(&[0xca, 0x3f, 0x80, 0x00, 0x00]);
+        assert_eq!(decoder.u64(), Err(CodecError::InvalidData));
+    }
+
+    #[test]
     fn abi_two_request_round_trips_verified_inputs() {
         let request = InvokeRequest {
             sender: "alice".to_string(),

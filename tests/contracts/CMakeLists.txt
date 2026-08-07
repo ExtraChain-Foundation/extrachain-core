@@ -15,6 +15,7 @@ add_executable(extrachain-contract-tests
     contract_runtime_test.cpp
     ../../sources/contracts/contract_codec.cpp
     ../../sources/contracts/contract_manager.cpp
+    ../../sources/contracts/wasm_policy.cpp
     ../../sources/contracts/wasm_runtime.cpp)
 target_include_directories(extrachain-contract-tests PRIVATE
     ../../headers

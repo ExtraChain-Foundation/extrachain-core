@@ -10,6 +10,8 @@
 
 #include "contracts/wasm_runtime.h"
 
+#include "wasm_policy.h"
+
 #include <array>
 #include <cstring>
 #include <limits>
@@ -111,6 +113,15 @@ namespace ExtraChain::Contracts {
         if (module_bytes.size() > std::numeric_limits<std::uint32_t>::max()
             || input.size() > std::numeric_limits<std::uint32_t>::max()) {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
+        }
+
+        const auto policy_result = Internal::validate_wasm_policy(module_bytes);
+        if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
+            return std::unexpected(
+                failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
+        }
+        if (policy_result == Internal::WasmPolicyResult::Invalid) {
+            return std::unexpected(failure(ExecutionError::InvalidModule, "Contract module is malformed"));
         }
 
         ThreadEnvironment thread_environment;
