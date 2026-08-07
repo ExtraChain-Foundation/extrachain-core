@@ -291,10 +291,7 @@ private slots:
         QVERIFY(!reserved.has_value());
         QCOMPARE(reserved.error().code, NameValidator::ErrorCode::ReservedName);
 
-        auto leading_dot = NameValidator::validate(".hidden");
-        QVERIFY(!leading_dot.has_value());
-        QCOMPARE(leading_dot.error().code, NameValidator::ErrorCode::LeadingDotSpace);
-        QCOMPARE(leading_dot.error().position, std::size_t { 0 });
+        QVERIFY(NameValidator::validate(".hidden").has_value());
 
         auto leading_space = NameValidator::validate(" file.txt");
         QVERIFY(!leading_space.has_value());

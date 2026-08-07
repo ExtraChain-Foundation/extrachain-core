@@ -66,7 +66,7 @@ std::expected<void, NameValidator::ValidationError> NameValidator::check_control
 
 std::expected<void, NameValidator::ValidationError> NameValidator::check_boundary_chars(
     std::string_view name) noexcept {
-    if (name.front() == '.' || name.front() == ' ') {
+    if (name.front() == ' ') {
         return std::unexpected(ValidationError { .code = ErrorCode::LeadingDotSpace, .position = 0 });
     }
     if (name.back() == '.' || name.back() == ' ') {
