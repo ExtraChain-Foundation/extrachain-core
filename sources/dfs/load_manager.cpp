@@ -173,6 +173,22 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 }
 
                 auto& load_info = it->second;
+                if (load_info.cooldown_until > std::chrono::system_clock::now()) {
+                    continue;
+                }
+                if (load_info.cooldown_until.time_since_epoch().count() != 0) {
+                    // Cooldown just elapsed: drop the stale source list so the block
+                    // below repopulates it from the CURRENT connections. Otherwise a
+                    // list of dead identifiers keeps failing and the file loops in
+                    // cooldown forever even though live peers are available.
+                    load_info.cooldown_until = {};
+                    load_info.identifier_list.clear();
+                    load_info.identifier_storage_checker.clear();
+                    // Re-probe the network for the content: a peer that only knew the
+                    // row (state=Known) when we first asked may have become Ready since.
+                    // request_file re-broadcasts DfsFileState (throttled to 30s/file).
+                    node->dfs()->request_file(file_link.owner_id, file_link.file_id);
+                }
 
                 // Files stay paused while vectors are downloading. Forced files (explicit
                 // user request_file, e.g. tapping media) are not paused.
@@ -219,11 +235,17 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                         }
                     }
 
-                    // If still no identifiers, remove from queue
+                    // Still no identifiers: cool down and retry instead of dropping the
+                    // download forever (connections may be seconds away from returning).
                     if (load_info.identifier_list.empty()) {
-                        eLog("[LoadManager] No connections available for file {}, removing from queue",
-                             file_link.file_id);
-                        active_downloads_locked->erase(it);
+                        load_info.cooldown_rounds = std::min(load_info.cooldown_rounds + 1, 2);
+                        load_info.cooldown_until =
+                            std::chrono::system_clock::now()
+                            + std::chrono::seconds(30LL << (load_info.cooldown_rounds - 1));
+                        eLog("[Load] COOLDOWN {}/{} for {}s: no connections",
+                             file_link.owner_id,
+                             file_link.file_id,
+                             30LL << (load_info.cooldown_rounds - 1));
                         continue;
                     }
                 }
@@ -329,11 +351,17 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 auto identifier_list_size = load_info.identifier_list.size();
                 if (!is_requested && identifier_list_size > 0) {
                     if (++load_info.source_refresh_cycles > 3) {
-                        eLog("[Load] GIVE UP {}/{} after {} source cycles",
+                        // Sources exhausted, but this is rarely terminal (the hub may not
+                        // have fetched the content yet): back off exponentially and retry.
+                        load_info.source_refresh_cycles = 0;
+                        load_info.cooldown_rounds = std::min(load_info.cooldown_rounds + 1, 2);
+                        load_info.cooldown_until =
+                            std::chrono::system_clock::now()
+                            + std::chrono::seconds(30LL << (load_info.cooldown_rounds - 1));
+                        eLog("[Load] COOLDOWN {}/{} for {}s after exhausted sources",
                              file_link.owner_id,
                              file_link.file_id,
-                             load_info.source_refresh_cycles);
-                        active_downloads_locked->erase(it);
+                             30LL << (load_info.cooldown_rounds - 1));
                         continue;
                     }
                     eLog("[LoadManager] Exhausted identifiers for file {}, refreshing sources", file_link.file_id);
@@ -834,6 +862,9 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
             }
             res->second.fragments_left.erase(file_content.fragment_number);
             res->second.last_fragment_received = std::chrono::system_clock::now();
+            // Real progress: reset the exhaustion backoff so a transfer that stalls
+            // again starts from the short cooldown, not from the grown-out interval.
+            res->second.cooldown_rounds = 0;
             // Attempt bookkeeping lives here too: if it lagged behind on the
             // pool, the retry counter would climb over its limit and gate the
             // refills sent below.

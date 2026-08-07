@@ -52,9 +52,12 @@ struct LoadInfo {
 
     bool notify_neighbours;
     bool forced { false };
-    // Count of full source-exhaustion restarts: give up after 3 cycles (file re-enters the
-    // queue via request_file/next sync) — otherwise an unreachable file retries forever.
+    // Count of full source-exhaustion restarts: after 3 cycles the download goes
+    // into an exponential cooldown instead of being dropped — the only reachable
+    // peer may simply not have the content yet (leaf asks hub before hub fetched it).
     int source_refresh_cycles { 0 };
+    int cooldown_rounds { 0 };
+    std::chrono::system_clock::time_point cooldown_until {};
 
     std::set<std::string>                         identifier_storage_checker {};
     std::vector<std::pair<std::string, Attempts>> identifier_list {};
