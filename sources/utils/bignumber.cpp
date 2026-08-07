@@ -261,17 +261,25 @@ std::string BigNumber::to_hex_string() const {
 }
 
 std::string BigNumber::to_printable_string() const {
-    auto res = this->to_string();
-    if (res.length() < 6)
-        return res;
+    const auto value = to_string();
+    if (value.length() < 6) {
+        return value;
+    }
+
+    const auto first_digit = value.front() == '-' ? std::size_t { 1 } : std::size_t { 0 };
+    const auto digit_count = value.size() - first_digit;
 
     std::string result;
-    int         counter = 0;
-    for (int i = res.length() - 1; i >= 0; i--) {
-        result = res[i] + result;
-        if (++counter % 3 == 0 && i != 0)
-            result = " " + result;
+    result.reserve(value.size() + digit_count / 3);
+    result.append(value, 0, first_digit);
+    for (std::size_t index = first_digit; index < value.size(); ++index) {
+        const auto digit_index = index - first_digit;
+        if (digit_index != 0 && (digit_count - digit_index) % 3 == 0) {
+            result.push_back(' ');
+        }
+        result.push_back(value[index]);
     }
+
     return result;
 }
 

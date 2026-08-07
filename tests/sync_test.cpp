@@ -225,6 +225,10 @@ private slots:
         QVERIFY(float_hex.has_value());
         QCOMPARE(float_hex->to_string(), std::string("10.5"));
         QVERIFY(!BigNumberFloat::create("a.5.1", NumeralBase::Hex).has_value());
+
+        QCOMPARE(BigNumber("12345").to_printable_string(), std::string("12345"));
+        QCOMPARE(BigNumber("1234567").to_printable_string(), std::string("1 234 567"));
+        QCOMPARE(BigNumber("-1234567").to_printable_string(), std::string("-1 234 567"));
     }
 
     // ----- Migration round-trip ----------------------------------------------
