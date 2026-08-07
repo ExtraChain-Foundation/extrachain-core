@@ -56,7 +56,7 @@ public:
     virtual void flush() override;
 
     qint64 pending_bytes() const override {
-        return m_ws ? m_ws->bytesToWrite() : 0;
+        return queued_bytes_.load(std::memory_order_relaxed) + (m_ws ? m_ws->bytesToWrite() : 0);
     }
 
 signals:

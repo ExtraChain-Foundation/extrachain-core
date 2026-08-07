@@ -177,6 +177,7 @@ void WebSocketService::closeSocket() {
         normal_queue_.swap(empty2);
         low_queue_.swap(empty3);
         m_messageCache.swap(empty4);
+        queued_bytes_.store(0, std::memory_order_relaxed);
         locker.unlock();
     }
 
@@ -308,7 +309,11 @@ void WebSocketService::processMessage(const QByteArray &message) {
         node->network()->message_received(mess.toStdString(), ip_.toStdString(), identifier_.toStdString());
     } else {
         eCritical("[WS] Message is empty after prepare");
-        emit error(Network::SocketServiceError::EmptyMessage, "", ip_.toStdString(), identifier_.toStdString(), direction_);
+        emit error(Network::SocketServiceError::EmptyMessage,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString(),
+                   direction_);
     }
 }
 
@@ -341,6 +346,7 @@ void WebSocketService::send_message(const QByteArray &data, Priority priority) {
             low_queue_.push(data);
             break;
         }
+        queued_bytes_.fetch_add(data.size(), std::memory_order_relaxed);
         locker.unlock();
     }
 
@@ -385,13 +391,17 @@ void WebSocketService::tryDequeueMessage() {
         data = low_queue_.front();
         low_queue_.pop();
     }
+    const bool has_more = !high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty();
+    if (!data.isEmpty()) {
+        queued_bytes_.fetch_sub(data.size(), std::memory_order_relaxed);
+    }
 
     locker.unlock();
 
     if (!data.isEmpty()) {
         emit sendMessageInternal(data);
 
-        if (!high_queue_.empty() || !normal_queue_.empty() || !low_queue_.empty()) {
+        if (has_more) {
             emit needToTryDequeue();
         }
     }
@@ -417,7 +427,11 @@ void WebSocketService::sendMessageInternalSlot(const QByteArray &data) {
     qint64 written = m_ws->sendBinaryMessage(prepared);
     if (written < 0) {
         eCritical("[WS] Failed to send message");
-        emit error(Network::SocketServiceError::CantSend, "", ip_.toStdString(), identifier_.toStdString(), direction_);
+        emit error(Network::SocketServiceError::CantSend,
+                   "",
+                   ip_.toStdString(),
+                   identifier_.toStdString(),
+                   direction_);
     }
 }
 

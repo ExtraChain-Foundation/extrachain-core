@@ -249,11 +249,11 @@ class EXTRACHAIN_EXPORT NetworkManager : public QObject {
     Q_OBJECT
 
 private:
-    bool                            active_ = false;
-    std::set<std::string>           failed_ips_;
-    std::unique_ptr<UPNPConnection> upnp_dis_;
-    std::unique_ptr<UPNPConnection> upnp_net_;
-    std::unique_ptr<UPnPConnector>  upnp_connector_;
+    bool                                      active_ = false;
+    std::set<std::string>                     failed_ips_;
+    std::unique_ptr<UPNPConnection>           upnp_dis_;
+    std::unique_ptr<UPNPConnection>           upnp_net_;
+    std::unique_ptr<UPnPConnector>            upnp_connector_;
     QMap<std::string, std::pair<int, qint64>> msg_hash_list_ = {};
 
     ExtraChainNode*                       node;
@@ -265,7 +265,7 @@ private:
     NetworkStatus                                network_status_;
 
     struct ReconnEntry {
-        uint64_t attempts       = 0;
+        uint64_t attempts        = 0;
         qint64   next_attempt_ms = 0;
     };
     std::map<std::string, ReconnEntry> reconn_;
@@ -322,15 +322,15 @@ private:
     void add_all_services_identifiers_to_message(MessageBody& msg);
 
 public:
-    bool is_first_node(const std::string& identifier); // detect for safety
+    bool                              is_first_node(const std::string& identifier); // detect for safety
     SafePtr<std::set<SocketService*>> connections() const;
 
     // Look up an active connection's peer_meta by its node identifier (the
     // string carried by Responder). Returns nullopt when the peer is not
     // currently connected — caller should treat that as "legacy".
     std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
-    bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
-    void connect_network();
+    bool                    server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
+    void                    connect_network();
 
 public slots:
     void remove_connection(const QString& identifier);
@@ -360,10 +360,18 @@ protected:
     bool check_message_count(const std::string& msg);
 
 public:
-    size_t msg_hash_list_size() const { return msg_hash_list_.size(); }
-    size_t messages_size() { return messages_->size(); }
-    size_t forwarded_messages_size() { return forwarded_messages_->size(); }
-    size_t connections_size() { return connections_->size(); }
+    size_t msg_hash_list_size() const {
+        return msg_hash_list_.size();
+    }
+    size_t messages_size() {
+        return messages_->size();
+    }
+    size_t forwarded_messages_size() {
+        return forwarded_messages_->size();
+    }
+    size_t connections_size() {
+        return connections_->size();
+    }
 
 private slots:
     void onNewWsConnection();
@@ -404,14 +412,15 @@ public:
 
     void send_broadcast_message_further(const NetworkPackageStorage& package_data);
 
-    void save_to_cache(const std::string& serialized_message,
-                       SendMode           send_mode,
-                       const std::string& receiver_identifier);
-    void send_from_cache();
-    bool is_connection_exists(const std::string& identifier);
-    bool is_active_connection_exists();
-    int  active_connections_count();
+    void                     save_to_cache(const std::string& serialized_message,
+                                           SendMode           send_mode,
+                                           const std::string& receiver_identifier);
+    void                     send_from_cache();
+    bool                     is_connection_exists(const std::string& identifier);
+    bool                     is_active_connection_exists();
+    int                      active_connections_count();
     std::vector<std::string> active_connection_identifiers() const;
+    qint64                   connection_pending_bytes(const std::string& identifier) const;
 
     void message_received(const std::string& message, const std::string& ip, const std::string& identifier);
 
@@ -427,6 +436,7 @@ public:
                                   SendMode           send_mode,
                                   MessageStatus      status,
                                   const Responder&   responder);
+    bool        needs_legacy_payload(SendMode send_mode, const Responder& responder) const;
 
     // Backward-compat overload for Responder::send_response in message_body.cpp.
     std::string send_message_send(const std::string& data_serialized,
@@ -434,7 +444,7 @@ public:
                                   SendMode           send_mode,
                                   MessageStatus      status,
                                   const Responder&   responder) {
-        return send_message_send(data_serialized, data_serialized, type, send_mode, status, responder);
+        return send_message_send(data_serialized, {}, type, send_mode, status, responder);
     }
 
     template <class T>
@@ -459,11 +469,12 @@ public:
         // TEMPORARY 0.26 legacy compat: hex variant for pre-0.26 peers, picked
         // per-peer by send_message_connections. Drop with the wire() shim.
         std::string data_serialized_legacy;
-        {
+        if (needs_legacy_payload(send_mode, responder)) {
             WireFormat::Scope scope(WireFormat::Mode::Legacy);
             data_serialized_legacy = MessagePack::serialize(data);
         }
-        auto message_id = send_message_send(data_serialized, data_serialized_legacy, type, send_mode, status, responder);
+        auto message_id =
+            send_message_send(data_serialized, data_serialized_legacy, type, send_mode, status, responder);
         return message_id;
     }
 

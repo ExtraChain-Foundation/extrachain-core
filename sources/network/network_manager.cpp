@@ -260,21 +260,25 @@ void NetworkManager::reconnection() {
 
     const qint64 now = Utils::current_date_ms();
     for (auto &[ip, entry] : reconn_) {
-        if (!need_reconnect.contains(ip)) continue;
-        if (this->failed_ips_.contains(ip)) continue;
-        if (now < entry.next_attempt_ms) continue;
+        if (!need_reconnect.contains(ip))
+            continue;
+        if (this->failed_ips_.contains(ip))
+            continue;
+        if (now < entry.next_attempt_ms)
+            continue;
 
         eLog("[Network] Reconnect to node: {} (attempt {})", ip, entry.attempts + 1);
         emit this->connect_to_node(QString::fromStdString(ip), Network::Protocol::WebSocket);
 
-        if (entry.attempts < 7) entry.attempts++;
+        if (entry.attempts < 7)
+            entry.attempts++;
 #ifdef IS_APP_UI_CLIENT
         constexpr int max_delay_ms = 60'000;
 #else
         constexpr int max_delay_ms = 300'000;
 #endif
-        const int delay         = std::min(5000 * (1 << entry.attempts), max_delay_ms);
-        entry.next_attempt_ms   = now + delay;
+        const int delay       = std::min(5000 * (1 << entry.attempts), max_delay_ms);
+        entry.next_attempt_ms = now + delay;
     }
 }
 
@@ -573,7 +577,7 @@ void NetworkManager::connect_to_websocket(const QString &ip,
 
     {
         std::vector<SocketService *> to_close;
-        auto connectionsLocked = *connections_;
+        auto                         connectionsLocked = *connections_;
         for (const auto &el : *connectionsLocked) {
             if (el->ip() == ip) {
                 if (el->is_active()) {
@@ -638,7 +642,8 @@ bool NetworkManager::send_message_checker(MessageType      type,
                                           SendMode         send_mode,
                                           MessageStatus    status,
                                           const Responder &responder) {
-    if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response && responder.message_id().empty() && responder.identifiers().empty()) {
+    if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response
+        && responder.message_id().empty() && responder.identifiers().empty()) {
         eCritical("[Network] Send message error: empty message id or receiver identifiers for response message");
         return false;
     }
@@ -654,7 +659,8 @@ bool NetworkManager::send_message_checker(MessageType      type,
         eCritical("[Network] Send message error: accountController is empty!");
         return false;
     }
-    if (/*send_mode != SendMode::Broadcast && */status == MessageStatus::Response && send_mode != SendMode::Focused) {
+    if (/*send_mode != SendMode::Broadcast && */ status == MessageStatus::Response
+        && send_mode != SendMode::Focused) {
         eWarning(
             "[Network] Send message warning: incorrect type send for response message, set to focused, "
             "type: "
@@ -672,21 +678,23 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                               SendMode           send_mode,
                                               MessageStatus      status,
                                               const Responder   &responder) {
-    auto       &main_actor = node->account_controller()->system_actor();
+    auto &main_actor = node->account_controller()->system_actor();
 
     // Build two parallel outer envelopes: canonical (decimal wire) and legacy (hex wire).
     // Outer MessageBody carries the inner payload as-is plus signature; it has to be
     // built and signed separately per variant so the signed hash matches the bytes
     // that actually hit the network.
-    MessageBody message    = make_init_message(data_serialized,
+    MessageBody message        = make_init_message(data_serialized,
                                             send_mode,
                                             type,
                                             status,
                                             main_actor.id(),
                                             responder.message_id(),
                                             node->node_identifier());
+    const bool  legacy_needed  = !data_serialized_legacy.empty();
     MessageBody message_legacy = message;
-    message_legacy.data         = data_serialized_legacy;
+    if (legacy_needed)
+        message_legacy.data = data_serialized_legacy;
 
     if (send_mode == SendMode::Broadcast) {
         this->add_all_services_identifiers_to_message(message);
@@ -698,13 +706,14 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
         auto serialized      = m.serialize();
         auto serialized_hash = m.calculate_hash();
         auto sign_result     = main_actor.key().sign(ByteArray(serialized_hash).toBytes());
-        if (!sign_result.has_value()) return std::nullopt;
+        if (!sign_result.has_value())
+            return std::nullopt;
         auto sign = ByteArray(sign_result.value()).toString();
         return serialized + sign;
     };
 
     auto canonical_blob = sign_envelope(message);
-    auto legacy_blob    = sign_envelope(message_legacy);
+    auto legacy_blob    = legacy_needed ? sign_envelope(message_legacy) : canonical_blob;
     if (!canonical_blob.has_value() || !legacy_blob.has_value()) {
         return "";
     }
@@ -724,7 +733,7 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
 
 #ifdef QT_DEBUG
     if (Network::networkDebug) {
-        auto                    serialized   = message.serialize();
+        auto                   serialized   = message.serialize();
         msgpack::object_handle oh           = msgpack::unpack(serialized.data(), serialized.size());
         msgpack::object        deserialized = oh.get();
         eLog("[Network Message] Send: type {}, status {}, id {}, type send {}, body: {}",
@@ -745,6 +754,33 @@ std::string NetworkManager::send_message_send(const std::string &data_serialized
                                    status);
 
     return message.message_id;
+}
+
+bool NetworkManager::needs_legacy_payload(SendMode send_mode, const Responder &responder) const {
+    if (WireFormat::wire() == WireFormat::Mode::Legacy)
+        return false;
+
+    std::string focused_identifier;
+    if (!responder.identifiers().empty()) {
+        focused_identifier = *responder.identifiers().begin();
+    } else if (!responder.message_id().empty()) {
+        auto messages_locked = *messages_;
+        auto found           = messages_locked->find(responder.message_id());
+        if (found != messages_locked->end())
+            focused_identifier = found->second.first;
+    }
+
+    auto connections_locked = *connections_;
+    for (const auto *service : *connections_locked) {
+        if (service == nullptr || !service->is_active())
+            continue;
+        if (send_mode == SendMode::Focused && service->identifier().toStdString() != focused_identifier) {
+            continue;
+        }
+        if (service->peer_meta().is_legacy_dag())
+            return true;
+    }
+    return false;
 }
 
 void NetworkManager::send_message_connections(const std::string &serialized_message,
@@ -888,8 +924,8 @@ void NetworkManager::send_broadcast_message_further(const NetworkPackageStorage 
     message_edited.nodes_identifiers_to_ignore.emplace(package_data.prev_identifier);
     add_all_services_identifiers_to_message(message_edited);
 
-    auto serialized      = message_edited.serialize();
-    auto full_blob       = serialized + package_data.sign;
+    auto serialized = message_edited.serialize();
+    auto full_blob  = serialized + package_data.sign;
     send_message_connections(full_blob, full_blob, message_edited, SendMode::Broadcast, "");
 
     // eTemp("Message forwarded with messageId: {}", package_data.msg_body.message_id);
@@ -1037,7 +1073,7 @@ int NetworkManager::active_connections_count() {
 
 std::vector<std::string> NetworkManager::active_connection_identifiers() const {
     std::vector<std::string> identifiers;
-    auto connectionsLocked = *connections();
+    auto                     connectionsLocked = *connections();
     identifiers.reserve(connectionsLocked->size());
 
     for (const auto &service : *connectionsLocked) {
@@ -1054,6 +1090,16 @@ std::vector<std::string> NetworkManager::active_connection_identifiers() const {
     std::sort(identifiers.begin(), identifiers.end());
     identifiers.erase(std::unique(identifiers.begin(), identifiers.end()), identifiers.end());
     return identifiers;
+}
+
+qint64 NetworkManager::connection_pending_bytes(const std::string &identifier) const {
+    auto connections_locked = *connections();
+    for (const auto *service : *connections_locked) {
+        if (service != nullptr && service->is_active() && service->identifier().toStdString() == identifier) {
+            return service->pending_bytes();
+        }
+    }
+    return 0;
 }
 
 bool NetworkManager::check_message_count(const std::string &msg) {
@@ -1174,11 +1220,7 @@ void NetworkManager::message_received(const std::string &message,
 
             auto serialized = message_edited.serialize();
             auto blob       = serialized + std::string(sign);
-            send_message_connections(blob,
-                                     blob,
-                                     message_edited,
-                                     SendMode::Focused,
-                                     searchRes->second.first);
+            send_message_connections(blob, blob, message_edited, SendMode::Focused, searchRes->second.first);
             // eWarning(
             //     "Network Message ignored 3: already achieved such Response with messageId: {} from: {}, type:
             //     {}", messageId, identifier, type);
@@ -1782,9 +1824,11 @@ void NetworkManager::message_received(const std::string &message,
 
         auto res = node->dag()->network_transaction(transaction_result.value(), responder);
 
-        // if (res.has_value()) {
-        send_broadcast_message_further(package_data);
-        // }
+        // Do not amplify invalid traffic. Deferred contract dependencies return
+        // success and continue to propagate, while rejected transactions stop here.
+        if (res.has_value()) {
+            send_broadcast_message_further(package_data);
+        }
         break;
     }
 
@@ -1836,8 +1880,9 @@ void NetworkManager::message_received(const std::string &message,
             // transition), matching how request_file_sections encodes them.
             bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
             if (wire_hex) {
-                node->dag()->network_request_file_sections(
-                    BigNumber::from_hex(range->first), BigNumber::from_hex(range->last), responder);
+                node->dag()->network_request_file_sections(BigNumber::from_hex(range->first),
+                                                           BigNumber::from_hex(range->last),
+                                                           responder);
             } else {
                 auto first = BigNumber::create(range->first);
                 auto last  = BigNumber::create(range->last);

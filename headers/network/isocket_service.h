@@ -25,6 +25,7 @@
 #include "network/peer_meta.h"
 #include "utils/exc_utils.h"
 
+#include <atomic>
 #include <queue>
 #include <QMutex>
 
@@ -71,7 +72,7 @@ public:
         // Storage schema version. Optional so legacy peers (who don't send it)
         // parse cleanly — JSON serialization drops absent optionals entirely.
         // Present + >= 100 = peer understands decimal wire format and pack sync.
-        std::optional<int>         dag_version;
+        std::optional<int> dag_version;
         // Real release version (e.g. "0.26.0"). Optional so pre-0.26 peers parse
         // cleanly; not version-checked, only a signal that the peer is >= 0.26.
         std::optional<std::string> node_version;
@@ -100,10 +101,10 @@ public:
     SocketMode                mode() {
         return mode_;
     }
-    SocketDirection           direction() const {
+    SocketDirection direction() const {
         return direction_;
     }
-    void                      set_direction(SocketDirection dir) {
+    void set_direction(SocketDirection dir) {
         direction_ = dir;
     }
 
@@ -112,7 +113,9 @@ public:
     // Snapshot of peer attributes derived from the initial handshake.
     // Populated by check_first_message(); read by send/receive handlers to
     // decide on wire format and feature availability.
-    const PeerMeta &peer_meta() const { return peer_meta_; }
+    const PeerMeta &peer_meta() const {
+        return peer_meta_;
+    }
 
 public:
     virtual void flush()                                                                  = 0;
@@ -125,16 +128,22 @@ public:
         return high_queue_.size() + normal_queue_.size() + low_queue_.size();
     }
 
-    virtual qint64 pending_bytes() const { return 0; }
+    virtual qint64 pending_bytes() const {
+        return queued_bytes_.load(std::memory_order_relaxed);
+    }
 
-// protected slots:
+    // protected slots:
 public slots:
     virtual void closeSocket();
 
 signals:
     void send(const QByteArray &data);
     void disconnected();
-    void error(Network::SocketServiceError code, const QString &errorData, std::string ip, std::string identifier, SocketDirection direction);
+    void error(Network::SocketServiceError code,
+               const QString              &errorData,
+               std::string                 ip,
+               std::string                 identifier,
+               SocketDirection             direction);
     void close(Network::SocketServiceError code = Network::SocketServiceError::PhysicalKill);
     void activated();
     void finished(); // if threads
@@ -166,6 +175,7 @@ protected:
     std::queue<QByteArray> high_queue_;
     std::queue<QByteArray> normal_queue_;
     std::queue<QByteArray> low_queue_;
+    std::atomic<qint64>    queued_bytes_ = 0;
 
     static constexpr qint64 MAX_BUFFER_SIZE       = 10 * 1024 * 1024; // 10MB
     bool                    waiting_buffer_space_ = false;
@@ -176,10 +186,18 @@ protected:
     bool       closed_ = false;
 };
 
-BOOST_DESCRIBE_STRUCT(
-    SocketService::HandshakeMessage,
-    (),
-    (network_id, version, identifier, socket_type, your_ip, connections, is_available, socket_mode, dag_version, node_version))
+BOOST_DESCRIBE_STRUCT(SocketService::HandshakeMessage,
+                      (),
+                      (network_id,
+                       version,
+                       identifier,
+                       socket_type,
+                       your_ip,
+                       connections,
+                       is_available,
+                       socket_mode,
+                       dag_version,
+                       node_version))
 
 BOOST_DESCRIBE_STRUCT(SocketService::SocketPair, (), (ip, identifier))
 
