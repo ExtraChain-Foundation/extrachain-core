@@ -212,14 +212,18 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
 }
 
 void TokenManager::final_token_creation(const Transaction &transaction) {
-    if (cache_creation_.find(transaction.hash()) == cache_creation_.end()) {
+    const auto transaction_hash = transaction.hash();
+    const auto cache_entry      = cache_creation_.find(transaction_hash);
+    if (cache_entry == cache_creation_.end()) {
         return;
     }
 
-    auto token_data       = cache_creation_.at(transaction.hash());
+    auto &token_data      = cache_entry->second;
     token_data.section_id = transaction.section();
-    token_data.tx_hash    = transaction.hash();
+    token_data.tx_hash    = transaction_hash;
     auto json             = Json::serialize(token_data);
+    const auto owner_id   = token_data.owner_id;
+    const auto token_id   = token_data.token_id;
 
     auto res = node->dfs()->store_data_as_file(transaction.receiver(),
                                                transaction.sender(),
@@ -233,8 +237,8 @@ void TokenManager::final_token_creation(const Transaction &transaction) {
         return;
     }
 
-    emit added(token_data.owner_id, token_data.token_id);
-    cache_creation_.erase(transaction.hash());
+    emit added(owner_id, token_id);
+    cache_creation_.erase(transaction_hash);
 
     // TODO!: write to vector
 }

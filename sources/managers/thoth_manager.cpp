@@ -140,9 +140,9 @@ bool ThothManager::read_all(bool is_my) {
 
     for (const auto& row : *rows) {
         auto file_link  = Dfs::FileLink { .owner_id = ActorId(row.at("owner")), .file_id = row.at("file_id") };
-        auto custom     = Json::deserialize<ThothCustom>(rows->at(0).at("custom"));
-        auto thoth_info = ThothInfo { .os      = rows->at(0).at("os"),
-                                      .token   = rows->at(0).at("token"),
+        auto custom     = Json::deserialize<ThothCustom>(row.at("custom"));
+        auto thoth_info = ThothInfo { .os      = row.at("os"),
+                                      .token   = row.at("token"),
                                       .ignored = custom.has_value() ? custom->ignored : std::set<ActorId>({}) };
         // eLog("Loaded --------- : {}", thoth_info);
         // eLog("Loaded --------- : {}", file_link);
@@ -214,11 +214,12 @@ void ThothManager::dfs_vector_add_check(const ActorId& owner_id, const std::stri
     }
 
     auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = file_id };
-    if (!infos_.contains(file_link)) {
+    const auto infos = infos_.find(file_link);
+    if (infos == infos_.end()) {
         return;
     }
 
-    for (const auto& el : std::as_const(infos_[file_link])) {
+    for (const auto& el : infos->second) {
         auto actor_id = ActorId(row.at("actor"));
         if (el.ignored.contains(actor_id)) {
             continue;
