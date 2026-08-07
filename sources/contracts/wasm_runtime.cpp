@@ -10,12 +10,15 @@
 
 #include "contracts/wasm_runtime.h"
 
+#include "contracts/contract_hash.h"
 #include "wasm_policy.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
+#include <memory>
 #include <limits>
-#include <mutex>
+#include <vector>
 
 #include <wasm_export.h>
 
@@ -24,9 +27,35 @@ namespace ExtraChain::Contracts {
 
         constexpr std::size_t ErrorBufferBytes = 256;
 
-        std::mutex  RuntimeMutex;
-        std::size_t RuntimeUsers = 0;
-        bool        RuntimeReady = false;
+        constexpr std::size_t ModuleCacheEntries = 8;
+
+        class RuntimeHost final {
+        public:
+            RuntimeHost()
+                : ready_(wasm_runtime_init()) {
+                if (ready_) {
+                    wasm_runtime_set_default_running_mode(Mode_Interp);
+                    wasm_runtime_set_log_level(WASM_LOG_LEVEL_ERROR);
+                }
+            }
+
+            ~RuntimeHost() {
+                if (ready_)
+                    wasm_runtime_destroy();
+            }
+
+            [[nodiscard]] bool ready() const {
+                return ready_;
+            }
+
+        private:
+            bool ready_ = false;
+        };
+
+        RuntimeHost &runtime_host() {
+            static RuntimeHost host;
+            return host;
+        }
 
         class ThreadEnvironment final {
         public:
@@ -48,6 +77,71 @@ namespace ExtraChain::Contracts {
             bool ready_ = false;
         };
 
+        struct CachedModule final {
+            std::string               hash;
+            std::vector<std::uint8_t> bytes;
+            wasm_module_t             module = nullptr;
+            std::uint64_t             used   = 0;
+
+            ~CachedModule() {
+                if (module != nullptr)
+                    wasm_runtime_unload(module);
+            }
+        };
+
+        class ThreadModuleCache final {
+        public:
+            wasm_module_t find(std::span<const std::uint8_t> bytes) {
+                const auto hash = content_hash(bytes);
+                for (auto &entry : entries_) {
+                    if (entry->hash == hash && entry->bytes.size() == bytes.size()
+                        && std::equal(entry->bytes.begin(), entry->bytes.end(), bytes.begin())) {
+                        entry->used = ++clock_;
+                        return entry->module;
+                    }
+                }
+                return nullptr;
+            }
+
+            wasm_module_t load(std::span<const std::uint8_t> bytes, char *error, std::size_t error_size) {
+                auto entry  = std::make_unique<CachedModule>();
+                entry->hash = content_hash(bytes);
+                entry->bytes.assign(bytes.begin(), bytes.end());
+                entry->module = wasm_runtime_load(entry->bytes.data(),
+                                                  static_cast<std::uint32_t>(entry->bytes.size()),
+                                                  error,
+                                                  static_cast<std::uint32_t>(error_size));
+                if (entry->module == nullptr)
+                    return nullptr;
+                entry->used = ++clock_;
+                if (entries_.size() >= ModuleCacheEntries) {
+                    auto oldest = std::min_element(entries_.begin(),
+                                                   entries_.end(),
+                                                   [](const auto &left, const auto &right) {
+                                                       return left->used < right->used;
+                                                   });
+                    entries_.erase(oldest);
+                }
+                const auto module = entry->module;
+                entries_.push_back(std::move(entry));
+                return module;
+            }
+
+        private:
+            std::vector<std::unique_ptr<CachedModule>> entries_;
+            std::uint64_t                              clock_ = 0;
+        };
+
+        ThreadEnvironment &thread_environment() {
+            thread_local ThreadEnvironment environment;
+            return environment;
+        }
+
+        ThreadModuleCache &thread_module_cache() {
+            thread_local ThreadModuleCache cache;
+            return cache;
+        }
+
         ExecutionFailure failure(ExecutionError error, const char *detail) {
             return { error, detail != nullptr ? detail : "Unknown WAMR error" };
         }
@@ -64,34 +158,11 @@ namespace ExtraChain::Contracts {
     } // namespace
 
     WasmRuntime::WasmRuntime(ExecutionLimits limits)
-        : limits_(limits) {
-        std::scoped_lock lock(RuntimeMutex);
-        if (RuntimeUsers == 0) {
-            RuntimeReady = wasm_runtime_init();
-            if (RuntimeReady) {
-                wasm_runtime_set_default_running_mode(Mode_Interp);
-                wasm_runtime_set_log_level(WASM_LOG_LEVEL_ERROR);
-            }
-        }
-
-        if (RuntimeReady) {
-            ++RuntimeUsers;
-            available_ = true;
-        }
+        : limits_(limits)
+        , available_(runtime_host().ready()) {
     }
 
-    WasmRuntime::~WasmRuntime() {
-        std::scoped_lock lock(RuntimeMutex);
-        if (!available_) {
-            return;
-        }
-
-        --RuntimeUsers;
-        if (RuntimeUsers == 0) {
-            wasm_runtime_destroy();
-            RuntimeReady = false;
-        }
-    }
+    WasmRuntime::~WasmRuntime() = default;
 
     bool WasmRuntime::available() const {
         return available_;
@@ -100,8 +171,7 @@ namespace ExtraChain::Contracts {
     std::expected<ExecutionResult, ExecutionFailure> WasmRuntime::invoke(
         std::span<const std::uint8_t> module_bytes,
         std::span<const std::uint8_t> input) const {
-        std::scoped_lock lock(RuntimeMutex);
-        if (!available_ || !RuntimeReady) {
+        if (!available_ || !runtime_host().ready()) {
             return std::unexpected(failure(ExecutionError::RuntimeUnavailable, "WAMR is not initialized"));
         }
         if (module_bytes.size() > limits_.module_bytes) {
@@ -115,27 +185,25 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ExecutionError::InputTooLarge, "Contract input cannot be addressed"));
         }
 
-        const auto policy_result = Internal::validate_wasm_policy(module_bytes);
-        if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
-            return std::unexpected(
-                failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
-        }
-        if (policy_result == Internal::WasmPolicyResult::Invalid) {
-            return std::unexpected(failure(ExecutionError::InvalidModule, "Contract module is malformed"));
-        }
-
-        ThreadEnvironment thread_environment;
-        if (!thread_environment.ready()) {
+        if (!thread_environment().ready()) {
             return std::unexpected(
                 failure(ExecutionError::RuntimeUnavailable, "Cannot initialize the WAMR thread environment"));
         }
 
-        std::vector<std::uint8_t>          module_copy(module_bytes.begin(), module_bytes.end());
         std::array<char, ErrorBufferBytes> error_buffer {};
-        wasm_module_t                      module = wasm_runtime_load(module_copy.data(),
-                                                 static_cast<std::uint32_t>(module_copy.size()),
-                                                 error_buffer.data(),
-                                                 error_buffer.size());
+        auto                              &module_cache = thread_module_cache();
+        wasm_module_t                      module       = module_cache.find(module_bytes);
+        if (module == nullptr) {
+            const auto policy_result = Internal::validate_wasm_policy(module_bytes);
+            if (policy_result == Internal::WasmPolicyResult::FloatingPoint) {
+                return std::unexpected(
+                    failure(ExecutionError::InvalidModule, "Contract modules cannot use floating-point values"));
+            }
+            if (policy_result == Internal::WasmPolicyResult::Invalid) {
+                return std::unexpected(failure(ExecutionError::InvalidModule, "Contract module is malformed"));
+            }
+            module = module_cache.load(module_bytes, error_buffer.data(), error_buffer.size());
+        }
         if (module == nullptr) {
             return std::unexpected(failure(ExecutionError::InvalidModule, error_buffer.data()));
         }
@@ -148,7 +216,6 @@ namespace ExtraChain::Contracts {
         wasm_module_inst_t instance =
             wasm_runtime_instantiate_ex(module, &arguments, error_buffer.data(), error_buffer.size());
         if (instance == nullptr) {
-            wasm_runtime_unload(module);
             return std::unexpected(failure(ExecutionError::InstantiateFailed, error_buffer.data()));
         }
         wasm_runtime_set_bounds_checks(instance, true);
@@ -156,7 +223,6 @@ namespace ExtraChain::Contracts {
         wasm_exec_env_t environment = wasm_runtime_create_exec_env(instance, limits_.stack_bytes);
         if (environment == nullptr) {
             wasm_runtime_deinstantiate(instance);
-            wasm_runtime_unload(module);
             return std::unexpected(
                 failure(ExecutionError::InstantiateFailed, "Cannot create the contract execution environment"));
         }
@@ -165,7 +231,6 @@ namespace ExtraChain::Contracts {
         auto finish = [&]() {
             wasm_runtime_destroy_exec_env(environment);
             wasm_runtime_deinstantiate(instance);
-            wasm_runtime_unload(module);
         };
 
         wasm_function_inst_t invoke_function = wasm_runtime_lookup_function(instance, "exc_invoke");

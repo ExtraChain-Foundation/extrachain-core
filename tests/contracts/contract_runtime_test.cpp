@@ -518,6 +518,26 @@ namespace {
         require(invocation.get().ok, "Repeated WAMR execution failed on a worker thread");
     }
 
+    void test_parallel_worker_threads(ExtraChain::Contracts::WasmRuntime &runtime, const Bytes &module) {
+        constexpr int                  WorkerCount    = 4;
+        constexpr int                  CallsPerWorker = 20;
+        std::vector<std::future<bool>> workers;
+        workers.reserve(WorkerCount);
+        for (int worker = 0; worker < WorkerCount; ++worker) {
+            workers.push_back(std::async(std::launch::async, [&runtime, &module]() {
+                for (int call = 0; call < CallsPerWorker; ++call) {
+                    Bytes state;
+                    if (!invoke(runtime, module, "alice", "init", {}, state).ok)
+                        return false;
+                }
+                return true;
+            }));
+        }
+        for (auto &worker : workers) {
+            require(worker.get(), "Parallel WAMR execution failed");
+        }
+    }
+
     void test_contract_manager(const Bytes &fungible_module, const Bytes &message_module) {
         ExtraChain::Contracts::ContractManager manager;
 
@@ -698,6 +718,7 @@ int main(int argc, char **argv) {
         auto message_module  = read_file(argv[2]);
         test_runtime_limits(runtime, fungible_module);
         test_worker_thread(runtime, message_module);
+        test_parallel_worker_threads(runtime, message_module);
         test_contract_hash();
         test_json_codec();
         test_fungible(runtime, fungible_module);
