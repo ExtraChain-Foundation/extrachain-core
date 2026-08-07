@@ -66,8 +66,8 @@ public:
         std::set<SocketPair> connections;
         bool                 is_available = false;
         bool                 is_constant  = false;
-        SocketMode           socket_mode;
-        DfsMode              dfs_mode;
+        SocketMode           socket_mode  = SocketMode::Full;
+        DfsMode              dfs_mode     = DfsMode::Full;
         // Storage schema version. Optional so legacy peers (who don't send it)
         // parse cleanly — JSON serialization drops absent optionals entirely.
         // Present + >= 100 = peer understands decimal wire format and pack sync.
@@ -159,7 +159,7 @@ protected:
     std::uint64_t    timestamp_        = 0;
     SocketMode       mode_             = SocketMode::Full;
     SocketDirection  direction_        = SocketDirection::Outgoing;
-    DfsMode          dfs_mode_socket_;
+    DfsMode          dfs_mode_socket_  = DfsMode::Full;
     PeerMeta         peer_meta_;
 
     QMutex                 queue_mutex_;

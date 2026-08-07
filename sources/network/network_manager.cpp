@@ -1098,7 +1098,7 @@ void NetworkManager::message_received(const std::string &message,
         return;
     }
 
-    MessageBody message_body = message_body_expected.value();
+    MessageBody message_body = std::move(message_body_expected).value();
     const auto  node_id =
         NodeId { .actor_id = message_body.init_sender_id, .node_identifier = message_body.init_sender_identifier };
 
@@ -1133,13 +1133,12 @@ void NetworkManager::message_received(const std::string &message,
       }
       */
 
-    SendMode      send_type  = message_body.send_type;
-    MessageType   type       = message_body.message_type;
-    MessageStatus status     = message_body.status;
-    std::string   serialized = message_body.data;
-    std::string   mess_id    = message_body.message_id;
-    std::string   message_id(mess_id.begin(), mess_id.end());
-    bool          is_luminance = node_id.actor_id == node->network_id();
+    const SendMode      send_type    = message_body.send_type;
+    const MessageType   type         = message_body.message_type;
+    const MessageStatus status       = message_body.status;
+    const std::string  &serialized   = message_body.data;
+    const std::string  &message_id   = message_body.message_id;
+    const bool          is_luminance = node_id.actor_id == node->network_id();
 
     if (status == MessageStatus::Request || status == MessageStatus::NoStatus) {
         bool should_ignore = (type == MessageType::DagTransaction || type == MessageType::NewActor
@@ -1214,7 +1213,7 @@ void NetworkManager::message_received(const std::string &message,
         eLog("[Network Message] Received: type {}, status {}, id {}, body: {}",
              type,
              status,
-             mess_id,
+             message_id,
              (std::stringstream() << deserialized).str());
     }
 #endif

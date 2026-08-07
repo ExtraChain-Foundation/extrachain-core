@@ -39,6 +39,8 @@
 #include "chain/transaction.h"
 #include "dfs/name_validator.h"
 #include "encryption/encryption_tools.h"
+#include "network/isocket_service.h"
+#include "network/message_body.h"
 #include "network/wire_format.h"
 #include "utils/bignumber.h"
 #include "utils/bignumber_float.h"
@@ -303,6 +305,34 @@ private slots:
 
         QVERIFY(PathValidator::validate("C:\\folder\\file.txt").has_value());
         QVERIFY(!PathValidator::validate("folder//file.txt").has_value());
+    }
+
+    void networkMessageEnvelopeRoundTrip() {
+        const SocketService::HandshakeMessage legacy_handshake;
+        QCOMPARE(legacy_handshake.socket_mode, SocketMode::Full);
+        QCOMPARE(legacy_handshake.dfs_mode, DfsMode::Full);
+
+        const ActorId sender("1");
+        auto          message = make_init_message("payload",
+                                         SendMode::Focused,
+                                         MessageType::Custom,
+                                         MessageStatus::Request,
+                                         sender,
+                                         "123456789012345",
+                                         "node-a");
+        message.nodes_identifiers_to_ignore.emplace("node-b");
+
+        const auto serialized = message.serialize();
+        auto       decoded    = MessagePack::deserialize<MessageBody>(serialized);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(decoded->send_type, message.send_type);
+        QCOMPARE(decoded->message_type, message.message_type);
+        QCOMPARE(decoded->status, message.status);
+        QCOMPARE(decoded->message_id, message.message_id);
+        QCOMPARE(decoded->sender_id, message.sender_id);
+        QCOMPARE(decoded->data, message.data);
+        QCOMPARE(decoded->nodes_identifiers_to_ignore, message.nodes_identifiers_to_ignore);
+        QCOMPARE(decoded->calculate_hash(), message.calculate_hash());
     }
 
     // ----- Migration round-trip ----------------------------------------------
