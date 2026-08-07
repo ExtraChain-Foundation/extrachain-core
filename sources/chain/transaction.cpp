@@ -45,7 +45,9 @@ Transaction::Transaction(const Transaction &other) {
     this->signature_  = other.signature_;
     this->type_       = other.type_;
     this->prev_hashs_ = other.prev_hashs_;
-    update_hash();
+    // hash_ is copied verbatim: every tx is hashed at sign()/deserialize time and
+    // fields never mutate afterwards, so recomputing blake on EVERY copy only
+    // burned CPU (dominant cost in profiling under load).
 }
 
 Transaction::Transaction(Transaction &&other) noexcept {
@@ -60,7 +62,7 @@ Transaction::Transaction(Transaction &&other) noexcept {
     signature_  = std::move(other.signature_);
     type_       = std::move(other.type_);
     prev_hashs_ = std::move(other.prev_hashs_);
-    update_hash();
+    // hash_ moved along with the fields — no recompute (see copy ctor).
 
     other.hash_ = "";
 }

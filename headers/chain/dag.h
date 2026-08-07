@@ -433,7 +433,9 @@ public:
      * @param deep The maximum number of sections to search back (default: 100)
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 100) const;
+    // 18 sections cover the whole accept window (TooSectionDiff rejects anything
+    // beyond +-15 before this search runs), instead of parsing 100 sections per tx.
+    std::optional<Transaction> search_duplicate_by_hash(const std::string &hash, int deep = 18) const;
 
     std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
                                                                                 std::uint64_t  latest_timestamp,
