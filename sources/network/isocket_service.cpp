@@ -168,14 +168,16 @@ bool SocketService::check_first_message(const HandshakeMessage &handshake) {
                 continue;
             }
 
-            // if (el->is_active()) {
-            // duplicate = true;
-            // }
-
-            // if (!el->is_active()) {
-            el->closeSocket();
+            // Restore the pre-#152 arbitration: an ACTIVE existing connection wins
+            // and the newcomer is rejected as duplicate. "Newest wins" made mutual
+            // dials fight forever (each side kills the other's champion), and every
+            // kill of an active socket silently dropped broadcasts in flight.
+            if (el->is_active()) {
+                duplicate = true;
+            } else {
+                el->closeSocket();
+            }
             break;
-            // }
         }
     }
 
