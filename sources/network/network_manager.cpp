@@ -178,11 +178,13 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
-    // Full nodes also re-dial their uplink: without this a node that loses its
-    // socket stays isolated until some peer happens to dial in, and files added
-    // elsewhere never replicate to it. The reconnection() slot guards against a
-    // node whose first_node points at itself (the network seed), so enabling the
-    // timer here is safe for every role.
+    // Full nodes also re-dial, but only towards peers already proven reachable:
+    // their configured first_node (uplink) and entries in reconn_, which is
+    // populated exclusively from sockets that reached SocketMode::Full (i.e. real
+    // servers we connected out to). A client behind NAT/router never lands there,
+    // so this never spams unreachable clients — it only restores a lost uplink so
+    // the node keeps replicating instead of silently falling out of the mesh.
+    // The reconnection() slot also guards against a seed whose first_node is self.
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
@@ -342,7 +344,12 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
+        // Only remember peers we dialled out to (Outgoing): those are reachable
+        // servers worth re-dialling. An Incoming socket can be a client behind
+        // NAT/router — we could never dial it back, so keeping it here would just
+        // produce endless reconnect attempts into the void.
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()
+            && service->direction() == SocketDirection::Outgoing) {
             reconn_.insert({ service->ip().toStdString(), {} });
         }
     });
