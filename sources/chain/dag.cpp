@@ -1342,9 +1342,22 @@ void Dag::start_sync() {
 
 void Dag::start_check() {
 #ifndef IS_APP_CLIENT
-    // temp
     if (status_ == DagStatus::Ready) {
-        return;
+        // Section 0 is the sync base and must exist on every FULL node (the
+        // genesis tx also carries the network id). A fresh full node joins
+        // already-Ready (set unconditionally at init), so without this check it
+        // would never run the initial chain sync: it would miss the genesis
+        // section, write_control would later materialize an empty stub and its
+        // control chain would diverge from the network forever. Light nodes keep
+        // the old behavior (they sync via the light package, not full sections).
+        if (mode_ != DagMode::Full) {
+            return;
+        }
+        auto zero = this->read_section(SectionId(0));
+        if (zero.has_value() && !zero->transactions.empty()) {
+            return;
+        }
+        eLog("[Dag] start_check: no genesis section yet — running initial sync");
     }
 #endif
 
@@ -2106,6 +2119,16 @@ void Dag::handle_sync_request() {
 
     auto last_block  = this->read_section(current_section_);
     auto sync_index  = last_block.has_value() ? last_block->id + 1 : SectionId(0);
+    // Section 0 is the sync base (genesis tx carries the network id). If we never
+    // received it — even though live traffic already advanced current_section_ —
+    // pull the chain from the very beginning; section sync merges idempotently.
+    {
+        auto zero = this->read_section(SectionId(0));
+        if (!zero.has_value() || zero->transactions.empty()) {
+            eLog("[Dag] handle_sync_request: genesis section missing — syncing from 0");
+            sync_index = SectionId(0);
+        }
+    }
 
     sync_last_index_ = nodes_by_block.front().second;
 
@@ -2143,7 +2166,10 @@ void Dag::handle_sync_request() {
          sync_last_index_.to_string(NumeralBase::Dec));
     // sync(sync_index, responder);
     if (mode_ == DagMode::Full) {
-        request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
+        // Start from sync_index, not current: when the genesis section is missing
+        // sync_index is forced to 0 above, otherwise it equals current+1 anyway.
+        auto sync_from = sync_index < current_section_ ? sync_index : current_section_;
+        request_file_sections(sync_from, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
     } else {
         auto responder_new = responder.with_new_message_id();
         node->network()->send_message(true,
