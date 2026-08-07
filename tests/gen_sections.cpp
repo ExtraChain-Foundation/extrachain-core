@@ -21,7 +21,7 @@
 // reward transactions to fill the DAG with many sections, so the hot -> pack
 // machinery (and later sync/migration) can be exercised on realistic data.
 //
-//   ./extrachain-gen-sections [N] [workdir]
+//   ./extrachain-gen-sections [N] [workdir] [--no-index]
 //
 // N defaults to 25000 (enough to seal 2 packs: SECTIONS_PER_PACK=10000 plus the
 // HOT_PACK_LAG=200 trailing window). workdir defaults to ./gen-data.
@@ -36,6 +36,7 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <string_view>
 
 #include "chain/actor.h"
 #include "chain/dag.h"
@@ -49,22 +50,24 @@
 
 namespace {
 
-std::size_t count_files(const std::filesystem::path &dir) {
-    std::error_code ec;
-    if (!std::filesystem::exists(dir, ec)) return 0;
-    std::size_t n = 0;
-    for (auto &e : std::filesystem::directory_iterator(dir, ec)) {
-        if (e.is_regular_file()) ++n;
+    std::size_t count_files(const std::filesystem::path &dir) {
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec))
+            return 0;
+        std::size_t n = 0;
+        for (auto &e : std::filesystem::directory_iterator(dir, ec)) {
+            if (e.is_regular_file())
+                ++n;
+        }
+        return n;
     }
-    return n;
-}
 
 } // namespace
 
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
 
-    const long long  target  = (argc > 1) ? std::atoll(argv[1]) : 25000;
+    const long long   target  = (argc > 1) ? std::atoll(argv[1]) : 25000;
     const std::string workdir = (argc > 2) ? argv[2] : "gen-data";
 
     // Fresh working directory — create_new_network refuses to run if a profile
@@ -73,6 +76,14 @@ int main(int argc, char *argv[]) {
     std::filesystem::create_directories(workdir);
     QDir::setCurrent(QString::fromStdString(workdir));
     Utils::wipeDataFiles();
+    if (argc > 3 && std::string_view(argv[3]) == "--no-index") {
+        ExtraChainSettings settings;
+        settings.chain_index_mode = ChainIndexMode::Disabled;
+        if (!Utils::write_settings(settings)) {
+            eCritical("[Gen] cannot disable ChainIndex for the diagnostic run");
+            return 1;
+        }
+    }
 
     ExtraChainNodeWrapper wrapper(&app, /*is_client*/ false, /*is_custom*/ false, /*port*/ 0);
     wrapper.init(/*makeAsync*/ false); // runs node->process() synchronously
@@ -82,16 +93,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    auto *dag    = node->dag();
-    auto  actor  = node->account_controller()->system_actor();
+    auto         *dag   = node->dag();
+    auto          actor = node->account_controller()->system_actor();
     const TokenId reward_token("468faf2f1be6504a9a26f7f027f7e43380b0d77d");
 
-    eLog("[Gen] Generating {} reward sections, starting at section {}", target,
+    eLog("[Gen] Generating {} reward sections, starting at section {}",
+         target,
          dag->current_section().to_string());
 
-    auto       t0       = std::chrono::steady_clock::now();
-    long long  ok       = 0;
-    long long  rejected = 0;
+    auto                     t0       = std::chrono::steady_clock::now();
+    long long                ok       = 0;
+    long long                rejected = 0;
+    std::chrono::nanoseconds sign_time {};
+    std::chrono::nanoseconds admission_time {};
 
     for (long long i = 0; i < target; ++i) {
         Transaction tx;
@@ -101,13 +115,18 @@ int main(int argc, char *argv[]) {
         tx.set_type(TransactionType::Reward);
         tx.set_token(reward_token);
         tx.set_section(dag->current_section() + 1);
-        if (!tx.sign(actor)) {
+        const auto sign_started = std::chrono::steady_clock::now();
+        const auto signed_ok    = tx.sign(actor);
+        sign_time += std::chrono::steady_clock::now() - sign_started;
+        if (!signed_ok) {
             ++rejected;
             continue;
         }
 
-        Responder responder(node->network());
-        auto      res = dag->network_transaction(tx, responder);
+        Responder  responder(node->network());
+        const auto admission_started = std::chrono::steady_clock::now();
+        auto       res               = dag->network_transaction(tx, responder);
+        admission_time += std::chrono::steady_clock::now() - admission_started;
         if (res.has_value()) {
             ++ok;
         } else {
@@ -118,7 +137,9 @@ int main(int argc, char *argv[]) {
         }
 
         if ((i + 1) % 2000 == 0) {
-            std::printf("[Gen] %lld/%lld done, current section %s\n", i + 1, target,
+            std::printf("[Gen] %lld/%lld done, current section %s\n",
+                        i + 1,
+                        target,
                         dag->current_section().to_string().c_str());
             std::fflush(stdout);
         }
@@ -132,10 +153,18 @@ int main(int argc, char *argv[]) {
     std::size_t hot_files  = count_files(ChainConst::DAG_HOT_FOLDER);
     std::size_t pack_files = count_files(ChainConst::DAG_PACKS_FOLDER);
 
-    std::printf("\n[Gen] Done: saved %lld, rejected %lld, in %.1fs (%.0f/s)\n", ok, rejected, secs,
+    std::printf("\n[Gen] Done: saved %lld, rejected %lld, in %.1fs (%.0f/s)\n",
+                ok,
+                rejected,
+                secs,
                 secs > 0 ? ok / secs : 0.0);
+    std::printf("[Gen] timing: sign %.1fs, admission/store %.1fs\n",
+                std::chrono::duration<double>(sign_time).count(),
+                std::chrono::duration<double>(admission_time).count());
     std::printf("[Gen] current_section=%s, hot files=%zu, pack files=%zu\n",
-                dag->current_section().to_string().c_str(), hot_files, pack_files);
+                dag->current_section().to_string().c_str(),
+                hot_files,
+                pack_files);
 
     // Spot-check: a packed section and a hot section read back correctly.
     if (dag->current_section() > SectionId(0)) {

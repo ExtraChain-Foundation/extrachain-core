@@ -24,6 +24,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <boost/describe.hpp>
 #include <QTimer>
@@ -35,6 +36,7 @@
 #include "chain/chain_index.h"
 #include "chain/control_index.h"
 #include "chain/pack_registry.h"
+#include "chain/hot_section_store.h"
 
 #include "3rdparty/rustex.h"
 
@@ -47,11 +49,14 @@ static const SectionId CONTROL_INTERVAL      = SectionId(20);
 static const int       CONTROL_INTERVAL_MOD  = 20;
 static const SectionId CONTROL_INTERVAL_DIFF = CONTROL_INTERVAL - 1; // 19
 
-// Sections this far behind the tip are still kept hot (one file each) before
+// Sections this far behind the tip stay in the mutable hot store before
 // being sealed into an immutable pack. Covers Light client's 15-section cache
 // lag, control-search backoff (~37), and a buffer for late-arriving sync data
 // or modest reorgs. 200 == 10 control intervals — cheap on disk (~400KB).
 static constexpr int HOT_PACK_LAG = 200;
+// Keep at most two not-yet-packed ranges in memory. The hot store remains the
+// source of truth, so dropping a cache entry only causes a later database read.
+static constexpr std::size_t PACK_HOT_CACHE_LIMIT = Pack::SECTIONS_PER_PACK * 2;
 
 // find_last_control() walks backwards from the current tip; these caps stop the walk
 // once enough evidence accumulates that no control is ever coming:
@@ -384,9 +389,9 @@ public:
      * @brief Persistent transaction index used for wallet/explorer queries
      *        and fast duplicate hash checks.
      */
-    ChainIndex *chain_index();
+    ChainIndex       *chain_index();
     const ChainIndex *chain_index() const;
-    bool chain_index_enabled() const;
+    bool              chain_index_enabled() const;
 
     /**
      * @brief Get the ID of the first saved section
@@ -483,6 +488,8 @@ public:
     Balances calculate_actors_balance(const std::vector<ActorId> &actor_ids,
                                       std::optional<SectionId>    to_section = std::nullopt);
 
+    void invalidate_token_allocations();
+
     /**
      * @brief Add a transaction to the sent transactions list
      *
@@ -495,7 +502,8 @@ public:
      *
      * Updates the persistent storage with the current first section,
      * last section, and last cached section IDs.
-     * @param allow_lower_first Permit a lower `first` than on disk (e.g. installing cold packs extends history backwards).
+     * @param allow_lower_first Permit a lower `first` than on disk (e.g. installing cold packs extends history
+     * backwards).
      */
     void update_range(bool allow_lower_first = false);
 
@@ -507,8 +515,7 @@ public:
      * @param hash    Hash within that section.
      * @return std::optional<Transaction> The transaction if found, or nullopt
      */
-    std::optional<Transaction>
-    find_transaction(const SectionId &section, const std::string &hash) const;
+    std::optional<Transaction> find_transaction(const SectionId &section, const std::string &hash) const;
 
     std::optional<std::pair<SectionId, std::string>> search_duplicate_by_sender(const ActorId &actor_id,
                                                                                 std::uint64_t  latest_timestamp,
@@ -651,10 +658,20 @@ public:
         return failed_transactions_;
     }
 
-    size_t sended_transactions_size() const { return sended_transactions_.size(); }
-    size_t failed_transactions_size() const { return failed_transactions_.size(); }
-    size_t last_txs_size() const { return last_txs_.size(); }
-    size_t cached_txs_size() { auto g = cached_txs_.lock(); return g->size(); }
+    size_t sended_transactions_size() const {
+        return sended_transactions_.size();
+    }
+    size_t failed_transactions_size() const {
+        return failed_transactions_.size();
+    }
+    size_t last_txs_size() const {
+        std::lock_guard lock(last_txs_mutex_);
+        return last_txs_.size();
+    }
+    size_t cached_txs_size() {
+        auto g = cached_txs_.lock();
+        return g->size();
+    }
 
     /**
      * @brief Begin accepting sync and network messages; start sync timers.
@@ -679,15 +696,22 @@ public:
     bool is_accepting_messages() const;
 
 private:
-    ExtraChainNode                              *node;                 // Parent node reference
-    TransactionCache                             transaction_cache_;   // Transaction cache for fast lookups
-    std::unordered_map<std::string, Transaction> sended_transactions_; // Transactions sent but not yet
-    std::unordered_map<std::string, Transaction> failed_transactions_; // Transactions failed
-    std::unordered_map<NodeId, std::uint64_t>    last_txs_;
-    DagCache                                     cache_; // Balance cache for fast calculations
+    ExtraChainNode                                       *node;               // Parent node reference
+    TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
+    std::unordered_map<std::string, Transaction>          sended_transactions_; // Transactions sent but not yet
+    std::unordered_map<std::string, Transaction>          failed_transactions_; // Transactions failed
+    std::unordered_map<NodeId, std::uint64_t>             last_txs_;
+    mutable std::mutex                                    last_txs_mutex_;
+    std::mutex                                            token_allocations_mutex_;
+    ActorId                                               token_allocations_owner_;
+    std::optional<std::string>                            token_allocations_file_id_;
+    bool                                                  token_allocations_cache_loaded_ = false;
+    std::map<std::pair<ActorId, TokenId>, BigNumberFloat> token_allocations_cache_;
+    DagCache                                              cache_; // Balance cache for fast calculations
 
-    mutable std::shared_mutex section_mutex_; //
-    mutable std::mutex        range_mutex_;   //
+    mutable std::shared_mutex   section_mutex_; //
+    mutable std::mutex          range_mutex_;   //
+    std::optional<SectionRange> persisted_range_;
 
     SectionId current_section_     = SectionId(-1);      // Current (latest) section ID
     SectionId first_saved_section_ = SectionId(-1);      // First section ID saved in the chain
@@ -705,13 +729,18 @@ private:
     bool                                         search_control_              = false;
     bool                                         light_requested_             = false;
 
-    rustex::mutex<std::set<Transaction>> cached_txs_; // Transactions cached during synchronization
+    rustex::mutex<std::set<Transaction>>         cached_txs_; // Transactions cached during synchronization
     static constexpr std::size_t                 MaxDeferredContractTransactions = 1024;
     std::mutex                                   deferred_contracts_mutex_;
     std::unordered_map<std::string, Transaction> deferred_contracts_;
 
     // Immutable packed storage for cold sections (10k per pack)
-    std::unique_ptr<Pack::Registry> pack_registry_;
+    std::unique_ptr<Pack::Registry>  pack_registry_;
+    std::unique_ptr<HotSectionStore> hot_section_store_;
+    SectionId                        next_pack_index_ = SectionId(0);
+    std::mutex                       pack_mutex_;
+    std::mutex                       pack_hot_cache_mutex_;
+    std::map<SectionId, std::string> pack_hot_cache_;
 
     // Persistent tx index (by hash / sender / receiver / token / time).
     // Full mode: every tx. Light mode: only tx involving local wallets.
@@ -734,8 +763,8 @@ private:
     //   started_ — set by start(), cleared by stop(). Guards double-start.
     //   accepting_messages_ — true between start() and stop(); network
     //   handlers must check this to drop inbound traffic during shutdown.
-    std::atomic<bool> started_{false};
-    std::atomic<bool> accepting_messages_{false};
+    std::atomic<bool> started_ { false };
+    std::atomic<bool> accepting_messages_ { false };
 
     //
     void add_to_cached_tx(const Transaction &transaction);
@@ -744,22 +773,24 @@ private:
     // Called from write_section when the hot range crosses a pack boundary.
     void try_pack_hot();
 
-    // Pack-sync state: peer's known packs queue. Filled by network_pack_list_response,
-    // drained by issuing DagPackRequest one at a time. Mutex guards the list and
-    // the in_flight flag together because both fields move whenever we ask the
-    // peer for the next pack.
-    std::mutex                pack_sync_mutex_;
-    std::vector<Pack::PackId> pack_sync_pending_;
-    bool                      pack_sync_in_flight_ = false;
-    bool                      pack_sync_installed_any_ = false;
-    // Chunked transfer of the pack currently being pulled: which pack and the
-    // next byte offset to request, so memory stays bounded to one chunk.
-    Pack::PackId              pack_sync_current_id_ = 0;
-    std::uint64_t             pack_sync_offset_     = 0;
+    // Pack-sync state. One pack is installed at a time, with a bounded window
+    // of chunk requests to avoid one network round trip per 256 KiB.
+    std::mutex                        pack_sync_mutex_;
+    std::vector<Pack::PackId>         pack_sync_pending_;
+    bool                              pack_sync_in_flight_     = false;
+    bool                              pack_sync_installed_any_ = false;
+    Pack::PackId                      pack_sync_current_id_    = 0;
+    std::uint64_t                     pack_sync_next_offset_   = 0;
+    std::uint64_t                     pack_sync_total_size_    = 0;
+    std::unordered_set<std::uint64_t> pack_sync_outstanding_offsets_;
+    std::unordered_set<std::uint64_t> pack_sync_received_offsets_;
 
     // Pull next pack from pack_sync_pending_ and send DagPackRequest.
     // Called after each pack is received (or after PackList arrives).
     void issue_next_pack_request(const Responder &responder);
+    void issue_pack_window(const Responder &responder);
+
+    std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);
 
     /**
      * @brief Request sections from the network

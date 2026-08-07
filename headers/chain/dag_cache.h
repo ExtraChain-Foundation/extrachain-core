@@ -151,6 +151,11 @@ public:
                                 const SectionId&            first_saved_section,
                                 std::optional<SectionId>    to_section = std::nullopt);
 
+    // Derived live view. It avoids reading the mutable section tail for each
+    // transaction from an active actor.
+    void apply_live_transaction(const Transaction& transaction);
+    void invalidate_live_balances();
+
     /**
      * @brief Calculate the genesis section id for caching
      *
@@ -228,6 +233,10 @@ private:
     bool                         contract_catalog_scanned_ = false;
     std::mutex                   mutex_;
     std::mutex                   contract_catalog_mutex_;
+    std::mutex                   live_balance_mutex_;
+    Balances                     live_balances_;
+    std::set<ActorId>            live_balance_actors_;
+    SectionId                    live_balance_section_ = SectionId(-1);
 
 public:
     /**

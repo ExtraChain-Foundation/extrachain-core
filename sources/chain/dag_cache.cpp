@@ -357,6 +357,24 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         return balances;
     }
 
+    const auto target_section = to_section.value_or(current_section);
+    const bool live_request =
+        dag != nullptr && dag->status() == DagStatus::Ready && target_section >= current_section;
+    if (live_request) {
+        std::lock_guard lock(live_balance_mutex_);
+        const bool      complete = live_balance_section_ == current_section
+                              && std::ranges::all_of(actor_ids, [this](const ActorId& actor) {
+                                     return live_balance_actors_.contains(actor);
+                                 });
+        if (complete) {
+            balances = live_balances_;
+            std::erase_if(balances, [&actor_ids](const auto& entry) {
+                return std::ranges::find(actor_ids, entry.first.first) == actor_ids.end();
+            });
+            return balances;
+        }
+    }
+
     bool      use_cache = false;
     BigNumber balance_start_section;
 
@@ -406,9 +424,45 @@ Balances DagCache::calculate_balances(const std::vector<ActorId>& actor_ids,
         return std::find(actor_ids.begin(), actor_ids.end(), actor_id) == actor_ids.end();
     });
 
-    eLog("[Dag] Calculating balances: {}", balances);
+    if (live_request && dag->current_section() == current_section) {
+        std::lock_guard lock(live_balance_mutex_);
+        if (live_balance_section_ != current_section) {
+            live_balances_.clear();
+            live_balance_actors_.clear();
+            live_balance_section_ = current_section;
+        }
+        for (const auto& actor : actor_ids) {
+            std::erase_if(live_balances_, [&actor](const auto& entry) {
+                return entry.first.first == actor;
+            });
+            live_balance_actors_.insert(actor);
+        }
+        live_balances_.insert(balances.begin(), balances.end());
+    }
 
     return balances;
+}
+
+void DagCache::apply_live_transaction(const Transaction& transaction) {
+    std::lock_guard lock(live_balance_mutex_);
+    if (live_balance_actors_.empty())
+        return;
+    if (live_balance_section_ > transaction.section()
+        || live_balance_section_ + BigNumber(1) < transaction.section()) {
+        live_balances_.clear();
+        live_balance_actors_.clear();
+        live_balance_section_ = SectionId(-1);
+        return;
+    }
+    process_transaction(transaction, live_balances_);
+    live_balance_section_ = transaction.section();
+}
+
+void DagCache::invalidate_live_balances() {
+    std::lock_guard lock(live_balance_mutex_);
+    live_balances_.clear();
+    live_balance_actors_.clear();
+    live_balance_section_ = SectionId(-1);
 }
 
 CacheResult DagCache::check_and_update_cache(const SectionId& current_section) {
@@ -594,56 +648,16 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
     std::set<std::pair<ActorId, TokenId>> actor_token_set;
 
-    // Scan from start_section to genesis_section to collect actor-token pairs
-    for (BigNumber i = start_section; i <= genesis_section; i++) {
-        auto section = read_section_callback(i);
-        if (!section.has_value()) {
-            continue;
-        }
-        if (section->transactions.empty()) {
-            continue;
-        }
-
-        if (i % BigNumber(20000) == 0) {
-            eLog("update_to_genesis_section scan on {}", i.to_printable_string());
-        }
-
-        for (const auto& tx : section->transactions) {
-            // if (tx.verify()) {
-
-            // }
-
-            actor_token_set.insert({ tx.sender(), tx.token() });
-            actor_token_set.insert({ tx.receiver(), tx.token() });
-
-            if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
-                auto from_token = TokenId::create(tx.meta().value());
-                if (from_token.has_value()) {
-                    actor_token_set.insert({ tx.sender(), from_token.value() });
-                    actor_token_set.insert({ tx.receiver(), from_token.value() });
-                }
-            }
-        }
-    }
-
-    // eLog("[DagCache] Found {} unique actor-token pairs for caching", actor_token_set.size());
-
     // Start a transaction for efficiency
     cache_db_->query("BEGIN TRANSACTION");
 
-    std::vector<std::pair<ActorId, TokenId>> actor_token_pairs(actor_token_set.begin(), actor_token_set.end());
-
-    // Balances from cache
-    auto cached_balances_opt = read_cached_balances(actor_token_pairs);
-    if (!cached_balances_opt.has_value()) {
-        eLog("[DagCache] Failed to read cached balances");
-        cache_db_->query("ROLLBACK");
-        return { false, BigNumber(-1) };
-    }
-
-    Balances& balances  = cached_balances_opt.value().second;
-    auto      cache_res = read_cached_balances();                 // ?
-    local_clear_less_balances(cache_res.first, cache_res.second); // ?
+    // The old path read every section once to collect keys and then read the
+    // same sections again to apply changes. The complete cache was loaded as a
+    // third input for the negative-balance check. Reuse that complete snapshot
+    // and collect touched keys while applying each section once.
+    auto cache_res = read_cached_balances();
+    local_clear_less_balances(cache_res.first, cache_res.second);
+    Balances balances = std::move(cache_res.second);
 
     // Process all transactions from start_section to genesis_section
     for (BigNumber i = start_section; i <= genesis_section; i++) {
@@ -657,6 +671,15 @@ std::pair<bool, SectionId> DagCache::update_to_genesis_section(
 
         // Process each transaction
         for (const auto& tx : section->transactions) {
+            actor_token_set.insert({ tx.sender(), tx.token() });
+            actor_token_set.insert({ tx.receiver(), tx.token() });
+            if (tx.type() == TransactionType::Conversion && tx.meta().has_value()) {
+                auto from_token = TokenId::create(tx.meta().value());
+                if (from_token.has_value()) {
+                    actor_token_set.insert({ tx.sender(), *from_token });
+                    actor_token_set.insert({ tx.receiver(), *from_token });
+                }
+            }
             process_transaction(tx, balances);
 
             if (dag->mode() == DagMode::Full) {
@@ -803,6 +826,7 @@ bool DagCache::init_db() {
 }
 
 void DagCache::reset_db() {
+    invalidate_live_balances();
     std::unique_lock<std::mutex> catalog_lock(contract_catalog_mutex_);
     std::unique_lock<std::mutex> lock(mutex_);
     const bool                   was_initialized = db_initialized_;

@@ -51,7 +51,7 @@ struct ChainIndexEntry {
 /**
  * @brief Persistent transaction index on top of dag storage.
  *
- * Writes: one batched SQLite transaction per section via on_section_written().
+ * Writes: several adjacent sections per SQLite transaction via on_section_written().
  * Reads: prepared statements with compound indexes — sender/receiver/token/timestamp.
  *
  * Mode:
@@ -70,30 +70,40 @@ public:
     ChainIndex(const ChainIndex &)            = delete;
     ChainIndex &operator=(const ChainIndex &) = delete;
 
-    // Called by Dag::write_section. Replaces rows for the section and batches all txs
-    // in one SQLite transaction, so replays do not duplicate query results.
+    // Called by Dag::write_section. Replaces rows for the section. Adjacent writes
+    // share a bounded transaction, so replays do not duplicate query results and
+    // the live path does not pay one durable commit for every section.
     void on_section_written(const Section &s);
 
     // All tx where sender == actor OR receiver == actor, optionally filtered by
     // token, newer-than timestamp filter, newest first. limit caps result size.
-    std::vector<ChainIndexEntry> find_for_actor(
-        const std::string &actor,
-        const std::string &token            = {},
-        std::uint64_t      before_timestamp = 0, // 0 == no upper bound
-        int                limit            = 50) const;
+    std::vector<ChainIndexEntry> find_for_actor(const std::string &actor,
+                                                const std::string &token            = {},
+                                                std::uint64_t      before_timestamp = 0, // 0 == no upper bound
+                                                int                limit            = 50) const;
 
     // Same but restricted to sender side only. Useful for "outgoing tx" views.
-    std::vector<ChainIndexEntry> find_sent_by(
-        const std::string &actor,
-        const std::string &token            = {},
-        std::uint64_t      before_timestamp = 0,
-        int                limit            = 50) const;
+    std::vector<ChainIndexEntry> find_sent_by(const std::string &actor,
+                                              const std::string &token            = {},
+                                              std::uint64_t      before_timestamp = 0,
+                                              int                limit            = 50) const;
 
-    std::vector<ChainIndexEntry> find_received_by(
-        const std::string &actor,
-        const std::string &token            = {},
-        std::uint64_t      before_timestamp = 0,
-        int                limit            = 50) const;
+    std::vector<ChainIndexEntry> find_received_by(const std::string &actor,
+                                                  const std::string &token            = {},
+                                                  std::uint64_t      before_timestamp = 0,
+                                                  int                limit            = 50) const;
+
+    // Fast replay check for a section that is already covered by the index.
+    bool contains_hash(const SectionId &section, const std::string &hash) const;
+
+    // Sections that contain a root or nested transition for this contract.
+    // The result is ordered and contains no duplicates.
+    std::vector<SectionId> find_contract_sections(const std::string &contract,
+                                                  const SectionId   &from_section = SectionId(0)) const;
+
+    // True after hash and contract references cover every indexed row.
+    // An older database stays on the safe DAG fallback until a full rebuild.
+    bool derived_index_ready() const;
 
     // Rebuild index from pack registry + hot sections. Blocking; safe to call
     // on startup if we suspect the index is stale (missing file, row-count
@@ -103,6 +113,9 @@ public:
 
     // Drop all rows. Used by wipe flows.
     void clear();
+
+    // Commit a partial live-write batch. Used at a clean node stop.
+    void flush();
 
     // Number of rows (heavy — uses COUNT(*); for rough estimates, prefer
     // last_indexed_section()).

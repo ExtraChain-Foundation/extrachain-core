@@ -28,12 +28,15 @@
 
 #include <QtTest/QtTest>
 
+#include <algorithm>
 #include <filesystem>
 #include <map>
 #include <string>
+#include <vector>
 
 #include "chain/actor.h"
 #include "chain/dag.h" // Section
+#include "chain/hot_section_store.h"
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
 #include "chain/transaction.h"
@@ -161,6 +164,77 @@ private slots:
 
         std::filesystem::remove_all(server_dir);
         std::filesystem::remove_all(client_dir);
+    }
+
+    void packSyncInstallsOutOfOrderChunks() {
+        auto server_dir = std::filesystem::temp_directory_path() / "exc_sync_window_server";
+        auto client_dir = std::filesystem::temp_directory_path() / "exc_sync_window_client";
+        std::filesystem::remove_all(client_dir);
+        QVERIFY(!make_server_packs(server_dir, 1, 2000).empty());
+
+        Pack::Registry server(server_dir);
+        server.rescan();
+        Pack::Registry client(client_dir);
+        auto           raw = server.read_raw(0);
+        QVERIFY(raw.has_value());
+
+        const std::size_t chunk_size = std::max<std::size_t>(1, (raw->size() + 3) / 4);
+        auto              first_size = std::min(chunk_size, raw->size());
+        QVERIFY(client.install_chunk(0, 0, std::string_view(*raw).substr(0, first_size), false).has_value());
+
+        std::vector<std::size_t> offsets;
+        for (std::size_t offset = chunk_size; offset < raw->size(); offset += chunk_size) {
+            offsets.push_back(offset);
+        }
+        std::ranges::reverse(offsets);
+        for (const auto offset : offsets) {
+            auto size = std::min(chunk_size, raw->size() - offset);
+            QVERIFY(
+                client.install_chunk(0, offset, std::string_view(*raw).substr(offset, size), false).has_value());
+        }
+        QVERIFY(client.install_chunk(0, raw->size(), {}, true).has_value());
+        QCOMPARE(client.read_section(SectionId(0)), std::optional<std::string>("sec-0"));
+        QCOMPARE(client.read_section(SectionId(1999)), std::optional<std::string>("sec-1999"));
+
+        std::filesystem::remove_all(server_dir);
+        std::filesystem::remove_all(client_dir);
+    }
+
+    void hotSectionStorePersistsAndPrunesRevisions() {
+        const auto dir  = std::filesystem::temp_directory_path() / "exc_hot_section_store";
+        const auto path = dir / "HotSections.db";
+        std::filesystem::remove_all(dir);
+
+        {
+            HotSectionStore store(path);
+            QVERIFY(store.is_open());
+            QVERIFY(store.put(SectionId(10), "section-10-v1"));
+            QVERIFY(store.put_many({ { SectionId(11), "section-11" }, { SectionId(12), "section-12" } }));
+            QVERIFY(store.put(SectionId(10), "section-10-v2"));
+            QCOMPARE(store.get(SectionId(10)), std::optional<std::string>("section-10-v2"));
+
+            const auto range = store.read_range(SectionId(10), SectionId(11));
+            QCOMPARE(range.size(), static_cast<std::size_t>(2));
+            QCOMPARE(range.at(SectionId(11)), std::string("section-11"));
+            const std::optional<std::pair<SectionId, SectionId>> expected_bounds =
+                std::pair { SectionId(10), SectionId(12) };
+            QCOMPARE(store.bounds(), expected_bounds);
+
+            QVERIFY(store.erase_range(SectionId(10), SectionId(10)));
+            QVERIFY(!store.contains(SectionId(10)));
+            QVERIFY(store.erase_from(SectionId(12)));
+            QVERIFY(!store.contains(SectionId(12)));
+        }
+
+        {
+            HotSectionStore reopened(path);
+            QCOMPARE(reopened.get(SectionId(11)), std::optional<std::string>("section-11"));
+            QVERIFY(reopened.clear());
+            QVERIFY(!reopened.contains(SectionId(11)));
+            QVERIFY(!reopened.bounds().has_value());
+        }
+
+        std::filesystem::remove_all(dir);
     }
 
     // ----- Wire format (legacy interop) --------------------------------------
@@ -334,13 +408,13 @@ private slots:
     }
 
     void chatFolderSerializationRoundTrip() {
-        const Chat::ChatFolder folder { .id                = "work",
-                                        .name              = "Work",
-                                        .emoji             = "briefcase",
-                                        .chat_ids          = { "owner-a:file-a", "owner-b:file-b" },
-                                        .pinned_chat_ids   = { "owner-b:file-b" },
-                                        .include_types = std::vector<Chat::ChatType> { Chat::Dialogue,
-                                                                                      Chat::Group },
+        const Chat::ChatFolder folder { .id              = "work",
+                                        .name            = "Work",
+                                        .emoji           = "briefcase",
+                                        .chat_ids        = { "owner-a:file-a", "owner-b:file-b" },
+                                        .pinned_chat_ids = { "owner-b:file-b" },
+                                        .include_types =
+                                            std::vector<Chat::ChatType> { Chat::Dialogue, Chat::Group },
                                         .excluded_chat_ids = { "owner-c:file-c" },
                                         .unread_only       = true,
                                         .muted             = false,

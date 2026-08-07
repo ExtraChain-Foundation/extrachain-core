@@ -81,30 +81,30 @@ namespace {
     std::vector<ContractTransitionData> contract_transitions(
         const ExtraChain::Contracts::PreparedContractChange& change) {
         std::vector<ContractTransitionData> result;
-        const auto append = [&](const auto& self,
+        const auto                          append = [&](const auto&                                          self,
                                 const ExtraChain::Contracts::PreparedContractChange& parent) -> void {
             std::size_t child_index = 0;
             for (const auto& effect : parent.output.effects) {
                 if (child_index >= parent.children.size()) {
                     return;
                 }
-                const auto& child    = parent.children[child_index++];
-                const auto& version  = child.record.versions.at(child.record.active_version - 1);
+                const auto& child = parent.children[child_index++];
+                const auto& version = child.record.versions.at(child.record.active_version - 1);
                 const auto& revision = version.revisions.back();
                 result.push_back(ContractTransitionData {
-                    .contract_id         = child.record.contract_id,
-                    .caller_contract_id  = parent.record.contract_id,
-                    .kind                = child.record.kind,
-                    .method              = effect.operation,
-                    .arguments_base64    = Utils::to_base64(effect.arguments),
-                    .module_hash         = version.module_hash,
-                    .previous_state_hash = revision.previous_hash,
-                    .state_hash          = revision.state_hash,
-                    .effects_hash = ExtraChain::Contracts::Codec::effect_hash(child.output.effects),
-                    .version             = version.version,
-                    .revision            = revision.revision,
-                    .checkpoint          = child.checkpoint,
-                    .checkpoint_revision = revision.checkpoint_revision,
+                                             .contract_id         = child.record.contract_id,
+                                             .caller_contract_id  = parent.record.contract_id,
+                                             .kind                = child.record.kind,
+                                             .method              = effect.operation,
+                                             .arguments_base64    = Utils::to_base64(effect.arguments),
+                                             .module_hash         = version.module_hash,
+                                             .previous_state_hash = revision.previous_hash,
+                                             .state_hash          = revision.state_hash,
+                                             .effects_hash = ExtraChain::Contracts::Codec::effect_hash(child.output.effects),
+                                             .version             = version.version,
+                                             .revision            = revision.revision,
+                                             .checkpoint          = child.checkpoint,
+                                             .checkpoint_revision = revision.checkpoint_revision,
                 });
                 self(self, child);
             }
@@ -245,7 +245,7 @@ void ExtraChainNode::process() {
     // so the constructor reads range/sections in the new layout.
     if (DagMigration::needs_migration()) {
         eLog("[Node] Legacy DAG layout detected — migrating");
-        auto res = DagMigration::migrate([](const DagMigration::Progress &p) {
+        auto res = DagMigration::migrate([](const DagMigration::Progress& p) {
             if (p.processed % 10000 == 0 || p.stage == "done") {
                 eLog("[Node] Migration {}: {}/{}", p.stage, p.processed, p.total);
             }
@@ -607,8 +607,9 @@ void ExtraChainNode::backfill_token_allocations() {
         }
 
         for (const auto& [key, amount] : totals) {
-            dfs_->dictionary_set_value(network_id, alloc_row->file_id, key,
-                                       amount.to_string(), network_id);
+            if (dfs_->dictionary_set_value(network_id, alloc_row->file_id, key, amount.to_string(), network_id)) {
+                dag_->invalidate_token_allocations();
+            }
         }
 
         eSuccess("[Node] token_allocations backfill complete: {} entries", totals.size());
@@ -1016,12 +1017,12 @@ ExtraChain::Contracts::ToolchainRegistry* ExtraChainNode::toolchain_registry() c
     return toolchain_registry_.get();
 }
 
-bool ExtraChainNode::stage_contract_change(std::string transaction_hash,
+bool ExtraChainNode::stage_contract_change(std::string                                   transaction_hash,
                                            ExtraChain::Contracts::PreparedContractChange change) {
     std::scoped_lock lock(pending_contracts_mutex_);
-    const auto contract_ids = [](const ExtraChain::Contracts::PreparedContractChange& root) {
+    const auto       contract_ids = [](const ExtraChain::Contracts::PreparedContractChange& root) {
         std::unordered_set<std::string> result;
-        const auto collect = [&](const auto& self,
+        const auto                      collect = [&](const auto&                                          self,
                                  const ExtraChain::Contracts::PreparedContractChange& current) -> void {
             result.insert(current.record.contract_id);
             for (const auto& child : current.children) {
@@ -1123,7 +1124,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         return TransactionProveError::InvalidContractPayload;
     }
 
-    const auto contract_id   = transaction.receiver();
+    const auto contract_id = transaction.receiver();
     const auto verified_inputs =
         verify_contract_inputs(dag_,
                                dfs_,
@@ -1133,7 +1134,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         || Json::serialize(*verified_inputs) != Json::serialize(metadata->verified_inputs)) {
         return TransactionProveError::InvalidContractPayload;
     }
-    auto       read_artifact = [this, &contract_id](const std::string& name, const ActorId& expected_author)
+    auto read_artifact = [this, &contract_id](const std::string& name, const ActorId& expected_author)
         -> std::expected<std::vector<std::uint8_t>, TransactionProveError> {
         auto row = dfs_->read_file_status(contract_id, name, Dfs::Basic::TEMPLATE_CONTRACTS);
         if (!row.has_value() || row->state != Dfs::FileState::Ready) {
@@ -1151,7 +1152,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     };
 
     auto verify_output = [&](const ExtraChain::Contracts::ContractOutput& output) -> TransactionProveError {
-    if (ExtraChain::Contracts::content_hash(output.state) != metadata->state_hash
+        if (ExtraChain::Contracts::content_hash(output.state) != metadata->state_hash
             || ExtraChain::Contracts::Codec::effect_hash(output.effects) != metadata->effects_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
@@ -1374,7 +1375,7 @@ std::expected<Transaction, ExtraChain::Contracts::ContractFailure> ExtraChainNod
             .detail = "No current wallet",
         });
     }
-    auto block  = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
+    auto block    = static_cast<std::uint64_t>(dag_->current_section().to_int().value_or(0)) + 1;
     auto verified = verify_contract_inputs(dag_, dfs_, verified_inputs, block);
     if (!verified.has_value()) {
         return std::unexpected(verified.error());

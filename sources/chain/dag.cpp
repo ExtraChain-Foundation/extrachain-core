@@ -25,6 +25,7 @@
 #include <QMetaObject>
 #include <QFile>
 #include <QProcess>
+#include <QSaveFile>
 #include <QStringList>
 
 #include "dfs/dfs_controller.h"
@@ -38,12 +39,18 @@ static constexpr int SYNC_SECTIONS_MAX_REQ = 2500;
 
 // Pack files are shipped in fixed-size chunks so neither side holds a whole pack
 // in memory and large packs stay well under the socket buffer limit.
-static constexpr std::size_t PACK_SYNC_CHUNK = 256 * 1024;
+static constexpr std::size_t PACK_SYNC_CHUNK  = 256 * 1024;
+static constexpr std::size_t PACK_SYNC_WINDOW = 8;
 
 // Upper bound on live transactions parked in the pending set while sync runs.
 // They are replayed once sync completes; the cap stops a flood from growing
 // memory without bound during a long sync.
 static constexpr std::size_t MAX_CACHED_TXS = 100000;
+
+// The hot section database and pack registry recover exact bounds after a
+// crash. The range file is a compact startup hint, so do not replace it for
+// every accepted section.
+static constexpr long long RANGE_PERSIST_INTERVAL = 256;
 
 Dag::Dag(ExtraChainNode *node)
     : node(node)
@@ -55,10 +62,28 @@ Dag::Dag(ExtraChainNode *node)
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
     pack_registry_->rescan();
+    {
+        auto packs = pack_registry_->known_packs();
+        std::ranges::sort(packs);
+        Pack::PackId first_missing = 0;
+        for (const auto pack : packs) {
+            if (pack < first_missing)
+                continue;
+            if (pack != first_missing)
+                break;
+            ++first_missing;
+        }
+        next_pack_index_ = SectionId(first_missing);
+    }
 
 #ifdef IS_APP_CLIENT
     clear_dag_folder();
 #endif
+
+    std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
+    std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
+    hot_section_store_ =
+        std::make_unique<HotSectionStore>(std::filesystem::path(ChainConst::DAG_HOT_FOLDER) / "HotSections.db");
 
     auto settings = Utils::read_settings();
     if (settings.dag_mode.has_value()) {
@@ -97,6 +122,7 @@ Dag::Dag(ExtraChainNode *node)
 
         auto section_range = Json::deserialize<SectionRange>(last_id_content.toStdString());
         if (section_range.has_value()) {
+            persisted_range_        = *section_range;
             auto first_id_result    = SectionId::create(section_range->first);
             auto current_id_result  = SectionId::create(section_range->last);
             auto last_cached_result = SectionId::create(section_range->last_cached);
@@ -138,6 +164,36 @@ Dag::Dag(ExtraChainNode *node)
         // QDir(QString::fromStdString(ChainConst::CHAIN_FOLDER)).removeRecursively();
         clear_dag();
     }
+
+    // The section stores are authoritative. Repair a stale or missing range
+    // file after a stop between the section commit and the range-file update.
+    if (const auto bounds = hot_section_store_->bounds(); bounds.has_value()) {
+        if (first_saved_section_ == SectionId(-1) || bounds->first < first_saved_section_)
+            first_saved_section_ = bounds->first;
+        if (bounds->second > current_section_)
+            current_section_ = bounds->second;
+    }
+    if (const auto coverage = pack_registry_->coverage(); coverage.has_value()) {
+        if (first_saved_section_ == SectionId(-1) || coverage->first < first_saved_section_)
+            first_saved_section_ = coverage->first;
+        if (coverage->last > current_section_)
+            current_section_ = coverage->last;
+    }
+    if (!persisted_range_.has_value()) {
+        std::error_code error;
+        for (const auto &entry : std::filesystem::directory_iterator(ChainConst::DAG_HOT_FOLDER, error)) {
+            if (error || !entry.is_regular_file())
+                continue;
+            const auto section = SectionId::create(entry.path().filename().string());
+            if (!section.has_value() || *section < SectionId(0))
+                continue;
+            if (first_saved_section_ == SectionId(-1) || *section < first_saved_section_)
+                first_saved_section_ = *section;
+            if (*section > current_section_)
+                current_section_ = *section;
+        }
+    }
+    update_range(true);
 
     transaction_cache_.make_files();
     cache_.init_db();
@@ -203,6 +259,11 @@ void Dag::stop() {
     if (!was_started) {
         return;
     }
+
+    if (chain_index_enabled_ && chain_index_)
+        chain_index_->flush();
+
+    update_range(true);
 
     if (timer_sync_) {
         QMetaObject::invokeMethod(timer_sync_, "stop", Qt::QueuedConnection);
@@ -360,23 +421,6 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
 
 std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
                                                                     const Responder   &responder) {
-    if (transaction.type() == TransactionType::Regular) {
-        auto sender  = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
-        auto last_it = last_txs_.find(sender);
-
-        if (last_it != last_txs_.end()) {
-            auto current_time = Utils::current_date_ms();
-            auto time_diff_ms = current_time - last_it->second;
-
-            if (time_diff_ms < 4500) {
-                eLog("[Dag] Ignore transaction from {}, diff: {} ms", sender, time_diff_ms);
-                return std::unexpected(TransactionProveError::TooOften);
-            }
-        }
-
-        last_txs_[sender] = transaction.timestamp();
-    }
-
     if (status_ != DagStatus::Final) {
         /*
         bool sync_timeout = false;
@@ -396,7 +440,8 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
                 this->add_to_cached_tx(transaction);
             } else {
                 eWarning("[Dag] Pending tx cache full ({}), dropping {} during sync",
-                         MAX_CACHED_TXS, transaction.hash());
+                         MAX_CACHED_TXS,
+                         transaction.hash());
             }
 
             // Update sync target if transaction section is ahead but within reasonable range
@@ -423,13 +468,32 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         */
     }
 
-    auto tx   = transaction;
-    auto resp = responder;
-    // ThreadPoolBoost::instance()->post([this, transaction = tx, responder = resp]() {
+    if (transaction.type() == TransactionType::Regular) {
+        const auto      sender       = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
+        const auto      current_time = Utils::current_date_ms();
+        std::lock_guard lock(last_txs_mutex_);
+        const auto      last = last_txs_.find(sender);
+        if (last != last_txs_.end() && current_time - last->second < 4500) {
+            return std::unexpected(TransactionProveError::TooOften);
+        }
+    }
+
     auto                  section = read_section(transaction.section());
     TransactionProveError res =
         this->prove_transaction(transaction,
                                 section.has_value() ? section->transactions : std::set<Transaction> {});
+    if (res == TransactionProveError::NoError && transaction.type() == TransactionType::Regular) {
+        const auto      sender       = NodeId { .actor_id = transaction.sender(), .node_identifier = "" };
+        const auto      current_time = Utils::current_date_ms();
+        std::lock_guard lock(last_txs_mutex_);
+        auto            last = last_txs_.find(sender);
+        if (last != last_txs_.end() && current_time - last->second < 4500) {
+            eLog("[Dag] Ignore verified transaction from {}, diff: {} ms", sender, current_time - last->second);
+            res = TransactionProveError::TooOften;
+        } else {
+            last_txs_.insert_or_assign(sender, current_time);
+        }
+    }
     TransactionResult transaction_result { .section_id = transaction.section(),
                                            .hash       = transaction.hash(),
                                            .result     = res };
@@ -475,7 +539,6 @@ std::expected<void, TransactionProveError> Dag::network_transaction(const Transa
         }
 
         this->set_current_section(transaction.section());
-        this->update_range();
         if (is_contract_transaction(transaction.type())) {
             node->finalize_contract_change(transaction.hash(), true);
         }
@@ -691,7 +754,20 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
         // wire-format scope a network handler may have left active on this thread.
         WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
 
-        // Hot path: per-section file
+        // Current storage: one WAL database for the mutable tail. This avoids
+        // one filesystem create operation for every accepted transaction.
+        if (hot_section_store_) {
+            auto content = hot_section_store_->get(section_id);
+            if (content.has_value()) {
+                auto section = Json::deserialize<Section>(*content);
+                if (section.has_value()) {
+                    section->id = section_id;
+                    return section.value();
+                }
+            }
+        }
+
+        // Migration fallback: section files written by earlier storage code.
         auto p    = this->file_path(section_id);
         auto path = FsPath::create(p);
         if (path.has_value()) {
@@ -724,6 +800,9 @@ std::optional<Section> Dag::read_section(const SectionId &section_id) const {
 }
 
 bool Dag::exists_section_file(const SectionId &section_id) const {
+    if (hot_section_store_ && hot_section_store_->contains(section_id)) {
+        return true;
+    }
     auto p    = this->file_path(section_id);
     auto path = FsPath::create(p);
     if (path.has_value()) {
@@ -742,20 +821,26 @@ std::optional<bool> Dag::write_section(const Section &section) {
             // wire-format scope left active by a network handler on this thread.
             WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
 
-            auto folder = this->file_folder(section.id);
-            if (!std::filesystem::exists(folder)) {
-                std::filesystem::create_directories(folder);
+            auto serialized = Json::serialize(section);
+            if (hot_section_store_ && hot_section_store_->is_open()) {
+                if (!hot_section_store_->put(section.id, serialized)) {
+                    return std::nullopt;
+                }
+            } else {
+                // Keep a safe fallback for an unavailable SQLite database.
+                auto path = FsPath::create(this->file_path(section.id));
+                if (!path.has_value() || !Utils::write_file_content(path.value(), serialized).has_value()) {
+                    return std::nullopt;
+                }
             }
-
-            auto p    = this->file_path(section.id);
-            auto path = FsPath::create(p);
-            if (!path.has_value()) {
-                return std::nullopt;
-            }
-
-            auto res = Utils::write_file_content(path.value(), Json::serialize(section));
-            if (!res.has_value()) {
-                return std::nullopt;
+            if (status_ != DagStatus::Sync) {
+                std::lock_guard cache_lock(pack_hot_cache_mutex_);
+                pack_hot_cache_.insert_or_assign(section.id, std::move(serialized));
+                while (pack_hot_cache_.size() > PACK_HOT_CACHE_LIMIT) {
+                    // Preserve the oldest range because it is the next range
+                    // that try_pack_hot() must seal after a previous failure.
+                    pack_hot_cache_.erase(std::prev(pack_hot_cache_.end()));
+                }
             }
         }
 
@@ -772,7 +857,10 @@ std::optional<bool> Dag::write_section(const Section &section) {
         if (control_index_) {
             if (section.control.has_value()) {
                 control_index_->put(section.id, section.control.value());
-            } else {
+            } else if (is_aligned20(section.id)) {
+                // Only aligned sections can contain a control hash. Limit the
+                // stale-row cleanup to those slots instead of writing an empty
+                // DELETE transaction for every ordinary section.
                 control_index_->erase(section.id);
             }
         }
@@ -835,7 +923,8 @@ std::optional<WriteResult> Dag::write_control(const SectionId &section_id, const
         return std::nullopt;
     }
 
-    if (control_index_) control_index_->put(section_id, hash);
+    if (control_index_)
+        control_index_->put(section_id, hash);
     return WriteResult::Write;
 }
 
@@ -859,7 +948,8 @@ std::optional<WriteResult> Dag::remove_control(const SectionId &section_id) {
         return std::nullopt;
     }
 
-    if (control_index_) control_index_->erase(section_id);
+    if (control_index_)
+        control_index_->erase(section_id);
     return WriteResult::Write;
 }
 
@@ -923,9 +1013,6 @@ bool Dag::save_transaction(const Transaction &transaction) {
         // Check if cache needs updating
         cache_.check_and_update_cache_thread(current_section_);
 
-        // Update range file
-        update_range();
-
         if (mode_ == DagMode::Light && transaction.section() == SectionId(0)) {
             auto network_id = transaction.sender();
             node->actor_index()->set_network_id(network_id);
@@ -943,6 +1030,7 @@ bool Dag::save_transaction(const Transaction &transaction) {
 
         const bool written = write_section(section).has_value();
         if (written) {
+            cache_.apply_live_transaction(transaction);
             cache_.index_contract_transaction(transaction);
         }
         return written;
@@ -958,7 +1046,8 @@ bool Dag::save_transaction(const Transaction &transaction) {
     // Invalidate control if section had one - transactions changed
     if (section->control.has_value()) {
         section->control = std::nullopt;
-        if (control_index_) control_index_->erase(section->id);
+        if (control_index_)
+            control_index_->erase(section->id);
     }
 
     // Check if cache needs updating
@@ -973,17 +1062,16 @@ bool Dag::save_transaction(const Transaction &transaction) {
         eLog("[Dag] Updated first_saved_section to {}", first_saved_section_);
     }
 
-    // Update range file
-    update_range();
-
     const bool written = write_section(section.value()).has_value();
     if (written) {
+        cache_.apply_live_transaction(transaction);
         cache_.index_contract_transaction(transaction);
     }
     return written;
 }
 
 bool Dag::local_remove_transaction(const SectionId &section_id, const std::string &hash) {
+    cache_.invalidate_live_balances();
     auto section = this->read_section(section_id);
     if (!section.has_value()) {
         return false;
@@ -1000,12 +1088,18 @@ bool Dag::local_remove_transaction(const SectionId &section_id, const std::strin
     }
 
     section->transactions.erase(it);
+    if (section->control.has_value()) {
+        section->control = std::nullopt;
+        if (control_index_)
+            control_index_->erase(section_id);
+    }
     this->write_section(section.value());
 
     return true;
 }
 
 std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std::set<Transaction> &transactions) {
+    cache_.invalidate_live_balances();
     if (transactions.empty()) {
         return std::nullopt;
     }
@@ -1051,13 +1145,13 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         // Invalidate control if section changed (new transactions added)
         if (changed && section.control.has_value()) {
             section.control = std::nullopt;
-            if (control_index_) control_index_->erase(section.id);
+            if (control_index_)
+                control_index_->erase(section.id);
         }
 
         set_current_section(section_id);
         if (created) {
             cache_.check_and_update_cache_thread(current_section_);
-            this->update_range();
             if (mode_ == DagMode::Light && section_id == SectionId(0)) {
                 node->actor_index()->set_network_id(first->sender());
                 all_saved &= write_section(section).has_value();
@@ -1092,8 +1186,6 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
         it = last;
     }
 
-    this->update_range();
-
     if (!all_saved)
         return std::nullopt;
 
@@ -1105,7 +1197,7 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     return std::make_pair(min_section, max_section);
 }
 
-TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions) {
+TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != SectionId(0)) {
@@ -1181,7 +1273,12 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Reject replays: the hash commits to the section, so a valid tx can only
     // live in its own section — a matching hash already stored there is a dup.
-    if (find_transaction(tx.section(), tx.hash()).has_value()) {
+    const bool indexed_section = mode_ == DagMode::Full && chain_index_enabled_ && chain_index_
+                                 && chain_index_->derived_index_ready()
+                                 && chain_index_->last_indexed_section() >= tx.section();
+    const bool duplicate = indexed_section ? chain_index_->contains_hash(tx.section(), tx.hash())
+                                           : find_transaction(tx.section(), tx.hash()).has_value();
+    if (duplicate) {
         return TransactionProveError::Duplicate;
     }
 
@@ -1195,6 +1292,16 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     if (senderActor.empty()) {
         return TransactionProveError::SenderNotExists;
     }
+
+    // Hash integrity was checked above against both supported encodings. Verify
+    // the signature over the stored hash once. Transaction::verify() must
+    // derive both hashes because it is also a standalone API; doing that here
+    // repeated hashing and made every legacy-signed transaction pay for a
+    // failed canonical Ed25519 verification before the successful legacy one.
+    const auto verify_stored_hash = [&]() {
+        const auto result = senderActor.key().verify(tx.hash(), tx.signature());
+        return result.has_value() && *result;
+    };
 
     if (is_contract_transaction(tx.type())) {
         if (tx.amount() != 0 || tx.meta().value_or("").empty() || tx.meta()->size() > 1024 * 1024
@@ -1210,7 +1317,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         if (tx.signature().empty()) {
             return TransactionProveError::MissingSignature;
         }
-        if (!tx.verify(senderActor)) {
+        if (!verify_stored_hash()) {
             return TransactionProveError::InvalidSignature;
         }
         return node->validate_contract_transaction(tx);
@@ -1229,7 +1336,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
             return TransactionProveError::BurnIncorrectReceiver;
         }
 
-        bool verify = tx.verify(senderActor);
+        bool verify = verify_stored_hash();
         if (!verify) {
             return TransactionProveError::InvalidSignature;
         }
@@ -1263,7 +1370,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
             return TransactionProveError::IdenticalSenderReceiver;
         }
 
-        bool verify = tx.verify(senderActor);
+        bool verify = verify_stored_hash();
         if (!verify) {
             return TransactionProveError::InvalidSignature;
         }
@@ -1289,7 +1396,7 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::MissingSignature;
     }
 
-    bool verify = tx.verify(senderActor);
+    bool verify = verify_stored_hash();
     if (!verify) {
         return TransactionProveError::InvalidSignature;
     }
@@ -1344,50 +1451,6 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         calculate_actors_balance(actor_ids, tx.section())[std::pair { targetSender, token }];
     BigNumberFloat transactionAmount = tx.amount();
 
-    // Apply all transactions in the current section to the balance
-    for (const Transaction &tx_check : std::as_const(transactions)) {
-        if (tx.hash() == tx_check.hash()) {
-            continue; // Skip the current transaction itself
-        }
-
-        if (tx_check.token() != token) {
-            continue; // Skip transactions with different tokens
-        }
-
-        // Rewards and contract initializations increase balance
-        if (tx_check.type() == TransactionType::Reward && tx_check.sender() == targetSender) {
-            senderBalance += tx_check.amount();
-            continue;
-        }
-
-        if (tx_check.type() == TransactionType::InitContract && tx_check.sender() == targetSender) {
-            senderBalance += tx_check.amount();
-            continue;
-        }
-
-        // Conversions can both increase and decrease balance
-        if (tx_check.type() == TransactionType::Conversion && tx_check.sender() == targetSender) {
-            if (tx_check.meta().has_value()) {
-                auto from_token = TokenId::create(tx_check.meta().value());
-                if (from_token.has_value() && from_token.value() == token) {
-                    senderBalance -= tx_check.amount();
-                }
-                if (tx_check.token() == token) {
-                    senderBalance += tx_check.amount();
-                }
-            }
-            continue;
-        }
-
-        // Regular transactions
-        if (tx_check.sender() == targetSender && tx_check.token() == token) {
-            senderBalance -= tx_check.amount();
-        }
-        if (tx_check.receiver() == targetSender && tx_check.token() == token) {
-            senderBalance += tx_check.amount();
-        }
-    }
-
     // Check if the sender has sufficient balance
     if (senderBalance < transactionAmount) {
         return TransactionProveError::SenderBalanceBelowZero;
@@ -1397,28 +1460,68 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     if (tx.type() == TransactionType::Regular) {
         auto network_id = node->actor_index()->network_id();
         if (!network_id.is_zero()) {
-            auto alloc_row =
-                Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
-                                                                                  network_id,
-                                                                                  Dfs::Basic::TEMPLATE_DICTIONARY,
-                                                                                  "token_allocations");
-            if (alloc_row.has_value()) {
-                auto minted_str = node->dfs()->read_dictionary(network_id,
-                                                               alloc_row->file_id,
-                                                               fmt::format("{}:{}",
-                                                                           targetSender.to_string(),
-                                                                           token.to_string()));
-                if (minted_str.has_value() && !minted_str->empty()) {
-                    auto minted_amount = BigNumberFloat::create(*minted_str);
-                    if (minted_amount.has_value() && senderBalance - minted_amount.value() < transactionAmount) {
-                        return TransactionProveError::SenderBalanceBelowZero;
-                    }
-                }
+            const auto minted_amount = frozen_token_allocation(targetSender, token);
+            if (minted_amount.has_value() && senderBalance - *minted_amount < transactionAmount) {
+                return TransactionProveError::SenderBalanceBelowZero;
             }
         }
     }
 
     return TransactionProveError::NoError;
+}
+
+std::optional<BigNumberFloat> Dag::frozen_token_allocation(const ActorId &actor, const TokenId &token) {
+    std::lock_guard lock(token_allocations_mutex_);
+    const auto      network_id = node->actor_index()->network_id();
+    if (network_id.is_zero())
+        return std::nullopt;
+
+    if (token_allocations_owner_ != network_id) {
+        token_allocations_owner_ = network_id;
+        token_allocations_file_id_.reset();
+        token_allocations_cache_.clear();
+        token_allocations_cache_loaded_ = false;
+    }
+
+    const auto key = std::pair { actor, token };
+    if (!token_allocations_file_id_.has_value()) {
+        const auto row =
+            Dfs::Tables::DirsFile::ActorSpace::search_file_by_folder_and_name(node->dfs()->get_db_instance(),
+                                                                              network_id,
+                                                                              Dfs::Basic::TEMPLATE_DICTIONARY,
+                                                                              "token_allocations");
+        if (!row.has_value())
+            return std::nullopt;
+        token_allocations_file_id_ = row->file_id;
+    }
+
+    if (!token_allocations_cache_loaded_) {
+        const auto rows = node->dfs()->read_dictionary_rows(network_id, *token_allocations_file_id_);
+        if (!rows.has_value()) {
+            token_allocations_file_id_.reset();
+            return std::nullopt;
+        }
+        for (const auto &[stored_key, stored_value] : *rows) {
+            const auto separator = stored_key.find(':');
+            if (separator == std::string::npos)
+                continue;
+            const auto stored_actor = ActorId::create(stored_key.substr(0, separator));
+            const auto stored_token = TokenId::create(stored_key.substr(separator + 1));
+            const auto amount       = BigNumberFloat::create(stored_value);
+            if (stored_actor.has_value() && stored_token.has_value() && amount.has_value()) {
+                token_allocations_cache_.insert_or_assign(std::pair { *stored_actor, *stored_token }, *amount);
+            }
+        }
+        token_allocations_cache_loaded_ = true;
+    }
+    const auto cached = token_allocations_cache_.find(key);
+    return cached != token_allocations_cache_.end() ? std::optional<BigNumberFloat>(cached->second) : std::nullopt;
+}
+
+void Dag::invalidate_token_allocations() {
+    std::lock_guard lock(token_allocations_mutex_);
+    token_allocations_cache_.clear();
+    token_allocations_cache_loaded_ = false;
 }
 
 void Dag::add_transaction_sended(const Transaction &transaction) {
@@ -1431,51 +1534,63 @@ void Dag::update_range(bool allow_lower_first) {
     try {
         std::lock_guard<std::mutex> lock(range_mutex_);
 
+        // Calls that permit a lower first section are explicit lifecycle or
+        // recovery checkpoints. They also force an immediate range write.
+        const bool force = allow_lower_first;
+
         auto new_first = first_saved_section_;
         auto new_last  = current_section_;
 
-        QFile read_file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-        if (read_file.open(QFile::ReadOnly)) {
-            auto existing = Json::deserialize<SectionRange>(read_file.readAll().toStdString());
-            read_file.close();
+        if (persisted_range_.has_value()) {
+            auto existing_first = SectionId::create(persisted_range_->first);
+            if (!allow_lower_first && existing_first.has_value() && existing_first.value() != SectionId(-1)
+                && new_first != SectionId(-1) && new_first < existing_first.value()) {
+                eLog("[Dag] update_range blocked: new first {} < existing {}", new_first, existing_first.value());
+                return;
+            }
 
-            if (existing.has_value()) {
-                auto existing_first = SectionId::create(existing->first);
-                if (!allow_lower_first && existing_first.has_value() && existing_first.value() != SectionId(-1)
-                    && new_first != SectionId(-1) && new_first < existing_first.value()) {
-                    eLog("[Dag] update_range blocked: new first {} < existing {}",
-                         new_first,
-                         existing_first.value());
+            const auto existing_last   = SectionId::create(persisted_range_->last);
+            const auto first_unchanged = existing_first.has_value() && existing_first.value() == new_first;
+            if (!force && first_unchanged && existing_last.has_value() && new_last >= existing_last.value()) {
+                const auto distance = (new_last - existing_last.value()).to_int();
+                if (distance.has_value() && *distance < RANGE_PERSIST_INTERVAL) {
                     return;
                 }
             }
         }
 
-        std::string json = Json::serialize(SectionRange { .first       = new_first.to_string(),
-                                                          .last        = new_last.to_string(),
-                                                          .last_cached = cache_.section().to_string() });
-
-        QFile file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
-        if (file.open(QFile::WriteOnly)) {
-            file.write(json.data());
-            file.close();
-        } else {
-            eLog("[Dag] Failed to open range file for writing");
+        SectionRange next { .first       = new_first.to_string(),
+                            .last        = new_last.to_string(),
+                            .last_cached = cache_.section().to_string() };
+        if (persisted_range_.has_value() && persisted_range_->first == next.first
+            && persisted_range_->last == next.last && persisted_range_->last_cached == next.last_cached) {
+            return;
         }
+
+        const std::string json = Json::serialize(next);
+        QSaveFile         file(QString::fromStdString(ChainConst::DAG_RANGE_PATH));
+        if (!file.open(QFile::WriteOnly)
+            || file.write(json.data(), static_cast<qint64>(json.size())) != static_cast<qint64>(json.size())
+            || !file.commit()) {
+            eLog("[Dag] Failed to write range file");
+            return;
+        }
+        persisted_range_ = std::move(next);
     } catch (const std::system_error &e) {
         // eCritical("[Dag] Caught system_error in update range: {}", e.what());
         return;
     }
 }
 
-std::optional<Transaction>
-Dag::find_transaction(const SectionId &section_id, const std::string &hash) const {
+std::optional<Transaction> Dag::find_transaction(const SectionId &section_id, const std::string &hash) const {
     // Direct read: section is part of the natural identity of a tx, so we
     // jump straight to its file/pack and scan its small (set-sized) tx list.
     auto section = this->read_section(section_id);
-    if (!section.has_value()) return std::nullopt;
+    if (!section.has_value())
+        return std::nullopt;
     for (const auto &tx : section->transactions) {
-        if (tx.hash() == hash) return tx;
+        if (tx.hash() == hash)
+            return tx;
     }
     return std::nullopt;
 }
@@ -1847,8 +1962,8 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
     // Pick the section file format the peer stores on disk: legacy peers expect
     // hex-serialized sections, post-0.26 peers decimal. A legacy peer has no
     // PeerMeta entry or advertises a pre-0.26 dag, so default to hex when unknown.
-    auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
-    auto meta    = node->network()->peer_meta_for(peer_id);
+    auto peer_id     = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta        = node->network()->peer_meta_for(peer_id);
     bool peer_legacy = !meta.has_value() || meta->is_legacy_dag();
 
     ThreadPoolBoost::instance_dag_sync()->post([this, from, to, responder, peer_legacy]() {
@@ -1864,10 +1979,8 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
             }
 
             WireFormat::Scope disk_scope(peer_legacy ? WireFormat::Mode::Legacy : WireFormat::Mode::Canonical);
-            sections.push_back(SectionFileData {
-                .section_id = i,
-                .file_bytes = Json::serialize(section.value())
-            });
+            sections.push_back(
+                SectionFileData { .section_id = i, .file_bytes = Json::serialize(section.value()) });
         }
 
         auto file_sync = FileSectionsSync { .to = to, .sections = sections, .last_section = current_section_ };
@@ -1876,8 +1989,8 @@ void Dag::network_request_file_sections(const SectionId &from, const SectionId &
         // travels in the wire format, symmetric with the request and response
         // decode, independent of the peer's on-disk file_bytes format above.
         WireFormat::Scope wire_scope(WireFormat::wire());
-        auto ser      = MessagePack::serialize(file_sync);
-        auto compress = qCompress(QByteArray::fromStdString(ser));
+        auto              ser      = MessagePack::serialize(file_sync);
+        auto              compress = qCompress(QByteArray::fromStdString(ser));
         responder.send_response(compress.toStdString(),
                                 MessageType::DagFileSections,
                                 SendMode::Focused,
@@ -1890,8 +2003,8 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
 
     // A legacy server sends section file_bytes in hex; our disk is canonical
     // (decimal), so such sections need re-serializing before they're written.
-    auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
-    auto meta    = node->network()->peer_meta_for(peer_id);
+    auto peer_id     = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+    auto meta        = node->network()->peer_meta_for(peer_id);
     bool peer_legacy = meta.has_value() && meta->is_legacy_dag();
 
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed, responder, peer_legacy]() {
@@ -1912,21 +2025,11 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             return;
         }
 
+        std::map<SectionId, std::string> received_sections;
         for (const auto &section_data : file_sync->sections) {
             if (mode_ == DagMode::Light) {
                 eLog("[Dag] Skip file section write: light mode");
                 return;
-            }
-
-            auto folder = this->file_folder(section_data.section_id);
-            if (!std::filesystem::exists(folder)) {
-                std::filesystem::create_directory(folder);
-            }
-
-            auto p    = this->file_path(section_data.section_id);
-            auto path = FsPath::create(p);
-            if (!path.has_value()) {
-                continue;
             }
 
             std::string disk_bytes = section_data.file_bytes;
@@ -1941,7 +2044,34 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 }
             }
 
-            Utils::write_file_content(path.value(), disk_bytes);
+            {
+                WireFormat::Scope canonical_scope(WireFormat::Mode::Canonical);
+                const auto        section = Json::deserialize<Section>(disk_bytes);
+                const bool        wrong_section =
+                    section.has_value() && std::ranges::any_of(section->transactions, [&](const auto &tx) {
+                        return tx.section() != section_data.section_id;
+                    });
+                if (!section.has_value() || wrong_section) {
+                    eWarning("[Dag] Reject invalid section {} in a sync batch", section_data.section_id);
+                    return;
+                }
+            }
+
+            received_sections.insert_or_assign(section_data.section_id, std::move(disk_bytes));
+        }
+
+        if (!received_sections.empty() && hot_section_store_ && hot_section_store_->is_open()
+            && !hot_section_store_->put_many(received_sections)) {
+            eWarning("[Dag] Failed to store a section sync batch");
+            return;
+        }
+        if (!received_sections.empty() && (!hot_section_store_ || !hot_section_store_->is_open())) {
+            for (const auto &[section_id, disk_bytes] : received_sections) {
+                auto path = FsPath::create(this->file_path(section_id));
+                if (path.has_value()) {
+                    static_cast<void>(Utils::write_file_content(path.value(), disk_bytes));
+                }
+            }
         }
 
         if (mode_ == DagMode::Light) {
@@ -1972,6 +2102,13 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
         if (file_sync->to >= sync_last_index_ - 1) {
             eLog("[Dag] File sync completed");
 
+            // A sync can replace existing control slots. Drop the derived index
+            // once and rebuild it from the received chain on the next lookup.
+            if (control_index_) {
+                control_index_->clear();
+                control_index_ready_.store(false);
+            }
+
             if (this->status_ != DagStatus::Ready) {
                 this->start_control();
 
@@ -1994,12 +2131,10 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
                 // Pull the peer's prebuilt cache instead of rebuilding it locally,
                 // when the peer supports it and our cache lags the chain.
                 {
-                    auto peer_id = responder.identifiers().empty()
-                                       ? std::string()
-                                       : *responder.identifiers().begin();
-                    auto meta    = node->network()->peer_meta_for(peer_id);
-                    if (meta.has_value() && meta->supports_pack_sync()
-                        && cache_.section() < current_section_) {
+                    auto peer_id =
+                        responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
+                    auto meta = node->network()->peer_meta_for(peer_id);
+                    if (meta.has_value() && meta->supports_pack_sync() && cache_.section() < current_section_) {
                         request_cache_snapshot(responder);
                     }
                 }
@@ -2011,7 +2146,9 @@ void Dag::network_file_sections_response(const std::string &compressed, const Re
             try_pack_hot();
             if (chain_index_enabled_ && chain_index_) {
                 auto *index = chain_index_.get();
-                ThreadPoolBoost::instance_dag_sync()->post([index]() { index->rebuild_from_disk(); });
+                ThreadPoolBoost::instance_dag_sync()->post([index]() {
+                    index->rebuild_from_disk();
+                });
             }
             return;
         }
@@ -2033,11 +2170,11 @@ void Dag::request_file_sections(const SectionId &from, const SectionId &to, cons
     // SectionRange carries ids as bare strings outside the BigNumber wire path,
     // so encode them in the wire format (hex during the legacy transition) to
     // match what legacy peers send and parse. Decode mirrors this in the handler.
-    bool wire_hex      = WireFormat::wire() == WireFormat::Mode::Legacy;
-    auto encode        = [wire_hex](const SectionId &s) {
+    bool wire_hex = WireFormat::wire() == WireFormat::Mode::Legacy;
+    auto encode   = [wire_hex](const SectionId &s) {
         return wire_hex ? s.to_hex_string() : s.to_string();
     };
-    auto range         = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
+    auto range = SectionRange { .first = from == -1 ? std::string("0") : encode(from), .last = encode(to) };
     auto responder_new = responder.with_new_message_id();
     responder_new.send_response(range, MessageType::DagFileSections, SendMode::Focused, MessageStatus::Request);
 
@@ -2173,7 +2310,7 @@ void Dag::network_response_light(const DagLightPackage &dag_light, const Respond
             }
         }
 
-        this->update_range();
+        this->update_range(true);
 
         if (mode_ == DagMode::Light) {
             eLog("[Dag] Light sync completed: cache section {}, saved sections from {} to {}",
@@ -2452,14 +2589,14 @@ void Dag::handle_sync_request() {
         // Pack-capable peer: fetch cold history wholesale, then file-sync only the
         // hot tail once pack-sync finishes (see issue_next_pack_request) so the
         // two paths never overlap. Legacy peers fall straight through to file-sync.
-        auto peer_id = responder.identifiers().empty()
-                           ? std::string()
-                           : *responder.identifiers().begin();
+        auto peer_id = responder.identifiers().empty() ? std::string() : *responder.identifiers().begin();
         auto meta    = node->network()->peer_meta_for(peer_id);
         if (meta.has_value() && meta->supports_pack_sync()) {
             start_pack_sync(responder);
         } else {
-            request_file_sections(current_section_, std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH), responder);
+            request_file_sections(current_section_,
+                                  std::min(sync_last_index_, current_section_ + SYNC_SECTIONS_BATCH),
+                                  responder);
         }
     } else {
         auto responder_new = responder.with_new_message_id();
@@ -2574,15 +2711,35 @@ void Dag::clear_dag() {
     cache_.reset_db();
     cache_.init_db();
 
-    // Also clear hot and packed storage
+    // Also clear hot and packed storage. Keep the open SQLite files in place;
+    // Windows does not allow removal of an open database.
     std::error_code ec;
-    std::filesystem::remove_all(ChainConst::DAG_HOT_FOLDER, ec);
+    if (hot_section_store_)
+        hot_section_store_->clear();
+    for (const auto &entry : std::filesystem::directory_iterator(ChainConst::DAG_HOT_FOLDER, ec)) {
+        if (ec)
+            break;
+        const auto name = entry.path().filename().string();
+        if (name == "HotSections.db" || name == "HotSections.db-wal" || name == "HotSections.db-shm")
+            continue;
+        std::filesystem::remove_all(entry.path(), ec);
+        if (ec)
+            break;
+    }
     std::filesystem::remove_all(ChainConst::DAG_PACKS_FOLDER, ec);
     std::filesystem::create_directories(ChainConst::DAG_HOT_FOLDER);
     std::filesystem::create_directories(ChainConst::DAG_PACKS_FOLDER);
-    if (pack_registry_) pack_registry_->rescan();
-    if (chain_index_enabled_ && chain_index_) chain_index_->clear();
-    if (control_index_) control_index_->clear();
+    if (pack_registry_)
+        pack_registry_->rescan();
+    next_pack_index_ = SectionId(0);
+    {
+        std::lock_guard lock(pack_hot_cache_mutex_);
+        pack_hot_cache_.clear();
+    }
+    if (chain_index_enabled_ && chain_index_)
+        chain_index_->clear();
+    if (control_index_)
+        control_index_->clear();
 
     eLog("[Dag] Cleared");
 #endif
@@ -2591,7 +2748,8 @@ void Dag::clear_dag() {
 // ---- Pack-level sync (peers with dag_version >= 100) ------------------------
 
 void Dag::network_pack_list_request(const Responder &responder) {
-    if (!pack_registry_) return;
+    if (!pack_registry_)
+        return;
 
     PackList list;
     auto     spans = pack_registry_->spans(); // in-memory metadata, no file I/O
@@ -2604,12 +2762,16 @@ void Dag::network_pack_list_request(const Responder &responder) {
         });
     }
 
-    node->network()->send_message(list, MessageType::DagPackList,
-                                  SendMode::Focused, MessageStatus::Response, responder);
+    node->network()->send_message(list,
+                                  MessageType::DagPackList,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
 }
 
 void Dag::network_pack_request(const PackRequest &req, const Responder &responder) {
-    if (!pack_registry_) return;
+    if (!pack_registry_)
+        return;
 
     auto total = pack_registry_->pack_byte_size(req.pack_id);
     if (!total.has_value()) {
@@ -2629,19 +2791,26 @@ void Dag::network_pack_request(const PackRequest &req, const Responder &responde
         .total_size = *total,
         .bytes      = std::move(*chunk),
     };
-    node->network()->send_message(out, MessageType::DagPackData,
-                                  SendMode::Focused, MessageStatus::Response, responder);
+    node->network()->send_message(out,
+                                  MessageType::DagPackData,
+                                  SendMode::Focused,
+                                  MessageStatus::Response,
+                                  responder);
 }
 
 void Dag::start_pack_sync(const Responder &responder) {
-    // Fresh message id: the core dedups Requests by message_id, so reusing the shared sync responder's id gets dropped.
-    node->network()->send_message(PackList {}, MessageType::DagPackList,
-                                  SendMode::Focused, MessageStatus::Request,
+    // Fresh message id: the core dedups Requests by message_id, so reusing the shared sync responder's id gets
+    // dropped.
+    node->network()->send_message(PackList {},
+                                  MessageType::DagPackList,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
                                   responder.with_new_message_id());
 }
 
 void Dag::network_pack_list_response(const PackList &list, const Responder &responder) {
-    if (!pack_registry_) return;
+    if (!pack_registry_)
+        return;
 
     auto local_ids = pack_registry_->known_packs();
     std::sort(local_ids.begin(), local_ids.end());
@@ -2657,8 +2826,8 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
 
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-        pack_sync_pending_ = std::move(missing);
-        pack_sync_in_flight_ = false;
+        pack_sync_pending_       = std::move(missing);
+        pack_sync_in_flight_     = false;
         pack_sync_installed_any_ = false;
     }
 
@@ -2668,25 +2837,30 @@ void Dag::network_pack_list_response(const PackList &list, const Responder &resp
 
 void Dag::issue_next_pack_request(const Responder &responder) {
     Pack::PackId next_id;
-    bool has_next = false;
-    bool rebuild_index = false;
-    bool finished = false;
+    bool         has_next      = false;
+    bool         rebuild_index = false;
+    bool         finished      = false;
     {
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-        if (pack_sync_in_flight_) return;
+        if (pack_sync_in_flight_)
+            return;
         if (pack_sync_pending_.empty()) {
             eLog("[Dag] Pack sync: all packs received");
             finished = true;
             if (pack_sync_installed_any_ && chain_index_enabled_ && chain_index_) {
                 pack_sync_installed_any_ = false;
-                rebuild_index = true;
+                rebuild_index            = true;
             }
         } else {
             next_id = pack_sync_pending_.front();
             pack_sync_pending_.erase(pack_sync_pending_.begin());
-            pack_sync_in_flight_ = true;
-            pack_sync_current_id_ = next_id;
-            pack_sync_offset_     = 0; // start the new pack from its first chunk
+            pack_sync_in_flight_   = true;
+            pack_sync_current_id_  = next_id;
+            pack_sync_next_offset_ = PACK_SYNC_CHUNK;
+            pack_sync_total_size_  = 0;
+            pack_sync_outstanding_offsets_.clear();
+            pack_sync_received_offsets_.clear();
+            pack_sync_outstanding_offsets_.insert(0);
             has_next = true;
         }
     }
@@ -2709,54 +2883,119 @@ void Dag::issue_next_pack_request(const Responder &responder) {
 
         // Cold history is in place; now pull the hot tail per-section.
         if (mode_ == DagMode::Full && tail_from <= sync_last_index_) {
-            request_file_sections(tail_from, std::min(sync_last_index_, tail_from + SYNC_SECTIONS_BATCH), responder);
+            request_file_sections(tail_from,
+                                  std::min(sync_last_index_, tail_from + SYNC_SECTIONS_BATCH),
+                                  responder);
         }
     }
 
     if (rebuild_index) {
         // Heavy disk + decompress + SQLite work — never on the network thread.
         auto *index = chain_index_.get();
-        ThreadPoolBoost::instance_dag_sync()->post([index]() { index->rebuild_from_disk(); });
+        ThreadPoolBoost::instance_dag_sync()->post([index]() {
+            index->rebuild_from_disk();
+        });
         return;
     }
-    if (!has_next) return;
+    if (!has_next)
+        return;
 
-    // Fresh message id per pack request: the core dedups Requests by message_id, dropping reuses of the sync responder's id.
+    // Fresh message id per pack request: the core dedups Requests by message_id, dropping reuses of the sync
+    // responder's id.
     PackRequest req { .pack_id = next_id, .offset = 0 };
-    node->network()->send_message(req, MessageType::DagPackRequest,
-                                  SendMode::Focused, MessageStatus::Request,
+    node->network()->send_message(req,
+                                  MessageType::DagPackRequest,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
                                   responder.with_new_message_id());
 }
 
+void Dag::issue_pack_window(const Responder &responder) {
+    std::vector<PackRequest> requests;
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        if (!pack_sync_in_flight_ || pack_sync_total_size_ == 0)
+            return;
+        while (pack_sync_outstanding_offsets_.size() < PACK_SYNC_WINDOW
+               && pack_sync_next_offset_ < pack_sync_total_size_) {
+            const auto offset = pack_sync_next_offset_;
+            pack_sync_next_offset_ += PACK_SYNC_CHUNK;
+            if (pack_sync_received_offsets_.contains(offset)
+                || !pack_sync_outstanding_offsets_.insert(offset).second) {
+                continue;
+            }
+            requests.push_back(PackRequest { .pack_id = pack_sync_current_id_, .offset = offset });
+        }
+    }
+    for (const auto &request : requests) {
+        node->network()->send_message(request,
+                                      MessageType::DagPackRequest,
+                                      SendMode::Focused,
+                                      MessageStatus::Request,
+                                      responder.with_new_message_id());
+    }
+}
+
 void Dag::network_pack_data_response(const PackData &data, const Responder &responder) {
-    if (!pack_registry_) return;
+    if (!pack_registry_)
+        return;
 
-    std::uint64_t next_offset = data.offset + data.bytes.size();
-    bool          is_last     = next_offset >= data.total_size;
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        if (!pack_sync_in_flight_ || data.pack_id != pack_sync_current_id_
+            || !pack_sync_outstanding_offsets_.contains(data.offset) || data.total_size == 0
+            || data.offset >= data.total_size || data.bytes.empty() || data.bytes.size() > PACK_SYNC_CHUNK
+            || data.offset + data.bytes.size() > data.total_size
+            || (pack_sync_total_size_ != 0 && pack_sync_total_size_ != data.total_size)) {
+            eWarning("[Dag] Unexpected pack {} chunk at {}", data.pack_id, data.offset);
+            return;
+        }
+        pack_sync_total_size_ = data.total_size;
+    }
 
-    auto res = pack_registry_->install_chunk(data.pack_id, data.offset, data.bytes, is_last);
+    auto res = pack_registry_->install_chunk(data.pack_id, data.offset, data.bytes, false);
     if (!res.has_value()) {
         eWarning("[Dag] Pack {} chunk at {} install failed: error {}",
-                 data.pack_id, data.offset, static_cast<int>(res.error()));
+                 data.pack_id,
+                 data.offset,
+                 static_cast<int>(res.error()));
         // Abort this pack; clear in_flight so the next pack can proceed.
         {
             std::lock_guard<std::mutex> lock(pack_sync_mutex_);
             pack_sync_in_flight_ = false;
+            pack_sync_outstanding_offsets_.clear();
+            pack_sync_received_offsets_.clear();
         }
         issue_next_pack_request(responder);
         return;
     }
 
-    if (!is_last) {
-        // Request the next chunk of the same pack; memory stays bounded.
+    bool complete = false;
+    {
+        std::lock_guard<std::mutex> lock(pack_sync_mutex_);
+        pack_sync_outstanding_offsets_.erase(data.offset);
+        pack_sync_received_offsets_.insert(data.offset);
+        const auto expected = static_cast<std::size_t>((data.total_size + PACK_SYNC_CHUNK - 1) / PACK_SYNC_CHUNK);
+        complete = pack_sync_received_offsets_.size() == expected && pack_sync_outstanding_offsets_.empty();
+    }
+
+    if (!complete) {
+        issue_pack_window(responder);
+        return;
+    }
+
+    // All offsets are present. Finalization verifies the complete pack before
+    // it becomes visible in the registry.
+    auto finalized = pack_registry_->install_chunk(data.pack_id, data.total_size, {}, true);
+    if (!finalized.has_value()) {
+        eWarning("[Dag] Pack {} finalization failed: error {}", data.pack_id, static_cast<int>(finalized.error()));
         {
             std::lock_guard<std::mutex> lock(pack_sync_mutex_);
-            pack_sync_offset_ = next_offset;
+            pack_sync_in_flight_ = false;
+            pack_sync_outstanding_offsets_.clear();
+            pack_sync_received_offsets_.clear();
         }
-        PackRequest req { .pack_id = data.pack_id, .offset = next_offset };
-        node->network()->send_message(req, MessageType::DagPackRequest,
-                                      SendMode::Focused, MessageStatus::Request,
-                                      responder.with_new_message_id());
+        issue_next_pack_request(responder);
         return;
     }
 
@@ -2765,6 +3004,8 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
         std::lock_guard<std::mutex> lock(pack_sync_mutex_);
         pack_sync_in_flight_     = false;
         pack_sync_installed_any_ = true;
+        pack_sync_outstanding_offsets_.clear();
+        pack_sync_received_offsets_.clear();
     }
     eLog("[Dag] Pack {} installed ({} bytes)", data.pack_id, data.total_size);
 
@@ -2774,7 +3015,8 @@ void Dag::network_pack_data_response(const PackData &data, const Responder &resp
 // ---- Balance-cache snapshot (peers with dag_version >= 100) ------------------
 
 void Dag::network_cache_snapshot_request(const Responder &responder) {
-    if (mode_ != DagMode::Full) return;
+    if (mode_ != DagMode::Full)
+        return;
 
     ThreadPoolBoost::instance_dag_sync()->post([this, responder]() {
         auto [section, balances] = cache_.read_cached_balances();
@@ -2792,20 +3034,23 @@ void Dag::network_cache_snapshot_request(const Responder &responder) {
 
         // Wire format for the section id field; balances are already plain strings.
         WireFormat::Scope wire_scope(WireFormat::wire());
-        auto ser      = MessagePack::serialize(snapshot);
-        auto compress = qCompress(QByteArray::fromStdString(ser));
-        responder.send_response(compress.toStdString(), MessageType::DagCacheSnapshotData,
-                                SendMode::Focused, MessageStatus::Response);
+        auto              ser      = MessagePack::serialize(snapshot);
+        auto              compress = qCompress(QByteArray::fromStdString(ser));
+        responder.send_response(compress.toStdString(),
+                                MessageType::DagCacheSnapshotData,
+                                SendMode::Focused,
+                                MessageStatus::Response);
     });
 }
 
 void Dag::network_cache_snapshot_response(const std::string &compressed, const Responder &responder) {
-    if (mode_ != DagMode::Full) return;
+    if (mode_ != DagMode::Full)
+        return;
 
     ThreadPoolBoost::instance_dag_sync()->post([this, compressed]() {
-        auto raw = qUncompress(QByteArray::fromStdString(compressed));
+        auto              raw = qUncompress(QByteArray::fromStdString(compressed));
         WireFormat::Scope wire_scope(WireFormat::wire());
-        auto snapshot = MessagePack::deserialize<CacheSnapshot>(raw.toStdString());
+        auto              snapshot = MessagePack::deserialize<CacheSnapshot>(raw.toStdString());
         if (!snapshot.has_value()) {
             eWarning("[Dag] Cache snapshot: failed to deserialize");
             return;
@@ -2813,8 +3058,7 @@ void Dag::network_cache_snapshot_response(const std::string &compressed, const R
 
         // Ignore a snapshot not ahead of our cache (peer may be mid-rebuild).
         if (snapshot->section <= cache_.section()) {
-            eLog("[Dag] Cache snapshot {} not ahead of local {}, ignoring",
-                 snapshot->section, cache_.section());
+            eLog("[Dag] Cache snapshot {} not ahead of local {}, ignoring", snapshot->section, cache_.section());
             return;
         }
 
@@ -2830,54 +3074,63 @@ void Dag::network_cache_snapshot_response(const std::string &compressed, const R
         }
 
         cache_.write_cached_balances(balances, snapshot->section);
-        update_range();
-        eLog("[Dag] Installed cache snapshot at section {} ({} balances)",
-             snapshot->section, balances.size());
+        update_range(true);
+        eLog("[Dag] Installed cache snapshot at section {} ({} balances)", snapshot->section, balances.size());
     });
 }
 
 void Dag::request_cache_snapshot(const Responder &responder) {
-    if (mode_ != DagMode::Full) return;
-    node->network()->send_message(true, MessageType::DagCacheSnapshotRequest,
-                                  SendMode::Focused, MessageStatus::Request,
+    if (mode_ != DagMode::Full)
+        return;
+    node->network()->send_message(true,
+                                  MessageType::DagCacheSnapshotRequest,
+                                  SendMode::Focused,
+                                  MessageStatus::Request,
                                   responder.with_new_message_id());
 }
 
 // -----------------------------------------------------------------------------
 
 void Dag::try_pack_hot() {
-    if (!pack_registry_) return;
+    if (!pack_registry_)
+        return;
+    std::lock_guard pack_lock(pack_mutex_);
 
     // Sealing a pack is irreversible. Never do it while a sync is in flight:
     // set_current_section() only moves forward, so a high section arriving first
     // can push current_section_ ahead of sections that are still downloading, and
     // we'd seal their slots as empty. Packing only the at-rest cold tail (status
     // Ready, or at startup before any sync starts) avoids that race.
-    if (status_ == DagStatus::Sync) return;
+    if (status_ == DagStatus::Sync)
+        return;
 
-    // Sync delivers sections out-of-order in batches; packing must be tried for
-    // every pack range that's been completed in hot/, not just the most recent
-    // one. We iterate from pack 0 upwards and pack each range whose 10k files
-    // are all present and that isn't already on disk.
-    auto section_size = Config::DataStorage::SECTION_SIZE;
+    // Sync can complete several pack ranges at once. Start at the first range
+    // that is not sealed. Do not scan every old pack on every live write.
+    auto      section_size = Config::DataStorage::SECTION_SIZE;
     SectionId lag(HOT_PACK_LAG);
     // We pack [N*size .. N*size+size-1] only after `current` is HOT_PACK_LAG
     // sections past pack_last, so reorgs and out-of-order delivery can still
     // mutate the trailing window without rewriting an immutable pack.
-    if (current_section_ < section_size + lag) return;
+    if (current_section_ < section_size + lag)
+        return;
 
     SectionId max_pack_idx = ((current_section_ - lag) / section_size) - SectionId(1);
-    if (max_pack_idx < SectionId(0)) return;
+    if (max_pack_idx < SectionId(0))
+        return;
 
     // On-disk pack payloads are canonical (decimal) — the empty placeholder and
     // any re-read content must not pick up an ambient wire (hex) scope.
     WireFormat::Scope disk_scope(WireFormat::Mode::Canonical);
 
-    for (SectionId pack_idx = SectionId(0); pack_idx <= max_pack_idx; pack_idx = pack_idx + 1) {
-        SectionId pack_first = pack_idx * section_size;
+    while (next_pack_index_ <= max_pack_idx) {
+        const auto pack_idx   = next_pack_index_;
+        SectionId  pack_first = pack_idx * section_size;
 
         if (pack_registry_->find_pack_for_section(pack_first).has_value()) {
-            continue; // already packed
+            if (hot_section_store_)
+                hot_section_store_->erase_range(pack_first, pack_first + section_size - 1);
+            next_pack_index_ += 1;
+            continue;
         }
 
         SectionId pack_last = pack_first + section_size - 1;
@@ -2889,6 +3142,7 @@ void Dag::try_pack_hot() {
         // first_saved_section_ (i.e. fully within our synced history). A range
         // that dips below first_saved_section_ is incompletely synced; skip it.
         if (first_saved_section_ != SectionId(-1) && pack_first < first_saved_section_) {
+            next_pack_index_ += 1;
             continue;
         }
 
@@ -2896,9 +3150,24 @@ void Dag::try_pack_hot() {
         // (sync skips sections with no transactions). With HOT_PACK_LAG already
         // guarding the moment, every id in this range has been "passed by" sync
         // — so absence is an empty section, not pending data.
-        std::map<SectionId, std::string> sections;
+        std::map<SectionId, std::string> sections = hot_section_store_
+                                                        ? hot_section_store_->read_range(pack_first, pack_last)
+                                                        : std::map<SectionId, std::string> {};
+        {
+            // Copy the complete candidate range under one lock. Do not lock
+            // once per section and do not keep the lock during disk I/O.
+            std::lock_guard cache_lock(pack_hot_cache_mutex_);
+            auto            cached = pack_hot_cache_.lower_bound(pack_first);
+            const auto      end    = pack_hot_cache_.upper_bound(pack_last);
+            while (cached != end) {
+                sections.emplace(cached->first, cached->second);
+                ++cached;
+            }
+        }
         const std::string empty_serialized = Json::serialize(Section { .id = SectionId(0) });
         for (SectionId s = pack_first; s <= pack_last; s = s + 1) {
+            if (sections.contains(s))
+                continue;
             auto p   = this->file_path(s);
             auto fsp = FsPath::create(p);
             if (fsp.has_value() && fsp->exists()) {
@@ -2915,15 +3184,26 @@ void Dag::try_pack_hot() {
         Pack::PackId pid;
         {
             auto candidate_int = pack_idx.to_int();
-            if (!candidate_int.has_value() || *candidate_int < 0) continue;
+            if (!candidate_int.has_value() || *candidate_int < 0) {
+                eCritical("[Dag] Invalid pack cursor: {}", pack_idx.to_string());
+                return;
+            }
             pid = static_cast<Pack::PackId>(*candidate_int);
         }
 
         auto res = pack_registry_->create_pack(pid, sections);
         if (!res.has_value()) {
             eWarning("[Dag] Failed to pack sections {}..{} (error {})",
-                     pack_first, pack_last, static_cast<int>(res.error()));
-            continue;
+                     pack_first,
+                     pack_last,
+                     static_cast<int>(res.error()));
+            return;
+        }
+
+        // The immutable pack is valid and visible. The corresponding mutable
+        // rows can now be removed in one database transaction.
+        if (hot_section_store_ && !hot_section_store_->erase_range(pack_first, pack_last)) {
+            eWarning("[Dag] Failed to remove packed hot rows {}..{}", pack_first, pack_last);
         }
 
         // Remove hot files that are now safely packed.
@@ -2931,8 +3211,15 @@ void Dag::try_pack_hot() {
             std::error_code ec;
             std::filesystem::remove(this->file_path(s), ec);
         }
+        {
+            std::lock_guard cache_lock(pack_hot_cache_mutex_);
+            const auto      first = pack_hot_cache_.lower_bound(pack_first);
+            const auto      last  = pack_hot_cache_.upper_bound(pack_last);
+            pack_hot_cache_.erase(first, last);
+        }
 
         eLog("[Dag] Packed sections {}..{} into pack {}", pack_first, pack_last, pid);
+        next_pack_index_ += 1;
     }
 }
 
@@ -2945,7 +3232,16 @@ void Dag::remove_sections(const SectionId &from) {
     auto to           = current_section_;
     auto correct_from = std::max(SectionId(0), from);
     current_section_  = correct_from;
-    this->update_range();
+    this->update_range(true);
+
+    if (hot_section_store_)
+        hot_section_store_->erase_from(correct_from);
+
+    {
+        std::lock_guard cache_lock(pack_hot_cache_mutex_);
+        const auto      first = pack_hot_cache_.lower_bound(correct_from);
+        pack_hot_cache_.erase(first, pack_hot_cache_.end());
+    }
 
     eLog("[Dag] Clear from {}", correct_from);
 
@@ -3171,7 +3467,10 @@ void Dag::mint_analysis_log() {
     eLog("[Dag] mint_analysis_log: === MINT TRANSACTIONS ===");
     for (const auto &m : mint_txs) {
         eLog("[Dag] mint_analysis_log: section={} actor={} token={} amount={}",
-             m.section_id, m.actor, m.token, m.amount.to_string());
+             m.section_id,
+             m.actor,
+             m.token,
+             m.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === SUMMARY PER ACTOR+TOKEN ===");
@@ -3188,21 +3487,19 @@ void Dag::mint_analysis_log() {
             ++abuse_count;
 
         eLog("[Dag] mint_analysis_log: actor={} token={} minted={} spent={} frozen={} {}{}",
-             actor, token,
+             actor,
+             token,
              mint_amount.to_string(),
              spent_amount.to_string(),
              frozen.to_string(),
              abused ? "USED_BEFORE_FREEZE " : "",
-             overspend > BigNumberFloat(0)
-                 ? fmt::format("OVERSPEND={}", overspend.to_string())
-                 : "");
+             overspend > BigNumberFloat(0) ? fmt::format("OVERSPEND={}", overspend.to_string()) : "");
     }
 
     eLog("[Dag] mint_analysis_log: === COLLECTORS (received tainted, no direct mint) ===");
     for (const auto &[key, total] : collector_received) {
         const auto &[actor, token] = key;
-        eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}",
-             actor, token, total.to_string());
+        eLog("[Dag] mint_analysis_log: collector actor={} token={} received={}", actor, token, total.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: === TAINTED CHAIN TRANSFERS ===");
@@ -3217,7 +3514,11 @@ void Dag::mint_analysis_log() {
         else
             tag = "CHAIN";
         eLog("[Dag] mint_analysis_log: [{}] section={} from={} to={} amount={}",
-             tag, t.section_id, t.from, t.to, t.amount.to_string());
+             tag,
+             t.section_id,
+             t.from,
+             t.to,
+             t.amount.to_string());
     }
 
     eLog("[Dag] mint_analysis_log: done. minted_pairs={} abused={} chain_transfers={}",
@@ -3348,7 +3649,8 @@ BigNumberFloat Dag::sum_all_rewards() {
 }
 
 void Dag::ensure_control_index() {
-    if (control_index_ready_.load()) return;
+    if (control_index_ready_.load())
+        return;
     if (!control_index_) {
         control_index_ready_.store(true);
         return;
@@ -3429,9 +3731,7 @@ std::optional<DagControl> Dag::find_last_control(const SectionId from, bool disa
         }
 
         skips += 1;
-        if (!disable_break
-            && (skips > CONTROL_SEARCH_SKIP_LIMIT
-                || missing_aligned > CONTROL_SEARCH_MISS_LIMIT)) {
+        if (!disable_break && (skips > CONTROL_SEARCH_SKIP_LIMIT || missing_aligned > CONTROL_SEARCH_MISS_LIMIT)) {
             break;
         }
     }
@@ -3458,7 +3758,8 @@ std::optional<DagControl> Dag::read_control(const SectionId &section_id) {
         return std::nullopt;
     }
 
-    if (control_index_) control_index_->put(section_id, section->control.value());
+    if (control_index_)
+        control_index_->put(section_id, section->control.value());
     return DagControl { .section_id = section_id, .control = section->control.value() };
 }
 

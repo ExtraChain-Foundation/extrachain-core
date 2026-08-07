@@ -70,6 +70,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_cache.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/pack_registry.h
+    ${CMAKE_CURRENT_LIST_DIR}/headers/chain/hot_section_store.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/dag_migration.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/chain_index.h
     ${CMAKE_CURRENT_LIST_DIR}/headers/chain/control_index.h
@@ -149,6 +150,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack_registry.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/hot_section_store.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_migration.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/chain_index.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/control_index.cpp

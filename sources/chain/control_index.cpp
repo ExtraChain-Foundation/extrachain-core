@@ -31,24 +31,25 @@
 
 namespace {
 
-constexpr const char *DB_FILENAME = "Control.db";
+    constexpr const char *DB_FILENAME = "Control.db";
 
-constexpr const char *SCHEMA_SQL = R"(
+    constexpr const char *SCHEMA_SQL = R"(
     CREATE TABLE IF NOT EXISTS control_index (
         section INTEGER PRIMARY KEY,
         hash    TEXT NOT NULL
     );
 )";
 
-std::uint64_t section_to_u64(const SectionId &id) {
-    auto i = id.to_int();
-    if (i.has_value() && *i >= 0) return static_cast<std::uint64_t>(*i);
-    try {
-        return std::stoull(id.to_string());
-    } catch (...) {
-        return 0;
+    std::uint64_t section_to_u64(const SectionId &id) {
+        auto i = id.to_int();
+        if (i.has_value() && *i >= 0)
+            return static_cast<std::uint64_t>(*i);
+        try {
+            return std::stoull(id.to_string());
+        } catch (...) {
+            return 0;
+        }
     }
-}
 
 } // namespace
 
@@ -56,17 +57,18 @@ struct ControlIndex::Impl {
     ExtraChainNode *node = nullptr;
     sqlite3        *db   = nullptr;
 
-    sqlite3_stmt *stmt_put       = nullptr;
-    sqlite3_stmt *stmt_erase     = nullptr;
-    sqlite3_stmt *stmt_get       = nullptr;
-    sqlite3_stmt *stmt_last      = nullptr;
-    sqlite3_stmt *stmt_count     = nullptr;
+    sqlite3_stmt *stmt_put   = nullptr;
+    sqlite3_stmt *stmt_erase = nullptr;
+    sqlite3_stmt *stmt_get   = nullptr;
+    sqlite3_stmt *stmt_last  = nullptr;
+    sqlite3_stmt *stmt_count = nullptr;
 
     mutable std::mutex mutex;
 
     ~Impl() {
         auto finalize = [](sqlite3_stmt *&s) {
-            if (s) sqlite3_finalize(s);
+            if (s)
+                sqlite3_finalize(s);
             s = nullptr;
         };
         finalize(stmt_put);
@@ -74,14 +76,16 @@ struct ControlIndex::Impl {
         finalize(stmt_get);
         finalize(stmt_last);
         finalize(stmt_count);
-        if (db) sqlite3_close(db);
+        if (db)
+            sqlite3_close(db);
     }
 
     bool exec(const char *sql) {
         char *err = nullptr;
         if (sqlite3_exec(db, sql, nullptr, nullptr, &err) != SQLITE_OK) {
             eWarning("[ControlIndex] exec failed: {} | sql: {}", err ? err : "?", sql);
-            if (err) sqlite3_free(err);
+            if (err)
+                sqlite3_free(err);
             return false;
         }
         return true;
@@ -94,6 +98,16 @@ struct ControlIndex::Impl {
             return nullptr;
         }
         return s;
+    }
+
+    void put_unlocked(const SectionId &section_id, const std::string &hash) {
+        sqlite3_reset(stmt_put);
+        sqlite3_clear_bindings(stmt_put);
+        sqlite3_bind_int64(stmt_put, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
+        sqlite3_bind_text(stmt_put, 2, hash.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt_put) != SQLITE_DONE) {
+            eWarning("[ControlIndex] put failed: {}", sqlite3_errmsg(db));
+        }
     }
 
     bool open() {
@@ -111,21 +125,25 @@ struct ControlIndex::Impl {
         exec("PRAGMA synchronous = NORMAL");
         exec("PRAGMA temp_store = MEMORY");
 
-        if (!exec(SCHEMA_SQL)) return false;
+        if (!exec(SCHEMA_SQL))
+            return false;
 
-        stmt_put   = prepare("INSERT INTO control_index (section, hash) VALUES (?, ?)"
-                             " ON CONFLICT(section) DO UPDATE SET hash = excluded.hash");
+        stmt_put = prepare(
+            "INSERT INTO control_index (section, hash) VALUES (?, ?)"
+            " ON CONFLICT(section) DO UPDATE SET hash = excluded.hash");
         stmt_erase = prepare("DELETE FROM control_index WHERE section = ?");
         stmt_get   = prepare("SELECT hash FROM control_index WHERE section = ?");
-        stmt_last  = prepare("SELECT section, hash FROM control_index WHERE section <= ?"
-                             " ORDER BY section DESC LIMIT 1");
+        stmt_last  = prepare(
+            "SELECT section, hash FROM control_index WHERE section <= ?"
+             " ORDER BY section DESC LIMIT 1");
         stmt_count = prepare("SELECT COUNT(*) FROM control_index");
 
         return stmt_put && stmt_erase && stmt_get && stmt_last && stmt_count;
     }
 };
 
-ControlIndex::ControlIndex(ExtraChainNode *node) : impl_(std::make_unique<Impl>()) {
+ControlIndex::ControlIndex(ExtraChainNode *node)
+    : impl_(std::make_unique<Impl>()) {
     impl_->node = node;
     if (!impl_->open()) {
         eWarning("[ControlIndex] open failed; control lookups fall back to section scan");
@@ -135,18 +153,15 @@ ControlIndex::ControlIndex(ExtraChainNode *node) : impl_(std::make_unique<Impl>(
 ControlIndex::~ControlIndex() = default;
 
 void ControlIndex::put(const SectionId &section_id, const std::string &hash) {
-    if (!impl_->db || !impl_->stmt_put) return;
+    if (!impl_->db || !impl_->stmt_put)
+        return;
     std::lock_guard lock(impl_->mutex);
-    sqlite3_reset(impl_->stmt_put);
-    sqlite3_bind_int64(impl_->stmt_put, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
-    sqlite3_bind_text(impl_->stmt_put, 2, hash.c_str(), -1, SQLITE_TRANSIENT);
-    if (sqlite3_step(impl_->stmt_put) != SQLITE_DONE) {
-        eWarning("[ControlIndex] put failed: {}", sqlite3_errmsg(impl_->db));
-    }
+    impl_->put_unlocked(section_id, hash);
 }
 
 void ControlIndex::erase(const SectionId &section_id) {
-    if (!impl_->db || !impl_->stmt_erase) return;
+    if (!impl_->db || !impl_->stmt_erase)
+        return;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_erase);
     sqlite3_bind_int64(impl_->stmt_erase, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
@@ -154,77 +169,88 @@ void ControlIndex::erase(const SectionId &section_id) {
 }
 
 std::optional<std::string> ControlIndex::get(const SectionId &section_id) const {
-    if (!impl_->db || !impl_->stmt_get) return std::nullopt;
+    if (!impl_->db || !impl_->stmt_get)
+        return std::nullopt;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_get);
     sqlite3_bind_int64(impl_->stmt_get, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
-    if (sqlite3_step(impl_->stmt_get) != SQLITE_ROW) return std::nullopt;
+    if (sqlite3_step(impl_->stmt_get) != SQLITE_ROW)
+        return std::nullopt;
     auto *txt = reinterpret_cast<const char *>(sqlite3_column_text(impl_->stmt_get, 0));
-    if (!txt) return std::nullopt;
+    if (!txt)
+        return std::nullopt;
     return std::string(txt);
 }
 
-std::optional<std::pair<SectionId, std::string>>
-ControlIndex::last_at_or_below(const SectionId &from) const {
-    if (!impl_->db || !impl_->stmt_last) return std::nullopt;
+std::optional<std::pair<SectionId, std::string>> ControlIndex::last_at_or_below(const SectionId &from) const {
+    if (!impl_->db || !impl_->stmt_last)
+        return std::nullopt;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_last);
     // from < 0 means "from the top": use the max representable section bound.
-    auto          fi    = from.to_int();
+    auto          fi     = from.to_int();
     bool          is_top = !fi.has_value() || *fi < 0;
     std::uint64_t bound  = is_top ? static_cast<std::uint64_t>(INT64_MAX) : section_to_u64(from);
     sqlite3_bind_int64(impl_->stmt_last, 1, static_cast<sqlite3_int64>(bound));
-    if (sqlite3_step(impl_->stmt_last) != SQLITE_ROW) return std::nullopt;
-    auto        sec = static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_last, 0));
-    auto       *txt = reinterpret_cast<const char *>(sqlite3_column_text(impl_->stmt_last, 1));
-    if (!txt) return std::nullopt;
+    if (sqlite3_step(impl_->stmt_last) != SQLITE_ROW)
+        return std::nullopt;
+    auto  sec = static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_last, 0));
+    auto *txt = reinterpret_cast<const char *>(sqlite3_column_text(impl_->stmt_last, 1));
+    if (!txt)
+        return std::nullopt;
     return std::pair { SectionId(static_cast<long long>(sec)), std::string(txt) };
 }
 
 void ControlIndex::clear() {
-    if (!impl_->db) return;
+    if (!impl_->db)
+        return;
     std::lock_guard lock(impl_->mutex);
     impl_->exec("DELETE FROM control_index");
 }
 
 std::uint64_t ControlIndex::row_count() const {
-    if (!impl_->db || !impl_->stmt_count) return 0;
+    if (!impl_->db || !impl_->stmt_count)
+        return 0;
     std::lock_guard lock(impl_->mutex);
     sqlite3_reset(impl_->stmt_count);
-    if (sqlite3_step(impl_->stmt_count) != SQLITE_ROW) return 0;
+    if (sqlite3_step(impl_->stmt_count) != SQLITE_ROW)
+        return 0;
     return static_cast<std::uint64_t>(sqlite3_column_int64(impl_->stmt_count, 0));
 }
 
 void ControlIndex::rebuild_from_dag() {
-    if (!impl_->db || !impl_->node) return;
+    if (!impl_->db || !impl_->node)
+        return;
 
     auto *dag = impl_->node->dag();
-    if (!dag) return;
-
-    clear();
+    if (!dag)
+        return;
 
     // Walk control-aligned sections and copy their hashes into the index. Reads
     // go through Dag::read_section (pack + hot aware). One transaction for speed.
-    {
-        std::lock_guard lock(impl_->mutex);
-        impl_->exec("BEGIN TRANSACTION");
+    std::lock_guard lock(impl_->mutex);
+    if (!impl_->exec("BEGIN IMMEDIATE"))
+        return;
+    if (!impl_->exec("DELETE FROM control_index")) {
+        impl_->exec("ROLLBACK");
+        return;
     }
 
-    SectionId first = dag->first_saved_section();
-    SectionId last  = dag->current_section();
+    SectionId     first = dag->first_saved_section();
+    SectionId     last  = dag->current_section();
     std::uint64_t added = 0;
     for (SectionId i = (first < SectionId(0) ? SectionId(0) : first); i <= last; i += CONTROL_INTERVAL_MOD) {
         // Read the section directly (not read_control, which consults this index).
         auto section = dag->read_section(i);
         if (section.has_value() && section->control.has_value()) {
-            put(i, section->control.value());
+            impl_->put_unlocked(i, section->control.value());
             ++added;
         }
     }
 
-    {
-        std::lock_guard lock(impl_->mutex);
-        impl_->exec("COMMIT");
+    if (!impl_->exec("COMMIT")) {
+        impl_->exec("ROLLBACK");
+        return;
     }
     eLog("[ControlIndex] rebuilt: {} control points [{}..{}]", added, first, last);
 }
