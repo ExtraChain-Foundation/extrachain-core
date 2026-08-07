@@ -53,7 +53,6 @@ namespace {
     CREATE TABLE IF NOT EXISTS tx_index (
         id        INTEGER PRIMARY KEY,
         section   INTEGER NOT NULL,
-        hash      TEXT,
         sender    INTEGER NOT NULL,
         receiver  INTEGER NOT NULL,
         token     INTEGER NOT NULL,
@@ -78,7 +77,7 @@ namespace {
     );
 )";
 
-    constexpr const char *DERIVED_INDEX_VERSION = "1";
+    constexpr const char *DERIVED_INDEX_VERSION = "2";
     constexpr std::size_t LIVE_WRITE_BATCH_SIZE = 128;
     constexpr auto        LIVE_WRITE_BATCH_AGE  = std::chrono::milliseconds(250);
 
@@ -160,7 +159,6 @@ struct ChainIndex::Impl {
     sqlite3_stmt *stmt_find_recv_token         = nullptr;
     sqlite3_stmt *stmt_row_count               = nullptr;
     sqlite3_stmt *stmt_last_section            = nullptr;
-    sqlite3_stmt *stmt_find_hash               = nullptr;
     sqlite3_stmt *stmt_delete_contract_section = nullptr;
     sqlite3_stmt *stmt_insert_contract_tx      = nullptr;
     sqlite3_stmt *stmt_find_contract_sections  = nullptr;
@@ -200,7 +198,6 @@ struct ChainIndex::Impl {
         finalize(stmt_find_recv_token);
         finalize(stmt_row_count);
         finalize(stmt_last_section);
-        finalize(stmt_find_hash);
         finalize(stmt_delete_contract_section);
         finalize(stmt_insert_contract_tx);
         finalize(stmt_find_contract_sections);
@@ -310,11 +307,24 @@ struct ChainIndex::Impl {
         }
         if (columns != nullptr)
             sqlite3_finalize(columns);
-        if (!has_hash && !exec("ALTER TABLE tx_index ADD COLUMN hash TEXT")) {
-            return false;
-        }
-        if (!exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_section_hash ON tx_index(section, hash)")) {
-            return false;
+        if (has_hash) {
+            if (!exec("BEGIN IMMEDIATE") || !exec("ALTER TABLE tx_index RENAME TO tx_index_with_hash")
+                || !exec("CREATE TABLE tx_index ("
+                         "id INTEGER PRIMARY KEY, section INTEGER NOT NULL, sender INTEGER NOT NULL,"
+                         "receiver INTEGER NOT NULL, token INTEGER NOT NULL, type INTEGER NOT NULL,"
+                         "timestamp INTEGER NOT NULL, amount TEXT NOT NULL)")
+                || !exec("INSERT INTO tx_index(id,section,sender,receiver,token,type,timestamp,amount)"
+                         " SELECT id,section,sender,receiver,token,type,timestamp,amount FROM tx_index_with_hash")
+                || !exec("DROP TABLE tx_index_with_hash")
+                || !exec("CREATE INDEX idx_sender ON tx_index(sender, timestamp DESC)")
+                || !exec("CREATE INDEX idx_receiver ON tx_index(receiver, timestamp DESC)")
+                || !exec("CREATE INDEX idx_section ON tx_index(section)")
+                || !exec("UPDATE index_meta SET value='2'"
+                         " WHERE key='derived_index_version' AND value='1'")
+                || !exec("COMMIT")) {
+                exec("ROLLBACK");
+                return false;
+            }
         }
 
         sqlite3_stmt *row_count = nullptr;
@@ -344,14 +354,14 @@ struct ChainIndex::Impl {
         if (rows == 0 && !derived_index_ready) {
             derived_index_ready = exec(
                 "INSERT OR REPLACE INTO index_meta(key, value)"
-                " VALUES ('derived_index_version', '1')");
+                " VALUES ('derived_index_version', '2')");
         }
 
         // Prepared statements
         stmt_insert_tx = prepare(
             "INSERT INTO tx_index"
-            " (section, hash, sender, receiver, token, type, timestamp, amount)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            " (section, sender, receiver, token, type, timestamp, amount)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)");
         stmt_delete_section = prepare("DELETE FROM tx_index WHERE section = ?");
 
         // Column order in every SELECT below must match row_to_entry().
@@ -384,7 +394,6 @@ struct ChainIndex::Impl {
 
         stmt_row_count               = prepare("SELECT COUNT(*) FROM tx_index");
         stmt_last_section            = prepare("SELECT COALESCE(MAX(section), -1) FROM tx_index");
-        stmt_find_hash               = prepare("SELECT 1 FROM tx_index WHERE section = ? AND hash = ? LIMIT 1");
         stmt_delete_contract_section = prepare("DELETE FROM contract_tx_index WHERE section = ?");
         stmt_insert_contract_tx =
             prepare("INSERT OR IGNORE INTO contract_tx_index(section, hash, contract) VALUES (?, ?, ?)");
@@ -400,10 +409,9 @@ struct ChainIndex::Impl {
         stmt_token_blob_by_id = prepare("SELECT actor FROM tokens WHERE id = ?");
 
         return stmt_insert_tx && stmt_delete_section && stmt_find_sent && stmt_find_sent_token && stmt_find_recv
-               && stmt_find_recv_token && stmt_row_count && stmt_last_section && stmt_find_hash
-               && stmt_delete_contract_section && stmt_insert_contract_tx && stmt_find_contract_sections
-               && stmt_actor_select && stmt_actor_insert && stmt_token_select && stmt_token_insert
-               && stmt_actor_blob_by_id && stmt_token_blob_by_id;
+               && stmt_find_recv_token && stmt_row_count && stmt_last_section && stmt_delete_contract_section
+               && stmt_insert_contract_tx && stmt_find_contract_sections && stmt_actor_select && stmt_actor_insert
+               && stmt_token_select && stmt_token_insert && stmt_actor_blob_by_id && stmt_token_blob_by_id;
     }
 
     bool should_index(const Transaction &tx) const {
@@ -472,13 +480,12 @@ struct ChainIndex::Impl {
         auto *s = stmt_insert_tx;
         sqlite3_reset(s);
         sqlite3_bind_int64(s, 1, static_cast<sqlite3_int64>(section_to_u64(section_id)));
-        sqlite3_bind_text(s, 2, tx.hash().c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int64(s, 3, sender_id);
-        sqlite3_bind_int64(s, 4, receiver_id);
-        sqlite3_bind_int64(s, 5, token_id);
-        sqlite3_bind_int(s, 6, static_cast<int>(tx.type()));
-        sqlite3_bind_int64(s, 7, static_cast<sqlite3_int64>(tx.timestamp()));
-        sqlite3_bind_text(s, 8, amount.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(s, 2, sender_id);
+        sqlite3_bind_int64(s, 3, receiver_id);
+        sqlite3_bind_int64(s, 4, token_id);
+        sqlite3_bind_int(s, 5, static_cast<int>(tx.type()));
+        sqlite3_bind_int64(s, 6, static_cast<sqlite3_int64>(tx.timestamp()));
+        sqlite3_bind_text(s, 7, amount.c_str(), -1, SQLITE_TRANSIENT);
 
         if (sqlite3_step(s) != SQLITE_DONE) {
             eWarning("[ChainIndex] insert failed: {}", sqlite3_errmsg(db));
@@ -660,19 +667,6 @@ std::vector<ChainIndexEntry> ChainIndex::find_received_by(const std::string &act
                                       limit);
 }
 
-bool ChainIndex::contains_hash(const SectionId &section, const std::string &hash) const {
-    if (!impl_->db || !impl_->stmt_find_hash || hash.empty())
-        return false;
-    std::lock_guard<std::mutex> lock(impl_->write_mutex);
-    sqlite3_reset(impl_->stmt_find_hash);
-    sqlite3_clear_bindings(impl_->stmt_find_hash);
-    sqlite3_bind_int64(impl_->stmt_find_hash, 1, static_cast<sqlite3_int64>(section_to_u64(section)));
-    sqlite3_bind_text(impl_->stmt_find_hash, 2, hash.c_str(), -1, SQLITE_TRANSIENT);
-    const bool found = sqlite3_step(impl_->stmt_find_hash) == SQLITE_ROW;
-    sqlite3_reset(impl_->stmt_find_hash);
-    return found;
-}
-
 std::vector<SectionId> ChainIndex::find_contract_sections(const std::string &contract,
                                                           const SectionId   &from_section) const {
     std::vector<SectionId> sections;
@@ -730,7 +724,7 @@ std::vector<ChainIndexEntry> ChainIndex::find_for_actor(const std::string &actor
     // in both sent/recv result sets). Match on the natural identity columns.
     auto same_tx = [](const ChainIndexEntry &a, const ChainIndexEntry &b) {
         return a.section_id == b.section_id && a.timestamp == b.timestamp && a.sender == b.sender
-               && a.receiver == b.receiver && a.token == b.token && a.type == b.type;
+               && a.receiver == b.receiver && a.token == b.token && a.type == b.type && a.amount == b.amount;
     };
     std::vector<ChainIndexEntry> out;
     out.reserve(merged.size());
@@ -809,7 +803,7 @@ void ChainIndex::rebuild_from_disk() {
     }
     impl_->exec("ANALYZE");
     impl_->derived_index_ready =
-        impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '1')");
+        impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '2')");
 
     eLog("[ChainIndex] Rebuild done, {} tx, {} actors, {} tokens",
          count,
@@ -827,7 +821,7 @@ void ChainIndex::clear() {
     impl_->exec("DELETE FROM actors");
     impl_->exec("DELETE FROM tokens");
     impl_->derived_index_ready =
-        impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '1')");
+        impl_->exec("INSERT OR REPLACE INTO index_meta(key, value) VALUES ('derived_index_version', '2')");
     impl_->actor_cache.map.clear();
     impl_->token_cache.map.clear();
 }

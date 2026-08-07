@@ -23,9 +23,9 @@
 /**
  * Mutable storage for the hot DAG tail.
  *
- * SQLite WAL avoids one filesystem create operation per section. Each put is
- * still an independent transaction. A process restart therefore exposes only
- * complete section revisions. Cold sections move to immutable Pack storage.
+ * SQLite WAL avoids one filesystem create operation per section. A batch and
+ * its committed range use one database transaction. A process restart exposes
+ * only complete section revisions. Cold sections move to immutable Pack storage.
  */
 class EXTRACHAIN_EXPORT HotSectionStore {
 public:
@@ -39,11 +39,14 @@ public:
 
     bool                       put(const SectionId &section, const std::string &payload);
     bool                       put_many(const std::map<SectionId, std::string> &sections);
+    bool                       commit_batch(const std::map<SectionId, std::string>               &sections,
+                                            const std::optional<std::pair<SectionId, SectionId>> &committed_range);
     std::optional<std::string> get(const SectionId &section) const;
     bool                       contains(const SectionId &section) const;
 
     std::map<SectionId, std::string>               read_range(const SectionId &from, const SectionId &to) const;
     std::optional<std::pair<SectionId, SectionId>> bounds() const;
+    std::optional<std::pair<SectionId, SectionId>> committed_range() const;
 
     bool erase_range(const SectionId &from, const SectionId &to);
     bool erase_from(const SectionId &from);

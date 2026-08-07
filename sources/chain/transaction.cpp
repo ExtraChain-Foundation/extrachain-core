@@ -74,7 +74,6 @@ Transaction::Transaction(const Transaction &other) {
     this->signature_  = other.signature_;
     this->type_       = other.type_;
     this->prev_hashs_ = other.prev_hashs_;
-    update_hash();
 }
 
 Transaction::Transaction(Transaction &&other) noexcept {
@@ -89,7 +88,6 @@ Transaction::Transaction(Transaction &&other) noexcept {
     signature_  = std::move(other.signature_);
     type_       = std::move(other.type_);
     prev_hashs_ = std::move(other.prev_hashs_);
-    update_hash();
 
     other.hash_ = "";
 }
@@ -127,13 +125,10 @@ std::string Transaction::hash_preimage(bool hex) const {
     // and amount are encoded; everything else must stay identical so that a
     // change here can't desync the two hashes. hex form = legacy peer compat.
     // TODO: + amount.size() meta.size() + prev_hashs_.size(); meta max 255 in prove + section size?
-    auto hashData =
-        (hex ? section_.to_hex_string() : section_.to_string())
-        + std::to_string(std::to_underlying(type_)) + sender_.to_string()
-        + receiver_.to_string() + token_.to_string()
-        + (hex ? amount_.to_hex_string() : amount_.to_string())
-        + std::to_string(timestamp_)
-        + (meta_.has_value() ? meta_.value() : "");
+    auto hashData = (hex ? section_.to_hex_string() : section_.to_string())
+                    + std::to_string(std::to_underlying(type_)) + sender_.to_string() + receiver_.to_string()
+                    + token_.to_string() + (hex ? amount_.to_hex_string() : amount_.to_string())
+                    + std::to_string(timestamp_) + (meta_.has_value() ? meta_.value() : "");
 
     for (const auto &prev_hash : prev_hashs_) {
         hashData += prev_hash;
@@ -333,8 +328,6 @@ void Transaction::operator=(const Transaction &other) {
     this->signature_  = other.signature_;
     this->type_       = other.type_;
     this->prev_hashs_ = other.prev_hashs_;
-
-    update_hash();
 }
 
 Transaction &Transaction::operator=(Transaction &&other) noexcept {
@@ -353,7 +346,6 @@ Transaction &Transaction::operator=(Transaction &&other) noexcept {
     signature_  = std::move(other.signature_);
     type_       = std::move(other.type_);
     prev_hashs_ = std::move(other.prev_hashs_);
-    update_hash();
 
     other.hash_      = "";
     other.signature_ = {};

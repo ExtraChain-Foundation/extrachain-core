@@ -12,6 +12,7 @@
 
 #include <sqlite3.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <mutex>
 
@@ -34,6 +35,8 @@ struct HotSectionStore::Impl {
     sqlite3_stmt      *get_stmt         = nullptr;
     sqlite3_stmt      *range_stmt       = nullptr;
     sqlite3_stmt      *bounds_stmt      = nullptr;
+    sqlite3_stmt      *meta_put_stmt    = nullptr;
+    sqlite3_stmt      *meta_get_stmt    = nullptr;
     sqlite3_stmt      *erase_range_stmt = nullptr;
     sqlite3_stmt      *erase_from_stmt  = nullptr;
     mutable std::mutex mutex;
@@ -43,6 +46,8 @@ struct HotSectionStore::Impl {
         sqlite3_finalize(get_stmt);
         sqlite3_finalize(range_stmt);
         sqlite3_finalize(bounds_stmt);
+        sqlite3_finalize(meta_put_stmt);
+        sqlite3_finalize(meta_get_stmt);
         sqlite3_finalize(erase_range_stmt);
         sqlite3_finalize(erase_from_stmt);
         if (db)
@@ -67,6 +72,23 @@ struct HotSectionStore::Impl {
         return nullptr;
     }
 
+    bool put_meta(const char *key, sqlite3_int64 value) {
+        sqlite3_reset(meta_put_stmt);
+        sqlite3_clear_bindings(meta_put_stmt);
+        sqlite3_bind_text(meta_put_stmt, 1, key, -1, SQLITE_STATIC);
+        sqlite3_bind_int64(meta_put_stmt, 2, value);
+        return sqlite3_step(meta_put_stmt) == SQLITE_DONE;
+    }
+
+    std::optional<sqlite3_int64> get_meta(const char *key) {
+        sqlite3_reset(meta_get_stmt);
+        sqlite3_clear_bindings(meta_get_stmt);
+        sqlite3_bind_text(meta_get_stmt, 1, key, -1, SQLITE_STATIC);
+        if (sqlite3_step(meta_get_stmt) != SQLITE_ROW)
+            return std::nullopt;
+        return sqlite3_column_int64(meta_get_stmt, 0);
+    }
+
     bool open(const std::filesystem::path &path) {
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
@@ -88,7 +110,9 @@ struct HotSectionStore::Impl {
         if (!exec("PRAGMA journal_mode=WAL") || !exec("PRAGMA synchronous=NORMAL")
             || !exec("PRAGMA temp_store=MEMORY")
             || !exec("CREATE TABLE IF NOT EXISTS sections ("
-                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL) WITHOUT ROWID")) {
+                     "section INTEGER PRIMARY KEY, payload BLOB NOT NULL) WITHOUT ROWID")
+            || !exec("CREATE TABLE IF NOT EXISTS chain_meta ("
+                     "key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID")) {
             return false;
         }
 
@@ -99,10 +123,15 @@ struct HotSectionStore::Impl {
         range_stmt = prepare(
             "SELECT section,payload FROM sections "
             "WHERE section>=?1 AND section<=?2 ORDER BY section");
-        bounds_stmt      = prepare("SELECT MIN(section),MAX(section) FROM sections");
+        bounds_stmt   = prepare("SELECT MIN(section),MAX(section) FROM sections");
+        meta_put_stmt = prepare(
+            "INSERT INTO chain_meta(key,value) VALUES(?1,?2)"
+            " ON CONFLICT(key) DO UPDATE SET value=excluded.value");
+        meta_get_stmt    = prepare("SELECT value FROM chain_meta WHERE key=?1");
         erase_range_stmt = prepare("DELETE FROM sections WHERE section>=?1 AND section<=?2");
         erase_from_stmt  = prepare("DELETE FROM sections WHERE section>=?1");
-        return put_stmt && get_stmt && range_stmt && bounds_stmt && erase_range_stmt && erase_from_stmt;
+        return put_stmt && get_stmt && range_stmt && bounds_stmt && meta_put_stmt && meta_get_stmt
+               && erase_range_stmt && erase_from_stmt;
     }
 };
 
@@ -116,7 +145,7 @@ HotSectionStore::~HotSectionStore() = default;
 
 bool HotSectionStore::is_open() const {
     return impl_->db && impl_->put_stmt && impl_->get_stmt && impl_->range_stmt && impl_->bounds_stmt
-           && impl_->erase_range_stmt && impl_->erase_from_stmt;
+           && impl_->meta_put_stmt && impl_->meta_get_stmt && impl_->erase_range_stmt && impl_->erase_from_stmt;
 }
 
 bool HotSectionStore::put(const SectionId &section, const std::string &payload) {
@@ -136,6 +165,11 @@ bool HotSectionStore::put(const SectionId &section, const std::string &payload) 
 }
 
 bool HotSectionStore::put_many(const std::map<SectionId, std::string> &sections) {
+    return commit_batch(sections, std::nullopt);
+}
+
+bool HotSectionStore::commit_batch(const std::map<SectionId, std::string>               &sections,
+                                   const std::optional<std::pair<SectionId, SectionId>> &committed_range) {
     if (!is_open() || sections.empty())
         return false;
     std::lock_guard lock(impl_->mutex);
@@ -160,10 +194,37 @@ bool HotSectionStore::put_many(const std::map<SectionId, std::string> &sections)
         }
     }
     sqlite3_reset(impl_->put_stmt);
+
+    if (committed_range.has_value()) {
+        const auto first = section_to_i64(committed_range->first);
+        const auto last  = section_to_i64(committed_range->second);
+        if (!first.has_value() || !last.has_value() || *last < *first) {
+            impl_->exec("ROLLBACK");
+            return false;
+        }
+        if (!impl_->put_meta("committed_first", *first) || !impl_->put_meta("committed_last", *last)) {
+            sqlite3_reset(impl_->meta_put_stmt);
+            impl_->exec("ROLLBACK");
+            return false;
+        }
+        sqlite3_reset(impl_->meta_put_stmt);
+    }
     if (impl_->exec("COMMIT"))
         return true;
     impl_->exec("ROLLBACK");
     return false;
+}
+
+std::optional<std::pair<SectionId, SectionId>> HotSectionStore::committed_range() const {
+    if (!is_open())
+        return std::nullopt;
+    std::lock_guard lock(impl_->mutex);
+    const auto      first = impl_->get_meta("committed_first");
+    const auto      last  = impl_->get_meta("committed_last");
+    sqlite3_reset(impl_->meta_get_stmt);
+    if (!first.has_value() || !last.has_value() || *first < 0 || *last < *first)
+        return std::nullopt;
+    return std::pair { SectionId(static_cast<long long>(*first)), SectionId(static_cast<long long>(*last)) };
 }
 
 std::optional<std::string> HotSectionStore::get(const SectionId &section) const {
@@ -253,17 +314,47 @@ bool HotSectionStore::erase_from(const SectionId &from) {
     if (!is_open() || !first.has_value())
         return false;
     std::lock_guard lock(impl_->mutex);
+    if (!impl_->exec("BEGIN IMMEDIATE"))
+        return false;
+
     sqlite3_reset(impl_->erase_from_stmt);
     sqlite3_clear_bindings(impl_->erase_from_stmt);
     sqlite3_bind_int64(impl_->erase_from_stmt, 1, *first);
     const bool erased = sqlite3_step(impl_->erase_from_stmt) == SQLITE_DONE;
     sqlite3_reset(impl_->erase_from_stmt);
-    return erased;
+    if (!erased) {
+        impl_->exec("ROLLBACK");
+        return false;
+    }
+
+    const auto committed_first = impl_->get_meta("committed_first");
+    const auto committed_last  = impl_->get_meta("committed_last");
+    sqlite3_reset(impl_->meta_get_stmt);
+    if (committed_first.has_value() && committed_last.has_value()) {
+        const auto new_last  = std::min(*committed_last, *first);
+        const auto new_first = std::min(*committed_first, new_last);
+        if (!impl_->put_meta("committed_first", new_first) || !impl_->put_meta("committed_last", new_last)) {
+            sqlite3_reset(impl_->meta_put_stmt);
+            impl_->exec("ROLLBACK");
+            return false;
+        }
+        sqlite3_reset(impl_->meta_put_stmt);
+    }
+
+    if (impl_->exec("COMMIT"))
+        return true;
+    impl_->exec("ROLLBACK");
+    return false;
 }
 
 bool HotSectionStore::clear() {
     if (!is_open())
         return false;
     std::lock_guard lock(impl_->mutex);
-    return impl_->exec("DELETE FROM sections");
+    if (!impl_->exec("BEGIN IMMEDIATE"))
+        return false;
+    if (impl_->exec("DELETE FROM sections") && impl_->exec("DELETE FROM chain_meta") && impl_->exec("COMMIT"))
+        return true;
+    impl_->exec("ROLLBACK");
+    return false;
 }

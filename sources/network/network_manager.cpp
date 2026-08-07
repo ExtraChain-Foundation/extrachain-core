@@ -1822,13 +1822,16 @@ void NetworkManager::message_received(const std::string &message,
             break;
         }
 
-        auto res = node->dag()->network_transaction(transaction_result.value(), responder);
-
-        // Do not amplify invalid traffic. Deferred contract dependencies return
-        // success and continue to propagate, while rejected transactions stop here.
-        if (res.has_value()) {
-            send_broadcast_message_further(package_data);
-        }
+        node->dag()->submit_network_transaction(transaction_result.value(),
+                                                responder,
+                                                [this,
+                                                 package_data](std::expected<void, TransactionProveError> result,
+                                                               bool should_forward) {
+                                                    // A committed transaction is forwarded once. Invalid traffic,
+                                                    // queue overflow, and idempotent replays stop at this node.
+                                                    if (result.has_value() && should_forward)
+                                                        send_broadcast_message_further(package_data);
+                                                });
         break;
     }
 

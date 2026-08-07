@@ -93,15 +93,12 @@ public:
                                                   std::uint64_t      before_timestamp = 0,
                                                   int                limit            = 50) const;
 
-    // Fast replay check for a section that is already covered by the index.
-    bool contains_hash(const SectionId &section, const std::string &hash) const;
-
     // Sections that contain a root or nested transition for this contract.
     // The result is ordered and contains no duplicates.
     std::vector<SectionId> find_contract_sections(const std::string &contract,
                                                   const SectionId   &from_section = SectionId(0)) const;
 
-    // True after hash and contract references cover every indexed row.
+    // True after contract references cover every indexed row.
     // An older database stays on the safe DAG fallback until a full rebuild.
     bool derived_index_ready() const;
 

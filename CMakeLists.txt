@@ -147,6 +147,7 @@ set(EXTRACHAIN_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/transaction_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/private_profile.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_admission.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/dag_cache.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack.cpp
     ${CMAKE_CURRENT_LIST_DIR}/sources/chain/pack_registry.cpp

@@ -211,27 +211,43 @@ private slots:
             QVERIFY(store.put(SectionId(10), "section-10-v1"));
             QVERIFY(store.put_many({ { SectionId(11), "section-11" }, { SectionId(12), "section-12" } }));
             QVERIFY(store.put(SectionId(10), "section-10-v2"));
+            QVERIFY(store.commit_batch({ { SectionId(20), "section-20" }, { SectionId(21), "section-21" } },
+                                       std::pair { SectionId(10), SectionId(21) }));
+            const std::optional<std::pair<SectionId, SectionId>> expected_committed_range =
+                std::pair { SectionId(10), SectionId(21) };
+            QCOMPARE(store.committed_range(), expected_committed_range);
+            QVERIFY(!store.commit_batch({ { SectionId(-1), "invalid" }, { SectionId(22), "section-22" } },
+                                        std::pair { SectionId(10), SectionId(22) }));
+            QVERIFY(!store.contains(SectionId(22)));
+            QCOMPARE(store.committed_range(), expected_committed_range);
             QCOMPARE(store.get(SectionId(10)), std::optional<std::string>("section-10-v2"));
 
             const auto range = store.read_range(SectionId(10), SectionId(11));
             QCOMPARE(range.size(), static_cast<std::size_t>(2));
             QCOMPARE(range.at(SectionId(11)), std::string("section-11"));
             const std::optional<std::pair<SectionId, SectionId>> expected_bounds =
-                std::pair { SectionId(10), SectionId(12) };
+                std::pair { SectionId(10), SectionId(21) };
             QCOMPARE(store.bounds(), expected_bounds);
 
             QVERIFY(store.erase_range(SectionId(10), SectionId(10)));
             QVERIFY(!store.contains(SectionId(10)));
             QVERIFY(store.erase_from(SectionId(12)));
             QVERIFY(!store.contains(SectionId(12)));
+            const std::optional<std::pair<SectionId, SectionId>> expected_rewound_range =
+                std::pair { SectionId(10), SectionId(12) };
+            QCOMPARE(store.committed_range(), expected_rewound_range);
         }
 
         {
             HotSectionStore reopened(path);
             QCOMPARE(reopened.get(SectionId(11)), std::optional<std::string>("section-11"));
+            const std::optional<std::pair<SectionId, SectionId>> expected_committed_range =
+                std::pair { SectionId(10), SectionId(12) };
+            QCOMPARE(reopened.committed_range(), expected_committed_range);
             QVERIFY(reopened.clear());
             QVERIFY(!reopened.contains(SectionId(11)));
             QVERIFY(!reopened.bounds().has_value());
+            QVERIFY(!reopened.committed_range().has_value());
         }
 
         std::filesystem::remove_all(dir);

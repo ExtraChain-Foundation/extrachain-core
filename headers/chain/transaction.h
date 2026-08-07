@@ -105,7 +105,8 @@ enum class TransactionProveError {
     BigReward,
     TooOften,
     InvalidContractPayload,
-    ContractDependencyMissing
+    ContractDependencyMissing,
+    AdmissionBusy
 };
 
 /**

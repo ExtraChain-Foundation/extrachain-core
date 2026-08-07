@@ -20,6 +20,7 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -312,6 +313,9 @@ BOOST_DESCRIBE_STRUCT(DagControlRangeResponse, (), (from, to, controls))
  */
 class Dag {
 public:
+    using AdmissionCompletion =
+        std::function<void(std::expected<void, TransactionProveError> result, bool should_forward)>;
+
     /**
      * @brief Construct a new Dag object
      *
@@ -460,6 +464,10 @@ public:
      */
     std::expected<void, TransactionProveError> network_transaction(const Transaction &transaction,
                                                                    const Responder   &responder);
+    bool                                       submit_network_transaction(const Transaction  &transaction,
+                                                                          const Responder    &responder,
+                                                                          AdmissionCompletion completion);
+    void                                       flush_admission();
 
     /**
      * @brief Process a transaction validation result from the network
@@ -696,6 +704,16 @@ public:
     bool is_accepting_messages() const;
 
 private:
+    struct AdmissionState;
+    std::shared_ptr<AdmissionState> admission_state_;
+
+    static std::shared_ptr<AdmissionState> create_admission_state(Dag *owner);
+    static bool                            is_admission_worker();
+    void                                   set_admission_accepting(bool accepting);
+
+    std::expected<void, TransactionProveError> network_transaction_immediate(const Transaction &transaction,
+                                                                             const Responder   &responder);
+
     ExtraChainNode                                       *node;               // Parent node reference
     TransactionCache                                      transaction_cache_; // Transaction cache for fast lookups
     std::unordered_map<std::string, Transaction>          sended_transactions_; // Transactions sent but not yet
@@ -889,7 +907,10 @@ public:
      * @param transactions The set of transactions in the current section
      * @return TransactionProveError Error code or NoError if valid
      */
-    TransactionProveError prove_transaction(const Transaction &tx, const std::set<Transaction> &transactions);
+    TransactionProveError prove_transaction(const Transaction           &tx,
+                                            const std::set<Transaction> &transactions,
+                                            const std::set<Transaction> *pending_transactions = nullptr,
+                                            const SectionId             *validation_frontier  = nullptr);
 
     void clear_dag();
     void clear_dag_folder();

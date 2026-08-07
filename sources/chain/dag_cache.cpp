@@ -458,6 +458,10 @@ void DagCache::apply_live_transaction(const Transaction& transaction) {
     live_balance_section_ = transaction.section();
 }
 
+void DagCache::apply_transaction_delta(const Transaction& transaction, Balances& balances) {
+    process_transaction(transaction, balances);
+}
+
 void DagCache::invalidate_live_balances() {
     std::lock_guard lock(live_balance_mutex_);
     live_balances_.clear();

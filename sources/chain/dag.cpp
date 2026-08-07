@@ -167,6 +167,12 @@ Dag::Dag(ExtraChainNode *node)
 
     // The section stores are authoritative. Repair a stale or missing range
     // file after a stop between the section commit and the range-file update.
+    if (const auto committed = hot_section_store_->committed_range(); committed.has_value()) {
+        if (first_saved_section_ == SectionId(-1) || committed->first < first_saved_section_)
+            first_saved_section_ = committed->first;
+        if (committed->second > current_section_)
+            current_section_ = committed->second;
+    }
     if (const auto bounds = hot_section_store_->bounds(); bounds.has_value()) {
         if (first_saved_section_ == SectionId(-1) || bounds->first < first_saved_section_)
             first_saved_section_ = bounds->first;
@@ -225,6 +231,8 @@ Dag::Dag(ExtraChainNode *node)
     // didn't pack out-of-order completions). Sweep them on startup.
     try_pack_hot();
 
+    admission_state_ = create_admission_state(this);
+
     // Automatically start so existing callers get the previous default lifecycle.
     // Callers that want explicit control can stop()/start() around migration etc.
     start();
@@ -232,6 +240,7 @@ Dag::Dag(ExtraChainNode *node)
 
 Dag::~Dag() {
     stop();
+    admission_state_.reset();
     cache_.dag = nullptr;
     timer_sync_->deleteLater();
 }
@@ -243,6 +252,7 @@ void Dag::start() {
         return;
     }
     accepting_messages_.store(true);
+    set_admission_accepting(true);
 
 #ifndef IS_APP_CLIENT
     this->set_status(DagStatus::Ready);
@@ -256,9 +266,12 @@ void Dag::stop() {
     // would otherwise race against a late callback.
     bool was_started = started_.exchange(false);
     accepting_messages_.store(false);
+    set_admission_accepting(false);
     if (!was_started) {
         return;
     }
+
+    flush_admission();
 
     if (chain_index_enabled_ && chain_index_)
         chain_index_->flush();
@@ -419,8 +432,8 @@ std::expected<Transaction, TransactionError> Dag::send_transaction(const Transac
     return tx;
 }
 
-std::expected<void, TransactionProveError> Dag::network_transaction(const Transaction &transaction,
-                                                                    const Responder   &responder) {
+std::expected<void, TransactionProveError> Dag::network_transaction_immediate(const Transaction &transaction,
+                                                                              const Responder   &responder) {
     if (status_ != DagStatus::Final) {
         /*
         bool sync_timeout = false;
@@ -813,6 +826,8 @@ bool Dag::exists_section_file(const SectionId &section_id) const {
 }
 
 std::optional<bool> Dag::write_section(const Section &section) {
+    if (!is_admission_worker())
+        flush_admission();
     try {
         {
             std::unique_lock<std::shared_mutex> lock(section_mutex_);
@@ -823,7 +838,12 @@ std::optional<bool> Dag::write_section(const Section &section) {
 
             auto serialized = Json::serialize(section);
             if (hot_section_store_ && hot_section_store_->is_open()) {
-                if (!hot_section_store_->put(section.id, serialized)) {
+                std::optional<std::pair<SectionId, SectionId>> committed_range;
+                if (first_saved_section_ >= SectionId(0) && section.id >= SectionId(0)) {
+                    committed_range = std::pair { std::min(first_saved_section_, section.id),
+                                                  std::max(current_section_, section.id) };
+                }
+                if (!hot_section_store_->commit_batch({ { section.id, serialized } }, committed_range)) {
                     return std::nullopt;
                 }
             } else {
@@ -1197,7 +1217,10 @@ std::optional<std::pair<SectionId, SectionId>> Dag::save_transactions(const std:
     return std::make_pair(min_section, max_section);
 }
 
-TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::set<Transaction> &) {
+TransactionProveError Dag::prove_transaction(const Transaction &tx,
+                                             const std::set<Transaction> &,
+                                             const std::set<Transaction> *pending_transactions,
+                                             const SectionId             *validation_frontier) {
     // Check Genesis transactions
     if (tx.type() == TransactionType::Genesis) {
         if (tx.section() != SectionId(0)) {
@@ -1227,13 +1250,9 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::NoError;
     }
 
-    // Verify previous section exists
-    auto section = this->read_section(SectionId(tx.section() - 1));
-    if (section.has_value()) {
-        // TODO: Additional section validation could be added here
-    }
-
-    if ((current_section_ - tx.section()).abs() > 15) {
+    // Keep the same bounded admission window for the stored or staged frontier.
+    const auto current = validation_frontier != nullptr ? *validation_frontier : current_section_;
+    if ((current - tx.section()).abs() > 15) {
         return TransactionProveError::TooSectionDiff;
     }
 
@@ -1273,11 +1292,13 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
 
     // Reject replays: the hash commits to the section, so a valid tx can only
     // live in its own section — a matching hash already stored there is a dup.
-    const bool indexed_section = mode_ == DagMode::Full && chain_index_enabled_ && chain_index_
-                                 && chain_index_->derived_index_ready()
-                                 && chain_index_->last_indexed_section() >= tx.section();
-    const bool duplicate = indexed_section ? chain_index_->contains_hash(tx.section(), tx.hash())
-                                           : find_transaction(tx.section(), tx.hash()).has_value();
+    const bool pending_duplicate =
+        pending_transactions != nullptr && std::ranges::any_of(*pending_transactions, [&](const auto &pending) {
+            return pending.hash() == tx.hash();
+        });
+    const bool duplicate =
+        pending_duplicate
+        || (tx.section() <= current_section_ && find_transaction(tx.section(), tx.hash()).has_value());
     if (duplicate) {
         return TransactionProveError::Duplicate;
     }
@@ -1449,6 +1470,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
     std::vector<ActorId> actor_ids = { targetSender };
     BigNumberFloat       senderBalance =
         calculate_actors_balance(actor_ids, tx.section())[std::pair { targetSender, token }];
+    if (pending_transactions != nullptr && !pending_transactions->empty()) {
+        Balances balances { { std::pair { targetSender, token }, senderBalance } };
+        for (const auto &pending : *pending_transactions) {
+            if (pending.section() <= tx.section())
+                cache_.apply_transaction_delta(pending, balances);
+        }
+        senderBalance = balances[std::pair { targetSender, token }];
+    }
     BigNumberFloat transactionAmount = tx.amount();
 
     // Check if the sender has sufficient balance
