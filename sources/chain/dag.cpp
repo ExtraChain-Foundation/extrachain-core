@@ -992,13 +992,14 @@ TransactionProveError Dag::prove_transaction(const Transaction &tx, const std::s
         return TransactionProveError::WrongHash;
     }
 
-    // Check for duplicate transaction
-    auto tx_result = this->search_duplicate_by_hash(tx_copy.hash());
-    if (tx_result.has_value()) {
-        // TODO
-        // if (tx == tx_result.value()) {
-        // }
-        return TransactionProveError::Duplicate;
+    // Check for duplicate transaction. The section id is part of the tx hash, so a
+    // duplicate can only live in its own section — and that section's transactions
+    // are already loaded and passed in here. No chain scan needed (the old
+    // search_duplicate_by_hash walked and JSON-parsed up to 100 sections per tx).
+    for (const auto &existing : transactions) {
+        if (existing.hash() == tx_copy.hash()) {
+            return TransactionProveError::Duplicate;
+        }
     }
 
     // Validate sender
@@ -1340,8 +1341,8 @@ void Dag::start_sync() {
 }
 
 void Dag::start_check() {
-    // temp
 #ifndef IS_APP_CLIENT
+    // temp
     if (status_ == DagStatus::Ready) {
         return;
     }
@@ -2105,6 +2106,7 @@ void Dag::handle_sync_request() {
 
     auto last_block  = this->read_section(current_section_);
     auto sync_index  = last_block.has_value() ? last_block->id + 1 : SectionId(0);
+
     sync_last_index_ = nodes_by_block.front().second;
 
     if (need_recontrol && mode_ == DagMode::Full) {
