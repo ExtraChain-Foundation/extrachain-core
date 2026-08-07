@@ -10,3 +10,4 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 extrachain-contract-sdk = { path = "../sdk" }
+extrachain-contract-components = { path = "../components" }

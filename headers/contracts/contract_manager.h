@@ -13,6 +13,7 @@
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "contracts/contract_types.h"
 #include "contracts/wasm_runtime.h"
@@ -75,7 +76,8 @@ namespace ExtraChain::Contracts {
             std::string_view              sender_id,
             std::string_view              method,
             std::span<const std::uint8_t> arguments,
-            std::uint64_t                 block);
+            std::uint64_t                 block,
+            const VerifiedInputs         &verified = {});
 
         [[nodiscard]] std::expected<PreparedContractChange, ContractFailure> prepare_upgrade(
             std::string_view              contract_id,
@@ -125,9 +127,26 @@ namespace ExtraChain::Contracts {
             std::string_view              method,
             std::span<const std::uint8_t> arguments,
             std::span<const std::uint8_t> state,
-            std::uint64_t                 block) const;
+            std::uint64_t                 block,
+            std::string_view              contract_id = {},
+            std::string_view              caller      = {},
+            const VerifiedInputs         &verified    = {},
+            std::uint32_t                 depth       = 0) const;
 
     private:
+        [[nodiscard]] std::expected<PreparedContractChange, ContractFailure> prepare_call_unlocked(
+            std::string_view                 contract_id,
+            std::string_view                 sender_id,
+            std::string_view                 caller_id,
+            std::string_view                 method,
+            std::span<const std::uint8_t>    arguments,
+            std::uint64_t                    block,
+            std::uint32_t                    depth,
+            std::vector<std::string>        &stack,
+            std::unordered_set<std::string> &touched,
+            std::uint32_t                   &call_count,
+            const VerifiedInputs            &verified);
+
         [[nodiscard]] std::expected<StateRevision, ContractFailure> revision(const ContractOutput &output,
                                                                              const StateRevision  *previous,
                                                                              std::uint64_t         block,

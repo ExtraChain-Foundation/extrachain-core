@@ -206,12 +206,14 @@ namespace ExtraChain::Contracts {
             }
             const auto parsed = Json::deserialize<ToolchainManifest>(
                 std::string(reinterpret_cast<const char*>(content->data()), content->size()));
-            if (!parsed.has_value() || parsed->schema != 1 || parsed->release_sequence == 0
+            if (!parsed.has_value() || parsed->schema != 2 || parsed->release_sequence == 0
                 || parsed->channel != "stable" || parsed->version.empty() || parsed->rust_version.empty()
-                || parsed->sdk_version.empty() || parsed->contract_abi != std::to_string(ContractAbiVersion)
-                || parsed->created == 0 || parsed->packages.empty() || parsed->core_min.empty()
-                || parsed->core_max.empty() || !version_parts(parsed->version).has_value()
-                || !version_parts(parsed->core_min).has_value() || !version_parts(parsed->core_max).has_value()
+                || parsed->sdk_version.empty() || parsed->components_version.empty()
+                || parsed->catalog_version.empty() || parsed->template_version.empty()
+                || parsed->contract_abi != std::to_string(ContractAbiVersion) || parsed->created == 0
+                || parsed->packages.empty() || parsed->core_min.empty() || parsed->core_max.empty()
+                || !version_parts(parsed->version).has_value() || !version_parts(parsed->core_min).has_value()
+                || !version_parts(parsed->core_max).has_value()
                 || *version_parts(parsed->core_min) > *version_parts(parsed->core_max)
                 || std::ranges::any_of(parsed->packages, [](const ToolchainPackage& package) {
                        return !valid_package(package);
@@ -313,9 +315,10 @@ namespace ExtraChain::Contracts {
 
     std::expected<void, ToolchainFailure> ToolchainRegistry::publish_manifest(
         const ToolchainManifest& value) const {
-        if (node_ == nullptr || node_->dfs() == nullptr || value.schema != 1 || value.release_sequence == 0
+        if (node_ == nullptr || node_->dfs() == nullptr || value.schema != 2 || value.release_sequence == 0
             || value.channel != "stable" || value.version.empty() || value.rust_version.empty()
-            || value.sdk_version.empty() || value.contract_abi != std::to_string(ContractAbiVersion)
+            || value.sdk_version.empty() || value.components_version.empty() || value.catalog_version.empty()
+            || value.template_version.empty() || value.contract_abi != std::to_string(ContractAbiVersion)
             || value.created == 0 || value.packages.empty() || !version_parts(value.version).has_value()
             || !version_parts(value.core_min).has_value() || !version_parts(value.core_max).has_value()
             || *version_parts(value.core_min) > *version_parts(value.core_max)

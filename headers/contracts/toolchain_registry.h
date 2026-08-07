@@ -39,12 +39,15 @@ namespace ExtraChain::Contracts {
                           (platform, architecture, archive_format, file_name, file_id, hash, size))
 
     struct ToolchainManifest {
-        std::uint32_t                 schema           = 1;
+        std::uint32_t                 schema           = 2;
         std::uint64_t                 release_sequence = 0;
         std::string                   channel          = "stable";
         std::string                   version;
         std::string                   rust_version;
         std::string                   sdk_version;
+        std::string                   components_version;
+        std::string                   catalog_version;
+        std::string                   template_version;
         std::string                   contract_abi;
         std::string                   core_min;
         std::string                   core_max;
@@ -60,6 +63,9 @@ namespace ExtraChain::Contracts {
                            version,
                            rust_version,
                            sdk_version,
+                           components_version,
+                           catalog_version,
+                           template_version,
                            contract_abi,
                            core_min,
                            core_max,
@@ -110,6 +116,16 @@ namespace ExtraChain::Contracts {
         QString           path;
     };
 
+    struct ContractComponent {
+        std::string              id;
+        std::string              name;
+        std::string              description;
+        std::string              category;
+        std::string              rust_import;
+        std::vector<std::string> dependencies;
+    };
+    BOOST_DESCRIBE_STRUCT(ContractComponent, (), (id, name, description, category, rust_import, dependencies))
+
     class EXTRACHAIN_EXPORT ToolchainInstaller {
     public:
         ToolchainInstaller(ExtraChainNode* node, QString root_path);
@@ -119,6 +135,10 @@ namespace ExtraChain::Contracts {
         std::expected<QString, ToolchainFailure>               build_contract(const QString& source,
                                                                               const QString& project_name,
                                                                               int            timeout_ms = 120000) const;
+        [[nodiscard]] std::vector<ContractComponent>           component_catalog() const;
+        [[nodiscard]] std::expected<QString, ToolchainFailure> compose_contract(
+            std::span<const std::string> component_ids,
+            const QString&               project_name) const;
 
     private:
         ExtraChainNode* node_;

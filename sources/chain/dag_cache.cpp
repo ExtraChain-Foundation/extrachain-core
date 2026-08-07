@@ -838,7 +838,7 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
 
     const auto metadata = Json::deserialize<ContractTransactionData>(*transaction.meta());
     const auto section  = transaction.section().to_int();
-    if (!metadata.has_value() || !section.has_value() || metadata->schema != 2 || metadata->kind.empty()
+    if (!metadata.has_value() || !section.has_value() || metadata->schema != 3 || metadata->kind.empty()
         || metadata->version == 0 || metadata->revision == 0) {
         return;
     }
@@ -887,6 +887,35 @@ void DagCache::index_contract_transaction(const Transaction& transaction) {
     }
     summary.replay_depth = summary.revision - summary.checkpoint_revision;
     cache_db_->replace("contract_catalog", Utils::to_dbrow(summary));
+
+    for (const auto& transition : metadata->transitions) {
+        auto rows = cache_db_->select("SELECT * FROM contract_catalog WHERE contract_id = ?",
+                                      "contract_catalog",
+                                      { { "contract_id", transition.contract_id } });
+        if (rows.empty()) {
+            continue;
+        }
+        auto nested = Utils::from_dbrow<ExtraChain::Contracts::ContractSummary>(rows.front());
+        if (!nested.has_value() || transition.revision <= nested->revision
+            || transition.previous_state_hash != nested->state_hash) {
+            continue;
+        }
+        nested->kind             = transition.kind;
+        nested->version          = transition.version;
+        nested->revision         = transition.revision;
+        nested->module_hash      = transition.module_hash;
+        nested->state_hash       = transition.state_hash;
+        nested->transaction_hash = transaction.hash();
+        nested->section          = static_cast<std::uint64_t>(*section);
+        if (transition.checkpoint) {
+            nested->checkpoint_revision         = transition.revision;
+            nested->checkpoint_section          = nested->section;
+            nested->checkpoint_state_hash       = transition.state_hash;
+            nested->checkpoint_transaction_hash = transaction.hash();
+        }
+        nested->replay_depth = nested->revision - nested->checkpoint_revision;
+        cache_db_->replace("contract_catalog", Utils::to_dbrow(*nested));
+    }
 }
 
 ExtraChain::Contracts::ContractCatalogPage DagCache::list_contracts(

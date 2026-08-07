@@ -5,10 +5,14 @@
 #include "exc_internal.h"
 
 #include <span>
+#include <string_view>
 
 #include <boost/describe.hpp>
 
+#include <QStandardPaths>
+
 #include "contracts/contract_manager.h"
+#include "contracts/toolchain_registry.h"
 #include "managers/extrachain_node.h"
 #include "utils/exc_utils.h"
 
@@ -66,6 +70,11 @@ namespace {
         case ContractError::ExecutionFailed:
         case ContractError::StateTooLarge:
         case ContractError::TooManyEvents:
+        case ContractError::TooManyEffects:
+        case ContractError::TooManyProofs:
+        case ContractError::CallDepthExceeded:
+        case ContractError::CallCycle:
+        case ContractError::InvalidProof:
             return EXC_ERR_CONTRACT_EXECUTION;
         }
         return EXC_ERR_UNKNOWN;
@@ -235,6 +244,58 @@ EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json) 
         *out_json = exc_strdup(Json::serialize(summary));
     });
     return ok ? result : EXC_ERR_DISPATCH_FAILED;
+}
+
+EXC_API ExcError exc_contract_components(char** out_json) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    (void)out_json;
+    return EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE;
+#else
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(out_json);
+    *out_json = nullptr;
+    bool ok   = dispatch_sync([&]() {
+        const auto root =
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/contract-toolchain";
+        const ExtraChain::Contracts::ToolchainInstaller installer(GlobalState::instance().node, root);
+        *out_json = exc_strdup(Json::serialize(installer.component_catalog()));
+    });
+    return ok && *out_json != nullptr ? EXC_OK : EXC_ERR_DISPATCH_FAILED;
+#endif
+}
+
+EXC_API ExcError exc_contract_compose(const char* project_name,
+                                      const char* component_ids_json,
+                                      char**      out_source) {
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    (void)project_name;
+    (void)component_ids_json;
+    (void)out_source;
+    return EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE;
+#else
+    EXC_CHECK_NODE();
+    EXC_CHECK_NULL(project_name);
+    EXC_CHECK_NULL(component_ids_json);
+    EXC_CHECK_NULL(out_source);
+    *out_source              = nullptr;
+    const auto component_ids = Json::deserialize<std::vector<std::string>>(std::string_view(component_ids_json));
+    if (!component_ids.has_value() || component_ids->empty()) {
+        return EXC_ERR_INVALID_ARGUMENT;
+    }
+    ExcError   result = EXC_OK;
+    const bool ok     = dispatch_sync([&]() {
+        const auto root =
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/contract-toolchain";
+        const ExtraChain::Contracts::ToolchainInstaller installer(GlobalState::instance().node, root);
+        const auto source = installer.compose_contract(*component_ids, QString::fromUtf8(project_name));
+        if (!source.has_value()) {
+            result = EXC_ERR_CONTRACT_INVALID_ARGUMENT;
+            return;
+        }
+        *out_source = exc_strdup(source->toStdString());
+    });
+    return ok ? result : EXC_ERR_DISPATCH_FAILED;
+#endif
 }
 
 } // extern "C"

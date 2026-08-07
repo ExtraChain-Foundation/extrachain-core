@@ -97,6 +97,14 @@ namespace {
         return result;
     }
 
+    Bytes string_pair_argument(std::string_view first, std::string_view second) {
+        Bytes result;
+        append_array(result, 2);
+        append_string(result, first);
+        append_string(result, second);
+        return result;
+    }
+
     Bytes transfer_from_argument(std::string_view owner, std::string_view receiver, std::uint64_t amount) {
         Bytes result;
         append_array(result, 3);
@@ -122,12 +130,19 @@ namespace {
                   std::span<const std::uint8_t> state) {
         Bytes result;
         append_array(result, 6);
+        append_array(result, 5);
         append_string(result, sender);
+        append_string(result, sender);
+        append_string(result, "test-contract");
+        append_unsigned(result, 1);
+        append_unsigned(result, 0);
         append_string(result, method);
         append_binary(result, arguments);
         append_binary(result, state);
-        append_unsigned(result, 1);
-        append_unsigned(result, 1);
+        append_array(result, 2);
+        append_array(result, 0);
+        append_array(result, 0);
+        append_unsigned(result, 2);
         return result;
     }
 
@@ -246,7 +261,7 @@ namespace {
 
     Response response(std::span<const std::uint8_t> source) {
         Reader reader(source);
-        if (reader.array() != 5) {
+        if (reader.array() != 6) {
             throw std::runtime_error("Invalid contract response");
         }
         Response result { .ok = reader.boolean(), .state = reader.binary(), .data = reader.binary() };
@@ -255,6 +270,16 @@ namespace {
             if (reader.array() != 2) {
                 throw std::runtime_error("Invalid contract event");
             }
+            static_cast<void>(reader.string());
+            static_cast<void>(reader.binary());
+        }
+        auto effects = reader.array();
+        for (std::size_t index = 0; index < effects; ++index) {
+            if (reader.array() != 4) {
+                throw std::runtime_error("Invalid contract effect");
+            }
+            static_cast<void>(reader.string());
+            static_cast<void>(reader.string());
             static_cast<void>(reader.string());
             static_cast<void>(reader.binary());
         }
@@ -507,6 +532,35 @@ namespace {
                 "ContractManager did not remove the redeemed message from contract state");
         auto replay = manager.call("claim-contract", "bob", "redeem", unsigned_argument(1), 5);
         require(!replay.has_value(), "ContractManager allowed a second redeem");
+
+        auto target = manager.deploy("target-contract", "alice", "message-claim", message_module, {}, 6);
+        require(target.has_value(), "ContractManager target deploy failed");
+        auto forwarded = manager.call("claim-contract",
+                                      "alice",
+                                      "forward_store",
+                                      string_pair_argument("target-contract", "atomic"),
+                                      7);
+        require(forwarded.has_value(), "ContractManager cross-contract call failed");
+        const auto root_record   = manager.inspect("claim-contract");
+        const auto target_record = manager.inspect("target-contract");
+        require(root_record.has_value() && target_record.has_value()
+                    && root_record->versions.back().revisions.back().revision == 5
+                    && target_record->versions.back().revisions.back().revision == 2
+                    && contains_text(root_record->versions.back().revisions.back().state, "atomic")
+                    && contains_text(target_record->versions.back().revisions.back().state, "atomic"),
+                "ContractManager did not commit the complete call graph");
+        const auto forwarded_owner =
+            manager.query("target-contract", "alice", "owner_of", unsigned_argument(1), 7);
+        require(forwarded_owner.has_value(), "Cross-contract token owner query failed");
+        Reader forwarded_owner_reader(forwarded_owner->data);
+        require(forwarded_owner_reader.string() == "claim-contract",
+                "Cross-contract call used the original sender as direct authority");
+        auto cycle = manager.call("claim-contract",
+                                  "alice",
+                                  "forward_store",
+                                  string_pair_argument("claim-contract", "cycle"),
+                                  8);
+        require(!cycle.has_value(), "ContractManager accepted a contract call cycle");
     }
 
     void test_checkpoint_schedule(const Bytes &fungible_module) {

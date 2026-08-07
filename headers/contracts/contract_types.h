@@ -20,8 +20,13 @@
 
 namespace ExtraChain::Contracts {
 
-    inline constexpr std::uint32_t ContractAbiVersion         = 1;
+    inline constexpr std::uint32_t ContractAbiVersion         = 2;
     inline constexpr std::uint64_t ContractCheckpointInterval = 256;
+    inline constexpr std::uint32_t ContractMaximumCallDepth   = 8;
+    inline constexpr std::uint32_t ContractMaximumCalls       = 32;
+    inline constexpr std::uint32_t ContractMaximumEvents      = 64;
+    inline constexpr std::uint32_t ContractMaximumEffects     = 64;
+    inline constexpr std::uint32_t ContractMaximumProofs      = 64;
 
     struct ExecutionLimits {
         std::size_t   module_bytes        = 2 * 1024 * 1024;
@@ -62,11 +67,51 @@ namespace ExtraChain::Contracts {
         std::vector<std::uint8_t> data;
     };
 
+    struct DagProof {
+        std::string   transaction_hash;
+        std::uint64_t section       = 0;
+        std::uint64_t confirmations = 0;
+    };
+    BOOST_DESCRIBE_STRUCT(DagProof, (), (transaction_hash, section, confirmations))
+
+    struct DfsProof {
+        std::string file_id;
+        std::string owner_id;
+        std::string content_hash;
+    };
+    BOOST_DESCRIBE_STRUCT(DfsProof, (), (file_id, owner_id, content_hash))
+
+    struct VerifiedInputs {
+        std::vector<DagProof> dag;
+        std::vector<DfsProof> dfs;
+    };
+    BOOST_DESCRIBE_STRUCT(VerifiedInputs, (), (dag, dfs))
+
+    struct ExecutionContext {
+        std::string   sender;
+        std::string   caller;
+        std::string   contract_id;
+        std::uint64_t block = 0;
+        std::uint32_t depth = 0;
+    };
+
+    enum class ContractEffectKind {
+        ContractCall
+    };
+
+    struct ContractEffect {
+        ContractEffectKind        kind = ContractEffectKind::ContractCall;
+        std::string               target;
+        std::string               operation;
+        std::vector<std::uint8_t> arguments;
+    };
+
     struct ContractOutput {
         bool                       ok = false;
         std::vector<std::uint8_t>  state;
         std::vector<std::uint8_t>  data;
         std::vector<ContractEvent> events;
+        std::vector<ContractEffect> effects;
         std::optional<std::string> error;
     };
 
@@ -164,6 +209,11 @@ namespace ExtraChain::Contracts {
         ExecutionFailed,
         StateTooLarge,
         TooManyEvents,
+        TooManyEffects,
+        TooManyProofs,
+        CallDepthExceeded,
+        CallCycle,
+        InvalidProof,
         Conflict,
         StorageError,
         UpgradeDenied
@@ -197,6 +247,7 @@ namespace ExtraChain::Contracts {
         std::uint32_t      expected_version = 0;
         std::string        expected_state_hash;
         bool               checkpoint = false;
+        std::vector<PreparedContractChange> children;
     };
 
 } // namespace ExtraChain::Contracts
