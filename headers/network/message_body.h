@@ -190,9 +190,16 @@ struct CustomMessage {
     MSGPACK_DEFINE(owner, data)
 };
 
-inline std::string generate_message_id() {
-    std::string message_id = Utils::calculate_hash(std::to_string(QDateTime::currentSecsSinceEpoch())
-                                                   + std::to_string(QRandomGenerator::global()->bounded(100000)))
+inline std::string generate_message_id(const std::string& body = std::string()) {
+    // Seconds + bounded(100000) gave only 100k distinct ids per second NETWORK-WIDE;
+    // two different messages colliding meant the second one was silently dropped by
+    // the receive dedup on every node (lost transactions under load). Mixing the
+    // message body makes a cross-content collision structurally impossible, and
+    // msecs + 64-bit random keep ids unique even for identical bodies. The wire
+    // format stays the same 15-hex id.
+    std::string message_id = Utils::calculate_hash(body
+                                                   + std::to_string(QDateTime::currentMSecsSinceEpoch())
+                                                   + std::to_string(QRandomGenerator::global()->generate64()))
                                  .substr(0, 15);
     return message_id;
 }
@@ -211,7 +218,7 @@ inline MessageBody make_init_message(const std::string& data,
     MessageBody message = { .send_type      = send_type,
                             .message_type   = type,
                             .status         = status,
-                            .message_id     = !to_message_id.empty() ? to_message_id : generate_message_id(),
+                            .message_id     = !to_message_id.empty() ? to_message_id : generate_message_id(data),
                             .sender_id      = sender,
                             .init_sender_id = sender,
                             .init_sender_identifier = sender_identifier,
