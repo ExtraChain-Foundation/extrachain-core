@@ -2695,6 +2695,12 @@ std::vector<ActorId> DfsController::startup_sync_actors() const {
         actors.insert(actor_id);
     }
 
+    // The chat actor owns the chat list, invites and chat vectors; without it the
+    // Light-mode filter drops its dirs rows and chats never appear on a clean profile.
+    if (auto chat_actor = node->account_controller()->chat_actor(); chat_actor.has_value()) {
+        actors.insert(chat_actor->get().id());
+    }
+
     for (const auto& file_link : priority_file_link_) {
         actors.insert(file_link.owner_id);
     }
