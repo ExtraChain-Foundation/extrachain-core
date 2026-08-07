@@ -178,11 +178,11 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
-#ifndef IS_APP_CLIENT
-    if (!node->is_client_application())
-        return;
-#endif
-
+    // Full nodes also re-dial their uplink: without this a node that loses its
+    // socket stays isolated until some peer happens to dial in, and files added
+    // elsewhere never replicate to it. The reconnection() slot guards against a
+    // node whose first_node points at itself (the network seed), so enabling the
+    // timer here is safe for every role.
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
@@ -201,8 +201,37 @@ void NetworkManager::go_offline() {
     eWarning("[NetworkManager] offline mode: all connections closed, reconnects disabled");
 }
 
+bool NetworkManager::is_own_address(const std::string& ip) const {
+    if (ip.empty()) {
+        return false;
+    }
+    QHostAddress target(QString::fromStdString(ip));
+    if (target.isNull()) {
+        return false;
+    }
+    // A first_node equal to one of this host's own interface addresses means this
+    // node is the seed. Loopback is deliberately NOT treated as "self" here: on a
+    // single-host test mesh several nodes share 127.0.0.x and must still dial each
+    // other; a genuine self-loop there is caught by the network-id check instead.
+    for (const QHostAddress& addr : QNetworkInterface::allAddresses()) {
+        if (addr.isLoopback()) {
+            continue;
+        }
+        if (addr.isEqual(target, QHostAddress::TolerantConversion)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void NetworkManager::reconnection() {
     if (offline_) {
+        return;
+    }
+    // Do not dial ourselves: the network seed's first_node resolves to one of this
+    // host's own listening addresses. A self-connection would pass the handshake
+    // (matching network id) and loop, so skip re-dial entirely for the seed.
+    if (ws_server_ != nullptr && ws_server_->isListening() && is_own_address(first_node_)) {
         return;
     }
     if (this->node->account_controller()->empty()) {
