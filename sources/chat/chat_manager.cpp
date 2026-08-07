@@ -127,7 +127,11 @@ ChatManager::ChatManager(ExtraChainNode* node)
                                              if (verify.has_value() && verify.value()) {
                                                  chat.peer_per_chat       = join->per_chat;
                                                  chat.peer_bind_signature = join->bind_signature;
-                                                 this->update_chat_in_mychats(chat);
+                                                 auto updated = this->update_chat_in_mychats(chat);
+                                                 if (!updated.has_value()) {
+                                                     eWarning("[Chat] Failed to persist peer key for {}",
+                                                              chat.file_id);
+                                                 }
                                              }
                                          }
                                      }
@@ -179,8 +183,12 @@ std::expected<void, ChatError> ChatManager::activate() {
 
     // Broadcast chat_main to actor_index if not yet known (first activation in network).
     if (!node->actor_index()->exists(chat_actor_id)) {
-        node->actor_index()->store_new_actor(actor->get().to_public());
-        eLog("[Chat] activate: broadcast chat_main {}", chat_actor_id);
+        auto stored = node->actor_index()->store_new_actor(actor->get().to_public());
+        if (!stored.has_value()) {
+            eWarning("[Chat] activate: failed to store chat_main {}", chat_actor_id);
+        } else {
+            eLog("[Chat] activate: broadcast chat_main {}", chat_actor_id);
+        }
     }
 
     activated_ = true;
@@ -665,13 +673,12 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         }
 
         mark_chat_priority(chat.value());
-        chats.push_back(chat.value());
+        chats.push_back(std::move(chat).value());
     }
 
-    chats_ = chats;
+    chats_ = std::move(chats);
 
     retry_pending_invites();
-    chats = chats_;
 
     // From-scratch import: staged startup sync only pulls .dirs for network/priority/my
     // accounts — chat owner-actors (peers' per-chat actors) aren't included. Without their
@@ -691,7 +698,7 @@ std::expected<std::vector<Chat::Chat>, ChatError> ChatManager::read_chats() {
         }
     }
 
-    return chats;
+    return chats_;
 }
 
 std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_messages(const ActorId&     owner_id,
@@ -734,7 +741,7 @@ std::expected<std::vector<Chat::Message>, ChatError> ChatManager::read_chat_mess
         if (!message.has_value()) {
             continue;
         }
-        messages.push_back(message.value());
+        messages.push_back(std::move(message).value());
     }
 
     return messages;
@@ -1403,7 +1410,10 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
         return false;
     }
 
-    this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
+    auto invite_removed = this->node->dfs()->remove_stored_file(owner_id, dir_row.file_id);
+    if (!invite_removed.has_value()) {
+        eWarning("[Chat] Failed to remove processed invite {}:{}", owner_id, dir_row.file_id);
+    }
 
     // Join message — carries my per_chat public key + bind so sender learns who I am.
     auto chat_main_result = current_chat_actor();
@@ -1418,7 +1428,10 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
             auto message      = Chat::Message { .id      = Utils::generate_random_hex(6),
                                                 .actor   = my_per_chat.id(),
                                                 .message = message_data };
-            add_new_message(chat.owner_id, chat.file_id, message);
+            auto join_added = add_new_message(chat.owner_id, chat.file_id, message);
+            if (!join_added.has_value()) {
+                eWarning("[Chat] Failed to add Join message to {}:{}", chat.owner_id, chat.file_id);
+            }
         }
     }
 

@@ -37,6 +37,7 @@
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
 #include "chain/transaction.h"
+#include "chat/chat.h"
 #include "dfs/name_validator.h"
 #include "encryption/encryption_tools.h"
 #include "network/isocket_service.h"
@@ -333,6 +334,32 @@ private slots:
         QCOMPARE(decoded->data, message.data);
         QCOMPARE(decoded->nodes_identifiers_to_ignore, message.nodes_identifiers_to_ignore);
         QCOMPARE(decoded->calculate_hash(), message.calculate_hash());
+    }
+
+    void chatFolderSerializationRoundTrip() {
+        const Chat::ChatFolder folder { .id                = "work",
+                                        .name              = "Work",
+                                        .emoji             = "briefcase",
+                                        .chat_ids          = { "owner-a:file-a", "owner-b:file-b" },
+                                        .pinned_chat_ids   = { "owner-b:file-b" },
+                                        .include_types = std::vector<Chat::ChatType> { Chat::Dialogue,
+                                                                                      Chat::Group },
+                                        .excluded_chat_ids = { "owner-c:file-c" },
+                                        .unread_only       = true,
+                                        .muted             = false,
+                                        .color             = "blue",
+                                        .order             = 3 };
+
+        const auto serialized = Json::serialize(folder);
+        auto       decoded    = Json::deserialize<Chat::ChatFolder>(serialized);
+        QVERIFY(decoded.has_value());
+        QCOMPARE(decoded->id, folder.id);
+        QCOMPARE(decoded->name, folder.name);
+        QCOMPARE(decoded->chat_ids, folder.chat_ids);
+        QCOMPARE(decoded->pinned_chat_ids, folder.pinned_chat_ids);
+        QCOMPARE(decoded->include_types, folder.include_types);
+        QCOMPARE(decoded->excluded_chat_ids, folder.excluded_chat_ids);
+        QCOMPARE(decoded->order, folder.order);
     }
 
     // ----- Migration round-trip ----------------------------------------------

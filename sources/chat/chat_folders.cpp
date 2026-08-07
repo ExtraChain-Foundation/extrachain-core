@@ -131,7 +131,7 @@ bool ChatFolders::load_if_needed() {
     auto security_actor = Dfs::DataSecuritySelf { .my_actor = chat_actor_id };
     cache_.clear();
     // Freshest copy wins per folder id; older copies only fill missing ids.
-    std::set<std::string> seen;
+    std::unordered_set<std::string> seen;
     for (const auto& folder_row : storage) {
         auto rows = owner_->node->dfs()->read_dictionary_rows(chat_actor_id, folder_row.file_id,
                                                               security_actor);
@@ -147,7 +147,7 @@ bool ChatFolders::load_if_needed() {
                 continue;
             }
             seen.insert(key);
-            cache_.push_back(folder.value());
+            cache_.push_back(std::move(folder).value());
         }
     }
     std::sort(cache_.begin(), cache_.end(),
@@ -258,8 +258,9 @@ bool ChatFolders::set_chats(const std::string& folder_id, const std::vector<std:
     Chat::ChatFolder updated = *folder;
     updated.chat_ids         = chat_keys;
     // Keep pinned_chat_ids a subset of chat_ids.
+    const std::unordered_set<std::string> chat_ids(updated.chat_ids.begin(), updated.chat_ids.end());
     std::erase_if(updated.pinned_chat_ids, [&](const std::string& p) {
-        return std::find(updated.chat_ids.begin(), updated.chat_ids.end(), p) == updated.chat_ids.end();
+        return !chat_ids.contains(p);
     });
     return save(updated);
 }
@@ -354,6 +355,7 @@ std::vector<std::string> ChatFolders::chats_in_folder(const std::string& folder_
     }
 
     std::vector<std::string> result;
+    result.reserve(owner_->chats_.size());
     for (const auto& chat : owner_->chats_) {
         const std::string chatKey = chat.owner_id.to_string() + ":" + chat.file_id;
         if (excluded.contains(chatKey)) {
@@ -374,6 +376,7 @@ bool ChatFolders::set_order(const std::vector<std::string>& ordered_folder_ids) 
 
     // Snapshot first: save() re-sorts cache_ and would invalidate pointers into it.
     std::vector<Chat::ChatFolder> to_write;
+    to_write.reserve(ordered_folder_ids.size());
     for (std::size_t i = 0; i < ordered_folder_ids.size(); ++i) {
         auto* folder = find_in_cache(ordered_folder_ids[i]);
         if (!folder) {

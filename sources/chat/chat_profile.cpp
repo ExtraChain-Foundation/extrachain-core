@@ -167,10 +167,16 @@ std::expected<Chat::ChatProfileAvatar, ChatError> ChatProfile::upload_avatar(
     if (previous.has_value()) {
         const auto& old = previous.value();
         if (!old.full_id.empty() && old.full_id != avatar.full_id) {
-            owner_->node->dfs()->remove_stored_file(chat_actor_id, old.full_id);
+            auto removed = owner_->node->dfs()->remove_stored_file(chat_actor_id, old.full_id);
+            if (!removed.has_value()) {
+                eWarning("[ChatProfile] Failed to remove old full avatar {}", old.full_id);
+            }
         }
         if (!old.mini_id.empty() && old.mini_id != avatar.mini_id) {
-            owner_->node->dfs()->remove_stored_file(chat_actor_id, old.mini_id);
+            auto removed = owner_->node->dfs()->remove_stored_file(chat_actor_id, old.mini_id);
+            if (!removed.has_value()) {
+                eWarning("[ChatProfile] Failed to remove old mini avatar {}", old.mini_id);
+            }
         }
     }
     return avatar;
@@ -208,5 +214,5 @@ std::expected<Chat::ChatProfileAvatar, ChatProfileError> ChatProfile::read_avata
     if (!avatar.has_value()) {
         return std::unexpected(ChatProfileError::Invalid);
     }
-    return avatar.value();
+    return std::move(avatar).value();
 }
