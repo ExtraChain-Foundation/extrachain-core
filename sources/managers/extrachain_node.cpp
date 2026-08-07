@@ -27,8 +27,6 @@
 #endif
 
 #include <QJsonObject>
-#include <QByteArrayView>
-#include <QCryptographicHash>
 #include <QFile>
 #include <QThread>
 #include <sodium/core.h>
@@ -57,6 +55,7 @@
 #include "utils/thread_pool_boost.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
+#include "contracts/contract_hash.h"
 #include "contracts/contract_transaction.h"
 #include "contracts/dfs_contract_storage.h"
 #include "contracts/toolchain_registry.h"
@@ -65,13 +64,6 @@
 std::atomic<bool> node_enabled { true };
 
 namespace {
-    std::string contract_content_hash(std::span<const std::uint8_t> value) {
-        QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
-        hasher.addData(
-            QByteArrayView(reinterpret_cast<const char*>(value.data()), static_cast<qsizetype>(value.size())));
-        return hasher.result().toHex().toStdString();
-    }
-
     std::string contract_hash_prefix(std::string_view value) {
         return std::string(value.substr(0, std::min<std::size_t>(value.size(), 12)));
     }
@@ -83,7 +75,7 @@ namespace {
         }
         auto module = module_file.readAll();
         auto begin  = reinterpret_cast<const std::uint8_t*>(module.constData());
-        return contract_content_hash(std::span(begin, static_cast<std::size_t>(module.size())));
+        return ExtraChain::Contracts::content_hash(std::span(begin, static_cast<std::size_t>(module.size())));
     }
 
     std::vector<ContractTransitionData> contract_transitions(
@@ -1159,7 +1151,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     };
 
     auto verify_output = [&](const ExtraChain::Contracts::ContractOutput& output) -> TransactionProveError {
-        if (contract_content_hash(output.state) != metadata->state_hash
+    if (ExtraChain::Contracts::content_hash(output.state) != metadata->state_hash
             || ExtraChain::Contracts::Codec::effect_hash(output.effects) != metadata->effects_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
@@ -1193,7 +1185,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
         if (!module.has_value()) {
             return module.error();
         }
-        if (contract_content_hash(*module) != metadata->module_hash) {
+        if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
             return TransactionProveError::InvalidContractPayload;
         }
         if (metadata->kind == "fungible-token") {
@@ -1274,7 +1266,7 @@ TransactionProveError ExtraChainNode::validate_contract_transaction(const Transa
     if (!module.has_value()) {
         return module.error();
     }
-    if (contract_content_hash(*module) != metadata->module_hash) {
+    if (ExtraChain::Contracts::content_hash(*module) != metadata->module_hash) {
         return TransactionProveError::InvalidContractPayload;
     }
     auto authorization_arguments = ExtraChain::Contracts::Codec::encode_string(metadata->module_hash);

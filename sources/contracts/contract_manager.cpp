@@ -13,23 +13,14 @@
 #include <algorithm>
 #include <mutex>
 
-#include <QByteArrayView>
-#include <QCryptographicHash>
-
 #include "contracts/contract_codec.h"
+#include "contracts/contract_hash.h"
 
 namespace ExtraChain::Contracts {
     namespace {
 
         ContractFailure failure(ContractError error, std::string detail) {
             return { error, std::move(detail) };
-        }
-
-        std::string hash(std::span<const std::uint8_t> value) {
-            QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
-            hasher.addData(QByteArrayView(reinterpret_cast<const char *>(value.data()),
-                                          static_cast<qsizetype>(value.size())));
-            return hasher.result().toHex().toStdString();
         }
 
         const StateRevision &latest_revision(const ContractVersion &version) {
@@ -193,13 +184,13 @@ namespace ExtraChain::Contracts {
             .revision                    = next_revision,
             .block                       = block,
             .previous_hash               = previous == nullptr ? std::string() : previous->state_hash,
-            .state_hash                  = hash(output.state),
+            .state_hash                  = content_hash(output.state),
             .transaction_hash            = {},
             .author_id                   = author_id,
             .state                       = output.state,
             .checkpoint_revision         = make_checkpoint ? next_revision : previous->checkpoint_revision,
             .checkpoint_block            = make_checkpoint ? block : previous->checkpoint_block,
-            .checkpoint_hash             = make_checkpoint ? hash(output.state) : previous->checkpoint_hash,
+            .checkpoint_hash = make_checkpoint ? content_hash(output.state) : previous->checkpoint_hash,
             .checkpoint_transaction_hash = make_checkpoint ? std::string() : previous->checkpoint_transaction_hash,
             .checkpoint_storage_id       = make_checkpoint ? std::string() : previous->checkpoint_storage_id,
             .checkpoint_author_id = make_checkpoint ? std::string(author_id) : previous->checkpoint_author_id,
@@ -269,7 +260,7 @@ namespace ExtraChain::Contracts {
             .active_version = 1,
             .versions       = { ContractVersion {
                       .version              = 1,
-                      .module_hash          = hash(module),
+                      .module_hash          = content_hash(module),
                       .previous_module_hash = {},
                       .module               = { module.begin(), module.end() },
                       .revisions            = { std::move(*initial_revision) },
@@ -484,7 +475,7 @@ namespace ExtraChain::Contracts {
         }
         auto      &current                 = active_version(record);
         const auto previous                = latest_revision(current);
-        const auto new_module_hash         = hash(module);
+        const auto new_module_hash         = content_hash(module);
         auto       authorization_arguments = Codec::encode_string(new_module_hash);
         auto       authorization           = evaluate(current.module,
                                       sender_id,
@@ -514,13 +505,13 @@ namespace ExtraChain::Contracts {
             .revision             = previous.revision + 1,
             .block                = block,
             .previous_hash        = previous.state_hash,
-            .state_hash           = hash(migration->state),
+            .state_hash           = content_hash(migration->state),
             .transaction_hash     = {},
             .author_id            = std::string(sender_id),
             .state                = migration->state,
             .checkpoint_revision  = previous.revision + 1,
             .checkpoint_block     = block,
-            .checkpoint_hash      = hash(migration->state),
+            .checkpoint_hash      = content_hash(migration->state),
             .checkpoint_author_id = std::string(sender_id),
         };
         record.active_version += 1;

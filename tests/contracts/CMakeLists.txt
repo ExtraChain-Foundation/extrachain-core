@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 COMPONENTS Core REQUIRED)
 find_package(Boost CONFIG REQUIRED COMPONENTS describe json)
 find_package(msgpack-cxx CONFIG REQUIRED)
+find_package(blake3 CONFIG REQUIRED)
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/ExtraChainWamr.cmake)
 
 add_executable(extrachain-contract-tests
@@ -19,7 +20,7 @@ target_include_directories(extrachain-contract-tests PRIVATE
     ../../headers
     ../../../extrachain-3rdparty/msgpack/include)
 target_link_libraries(extrachain-contract-tests PRIVATE
-    Qt6::Core Boost::describe Boost::json msgpack-cxx extrachain-wamr)
+    Qt6::Core Boost::describe Boost::json msgpack-cxx BLAKE3::blake3 extrachain-wamr)
 if(UNIX AND NOT APPLE)
     target_link_options(extrachain-contract-tests PRIVATE "-Wl,-z,noexecstack")
 endif()

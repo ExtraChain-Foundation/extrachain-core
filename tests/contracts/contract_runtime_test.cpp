@@ -11,6 +11,7 @@
 #include "contracts/wasm_runtime.h"
 #include "contracts/contract_manager.h"
 #include "contracts/contract_codec.h"
+#include "contracts/contract_hash.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -647,6 +648,13 @@ namespace {
         require(!oversized.has_value(), "Oversized JSON arguments were accepted");
     }
 
+    void test_contract_hash() {
+        const Bytes value { 'a', 'b', 'c' };
+        require(ExtraChain::Contracts::content_hash(value)
+                    == "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d85",
+                "Contract content hash is not BLAKE3");
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -660,6 +668,7 @@ int main(int argc, char **argv) {
         auto message_module  = read_file(argv[2]);
         test_runtime_limits(runtime, fungible_module);
         test_worker_thread(runtime, message_module);
+        test_contract_hash();
         test_json_codec();
         test_fungible(runtime, fungible_module);
         test_message_claim(runtime, message_module);

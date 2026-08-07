@@ -12,14 +12,13 @@
 
 #include <algorithm>
 
-#include <QByteArrayView>
-#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QSaveFile>
 
 #include "chain/dag.h"
 #include "contracts/contract_codec.h"
+#include "contracts/contract_hash.h"
 #include "contracts/contract_transaction.h"
 #include <fmt/format.h>
 #include <msgpack.hpp>
@@ -76,13 +75,6 @@ namespace ExtraChain::Contracts {
 
         ContractFailure failure(ContractError error, std::string detail) {
             return { error, std::move(detail) };
-        }
-
-        std::string content_hash(std::span<const std::uint8_t> value) {
-            QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
-            hasher.addData(QByteArrayView(reinterpret_cast<const char *>(value.data()),
-                                          static_cast<qsizetype>(value.size())));
-            return hasher.result().toHex().toStdString();
         }
 
         std::string prefix(std::string_view value) {

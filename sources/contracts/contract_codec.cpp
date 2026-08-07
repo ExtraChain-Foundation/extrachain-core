@@ -16,9 +16,7 @@
 #include <msgpack.hpp>
 
 #include <QByteArray>
-#include <QByteArrayView>
-#include <QCryptographicHash>
-
+#include "contracts/contract_hash.h"
 namespace ExtraChain::Contracts::Codec {
     namespace {
 
@@ -300,11 +298,7 @@ namespace ExtraChain::Contracts::Codec {
     }
 
     std::string effect_hash(std::span<const ContractEffect> effects) {
-        const auto         encoded = encode_effects(effects);
-        QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
-        hasher.addData(QByteArrayView(reinterpret_cast<const char *>(encoded.data()),
-                                      static_cast<qsizetype>(encoded.size())));
-        return hasher.result().toHex().toStdString();
+        return content_hash(encode_effects(effects));
     }
 
 } // namespace ExtraChain::Contracts::Codec
