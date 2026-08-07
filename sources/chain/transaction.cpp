@@ -36,7 +36,7 @@ namespace {
         append_field(result, transaction.sender().to_string());
         append_field(result, transaction.receiver().to_string());
         append_field(result, transaction.token().to_string());
-        append_field(result, transaction.amount().to_string(NumeralBase::Hex));
+        append_field(result, transaction.amount().to_string());
         append_field(result, std::to_string(transaction.timestamp()));
         append_field(result, transaction.meta().value_or(""));
         append_field(result, std::to_string(transaction.prev_hashs().size()));

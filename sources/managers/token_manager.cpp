@@ -40,7 +40,7 @@ namespace {
                                                                                     const std::string    &ticker,
                                                                                     std::uint8_t          decimals,
                                                                                     const BigNumberFloat &count) {
-        auto          count_text = count.to_string(NumeralBase::Dec);
+        auto          count_text = count.to_string();
         std::uint64_t supply     = 0;
         auto [position, error] = std::from_chars(count_text.data(), count_text.data() + count_text.size(), supply);
         if (error != std::errc() || position != count_text.data() + count_text.size()) {

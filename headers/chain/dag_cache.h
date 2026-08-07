@@ -32,7 +32,7 @@
 
 class ExtraChainNode;
 class Dag;
-class Section;
+struct Section;
 class DbConnector;
 
 // Cache configuration constants

@@ -45,7 +45,7 @@ namespace {
         }
 
         auto amount = [](std::uint64_t value, bool positive) {
-            auto result = BigNumberFloat(std::to_string(value), NumeralBase::Dec);
+            auto result = BigNumberFloat(std::to_string(value));
             return positive ? result : -result;
         };
         auto actor = [](std::string value) -> std::optional<ActorId> {
