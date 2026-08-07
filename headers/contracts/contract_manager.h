@@ -19,6 +19,8 @@
 
 namespace ExtraChain::Contracts {
 
+    EXTRACHAIN_EXPORT void retain_current_contract_state(ContractRecord &record);
+
     class EXTRACHAIN_EXPORT ContractStorage {
     public:
         virtual ~ContractStorage() = default;
@@ -81,6 +83,8 @@ namespace ExtraChain::Contracts {
             std::span<const std::uint8_t> module,
             std::span<const std::uint8_t> migration_arguments,
             std::uint64_t                 block);
+
+        [[nodiscard]] std::expected<void, ContractFailure> stage(const PreparedContractChange &change);
 
         [[nodiscard]] std::expected<ContractReceipt, ContractFailure> commit(PreparedContractChange change,
                                                                              std::string transaction_hash = {});

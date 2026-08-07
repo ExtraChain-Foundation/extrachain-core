@@ -189,6 +189,8 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         .state_hash          = revision.state_hash,
         .version             = version.version,
         .revision            = revision.revision,
+        .checkpoint          = true,
+        .checkpoint_revision = revision.revision,
     };
 
     Transaction tx;

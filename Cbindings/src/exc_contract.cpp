@@ -24,11 +24,27 @@ namespace {
         std::string   module_hash;
         std::string   state_hash;
         std::string   transaction_hash;
+        std::uint64_t checkpoint_revision;
+        std::uint64_t checkpoint_section;
+        std::string   checkpoint_state_hash;
+        std::string   checkpoint_transaction_hash;
+        std::uint64_t replay_depth;
     };
-    BOOST_DESCRIBE_STRUCT(
-        ContractSummary,
-        (),
-        (contract_id, owner_id, kind, version, revision, module_hash, state_hash, transaction_hash))
+    BOOST_DESCRIBE_STRUCT(ContractSummary,
+                          (),
+                          (contract_id,
+                           owner_id,
+                           kind,
+                           version,
+                           revision,
+                           module_hash,
+                           state_hash,
+                           transaction_hash,
+                           checkpoint_revision,
+                           checkpoint_section,
+                           checkpoint_state_hash,
+                           checkpoint_transaction_hash,
+                           replay_depth))
 
     ExcError contract_error(ExtraChain::Contracts::ContractError error) {
         using ExtraChain::Contracts::ContractError;
@@ -202,14 +218,19 @@ EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json) 
         const auto& version  = record->versions.at(record->active_version - 1);
         const auto& revision = version.revisions.back();
         auto        summary  = ContractSummary {
-                            .contract_id      = record->contract_id,
-                            .owner_id         = record->owner_id,
-                            .kind             = record->kind,
-                            .version          = version.version,
-                            .revision         = revision.revision,
-                            .module_hash      = version.module_hash,
-                            .state_hash       = revision.state_hash,
-                            .transaction_hash = revision.transaction_hash,
+                            .contract_id                 = record->contract_id,
+                            .owner_id                    = record->owner_id,
+                            .kind                        = record->kind,
+                            .version                     = version.version,
+                            .revision                    = revision.revision,
+                            .module_hash                 = version.module_hash,
+                            .state_hash                  = revision.state_hash,
+                            .transaction_hash            = revision.transaction_hash,
+                            .checkpoint_revision         = revision.checkpoint_revision,
+                            .checkpoint_section          = revision.checkpoint_block,
+                            .checkpoint_state_hash       = revision.checkpoint_hash,
+                            .checkpoint_transaction_hash = revision.checkpoint_transaction_hash,
+                            .replay_depth                = revision.revision - revision.checkpoint_revision,
         };
         *out_json = exc_strdup(Json::serialize(summary));
     });
