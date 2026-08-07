@@ -30,6 +30,9 @@
 #include <QTimer>
 #include <algorithm>
 
+static constexpr qint64 DFS_QUEUE_HIGH_WATER = 4 * 1024 * 1024;
+static constexpr qint64 DFS_QUEUE_LOW_WATER  = 2 * 1024 * 1024;
+
 LoadManager::LoadManager(ExtraChainNode* node, QObject* parent)
     : QObject(parent)
     , node(node) {
@@ -66,18 +69,17 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                 bool  is_requested   = false;
 
                 // Remove disconnected identifiers from the list
-                load_info.identifier_list.erase(
-                    std::remove_if(load_info.identifier_list.begin(),
-                                   load_info.identifier_list.end(),
-                                   [this](const auto& id_pair) {
-                                       return !node->network()->is_connection_exists(id_pair.first);
-                                   }),
-                    load_info.identifier_list.end());
+                load_info.identifier_list.erase(std::remove_if(load_info.identifier_list.begin(),
+                                                               load_info.identifier_list.end(),
+                                                               [this](const auto& id_pair) {
+                                                                   return !node->network()->is_connection_exists(
+                                                                       id_pair.first);
+                                                               }),
+                                                load_info.identifier_list.end());
 
                 // If no identifiers left, try to find new peers who have this file
                 if (load_info.identifier_list.empty()) {
-                    eLog("[LoadManager] No active identifiers for file {}, asking neighbours",
-                         it.first.file_id);
+                    eLog("[LoadManager] No active identifiers for file {}, asking neighbours", it.first.file_id);
                     load_info.identifier_storage_checker.clear();
 
                     // Add all active connections as potential sources
@@ -153,17 +155,16 @@ void LoadManager::timer_runner(const Dfs::FileLink file_link_to_proceed) {
                             is_setted = true;
                         }
 
-                        if (is_setted)
-                        {
+                        if (is_setted) {
                             this->node->network()->send_message(output,
                                                                 MessageType::DfsFileRequest,
                                                                 SendMode::Focused,
                                                                 MessageStatus::NoStatus,
                                                                 responder.with_new_message_id());
 
-                           // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}),
-                           // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
-                           // identifier.second.counter, it.first, output.fragment_numbers);
+                            // eLog("LoadManager::timer_runner, try to send request once more with identifier ({}),
+                            // attempt: {} for file_link: {} and fragments: {}.", identifier.first,
+                            // identifier.second.counter, it.first, output.fragment_numbers);
                             is_requested = true;
                             break;
                         }
@@ -380,8 +381,8 @@ void LoadManager::add_to_queue(const ActorId&                  owner_id,
         auto file_link = Dfs::FileLink { .owner_id = owner_id, .file_id = dir_row.file_id };
         // request_file can run before this actor's directory arrives. A forced
         // file must enter the queue when its directory row becomes available.
-        bool need_load = is_full || node->dfs()->is_priority(file_link)
-                         || node->dfs()->forces_files_.contains(file_link);
+        bool need_load =
+            is_full || node->dfs()->is_priority(file_link) || node->dfs()->forces_files_.contains(file_link);
         if (/* dir_row.type == Dfs::FileType::File && */ !need_load) {
             continue;
         }
@@ -486,17 +487,25 @@ void LoadManager::share_stored_file(const Dfs::FileLinkFragment& file_link_fragm
 
                 // offset += Dfs::Basic::FRAGMENT_SIZE;
 
-                int progress = static_cast<int>((fragment_number * 100) / max_offsets);
+                int  progress = static_cast<int>((fragment_number * 100) / max_offsets);
                 emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
-                                                  file_link_fragment.file_link.file_id,
-                                                  progress);
+                                                 file_link_fragment.file_link.file_id,
+                                                 progress);
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                // SocketService already serializes writes. Pause only when its
+                // bounded peer queue reaches the high-water mark instead of
+                // limiting every fragment to a fixed 100 ms delay.
+                if (node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_HIGH_WATER) {
+                    while (node->network()->is_connection_exists(identifier)
+                           && node->network()->connection_pending_bytes(identifier) > DFS_QUEUE_LOW_WATER) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                    }
+                }
             }
 
             emit node->dfs()->uploadProgress(file_link_fragment.file_link.owner_id,
-                                              file_link_fragment.file_link.file_id,
-                                              100);
+                                             file_link_fragment.file_link.file_id,
+                                             100);
         });
     // eLog("[Dfs] LoadManager::share_stored_file, file pushed to waiting send queue. owner_id: {}, file_id: {}",
     // file_link_fragment.file_link.owner_id, file_link_fragment.file_link.file_id);
@@ -593,7 +602,8 @@ void LoadManager::file_fragment_achieved(const Dfs::Packets::FragmentData& file_
         }
 
         {
-            std::lock_guard<std::mutex> m_lock(m_write_file_mutex);
+            auto&                       write_mutex = m_write_file_mutexes[file_link.hash() % WRITE_STRIPES];
+            std::lock_guard<std::mutex> m_lock(write_mutex);
             auto result = Utils::write_file_chunk(path.value(), file_content.data, file_content.offset);
             if (!result.has_value()) {
                 // eCritical("[Dfs] LoadManager::file_fragment_achieved, save file to disk error. file_link: {},
@@ -687,11 +697,11 @@ void LoadManager::finish_him(const ActorId& owner_id, const Dfs::DirRow& dir_row
 
 bool LoadManager::is_downloading(const Dfs::FileLink& file_link) const {
     constexpr auto ACTIVITY_TIMEOUT = std::chrono::seconds(60);
-    auto now = std::chrono::system_clock::now();
+    auto           now              = std::chrono::system_clock::now();
 
     auto check_active = [&](const SafePtr<std::unordered_map<Dfs::FileLink, LoadInfo>>& downloads) -> bool {
         auto locked = *downloads;
-        auto it = locked->find(file_link);
+        auto it     = locked->find(file_link);
         if (it == locked->end()) {
             return false;
         }

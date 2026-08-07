@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <array>
 #include <queue>
 #include <string>
 #include <chrono>
@@ -45,8 +46,8 @@ struct LoadInfo {
 
     Dfs::DirRow dir_row;
 
-    size_t           amount_fragments;
-    std::set<size_t> fragments_left;
+    size_t                                amount_fragments;
+    std::set<size_t>                      fragments_left;
     std::chrono::system_clock::time_point last_fragment_received {};
 
     bool notify_neighbours;
@@ -131,7 +132,8 @@ private:
     };
 
     SafePtr<std::unordered_map<Dfs::FileLink, ReadStorage>> m_active_reads;
-    std::mutex                                              m_write_file_mutex;
+    static constexpr std::size_t                            WRITE_STRIPES = 64;
+    std::array<std::mutex, WRITE_STRIPES>                   m_write_file_mutexes;
 
     QTimer* m_timer;
 };
