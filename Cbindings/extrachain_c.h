@@ -485,6 +485,12 @@ EXC_API ExcError exc_contract_upgrade(const char*    contract_id,
 /* Return identity, version, revision, and current hashes as JSON. */
 EXC_API ExcError exc_contract_inspect(const char* contract_id, char** out_json);
 
+/* Return the trusted contract component catalog as JSON. Desktop use only. */
+EXC_API ExcError exc_contract_components(char** out_json);
+
+/* Generate Rust source from a JSON array of component IDs. Desktop use only. */
+EXC_API ExcError exc_contract_compose(const char* project_name, const char* component_ids_json, char** out_source);
+
 /* ════════════════════════════════════════════════════════════════════
  *  Callbacks (event registration)
  * ════════════════════════════════════════════════════════════════════ */

@@ -5,6 +5,7 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use extrachain_contract_components::Ownership;
 use extrachain_contract_sdk::{
     Contract, Decoder, Encoder, Event, InvokeRequest, InvokeResponse, export_contract,
 };
@@ -241,7 +242,7 @@ impl FungibleToken {
                     || symbol.is_empty()
                     || symbol.len() > MAX_SYMBOL_BYTES
                     || decimals > 18
-                    || request.sender.is_empty()
+                    || request.caller.is_empty()
                     || !decoder.is_empty()
                 {
                     return Err("Invalid token metadata");
@@ -249,32 +250,32 @@ impl FungibleToken {
                 state.name = name;
                 state.symbol = symbol;
                 state.decimals = decimals;
-                state.owner = request.sender.clone();
+                state.owner = request.caller.clone();
                 state.mint_enabled = true;
                 state.total_supply = supply;
-                state.set_balance(&request.sender, supply);
+                state.set_balance(&request.caller, supply);
                 Ok((
                     Self::amount_data(supply),
-                    alloc::vec![Self::event("mint", &[(&request.sender, supply)])],
+                    alloc::vec![Self::event("mint", &[(&request.caller, supply)])],
                 ))
             }
             "transfer" => {
                 let (to, amount) = Self::parse_pair(&request.arguments)?;
-                Self::transfer(state, &request.sender, &to, amount)?;
+                Self::transfer(state, &request.caller, &to, amount)?;
                 Ok((
                     Vec::new(),
                     alloc::vec![Self::event(
                         "transfer",
-                        &[(&request.sender, amount), (&to, amount)]
+                        &[(&request.caller, amount), (&to, amount)]
                     )],
                 ))
             }
             "approve" => {
                 let (spender, amount) = Self::parse_pair(&request.arguments)?;
-                if spender == request.sender {
+                if spender == request.caller {
                     return Err("Self approval is not allowed");
                 }
-                state.set_allowance(&request.sender, &spender, amount);
+                state.set_allowance(&request.caller, &spender, amount);
                 Ok((
                     Vec::new(),
                     alloc::vec![Self::event("approval", &[(&spender, amount)])],
@@ -288,14 +289,14 @@ impl FungibleToken {
                 let owner = decoder.string().map_err(|_| "Invalid owner")?;
                 let to = decoder.string().map_err(|_| "Invalid receiver")?;
                 let amount = decoder.u64().map_err(|_| "Invalid amount")?;
-                if !decoder.is_empty() || state.allowance(&owner, &request.sender) < amount {
+                if !decoder.is_empty() || state.allowance(&owner, &request.caller) < amount {
                     return Err("Allowance is too small");
                 }
                 Self::transfer(state, &owner, &to, amount)?;
                 state.set_allowance(
                     &owner,
-                    &request.sender,
-                    state.allowance(&owner, &request.sender) - amount,
+                    &request.caller,
+                    state.allowance(&owner, &request.caller) - amount,
                 );
                 Ok((
                     Vec::new(),
@@ -304,7 +305,12 @@ impl FungibleToken {
             }
             "mint" => {
                 let (to, amount) = Self::parse_pair(&request.arguments)?;
-                if request.sender != state.owner || !state.mint_enabled || amount == 0 {
+                if Ownership::new(&state.owner)
+                    .require_owner(&request.caller)
+                    .is_err()
+                    || !state.mint_enabled
+                    || amount == 0
+                {
                     return Err("Mint is not allowed");
                 }
                 state.total_supply = state
@@ -324,7 +330,11 @@ impl FungibleToken {
                 ))
             }
             "revoke_mint" => {
-                if request.sender != state.owner || !state.mint_enabled {
+                if Ownership::new(&state.owner)
+                    .require_owner(&request.caller)
+                    .is_err()
+                    || !state.mint_enabled
+                {
                     return Err("Mint control is not available");
                 }
                 state.mint_enabled = false;
@@ -333,14 +343,14 @@ impl FungibleToken {
             "burn" => {
                 let mut decoder = Decoder::new(&request.arguments);
                 let amount = decoder.u64().map_err(|_| "Invalid amount")?;
-                if amount == 0 || !decoder.is_empty() || state.balance(&request.sender) < amount {
+                if amount == 0 || !decoder.is_empty() || state.balance(&request.caller) < amount {
                     return Err("Burn is not allowed");
                 }
-                state.set_balance(&request.sender, state.balance(&request.sender) - amount);
+                state.set_balance(&request.caller, state.balance(&request.caller) - amount);
                 state.total_supply -= amount;
                 Ok((
                     Self::amount_data(state.total_supply),
-                    alloc::vec![Self::event("burn", &[(&request.sender, amount)])],
+                    alloc::vec![Self::event("burn", &[(&request.caller, amount)])],
                 ))
             }
             "balance_of" => {
@@ -367,9 +377,7 @@ impl FungibleToken {
                 ))
             }
             "authorize_upgrade" | "migrate" => {
-                if request.sender != state.owner {
-                    return Err("Only the token owner can upgrade this contract");
-                }
+                Ownership::new(&state.owner).require_owner(&request.caller)?;
                 Ok((Vec::new(), Vec::new()))
             }
             _ => Err("Unknown token method"),

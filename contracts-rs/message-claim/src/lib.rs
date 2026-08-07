@@ -5,8 +5,9 @@ extern crate alloc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use extrachain_contract_components::Ownership;
 use extrachain_contract_sdk::{
-    Contract, Decoder, Encoder, Event, InvokeRequest, InvokeResponse, export_contract,
+    Contract, Decoder, Effect, Encoder, Event, InvokeRequest, InvokeResponse, export_contract,
 };
 
 const MAX_MESSAGE_BYTES: usize = 64 * 1024;
@@ -126,12 +127,12 @@ impl MessageClaim {
         match request.method.as_str() {
             "init" => {
                 if !state.owner.is_empty()
-                    || request.sender.is_empty()
+                    || request.caller.is_empty()
                     || !request.arguments.is_empty()
                 {
                     return Err("Claim contract is already initialized");
                 }
-                state.owner = request.sender.clone();
+                state.owner = request.caller.clone();
                 Ok((Vec::new(), Vec::new()))
             }
             "store" => {
@@ -139,7 +140,7 @@ impl MessageClaim {
                 let message = decoder.string().map_err(|_| "Invalid message")?;
                 if message.is_empty()
                     || message.len() > MAX_MESSAGE_BYTES
-                    || request.sender.is_empty()
+                    || request.caller.is_empty()
                     || !decoder.is_empty()
                 {
                     return Err("Message is not valid");
@@ -148,13 +149,13 @@ impl MessageClaim {
                 state.next_id = state.next_id.checked_add(1).ok_or("Token ID overflow")?;
                 state.claims.push(Claim {
                     id,
-                    owner: request.sender.clone(),
+                    owner: request.caller.clone(),
                     message,
                     active: true,
                 });
                 Ok((
                     Self::id_data(id),
-                    alloc::vec![Self::event("mint", id, &request.sender)],
+                    alloc::vec![Self::event("mint", id, &request.caller)],
                 ))
             }
             "transfer" => {
@@ -168,7 +169,7 @@ impl MessageClaim {
                     return Err("Invalid receiver");
                 }
                 let claim = state.active_claim_mut(id)?;
-                if claim.owner != request.sender || receiver == request.sender {
+                if claim.owner != request.caller || receiver == request.caller {
                     return Err("Transfer is not allowed");
                 }
                 claim.owner = receiver.clone();
@@ -184,7 +185,7 @@ impl MessageClaim {
                     return Err("Invalid arguments");
                 }
                 let claim_index = state.active_claim_index(id)?;
-                if state.claims[claim_index].owner != request.sender {
+                if state.claims[claim_index].owner != request.caller {
                     return Err("Only the current owner can redeem this token");
                 }
                 let claim = state.claims.remove(claim_index);
@@ -192,7 +193,7 @@ impl MessageClaim {
                 data.string(&claim.message);
                 Ok((
                     data.finish(),
-                    alloc::vec![Self::event("burn", id, &request.sender)],
+                    alloc::vec![Self::event("burn", id, &request.caller)],
                 ))
             }
             "owner_of" => {
@@ -207,9 +208,7 @@ impl MessageClaim {
                 Ok((data.finish(), Vec::new()))
             }
             "authorize_upgrade" | "migrate" => {
-                if request.sender != state.owner {
-                    return Err("Only the contract owner can upgrade this contract");
-                }
+                Ownership::new(&state.owner).require_owner(&request.caller)?;
                 Ok((Vec::new(), Vec::new()))
             }
             _ => Err("Unknown claim method"),
@@ -223,6 +222,50 @@ impl Contract for MessageClaim {
             Ok(state) => state,
             Err(error) => return InvokeResponse::failure(request.state, error),
         };
+        if request.method == "forward_store" {
+            let mut decoder = Decoder::new(&request.arguments);
+            if decoder.array().ok() != Some(2) {
+                return InvokeResponse::failure(request.state, "Invalid forward arguments");
+            }
+            let target = match decoder.string() {
+                Ok(value) => value,
+                Err(_) => return InvokeResponse::failure(request.state, "Invalid target contract"),
+            };
+            let message = match decoder.string() {
+                Ok(value) => value,
+                Err(_) => return InvokeResponse::failure(request.state, "Invalid message"),
+            };
+            if target.is_empty()
+                || message.is_empty()
+                || message.len() > MAX_MESSAGE_BYTES
+                || !decoder.is_empty()
+            {
+                return InvokeResponse::failure(request.state, "Invalid forward arguments");
+            }
+            let id = state.next_id;
+            state.next_id = match state.next_id.checked_add(1) {
+                Some(value) => value,
+                None => return InvokeResponse::failure(request.state, "Token ID overflow"),
+            };
+            state.claims.push(Claim {
+                id,
+                owner: request.caller.clone(),
+                message: message.clone(),
+                active: true,
+            });
+            let mut child_arguments = Encoder::new();
+            child_arguments.string(&message);
+            return InvokeResponse::success(
+                state.encode(),
+                Self::id_data(id),
+                alloc::vec![Self::event("mint", id, &request.caller)],
+            )
+            .with_effects(alloc::vec![Effect::ContractCall {
+                contract_id: target,
+                method: "store".to_string(),
+                arguments: child_arguments.finish(),
+            }]);
+        }
         match Self::handle(&request, &mut state) {
             Ok((data, events)) => InvokeResponse::success(state.encode(), data, events),
             Err(error) => InvokeResponse::failure(request.state, error),

@@ -16,6 +16,8 @@
 #include <msgpack.hpp>
 
 #include <QByteArray>
+#include <QByteArrayView>
+#include <QCryptographicHash>
 
 namespace ExtraChain::Contracts::Codec {
     namespace {
@@ -133,19 +135,38 @@ namespace ExtraChain::Contracts::Codec {
 
     } // namespace
 
-    std::vector<std::uint8_t> encode_request(std::string_view              sender,
+    std::vector<std::uint8_t> encode_request(const ExecutionContext       &context,
                                              std::string_view              method,
                                              std::span<const std::uint8_t> arguments,
                                              std::span<const std::uint8_t> state,
-                                             std::uint64_t                 block) {
+                                             const VerifiedInputs         &verified) {
         msgpack::sbuffer buffer;
         msgpack::packer  packer(buffer);
         packer.pack_array(6);
-        packer.pack(sender);
+        packer.pack_array(5);
+        packer.pack(context.sender);
+        packer.pack(context.caller);
+        packer.pack(context.contract_id);
+        packer.pack(context.block);
+        packer.pack(context.depth);
         packer.pack(method);
         pack_binary(packer, arguments);
         pack_binary(packer, state);
-        packer.pack(block);
+        packer.pack_array(2);
+        packer.pack_array(static_cast<std::uint32_t>(verified.dag.size()));
+        for (const auto &proof : verified.dag) {
+            packer.pack_array(3);
+            packer.pack(proof.transaction_hash);
+            packer.pack(proof.section);
+            packer.pack(proof.confirmations);
+        }
+        packer.pack_array(static_cast<std::uint32_t>(verified.dfs.size()));
+        for (const auto &proof : verified.dfs) {
+            packer.pack_array(3);
+            packer.pack(proof.file_id);
+            packer.pack(proof.owner_id);
+            packer.pack(proof.content_hash);
+        }
         packer.pack(ContractAbiVersion);
         auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
         return { begin, begin + buffer.size() };
@@ -196,7 +217,7 @@ namespace ExtraChain::Contracts::Codec {
             auto        handle =
                 msgpack::unpack(reinterpret_cast<const char *>(response.data()), response.size(), offset);
             const auto &root = handle.get();
-            if (offset != response.size() || root.type != msgpack::type::ARRAY || root.via.array.size != 5) {
+            if (offset != response.size() || root.type != msgpack::type::ARRAY || root.via.array.size != 6) {
                 return std::unexpected(
                     ContractFailure { ContractError::InvalidResponse, "Contract returned an invalid response" });
             }
@@ -209,6 +230,10 @@ namespace ExtraChain::Contracts::Codec {
             if (items[3].type != msgpack::type::ARRAY) {
                 throw msgpack::type_error();
             }
+            if (items[3].via.array.size > ContractMaximumEvents) {
+                return std::unexpected(
+                    ContractFailure { ContractError::TooManyEvents, "Contract emitted too many events" });
+            }
             result.events.reserve(items[3].via.array.size);
             for (std::uint32_t index = 0; index < items[3].via.array.size; ++index) {
                 const auto &event = items[3].via.array.ptr[index];
@@ -220,17 +245,66 @@ namespace ExtraChain::Contracts::Codec {
                 decoded.data = binary(event.via.array.ptr[1]);
                 result.events.push_back(std::move(decoded));
             }
-            if (items[4].type == msgpack::type::STR) {
+            if (items[4].type != msgpack::type::ARRAY) {
+                throw msgpack::type_error();
+            }
+            if (items[4].via.array.size > ContractMaximumEffects) {
+                return std::unexpected(
+                    ContractFailure { ContractError::TooManyEffects, "Contract emitted too many effects" });
+            }
+            result.effects.reserve(items[4].via.array.size);
+            for (std::uint32_t index = 0; index < items[4].via.array.size; ++index) {
+                const auto &effect = items[4].via.array.ptr[index];
+                if (effect.type != msgpack::type::ARRAY || effect.via.array.size != 4) {
+                    throw msgpack::type_error();
+                }
+                std::string    kind;
+                ContractEffect decoded;
+                effect.via.array.ptr[0].convert(kind);
+                if (kind == "contract_call") {
+                    decoded.kind = ContractEffectKind::ContractCall;
+                } else {
+                    throw msgpack::type_error();
+                }
+                effect.via.array.ptr[1].convert(decoded.target);
+                effect.via.array.ptr[2].convert(decoded.operation);
+                decoded.arguments = binary(effect.via.array.ptr[3]);
+                result.effects.push_back(std::move(decoded));
+            }
+            if (items[5].type == msgpack::type::STR) {
                 std::string error;
-                items[4].convert(error);
+                items[5].convert(error);
                 result.error = std::move(error);
-            } else if (items[4].type != msgpack::type::NIL) {
+            } else if (items[5].type != msgpack::type::NIL) {
                 throw msgpack::type_error();
             }
             return result;
         } catch (const std::exception &error) {
             return std::unexpected(ContractFailure { ContractError::InvalidResponse, error.what() });
         }
+    }
+
+    std::vector<std::uint8_t> encode_effects(std::span<const ContractEffect> effects) {
+        msgpack::sbuffer buffer;
+        msgpack::packer  packer(buffer);
+        packer.pack_array(static_cast<std::uint32_t>(effects.size()));
+        for (const auto &effect : effects) {
+            packer.pack_array(4);
+            packer.pack("contract_call");
+            packer.pack(effect.target);
+            packer.pack(effect.operation);
+            pack_binary(packer, effect.arguments);
+        }
+        const auto *begin = reinterpret_cast<const std::uint8_t *>(buffer.data());
+        return { begin, begin + buffer.size() };
+    }
+
+    std::string effect_hash(std::span<const ContractEffect> effects) {
+        const auto         encoded = encode_effects(effects);
+        QCryptographicHash hasher(QCryptographicHash::Blake2b_256);
+        hasher.addData(QByteArrayView(reinterpret_cast<const char *>(encoded.data()),
+                                      static_cast<qsizetype>(encoded.size())));
+        return hasher.result().toHex().toStdString();
     }
 
 } // namespace ExtraChain::Contracts::Codec

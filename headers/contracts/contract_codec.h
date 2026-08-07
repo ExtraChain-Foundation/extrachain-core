@@ -18,11 +18,11 @@
 
 namespace ExtraChain::Contracts::Codec {
 
-    [[nodiscard]] std::vector<std::uint8_t> encode_request(std::string_view              sender,
+    [[nodiscard]] std::vector<std::uint8_t> encode_request(const ExecutionContext       &context,
                                                            std::string_view              method,
                                                            std::span<const std::uint8_t> arguments,
                                                            std::span<const std::uint8_t> state,
-                                                           std::uint64_t                 block);
+                                                           const VerifiedInputs         &verified = {});
 
     [[nodiscard]] std::vector<std::uint8_t> encode_string(std::string_view value);
 
@@ -32,5 +32,9 @@ namespace ExtraChain::Contracts::Codec {
 
     [[nodiscard]] std::expected<ContractOutput, ContractFailure> decode_response(
         std::span<const std::uint8_t> response);
+
+    [[nodiscard]] std::vector<std::uint8_t> encode_effects(std::span<const ContractEffect> effects);
+
+    [[nodiscard]] std::string effect_hash(std::span<const ContractEffect> effects);
 
 } // namespace ExtraChain::Contracts::Codec

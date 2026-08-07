@@ -143,6 +143,7 @@ typedef enum ExcError {
     EXC_ERR_CONTRACT_CONFLICT         = 903,
     EXC_ERR_CONTRACT_STORAGE          = 904,
     EXC_ERR_CONTRACT_UPGRADE_DENIED   = 905,
+    EXC_ERR_CONTRACT_DEVELOPMENT_UNAVAILABLE = 906,
 } ExcError;
 
 /* ── Enums ──────────────────────────────────────────────────────── */

@@ -12,7 +12,9 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <optional>
+#include <unordered_set>
 
 #include <QDir>
 #include <QFile>
@@ -34,6 +36,9 @@
 namespace ExtraChain::Contracts {
     namespace {
         constexpr auto StateFile = "installation.json";
+        constexpr auto SupportedComponentsVersion = "0.1.0";
+        constexpr auto SupportedCatalogVersion    = "0.1.0";
+        constexpr auto SupportedTemplateVersion   = "0.1.0";
 
         ToolchainFailure failure(ToolchainError error, std::string detail) {
             return { error, std::move(detail) };
@@ -213,9 +218,21 @@ namespace ExtraChain::Contracts {
             const QFileInfo cargo(directory.filePath(CargoName));
             const QFileInfo rustc(directory.filePath(RustcName));
             const QFileInfo sdk(directory.filePath("sdk/Cargo.toml"));
+            const QFileInfo components(directory.filePath("components/Cargo.toml"));
+            const QFileInfo catalog(directory.filePath("catalog/components.json"));
+            const QFileInfo template_file(directory.filePath("templates/basic/src/lib.rs"));
+            QFile           catalog_file(catalog.absoluteFilePath());
+            if (!catalog_file.open(QIODevice::ReadOnly)) {
+                return false;
+            }
+            const auto catalog_document = QJsonDocument::fromJson(catalog_file.readAll());
             return cargo.isFile() && cargo.isExecutable() && rustc.isFile() && rustc.isExecutable() && sdk.isFile()
+                   && components.isFile() && catalog.isFile() && template_file.isFile()
                    && QDir(directory.filePath("rustup")).exists()
-                   && QDir(directory.filePath("cargo-home")).exists();
+                   && QDir(directory.filePath("cargo-home")).exists() && catalog_document.isObject()
+                   && catalog_document.object().value("schema").toInt() == 1
+                   && catalog_document.object().value("version").toString() == SupportedCatalogVersion
+                   && catalog_document.object().value("components").isArray();
         }
     } // namespace
 
@@ -244,12 +261,17 @@ namespace ExtraChain::Contracts {
         const auto release        = QFileInfo(path);
         const auto canonical_path = release.canonicalFilePath();
         const auto release_parent = QFileInfo(canonical_path).dir().canonicalPath();
-        if (!installed.has_value() || installed->schema != 1 || installed->channel != "stable"
+        if (!installed.has_value() || installed->schema != 2 || installed->channel != "stable"
             || installed->release_sequence != sequence || installed->rust_version.empty()
-            || installed->sdk_version.empty() || installed->contract_abi != std::to_string(ContractAbiVersion)
-            || installed->created == 0 || !version_parts(installed->version).has_value()
-            || !compatible_with_core(*installed) || root_path.isEmpty() || canonical_path.isEmpty()
-            || release_parent != root_path || !release.fileName().startsWith("release-r")) {
+            || installed->sdk_version.empty() || installed->components_version.empty()
+            || installed->catalog_version.empty() || installed->template_version.empty()
+            || installed->components_version != SupportedComponentsVersion
+            || installed->catalog_version != SupportedCatalogVersion
+            || installed->template_version != SupportedTemplateVersion
+            || installed->contract_abi != std::to_string(ContractAbiVersion) || installed->created == 0
+            || !version_parts(installed->version).has_value() || !compatible_with_core(*installed)
+            || root_path.isEmpty() || canonical_path.isEmpty() || release_parent != root_path
+            || !release.fileName().startsWith("release-r")) {
             return std::unexpected(failure(ToolchainError::Unavailable, "Installed toolchain state is invalid"));
         }
         if (std::ranges::find(installed->revoked_versions, installed->version)
@@ -373,15 +395,18 @@ namespace ExtraChain::Contracts {
                 failure(ToolchainError::StorageError, "Cannot create the contract build directory"));
         }
         const auto sdk        = QDir(installation->path).filePath("sdk");
+        const auto components = QDir(installation->path).filePath("components");
         const auto cargo_file = QDir(project.path()).filePath("Cargo.toml");
         QSaveFile  manifest(cargo_file);
-        const auto cargo = QString(
-                               "[package]\nname = \"%1\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"
-                               "[lib]\ncrate-type = [\"cdylib\"]\n"
-                               "[dependencies]\nextrachain-contract-sdk = { path = \"%2\" }\n"
-                               "[profile.release]\npanic = \"abort\"\nlto = true\nopt-level = \"s\"\n"
-                               "codegen-units = 1\nstrip = true\n")
-                               .arg(safe_name, QDir::fromNativeSeparators(sdk));
+        const auto cargo =
+            QString(
+                "[package]\nname = \"%1\"\nversion = \"0.1.0\"\nedition = \"2024\"\n"
+                "[lib]\ncrate-type = [\"cdylib\"]\n"
+                "[dependencies]\nextrachain-contract-sdk = { path = \"%2\" }\n"
+                "extrachain-contract-components = { path = \"%3\" }\n"
+                "[profile.release]\npanic = \"abort\"\nlto = true\nopt-level = \"s\"\n"
+                "codegen-units = 1\nstrip = true\n")
+                .arg(safe_name, QDir::fromNativeSeparators(sdk), QDir::fromNativeSeparators(components));
         const auto cargo_bytes = cargo.toUtf8();
         if (!manifest.open(QIODevice::WriteOnly) || manifest.write(cargo_bytes) != cargo_bytes.size()
             || !manifest.commit()) {
@@ -446,6 +471,131 @@ namespace ExtraChain::Contracts {
             return std::unexpected(failure(ToolchainError::StorageError, "Cannot save the WebAssembly module"));
         }
         return output;
+    }
+
+    std::vector<ContractComponent> ToolchainInstaller::component_catalog() const {
+        const auto installation = current();
+        if (!installation.has_value()) {
+            return {};
+        }
+        QFile file(QDir(installation->path).filePath("catalog/components.json"));
+        if (!file.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        const auto document = QJsonDocument::fromJson(file.readAll());
+        if (!document.isObject() || document.object().value("schema").toInt() != 1
+            || document.object().value("version").toString() != SupportedCatalogVersion
+            || !document.object().value("components").isArray()) {
+            return {};
+        }
+        std::vector<ContractComponent> result;
+        const auto                     components = document.object().value("components").toArray();
+        result.reserve(static_cast<std::size_t>(components.size()));
+        for (const auto& value : components) {
+            const auto        object = value.toObject();
+            ContractComponent component {
+                .id          = object.value("id").toString().toStdString(),
+                .name        = object.value("name").toString().toStdString(),
+                .description = object.value("description").toString().toStdString(),
+                .category    = object.value("category").toString().toStdString(),
+                .rust_import = object.value("rust_import").toString().toStdString(),
+            };
+            const auto dependencies = object.value("dependencies").toArray();
+            component.dependencies.reserve(static_cast<std::size_t>(dependencies.size()));
+            for (const auto& dependency : dependencies) {
+                component.dependencies.push_back(dependency.toString().toStdString());
+            }
+            if (component.id.empty() || component.name.empty() || component.description.empty()
+                || component.category.empty() || component.rust_import.empty()
+                || std::ranges::any_of(result, [&](const ContractComponent& known) {
+                       return known.id == component.id;
+                   })) {
+                return {};
+            }
+            result.push_back(std::move(component));
+        }
+        return result;
+    }
+
+    std::expected<QString, ToolchainFailure> ToolchainInstaller::compose_contract(
+        std::span<const std::string> component_ids,
+        const QString&               project_name) const {
+        const auto name = project_name.trimmed();
+        if (name.isEmpty() || name.size() > 64 || component_ids.empty()
+            || std::ranges::any_of(name, [](QChar character) {
+                   return !character.isLetterOrNumber() && character != '_' && character != '-';
+               })) {
+            return std::unexpected(
+                failure(ToolchainError::InvalidManifest, "A project name and one component are required"));
+        }
+        const auto installation = current();
+        if (!installation.has_value()) {
+            return std::unexpected(installation.error());
+        }
+        const auto catalog = component_catalog();
+        if (catalog.empty()) {
+            return std::unexpected(
+                failure(ToolchainError::InvalidManifest, "The installed component catalog is invalid"));
+        }
+        std::vector<std::string> selected;
+        selected.reserve(component_ids.size());
+        std::unordered_set<std::string>               resolving;
+        const std::function<bool(const std::string&)> add_component = [&](const std::string& component_id) {
+            if (std::ranges::find(selected, component_id) != selected.end()) {
+                return true;
+            }
+            if (!resolving.insert(component_id).second) {
+                return false;
+            }
+            const auto component = std::ranges::find(catalog, component_id, &ContractComponent::id);
+            if (component == catalog.end()) {
+                return false;
+            }
+            for (const auto& dependency : component->dependencies) {
+                if (!add_component(dependency)) {
+                    return false;
+                }
+            }
+            resolving.erase(component_id);
+            selected.push_back(component_id);
+            return true;
+        };
+        for (const auto& component_id : component_ids) {
+            if (!add_component(component_id)) {
+                return std::unexpected(
+                    failure(ToolchainError::InvalidManifest, "The component catalog dependency graph is invalid"));
+            }
+        }
+
+        QString component_list;
+        QString component_imports;
+        for (const auto& component_id : selected) {
+            const auto component = std::ranges::find(catalog, component_id, &ContractComponent::id);
+            component_list += QString("// - %1\n").arg(QString::fromStdString(component_id));
+            component_imports += QString("    pub use extrachain_contract_components::%1;\n")
+                                     .arg(QString::fromStdString(component->rust_import));
+        }
+        return QString(
+                   "#![no_std]\n\n"
+                   "extern crate alloc;\n\n"
+                   "use alloc::vec::Vec;\n"
+                   "use extrachain_contract_sdk::{Contract, InvokeRequest, InvokeResponse, export_contract};\n\n"
+                   "// Components selected from the trusted ExtraChain catalog:\n%1\n"
+                   "#[allow(unused_imports)]\n"
+                   "mod components {\n%2}\n"
+                   "pub struct GeneratedContract;\n\n"
+                   "impl Contract for GeneratedContract {\n"
+                   "    fn invoke(request: InvokeRequest) -> InvokeResponse {\n"
+                   "        match request.method.as_str() {\n"
+                   "            \"init\" | \"authorize_upgrade\" | \"migrate\" => {\n"
+                   "                InvokeResponse::success(request.state, Vec::new(), Vec::new())\n"
+                   "            }\n"
+                   "            _ => InvokeResponse::failure(request.state, \"Unknown contract method\"),\n"
+                   "        }\n"
+                   "    }\n"
+                   "}\n\n"
+                   "export_contract!(GeneratedContract);\n")
+            .arg(component_list, component_imports);
     }
 
 } // namespace ExtraChain::Contracts

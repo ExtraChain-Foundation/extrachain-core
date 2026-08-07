@@ -26,6 +26,7 @@
 #include "network/network_manager.h"
 #include "utils/exc_utils.h"
 #include "contracts/contract_manager.h"
+#include "contracts/contract_codec.h"
 #include "contracts/contract_transaction.h"
 
 #include <charconv>
@@ -187,6 +188,7 @@ std::expected<TokenData, CreateTokenError> TokenManager::create_token(const Acto
         .module_hash         = version.module_hash,
         .previous_state_hash = revision.previous_hash,
         .state_hash          = revision.state_hash,
+        .effects_hash        = ExtraChain::Contracts::Codec::effect_hash(deployment->output.effects),
         .version             = version.version,
         .revision            = revision.revision,
         .checkpoint          = true,
