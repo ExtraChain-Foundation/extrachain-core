@@ -259,6 +259,9 @@ void ExtraChainNode::process() {
         });
         if (!res.has_value()) {
             eCritical("[Node] DAG migration failed: error {}", static_cast<int>(res.error()));
+            node_enabled.store(false);
+            QCoreApplication::exit(-1001);
+            return;
         } else {
             eSuccess("[Node] DAG migration complete");
         }

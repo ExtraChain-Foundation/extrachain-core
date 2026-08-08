@@ -329,7 +329,8 @@ public:
 
     // Look up an active connection's peer_meta by its node identifier (the
     // string carried by Responder). Returns nullopt when the peer is not
-    // currently connected — caller should treat that as "legacy".
+    // currently connected. Response handlers must reject data when metadata is
+    // absent; request handlers may use the legacy format for old peers.
     std::optional<PeerMeta> peer_meta_for(const std::string& identifier) const;
     bool                    server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void                    connect_network();

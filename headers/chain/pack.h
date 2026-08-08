@@ -55,7 +55,8 @@ enum class Error {
     DecompressionFailed,
     SectionNotFound,
     NonConsecutiveSections,
-    EmptyInput
+    EmptyInput,
+    ValidationFailed
 };
 
 /**

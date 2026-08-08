@@ -23,6 +23,7 @@
 #include <deque>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <list>
 #include <map>
 #include <mutex>
@@ -46,6 +47,8 @@ namespace Pack {
      */
     class EXTRACHAIN_EXPORT Registry {
     public:
+        using Validator = std::function<bool(const Reader &)>;
+
         explicit Registry(std::filesystem::path packs_dir, std::size_t max_open = 16);
         ~Registry();
 
@@ -97,7 +100,7 @@ namespace Pack {
         // Atomically install a pack received from a peer. Validates by opening it
         // (Pack::Reader::open: magic + version + bounds + Blake3 footer checksum).
         // Existing pack with same id is overwritten.
-        std::expected<void, Error> install_raw(PackId id, std::string_view bytes);
+        std::expected<void, Error> install_raw(PackId id, std::string_view bytes, const Validator &validator = {});
 
         // Byte size of a pack file on disk, or nullopt if unknown/unreadable.
         std::optional<std::uint64_t> pack_byte_size(PackId id) const;
@@ -113,7 +116,8 @@ namespace Pack {
         std::expected<void, Error> install_chunk(PackId           id,
                                                  std::uint64_t    offset,
                                                  std::string_view bytes,
-                                                 bool             is_last);
+                                                 bool             is_last,
+                                                 const Validator &validator = {});
 
     private:
         struct PackMeta {
@@ -149,7 +153,9 @@ namespace Pack {
 
         // Validate a completed .incoming file for id and atomically swap it into
         // place, updating meta_. Removes the temp file on any failure.
-        std::expected<void, Error> finalize_incoming(PackId id, const std::filesystem::path &tmp);
+        std::expected<void, Error> finalize_incoming(PackId                       id,
+                                                     const std::filesystem::path &tmp,
+                                                     const Validator             &validator);
 
         static std::optional<PackId> parse_pack_filename(const std::filesystem::path &p);
     };

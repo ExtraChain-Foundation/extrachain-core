@@ -36,6 +36,7 @@
 
 #include "chain/actor.h"
 #include "chain/dag.h" // Section
+#include "chain/dag_migration.h"
 #include "chain/hot_section_store.h"
 #include "chain/pack.h"
 #include "chain/pack_registry.h"
@@ -158,6 +159,16 @@ private slots:
         // Valid bytes but wrong id -> rejected (embedded id != requested id).
         QVERIFY(!client.install_raw(999, *raw).has_value());
 
+        // A caller can apply chain-level checks before the pack becomes visible.
+        QVERIFY(!client
+                     .install_raw(0,
+                                  *raw,
+                                  [](const Pack::Reader &) {
+                                      return false;
+                                  })
+                     .has_value());
+        QVERIFY(!client.read_section(SectionId(0)).has_value());
+
         // The honest install still works afterwards.
         QVERIFY(client.install_raw(0, *raw).has_value());
         QVERIFY(client.read_section(SectionId(0)).has_value());
@@ -198,6 +209,21 @@ private slots:
 
         std::filesystem::remove_all(server_dir);
         std::filesystem::remove_all(client_dir);
+    }
+
+    void packWriterRejectsOversizedSectionRange() {
+        const auto path = std::filesystem::temp_directory_path() / "exc_oversized_range.pack";
+        std::filesystem::remove(path);
+
+        std::map<SectionId, std::string> sections;
+        for (std::size_t section = 0; section <= Pack::SECTIONS_PER_PACK; ++section) {
+            sections.emplace(SectionId(static_cast<long long>(section)), "section");
+        }
+
+        const auto result = Pack::write(path, 0, sections);
+        QVERIFY(!result.has_value());
+        QCOMPARE(result.error(), Pack::Error::InvalidFormat);
+        QVERIFY(!std::filesystem::exists(path));
     }
 
     void hotSectionStorePersistsAndPrunesRevisions() {
@@ -505,6 +531,77 @@ private slots:
         const Transaction &mtx = *migrated->transactions.begin();
         QCOMPARE(mtx.amount().to_string(), std::string("100"));
         QVERIFY2(mtx.verify(signer_pub), "signature must still verify after migration");
+    }
+
+    void migrationKeepsRecoverableLegacyBackup() {
+        namespace fs             = std::filesystem;
+        const auto original_path = fs::current_path();
+        const auto root          = fs::temp_directory_path() / "exc_staged_migration";
+        fs::remove_all(root);
+        fs::create_directories(root / "dag" / "0");
+        fs::current_path(root);
+
+        Transaction tx;
+        tx.set_section(SectionId(0));
+        tx.set_type(TransactionType::Genesis);
+        tx.set_sender(ActorId());
+        tx.set_receiver(ActorId());
+        Section section { .id = SectionId(0), .transactions = { tx } };
+
+        {
+            WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+            std::ofstream     section_file(root / "dag" / "0" / "0", std::ios::binary);
+            section_file << Json::serialize(section);
+            std::ofstream range_file(root / "dag" / "range", std::ios::binary);
+            range_file << Json::serialize(SectionRange { .first = "0", .last = "0", .last_cached = "0" });
+        }
+
+        const auto migrated = DagMigration::migrate();
+        fs::current_path(original_path);
+
+        QVERIFY2(migrated.has_value(), "staged migration must succeed");
+        QVERIFY(fs::exists(root / "dag" / "hot" / "0"));
+        QVERIFY(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
+        QVERIFY(!fs::exists(root / "dag.migration-staging"));
+
+        fs::remove_all(root);
+    }
+
+    void migrationRecoversInterruptedActivation() {
+        namespace fs             = std::filesystem;
+        const auto original_path = fs::current_path();
+        const auto root          = fs::temp_directory_path() / "exc_staged_migration_recovery";
+        fs::remove_all(root);
+        fs::create_directories(root / "dag" / "0");
+        fs::current_path(root);
+
+        Transaction tx;
+        tx.set_section(SectionId(0));
+        tx.set_type(TransactionType::Genesis);
+        Section section { .id = SectionId(0), .transactions = { tx } };
+
+        {
+            WireFormat::Scope legacy(WireFormat::Mode::Legacy);
+            std::ofstream     section_file(root / "dag" / "0" / "0", std::ios::binary);
+            section_file << Json::serialize(section);
+            std::ofstream range_file(root / "dag" / "range", std::ios::binary);
+            range_file << Json::serialize(SectionRange { .first = "0", .last = "0", .last_cached = "0" });
+        }
+
+        fs::copy(root / "dag", root / "dag.migration-staging", fs::copy_options::recursive);
+        std::ofstream(root / "dag.migration-staging" / "copy.complete") << "complete";
+        fs::rename(root / "dag", root / "dag.legacy-backup");
+
+        QVERIFY(DagMigration::needs_migration());
+        const auto migrated = DagMigration::migrate();
+        fs::current_path(original_path);
+
+        QVERIFY2(migrated.has_value(), "migration must resume between activation renames");
+        QVERIFY(fs::exists(root / "dag" / "hot" / "0"));
+        QVERIFY(fs::exists(root / "dag.legacy-backup" / "0" / "0"));
+        QVERIFY(!fs::exists(root / "dag.migration-staging"));
+
+        fs::remove_all(root);
     }
 };
 

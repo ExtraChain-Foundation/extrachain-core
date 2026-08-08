@@ -328,7 +328,9 @@ namespace Pack {
         return out;
     }
 
-    std::expected<void, Error> Registry::install_raw(PackId id, std::string_view bytes) {
+    std::expected<void, Error> Registry::install_raw(PackId           id,
+                                                     std::string_view bytes,
+                                                     const Validator &validator) {
         if (bytes.empty())
             return std::unexpected(Error::EmptyInput);
         std::lock_guard incoming_lock(incoming_mutex_);
@@ -345,10 +347,12 @@ namespace Pack {
                 return std::unexpected(Error::WriteFailed);
         }
 
-        return finalize_incoming(id, tmp);
+        return finalize_incoming(id, tmp, validator);
     }
 
-    std::expected<void, Error> Registry::finalize_incoming(PackId id, const std::filesystem::path &tmp) {
+    std::expected<void, Error> Registry::finalize_incoming(PackId                       id,
+                                                           const std::filesystem::path &tmp,
+                                                           const Validator             &validator) {
         // Validate by opening; reject corrupt payloads before swapping in.
         auto check = Reader::open(tmp);
         if (!check.has_value()) {
@@ -360,6 +364,11 @@ namespace Pack {
             std::error_code ec;
             std::filesystem::remove(tmp, ec);
             return std::unexpected(Error::InvalidFormat);
+        }
+        if (validator && !validator(*check)) {
+            std::error_code ec;
+            std::filesystem::remove(tmp, ec);
+            return std::unexpected(Error::ValidationFailed);
         }
 
         PackMeta meta { .id = id, .first = check->first_section(), .last = check->last_section() };
@@ -423,7 +432,8 @@ namespace Pack {
     std::expected<void, Error> Registry::install_chunk(PackId           id,
                                                        std::uint64_t    offset,
                                                        std::string_view bytes,
-                                                       bool             is_last) {
+                                                       bool             is_last,
+                                                       const Validator &validator) {
         std::lock_guard incoming_lock(incoming_mutex_);
         auto            tmp = pack_path(id);
         tmp += ".incoming";
@@ -452,7 +462,7 @@ namespace Pack {
 
         if (!is_last)
             return {};
-        return finalize_incoming(id, tmp);
+        return finalize_incoming(id, tmp, validator);
     }
 
 } // namespace Pack

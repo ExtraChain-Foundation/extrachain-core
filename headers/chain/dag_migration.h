@@ -36,7 +36,11 @@ enum class Error {
     WriteFailed,
     ParseFailed,
     PackFailed,
-    CheckpointFailed
+    CheckpointFailed,
+    CopyFailed,
+    ValidationFailed,
+    ActivationFailed,
+    BackupExists
 };
 
 struct Progress {
@@ -55,8 +59,9 @@ EXTRACHAIN_EXPORT bool needs_migration();
 
 /**
  * Convert legacy hex-indexed DAG into decimal hot/ files and packed cold packs.
+ * The conversion runs in a sibling staging directory. The live DAG is replaced
+ * only after validation, and the legacy directory remains as a backup.
  * Idempotent — safe to call on already-migrated storage (returns AlreadyCurrent).
- * Writes dag/migration.progress for resume on interruption.
  */
 EXTRACHAIN_EXPORT std::expected<void, Error>
 migrate(ProgressCallback on_progress = {});

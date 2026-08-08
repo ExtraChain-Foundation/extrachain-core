@@ -58,6 +58,8 @@ static constexpr int HOT_PACK_LAG = 200;
 // Keep at most two not-yet-packed ranges in memory. The hot store remains the
 // source of truth, so dropping a cache entry only causes a later database read.
 static constexpr std::size_t PACK_HOT_CACHE_LIMIT = Pack::SECTIONS_PER_PACK * 2;
+static constexpr std::size_t   PACK_SYNC_MAX_PACKS      = 100000;
+static constexpr std::uint64_t PACK_SYNC_MAX_PACK_BYTES = 512ULL * 1024ULL * 1024ULL;
 
 // find_last_control() walks backwards from the current tip; these caps stop the walk
 // once enough evidence accumulates that no control is ever coming:
@@ -219,8 +221,8 @@ struct PackData {
 };
 BOOST_DESCRIBE_STRUCT(PackData, (), (pack_id, offset, total_size, bytes))
 
-// Prebuilt balance cache handed over whole so the receiver skips replaying cold
-// history. Trusted in the single-creator topology (same source as the packs).
+// Legacy balance-cache snapshot messages. Current nodes reject this derived
+// state and rebuild it from verified local sections.
 struct CacheBalanceRow {
     std::string actor_id;
     std::string token_id;
@@ -802,11 +804,14 @@ private:
     std::uint64_t                     pack_sync_total_size_    = 0;
     std::unordered_set<std::uint64_t> pack_sync_outstanding_offsets_;
     std::unordered_set<std::uint64_t> pack_sync_received_offsets_;
+    std::string                       pack_sync_peer_;
+    std::optional<SectionId>          pack_sync_fallback_from_;
 
     // Pull next pack from pack_sync_pending_ and send DagPackRequest.
     // Called after each pack is received (or after PackList arrives).
     void issue_next_pack_request(const Responder &responder);
     void issue_pack_window(const Responder &responder);
+    bool validate_received_pack(Pack::PackId id, const Pack::Reader &reader) const;
 
     std::optional<BigNumberFloat> frozen_token_allocation(const ActorId &actor, const TokenId &token);
 
