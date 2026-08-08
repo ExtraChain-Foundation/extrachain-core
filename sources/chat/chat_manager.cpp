@@ -1325,6 +1325,9 @@ bool ChatManager::parse_invite(const ActorId& owner_id, const Dfs::DirRow& dir_r
     auto encrypted = Dfs::Tables::DirsFile::ActorSpace::get_file_content(owner_id, dir_row.file_id);
     if (!encrypted.has_value()) {
         eWarning("[Chat] parse_invite {}: no file content", dir_row.file_id);
+        // The dir row is known but the file never arrived (interrupted first sync);
+        // re-request it, `downloaded` will re-run parse_invite on arrival.
+        node->dfs()->request_file(owner_id, dir_row.file_id);
         return false;
     }
 
