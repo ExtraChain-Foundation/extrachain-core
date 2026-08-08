@@ -178,11 +178,13 @@ bool NetworkManager::is_first_node(const std::string &identifier) {
 }
 
 void NetworkManager::process() {
-#ifndef IS_APP_CLIENT
-    if (!node->is_client_application())
-        return;
-#endif
-
+    // Full nodes also re-dial, but only towards peers already proven reachable:
+    // their configured first_node (uplink) and entries in reconn_, which is
+    // populated exclusively from sockets that reached SocketMode::Full (i.e. real
+    // servers we connected out to). A client behind NAT/router never lands there,
+    // so this never spams unreachable clients — it only restores a lost uplink so
+    // the node keeps replicating instead of silently falling out of the mesh.
+    // The reconnection() slot also guards against a seed whose first_node is self.
     connect(reconnect_timer_, &QTimer::timeout, this, &NetworkManager::reconnection);
     reconnect_timer_->start(Utils::RECONNECT_INTERVAL);
 }
@@ -201,8 +203,37 @@ void NetworkManager::go_offline() {
     eWarning("[NetworkManager] offline mode: all connections closed, reconnects disabled");
 }
 
+bool NetworkManager::is_own_address(const std::string& ip) const {
+    if (ip.empty()) {
+        return false;
+    }
+    QHostAddress target(QString::fromStdString(ip));
+    if (target.isNull()) {
+        return false;
+    }
+    // A first_node equal to one of this host's own interface addresses means this
+    // node is the seed. Loopback is deliberately NOT treated as "self" here: on a
+    // single-host test mesh several nodes share 127.0.0.x and must still dial each
+    // other; a genuine self-loop there is caught by the network-id check instead.
+    for (const QHostAddress& addr : QNetworkInterface::allAddresses()) {
+        if (addr.isLoopback()) {
+            continue;
+        }
+        if (addr.isEqual(target, QHostAddress::TolerantConversion)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void NetworkManager::reconnection() {
     if (offline_) {
+        return;
+    }
+    // Do not dial ourselves: the network seed's first_node resolves to one of this
+    // host's own listening addresses. A self-connection would pass the handshake
+    // (matching network id) and loop, so skip re-dial entirely for the seed.
+    if (ws_server_ != nullptr && ws_server_->isListening() && is_own_address(first_node_)) {
         return;
     }
     if (this->node->account_controller()->empty()) {
@@ -313,7 +344,12 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
         emit this->newSocketActivatedWithParams(service->ip().toStdString(), service->identifier().toStdString());
         emit this->newSocketActivated();
 
-        if (service->mode() == SocketMode::Full && service->ip() != first_node()) {
+        // Only remember peers we dialled out to (Outgoing): those are reachable
+        // servers worth re-dialling. An Incoming socket can be a client behind
+        // NAT/router — we could never dial it back, so keeping it here would just
+        // produce endless reconnect attempts into the void.
+        if (service->mode() == SocketMode::Full && service->ip() != first_node()
+            && service->direction() == SocketDirection::Outgoing) {
             reconn_.insert({ service->ip().toStdString(), {} });
         }
     });
@@ -348,8 +384,15 @@ void NetworkManager::connectWsService(WebSocketService *service, bool requestLis
                     }
                 }
 
+                // TEST STAND ONLY (do not commit): EXC_ALLOW_LOOPBACK_SHARE lets
+                // auto-discovery accept 127.0.0.x so a single-host mesh can grow to
+                // a realistic degree. In production loopback is always skipped.
+                static const bool allow_loopback_share =
+                    qEnvironmentVariableIsSet("EXC_ALLOW_LOOPBACK_SHARE");
                 for (const auto &[ip, identifier] : connections) {
-                    if (this->failed_ips_.contains(ip) || ip == "127.0.0.1") {
+                    const bool is_plain_loopback = (ip == "127.0.0.1");
+                    if (this->failed_ips_.contains(ip)
+                        || (is_plain_loopback && !allow_loopback_share)) {
                         continue;
                     }
 
@@ -1545,15 +1588,19 @@ void NetworkManager::message_received(const std::string &message,
         break;
     }
     case MessageType::DfsFileFragment: {
-        auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
-        if (!fragment_data_result.has_value()) {
-            eWarning("[NetworkManager] {} deserialization failed for FragmentData", type);
-            break;
-        }
-
-        // TIMER_START(FRAG)
-        node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
-        // TIMER_END(FRAG)
+        // Bulk payload off the dispatch thread: during a replication wave the
+        // MB-sized deserialize + disk write queued for seconds ahead of consensus
+        // messages and delayed transactions fell out of the accept window
+        // (TooSectionDiff). Disk writes stay serialized by m_write_file_mutex and
+        // bookkeeping is SafePtr-guarded, so pool execution is safe.
+        ThreadPoolBoost::instance_dfs()->post([this, serialized = std::string(serialized), identifier]() {
+            auto fragment_data_result = MessagePack::deserialize<Dfs::Packets::FragmentData>(serialized);
+            if (!fragment_data_result.has_value()) {
+                eWarning("[NetworkManager] DfsFileFragment deserialization failed");
+                return;
+            }
+            node->dfs()->download_manager().file_fragment_achieved(fragment_data_result.value(), identifier);
+        });
 
         break;
     }

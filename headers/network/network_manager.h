@@ -325,6 +325,9 @@ public:
     SafePtr<std::set<SocketService*>> connections() const;
     bool server_status(Network::Protocol protocol = Network::Protocol::WebSocket) const;
     void connect_network();
+    // True if `ip` is one of this host's own (non-loopback) interface addresses,
+    // i.e. this node is the network seed and must not re-dial itself.
+    bool is_own_address(const std::string& ip) const;
 
 public slots:
     void remove_connection(const QString& identifier);
