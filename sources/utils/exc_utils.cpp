@@ -1021,7 +1021,14 @@ std::expected<void, Utils::FileError> Utils::write_file_chunk(const FsPath      
     file.open(path_str.value(), std::ios::in | std::ios::out | std::ios::binary);
 
     if (!file.is_open()) {
-        // If file doesn't exist, create it
+        // NEVER truncate an existing file: a transient r+ open failure (e.g. fd
+        // exhaustion under load) used to fall through here and wipe a partially
+        // assembled download — already-written fragments became zero holes.
+        if (exists) {
+            eLog("Failed to reopen existing file (transient?): {}", path_str.value());
+            return std::unexpected(FileError::OpenError);
+        }
+        // File genuinely absent — create it.
         file.clear();
         file.open(path_str.value(), std::ios::out | std::ios::binary);
         if (!file.is_open()) {
